@@ -46,4 +46,4 @@ partners = {
 #   truststore_pem  = "/ruta/absoluta/truststore.pem"
 # }
 
-alert_emails = []
+alert_emails = ["sj.fuentes@uniandes.edu.co"]
