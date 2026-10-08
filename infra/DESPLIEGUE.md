@@ -80,7 +80,7 @@ aws secretsmanager put-secret-value --secret-id solventa-int/aliados/kyc \
 make infra-bootstrap AWS_REGION=us-east-1
 ```
 
-- **Crea** el bucket de estado (versionado, cifrado, sin acceso público y protegido contra borrado) y el rol `solventa-github-deploy`, que solo pueden asumir workflows de `sjfuentes-uniandes/proyecto-final-2-backend`.
+- **Crea** el bucket de estado (versionado, cifrado, sin acceso público y protegido contra borrado) y el rol `solventa-github-deploy`, que solo pueden asumir workflows de `sjfuentes-uniandes/proyecto-final-2-backend`, identificado por los ID del dueño y del repositorio (`sjfuentes-uniandes@196879525/proyecto-final-2-backend@1409601103`).
 - **Muestra** el `AWS_ROLE_ARN` para configurar GitHub (sección 7).
 - **Proveedor OIDC existente:** si la cuenta ya tiene el proveedor OIDC de GitHub, usar `CREATE_GITHUB_OIDC_PROVIDER=false make infra-bootstrap`.
 - **Estado local:** el estado del bootstrap queda en `infra/bootstrap/terraform.tfstate` (ignorado por Git). Guardarlo; si se pierde, los recursos se pueden importar de nuevo.
@@ -209,7 +209,7 @@ Los workflows de un mismo ambiente comparten un grupo de concurrencia, así que 
 | --- | --- |
 | `No existe el bucket de estado` | Falta `make infra-bootstrap` en esta cuenta o región. |
 | `Falta la variable AWS_ROLE_ARN` (Actions) | Configurar las variables del repositorio (sección 7). |
-| `Not authorized to perform sts:AssumeRoleWithWebIdentity` (Actions) | AWS rechazó el token de GitHub. El paso *Diagnóstico OIDC* imprime el rol pedido y los claims del token. Revisar: (1) que `AWS_ROLE_ARN` sea exactamente el `github_role_arn` del bootstrap y de la misma cuenta; (2) que `sub` empiece por `repo:<owner>/<repo>:` con el mismo `github_repository` del bootstrap (repositorio renombrado, transferido o fork, o una plantilla de `sub` personalizada en la organización); (3) que el rol y el proveedor OIDC existan (`aws iam get-role --role-name solventa-github-deploy`). Corregir y volver a ejecutar `make infra-bootstrap`. |
+| `Not authorized to perform sts:AssumeRoleWithWebIdentity` (Actions) | AWS rechazó el token de GitHub. El paso *Diagnóstico OIDC* imprime el rol pedido y los claims del token. Revisar: (1) que `AWS_ROLE_ARN` sea exactamente el `github_role_arn` del bootstrap y de la misma cuenta; (2) que `sub` empiece por `repo:` + el `github_repository` del bootstrap (`owner@<id>/repo@<id>`); si el repositorio se renombra, transfiere o recrea, actualizar esa variable; (3) que el rol y el proveedor OIDC existan (`aws iam get-role --role-name solventa-github-deploy`). Corregir y volver a ejecutar `make infra-bootstrap`. |
 | `Error acquiring the state lock` | Otro despliegue del mismo ambiente está en curso. Si quedó colgado: `terraform -chdir=infra/<raíz> force-unlock <id>` tras `tf_init`. |
 | `db-bootstrap falló` | Revisar el log group `/ecs/solventa-<ambiente>/db-bootstrap`. Si RDS aún no está disponible, repetir `make infra-bases`. |
 | Un servicio no queda estable | `aws ecs describe-services` y el log group `/ecs/solventa-<ambiente>/<servicio>`. Si el health check falla, el *circuit breaker* revierte el despliegue. |

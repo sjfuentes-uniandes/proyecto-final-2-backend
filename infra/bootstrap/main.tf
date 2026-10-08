@@ -29,10 +29,13 @@ variable "name" {
   default     = "solventa"
 }
 
+# GitHub emite el sub del token con los ID del dueño y del repositorio
+# (repo:owner@<id>/repo@<id>:...). Fijar los ID evita que otro repositorio con el
+# mismo nombre (renombrado o recreado) pueda asumir el rol.
 variable "github_repository" {
-  description = "owner/repo autorizado a asumir el rol de despliegue."
+  description = "owner@<id>/repo@<id> autorizado a asumir el rol de despliegue (tal como aparece en el sub del token)."
   type        = string
-  default     = "sjfuentes-uniandes/proyecto-final-2-backend"
+  default     = "sjfuentes-uniandes@196879525/proyecto-final-2-backend@1409601103"
 }
 
 variable "create_github_oidc_provider" {
