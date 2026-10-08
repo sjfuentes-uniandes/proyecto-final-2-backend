@@ -116,6 +116,33 @@ Ejecuta en orden los cuatro pasos de la sección 1:
 | `make infra-plan` | Ver los cambios de ambas raíces sin aplicar |
 | `make infra-pausar` / `make infra-reanudar` | Llevar todos los servicios a 0 tareas o volver a las réplicas configuradas |
 | `make infra-salidas` | URLs de los APIs, portal, Cognito y tablero |
+| `make infra-probar` | Prueba rápida del ambiente desplegado (sección 5.1) |
+
+### 5.1 Prueba rápida del ambiente
+
+Sirve para comprobar el ambiente aunque los servicios todavía sean esqueletos: solo usa `GET /health`. El workflow **Infra - Desplegar** la ejecuta al final, salvo que se desmarque `probar`.
+
+Primer despliegue de prueba, solo con lo necesario para recorrer el borde completo (dos tareas Spot, unos 7 USD/mes además de la plataforma; destruir o pausar al terminar):
+
+```bash
+make infra-bootstrap                                                # una vez por cuenta
+SERVICES=api-socios,simulador-aliados make infra-desplegar ENV=int
+make infra-probar ENV=int                                           # SMOKE_ALERTA=1 prueba también el correo
+```
+
+| Chequeo | Esperado | Qué valida |
+| --- | --- | --- |
+| Servicios ECS | Tareas corriendo = deseadas | Imágenes en ECR, healthcheck de la imagen, IAM, secretos, red privada y NAT |
+| Destinos del ALB | Al menos 1 saludable por servicio de acceso | ALB interno, grupos de seguridad, `GET /health` |
+| Canales sin token o con token inválido | 401 con `X-Correlation-Id` | WAF, API Gateway, autorizador de Cognito, respuestas del borde |
+| Socio de prueba: token `client_credentials` | Cognito entrega el token | Pool de socios, dominio y servidor de recursos |
+| Socio con token, sin API key | 401/403 | Plan de uso por API key (HU-W02) |
+| Socio con token y API key | 200 desde `api-socios` | Recorrido completo: WAF → API Gateway → VPC Link v2 → ALB → ECS |
+| `SMOKE_ALERTA=1` | Llega el correo de prueba | Tópico de alertas y suscripción confirmada (HU-W28) |
+
+- **Socios de prueba:** la prueba usa `socio-a`, definido en `infra/envs/int/platform.tfvars`.
+- **Dominio de Cognito:** puede tardar unos minutos en responder después del primer `infra-plataforma`. Si falla solo el token, repetir.
+- **Más servicios:** para cubrir los demás, agregarlos a `SERVICES`. Sin `SERVICES`, se construyen los 10 del catálogo.
 
 ### Imágenes de los microservicios
 

@@ -1,11 +1,8 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from solventa_common.settings import ServiceSettings
 
 
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="SOLVENTA_")
-
+class Settings(ServiceSettings):
     service_name: str = "bff-web"
-    database_url: str = "postgresql://solventa:solventa@localhost:5432/bff_web"
 
 
 settings = Settings()

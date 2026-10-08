@@ -31,12 +31,13 @@ partner_tiers = {
   estandar = { rate = 50, burst = 100, quota_limit = 50000, quota_period = "DAY" }
 }
 
-# Dos socios con cuotas pequeñas y deterministas para las pruebas N2/N3 de
-# HU-W01 y HU-W02. Para desactivar uno, poner enabled = false y aplicar.
-# partners = {
-#   socio-a = { tier = "basico", scopes = ["cotizaciones.escribir", "cotizaciones.leer"] }
-#   socio-b = { tier = "basico", scopes = ["cotizaciones.leer"] }
-# }
+# Dos socios de prueba: make infra-probar usa socio-a, y ambos sirven para las
+# pruebas N3 de HU-W01 y HU-W02. Para desactivar uno, poner enabled = false y
+# aplicar. Credenciales: terraform -chdir=infra/platform output -json partners
+partners = {
+  socio-a = { tier = "basico", scopes = ["cotizaciones.escribir", "cotizaciones.leer"] }
+  socio-b = { tier = "basico", scopes = ["cotizaciones.leer"] }
+}
 
 # Dominio propio con mTLS para socios (requiere certificado ACM en la región).
 # custom_domain = {

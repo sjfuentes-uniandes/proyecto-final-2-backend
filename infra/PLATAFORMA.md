@@ -115,7 +115,7 @@ make infra-destruir ENV=int       # todo el ambiente
 
 **Imágenes:** escuchan en el puerto `8080`, exponen `GET /health` e incluyen `/app/healthcheck`.
 
-**Variables de entorno** (definidas en `infra/apps/ecs.tf`):
+**Variables de entorno** (definidas en `infra/apps/ecs.tf`). En Python, `solventa_common.settings.ServiceSettings` ya las lee: el `config.py` de cada servicio hereda de ella y `settings.database_url` arma la conexión con `DB_*` en AWS o con el Postgres local en desarrollo.
 
 | Variable | Servicios | Contenido |
 | --- | --- | --- |

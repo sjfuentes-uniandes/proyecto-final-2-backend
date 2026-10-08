@@ -27,6 +27,10 @@ on:
         description: En completo, construir y publicar imágenes antes de desplegar
         type: boolean
         default: true
+      probar:
+        description: Ejecutar la prueba rápida (make infra-probar) después de desplegar aplicaciones
+        type: boolean
+        default: true
 
 permissions:
   id-token: write
@@ -78,6 +82,10 @@ jobs:
       - name: Aplicaciones
         if: inputs.alcance == 'completo' || inputs.alcance == 'aplicaciones' || inputs.alcance == 'microservicios'
         run: make infra-aplicaciones
+
+      - name: Prueba rápida
+        if: inputs.probar && (inputs.alcance == 'completo' || inputs.alcance == 'aplicaciones' || inputs.alcance == 'microservicios')
+        run: make infra-probar
 
       - name: Resumen
         if: success()
