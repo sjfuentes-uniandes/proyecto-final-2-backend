@@ -1,8 +1,46 @@
-# Workflow existente: pendiente.
-name: infra-imagenes
-on: workflow_dispatch
+name: Infra - Imágenes a ECR
+
+# Construye y publica en ECR las imágenes de los microservicios, sin desplegar.
+# Para desplegarlas después: Infra - Desplegar con alcance "aplicaciones".
+on:
+  workflow_dispatch:
+    inputs:
+      ambiente:
+        description: Ambiente (sus repositorios ECR deben existir)
+        type: string
+        default: int
+        required: true
+      servicios:
+        description: Servicios separados por coma (vacío = todos los que tienen services/<servicio>/Dockerfile)
+        type: string
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: imagenes-${{ inputs.ambiente }}
+  cancel-in-progress: false
+
 jobs:
-  pendiente:
+  imagenes:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.ambiente }}
+    timeout-minutes: 60
+    env:
+      ENV: ${{ inputs.ambiente }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      SERVICES: ${{ inputs.servicios }}
     steps:
-      - run: echo "Pendiente "
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/preparar-infra
+        with:
+          aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Construir y publicar
+        run: make infra-imagenes

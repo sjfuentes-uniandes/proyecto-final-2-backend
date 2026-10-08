@@ -1,8 +1,90 @@
-# Workflow existente: pendiente.
-name: infra-desplegar
-on: workflow_dispatch
+name: Infra - Desplegar
+
+# Despliegue manual del ambiente. Alcances:
+#   completo        plataforma -> bases -> imágenes -> aplicaciones
+#   plataforma      solo infra/platform (red, datos, mensajería, identidad, borde, ECR)
+#   bases           solo la tarea que crea base y usuario por servicio en RDS
+#   aplicaciones    solo infra/apps con las imágenes que ya están en ECR
+#   microservicios  imagen + despliegue de los servicios indicados
+on:
+  workflow_dispatch:
+    inputs:
+      ambiente:
+        description: Ambiente (carpeta infra/envs/<ambiente>)
+        type: string
+        default: int
+        required: true
+      alcance:
+        description: Qué desplegar
+        type: choice
+        options: [completo, plataforma, bases, aplicaciones, microservicios]
+        default: completo
+      servicios:
+        description: "Servicios separados por coma (microservicios; en completo, vacío = todos con Dockerfile)"
+        type: string
+        default: ""
+      construir_imagenes:
+        description: En completo, construir y publicar imágenes antes de desplegar
+        type: boolean
+        default: true
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: infra-${{ inputs.ambiente }}
+  cancel-in-progress: false
+
 jobs:
-  pendiente:
+  desplegar:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.ambiente }}
+    timeout-minutes: 90
+    env:
+      ENV: ${{ inputs.ambiente }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      AUTO_APPROVE: "1"
+      SERVICES: ${{ inputs.servicios }}
     steps:
-      - run: echo "Pendiente"
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/preparar-infra
+        with:
+          aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Validar entradas
+        if: inputs.alcance == 'microservicios' && inputs.servicios == ''
+        run: |
+          echo "::error::El alcance microservicios requiere la lista de servicios."
+          exit 1
+
+      - name: Plataforma
+        if: inputs.alcance == 'completo' || inputs.alcance == 'plataforma'
+        run: make infra-plataforma
+
+      - name: Bases por servicio
+        if: inputs.alcance == 'completo' || inputs.alcance == 'bases'
+        run: make infra-bases
+
+      - uses: docker/setup-buildx-action@v3
+        if: (inputs.alcance == 'completo' && inputs.construir_imagenes) || inputs.alcance == 'microservicios'
+
+      - name: Imágenes
+        if: (inputs.alcance == 'completo' && inputs.construir_imagenes) || inputs.alcance == 'microservicios'
+        run: make infra-imagenes
+
+      - name: Aplicaciones
+        if: inputs.alcance == 'completo' || inputs.alcance == 'aplicaciones' || inputs.alcance == 'microservicios'
+        run: make infra-aplicaciones
+
+      - name: Resumen
+        if: success()
+        run: |
+          {
+            echo "### Ambiente \`${ENV}\` (${{ inputs.alcance }})"
+            echo '```'
+            make -s infra-salidas || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

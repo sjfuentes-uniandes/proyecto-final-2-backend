@@ -22,7 +22,7 @@ services:
     ports: ["4566:4566"]
 
   simulador-aliados:
-    build: services/simulador-aliados
+    build: { context: ., dockerfile: services/simulador-aliados/Dockerfile }
     ports: ["8089:8080"]
 
   bff-web:

@@ -1,0 +1,196 @@
+# Despliegue de la plataforma Solventa
+
+Esta guía cubre cómo crear, actualizar y destruir un ambiente completo de la plataforma: `infra/platform` + `infra/apps`. Qué contiene cada raíz y por qué está en [PLATAFORMA.md](PLATAFORMA.md).
+
+Todo se hace con **un solo comando** desde la máquina local (`make infra-*`) o desde **GitHub Actions**. Ambos caminos ejecutan los mismos scripts (`scripts/plataforma/*.sh`), así que el resultado es idéntico.
+
+## 1. Piezas y dependencias
+
+```
+infra/bootstrap  (una vez por cuenta; nunca se destruye)
+   │  bucket S3 de estado  +  rol OIDC para GitHub Actions
+   ▼
+infra/platform   (paso 1)  ── crea los repositorios ECR, RDS, red, borde...
+   │
+   ├──► tarea db-bootstrap (paso 2)   crea base y usuario por servicio en RDS
+   │
+   ├──► imágenes (paso 3)             build + push a los repositorios ECR de platform
+   │
+   ▼
+infra/apps       (paso 4)  ── lee el estado de platform y despliega SOLO los servicios con imagen en ECR
+```
+
+| Paso | Necesita | Produce |
+| --- | --- | --- |
+| 0. Bootstrap | Credenciales de administrador | Bucket `solventa-tfstate-<cuenta>` y rol `solventa-github-deploy` |
+| 1. Plataforma | Bootstrap | Todo lo que no depende de imágenes, incluidos los repositorios ECR vacíos |
+| 2. Bases | Plataforma (RDS disponible) | Una base y un usuario por servicio con base de datos |
+| 3. Imágenes | Plataforma (repositorios ECR) y código en `services/<servicio>/Dockerfile` | Imágenes con etiqueta inmutable en ECR |
+| 4. Aplicaciones | Plataforma + al menos una imagen en ECR (y paso 2 para servicios con base) | Servicios ECS, IAM, autoescalado, alarmas y tablero |
+
+**Dependencia de imágenes:** `apps` despliega exactamente los servicios que tienen imagen en ECR.
+- `scripts/plataforma/digests.sh` toma el digest **más reciente de cada repositorio** y lo escribe en `infra/envs/<ambiente>/images.tfvars.json`, que no se versiona.
+- Si ningún servicio tiene imagen, el paso 4 no hace nada y avisa.
+- Publicar un solo microservicio no retira a los demás.
+- `terraform -chdir=infra/apps output pending_services` lista los servicios del catálogo que todavía no tienen imagen.
+
+**Orden entre microservicios:** `apps` crea primero a los servicios invocados y después a quienes los invocan (capas de Service Connect). Si en un despliegue aparece un servicio nuevo que otros ya invocaban, el script fuerza un nuevo despliegue de esos llamadores para que lo descubran.
+
+## 2. Requisitos
+
+| Herramienta | Uso |
+| --- | --- |
+| Terraform ≥ 1.10 | Backend S3 con bloqueo nativo (`use_lockfile`) |
+| AWS CLI v2 | Credenciales, ECR, ECS |
+| Docker con Buildx | Build `linux/amd64` de las imágenes |
+| jq, git, make, bash ≥ 4 | Scripts |
+
+Credenciales de AWS en la terminal (`aws configure`, `AWS_PROFILE` o SSO), verificables con `aws sts get-caller-identity`.
+
+## 3. Configuración por ambiente
+
+Cada ambiente es una carpeta versionada `infra/envs/<ambiente>/` sin secretos:
+
+| Archivo | Contenido |
+| --- | --- |
+| `platform.tfvars` | Red, perfil de costo, RDS, Cognito, cuotas de socios, WAF, correos de alertas. `environment` debe ser igual al nombre de la carpeta. |
+| `apps.tfvars` | Tamaño de tareas, réplicas, Spot, pausa, endpoints de aliados y umbrales de alarmas. |
+| `images.tfvars.json` | Se genera en cada despliegue (ignorado por Git). |
+
+El estado remoto queda en `s3://solventa-tfstate-<cuenta>/<ambiente>/{platform,apps}.tfstate`, con bloqueo, así que dos despliegues simultáneos del mismo ambiente no se pisan.
+
+Para crear otro ambiente, por ejemplo `qa`:
+
+```bash
+cp -r infra/envs/int infra/envs/qa
+# editar infra/envs/qa/platform.tfvars: environment = "qa" y otro vpc_cidr si se desea
+make infra-desplegar ENV=qa
+```
+
+**Secretos de aliados:** Terraform crea los secretos `solventa-<ambiente>/aliados/{kyc,open-finance,datos-abiertos}` con un valor de marcador. Mientras no se carguen las credenciales reales, los adaptadores usan `simulador-aliados`. Para cargarlas, después del paso 1:
+
+```bash
+aws secretsmanager put-secret-value --secret-id solventa-int/aliados/kyc \
+  --secret-string '{"client_id":"...","client_secret":"..."}'
+```
+
+## 4. Primera vez en una cuenta (bootstrap)
+
+```bash
+make infra-bootstrap AWS_REGION=us-east-1
+```
+
+- **Crea** el bucket de estado (versionado, cifrado, sin acceso público y protegido contra borrado) y el rol `solventa-github-deploy`, que solo pueden asumir workflows de `sjfuentes-uniandes/proyecto-final-2-backend`.
+- **Muestra** el `AWS_ROLE_ARN` para configurar GitHub (sección 7).
+- **Proveedor OIDC existente:** si la cuenta ya tiene el proveedor OIDC de GitHub, usar `CREATE_GITHUB_OIDC_PROVIDER=false make infra-bootstrap`.
+- **Estado local:** el estado del bootstrap queda en `infra/bootstrap/terraform.tfstate` (ignorado por Git). Guardarlo; si se pierde, los recursos se pueden importar de nuevo.
+
+## 5. Despliegue con make
+
+Todos los targets aceptan `ENV=<ambiente>` (por defecto `int`) y `AUTO_APPROVE=1` para no pedir confirmación. `make infra-ayuda` los lista.
+
+### Todo de una vez
+
+```bash
+make infra-desplegar ENV=int
+```
+
+Ejecuta en orden los cuatro pasos de la sección 1:
+
+| Paso | Qué hace | Duración aproximada |
+| --- | --- | --- |
+| **1. `infra-plataforma`** | `terraform apply` de `infra/platform` | 15–25 min (RDS, CloudFront y NAT son lo más lento) |
+| **2. `infra-bases`** | Ejecuta la tarea `db-bootstrap`, espera su fin y falla si su código de salida no es 0 | 1–2 min |
+| **3. `infra-imagenes`** | Build y push de cada servicio del catálogo que tenga `services/<servicio>/Dockerfile` | Depende de los servicios |
+| **4. `infra-aplicaciones`** | Genera los digests, `terraform apply` de `infra/apps` y espera a que los servicios queden estables. Muestra las URLs y los servicios pendientes | 5–10 min |
+
+### Por partes
+
+| Comando | Cuándo usarlo |
+| --- | --- |
+| `make infra-plataforma` | Cambios en red, datos, colas, Cognito, API Gateway, WAF o el catálogo (`infra/platform/catalog.tf`) |
+| `make infra-bases` | Después de agregar al catálogo un servicio con `database = true` (es idempotente) |
+| `make infra-imagenes [SERVICES=a,b]` | Publicar imágenes sin desplegarlas |
+| `make infra-aplicaciones` | Desplegar lo que ya está en ECR, o aplicar cambios de `apps.tfvars` |
+| `make infra-microservicios SERVICES=clientes,adaptador-identidad` | Imagen + despliegue de esos servicios, sin tocar la plataforma |
+| `make infra-plan` | Ver los cambios de ambas raíces sin aplicar |
+| `make infra-pausar` / `make infra-reanudar` | Llevar todos los servicios a 0 tareas o volver a las réplicas configuradas |
+| `make infra-salidas` | URLs de los APIs, portal, Cognito y tablero |
+
+### Imágenes de los microservicios
+
+- **Convención:** `services/<servicio>/Dockerfile`, construido con contexto en la raíz del repo para que la imagen incluya `libs/`. El nombre de la carpeta debe coincidir con el del catálogo (`bff-web`, `clientes`, `adaptador-identidad`…). Con `SRC_DIR=otra/carpeta` se usa otra raíz.
+- **Contrato de la imagen:** escucha en el puerto 8080, expone `GET /health` e incluye `/app/healthcheck`. Las variables de entorno que recibe están en PLATAFORMA.md.
+- **Etiqueta:** es el commit (`git rev-parse --short=12 HEAD`). Si `services/` o `libs/` tienen cambios sin commit, se usa `<commit>-dirty-<fecha>`. Los repositorios son inmutables: si la etiqueta ya existe, no se reconstruye.
+
+### Flujo típico de una historia
+
+```bash
+# 1. Implementar el servicio en services/clientes/ (Dockerfile incluido) y hacer commit.
+# 2. Publicar y desplegar solo ese servicio:
+make infra-microservicios SERVICES=clientes
+# 3. Revisar el tablero y los logs:
+make infra-salidas
+```
+
+## 6. Destruir el ambiente
+
+```bash
+make infra-destruir ENV=int                 # pide escribir el nombre del ambiente
+AUTO_APPROVE=1 make infra-destruir ENV=int  # sin pregunta (CI)
+```
+
+| Orden | Qué pasa |
+| --- | --- |
+| 1 | Destruye `apps` (servicios, IAM, alarmas, tablero). |
+| 2 | Vacía el bucket de auditoría saltando la retención GOVERNANCE de Object Lock. Con `audit_lock_mode = "COMPLIANCE"`, AWS no permite borrar antes del vencimiento y la destrucción de ese bucket falla. |
+| 3 | Destruye `platform`: RDS sin snapshot final, repositorios ECR con sus imágenes, Cognito, colas, NAT, ALB, API Gateway, WAF y VPC. |
+
+- **Idempotencia:** si una raíz ya no tiene recursos, se omite.
+- **Lo que se conserva:** el bucket de estado y el rol de GitHub (bootstrap).
+- **Recrear:** basta con volver a ejecutar `make infra-desplegar`. Las imágenes se reconstruyen porque ECR se borró con el ambiente.
+- **Datos:** la base de datos, los usuarios de Cognito y la auditoría **se pierden**. Exportar lo necesario antes de destruir.
+
+## 7. GitHub Actions
+
+### Configuración (una vez)
+
+1. Ejecutar `make infra-bootstrap` localmente (sección 4).
+2. En GitHub, en **Settings → Secrets and variables → Actions → Variables**, crear:
+   - `AWS_ROLE_ARN`: el valor que imprimió el bootstrap.
+   - `AWS_REGION`: por ejemplo `us-east-1`.
+3. Opcional: en **Settings → Environments**, crear el ambiente (`int`, `qa`…) con *required reviewers* para exigir aprobación antes de desplegar o destruir. Los workflows usan `environment: <ambiente>`.
+4. Los workflows `workflow_dispatch` solo aparecen en la pestaña **Actions** cuando están en la rama por defecto (`main`).
+
+No se guardan llaves de AWS en GitHub: los workflows obtienen credenciales temporales por OIDC.
+
+### Workflows
+
+| Workflow | Disparador | Qué hace |
+| --- | --- | --- |
+| **Infra - Desplegar** (`infra-desplegar.yml`) | Manual | Alcance `completo`, `plataforma`, `bases`, `aplicaciones` o `microservicios` (con la lista `servicios`). En `completo`, `construir_imagenes` decide si se publican imágenes antes de `apps`. Deja las URLs en el resumen de la ejecución. |
+| **Infra - Imágenes a ECR** (`infra-imagenes.yml`) | Manual | Build y push de los servicios indicados (o todos los que tienen Dockerfile), sin desplegar. |
+| **Infra - Destruir** (`infra-destruir.yml`) | Manual | Exige escribir `destruir <ambiente>`. Ejecuta `make infra-destruir`. |
+| **Infra - Validar** (`infra-validar.yml`) | Pull requests que tocan `infra/` o los scripts | `fmt`, `validate` y `terraform test` de las tres raíces, más `shellcheck`. No usa AWS. |
+
+Los workflows de un mismo ambiente comparten un grupo de concurrencia, así que no se ejecutan dos a la vez. Además, el estado remoto tiene bloqueo.
+
+## 8. Problemas frecuentes
+
+| Síntoma | Causa y solución |
+| --- | --- |
+| `No existe el bucket de estado` | Falta `make infra-bootstrap` en esta cuenta o región. |
+| `Falta la variable AWS_ROLE_ARN` (Actions) | Configurar las variables del repositorio (sección 7). |
+| `Error acquiring the state lock` | Otro despliegue del mismo ambiente está en curso. Si quedó colgado: `terraform -chdir=infra/<raíz> force-unlock <id>` tras `tf_init`. |
+| `db-bootstrap falló` | Revisar el log group `/ecs/solventa-<ambiente>/db-bootstrap`. Si RDS aún no está disponible, repetir `make infra-bases`. |
+| Un servicio no queda estable | `aws ecs describe-services` y el log group `/ecs/solventa-<ambiente>/<servicio>`. Si el health check falla, el *circuit breaker* revierte el despliegue. |
+| Una tarea no alcanza a otro servicio | El invocado se creó después que el llamador y la autodetección no aplicó. Ejecutar `aws ecs update-service --force-new-deployment` sobre el llamador. |
+| `aws_api_gateway_account` en conflicto | La configuración de logs de API Gateway es única por región y cuenta. Si otra pila la administra, quitar ese recurso de una de las dos. |
+| No se puede destruir la auditoría | `audit_lock_mode = "COMPLIANCE"`: esperar el vencimiento de la retención. |
+
+## 9. Validación sin AWS
+
+```bash
+make infra-validar                      # fmt, validate y pruebas con proveedores simulados
+shellcheck -x -P scripts/plataforma scripts/plataforma/*.sh
+```

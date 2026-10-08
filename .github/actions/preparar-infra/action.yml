@@ -1,0 +1,35 @@
+name: Preparar herramientas de infraestructura
+description: Credenciales AWS por OIDC (rol creado con make infra-bootstrap) y Terraform.
+inputs:
+  aws-role-arn:
+    description: ARN del rol de despliegue (variable AWS_ROLE_ARN del repositorio).
+    required: true
+  aws-region:
+    description: Región de AWS.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Validar configuración
+      shell: bash
+      env:
+        ROLE: ${{ inputs.aws-role-arn }}
+      run: |
+        if [ -z "$ROLE" ]; then
+          echo "::error::Falta la variable AWS_ROLE_ARN del repositorio. Ver infra/DESPLIEGUE.md (sección GitHub Actions)."
+          exit 1
+        fi
+
+    - name: Credenciales AWS (OIDC)
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.aws-role-arn }}
+        aws-region: ${{ inputs.aws-region }}
+        role-session-name: gh-${{ github.run_id }}
+        role-duration-seconds: 7200
+
+    - name: Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: "~1.16"
+        terraform_wrapper: false

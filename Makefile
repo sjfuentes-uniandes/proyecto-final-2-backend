@@ -1,4 +1,6 @@
-.PHONY: dev-up dev-down dev-sync test-unit test-module test-contract test-e2e infra-validar
+include infra/plataforma.mk
+
+.PHONY: dev-up dev-down dev-sync test-unit test-module test-contract test-e2e diagramas
 
 SERVICE ?=
 
@@ -23,5 +25,5 @@ test-contract:
 test-e2e:
 	uv run pytest tests/e2e
 
-infra-validar:
-	@echo "TODO: migrar scripts de infra a scripts/plataforma"
+diagramas:
+	@./scripts/generate_diagrams.sh
