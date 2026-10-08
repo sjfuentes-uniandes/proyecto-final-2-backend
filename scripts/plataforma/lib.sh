@@ -1,5 +1,7 @@
 # shellcheck shell=bash
 # Funciones comunes de los scripts de la plataforma (infra/platform + infra/apps).
+# Compatibles con bash 3.2 (el de macOS): sin mapfile, ${var,,} ni arreglos
+# asociativos, y los arreglos que pueden quedar vacíos se expanden con ${a[@]+...}.
 # Las usan el Makefile (targets infra-*) y los workflows de GitHub Actions, de
 # modo que el despliegue local y el de CI siguen exactamente el mismo camino.
 #

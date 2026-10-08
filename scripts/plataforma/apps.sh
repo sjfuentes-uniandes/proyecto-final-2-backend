@@ -37,7 +37,7 @@ before="$(deployed_services)"
 case "${action}" in
   plan)
     terraform -chdir="${INFRA_DIR}/apps" plan -input=false \
-      -var-file="${ENV_DIR}/apps.tfvars" -var-file="${images}" "${pause_args[@]}" "${out_args[@]}"
+      -var-file="${ENV_DIR}/apps.tfvars" -var-file="${images}" ${pause_args[@]+"${pause_args[@]}"} ${out_args[@]+"${out_args[@]}"}
     exit 0
     ;;
   apply)
@@ -46,7 +46,7 @@ case "${action}" in
     else
       # shellcheck disable=SC2046
       terraform -chdir="${INFRA_DIR}/apps" apply -input=false $(approve_flag) \
-        -var-file="${ENV_DIR}/apps.tfvars" -var-file="${images}" "${pause_args[@]}"
+        -var-file="${ENV_DIR}/apps.tfvars" -var-file="${images}" ${pause_args[@]+"${pause_args[@]}"}
     fi
     ;;
   *) die "Acción no soportada: ${action}" ;;
@@ -61,14 +61,14 @@ cluster=$(terraform -chdir="${INFRA_DIR}/apps" output -raw cluster_name)
 after="$(deployed_services)"
 new=$(jq -nc --argjson a "${after}" --argjson b "${before}" '$a - $b')
 if [ "${before}" != "[]" ] && [ "${new}" != "[]" ]; then
-  mapfile -t callers < <(platform_output platform | jq -r --argjson new "${new}" --argjson old "${before}" \
-    '.catalog | to_entries[] | select(.key as $k | $old | index($k)) | select(any(.value.calls[]; . as $c | $new | index($c))) | .key')
-  for service in "${callers[@]}"; do
+  while IFS= read -r service; do
     echo "  ~ ${service}: nuevo despliegue para descubrir $(jq -r 'join(", ")' <<<"${new}")"
     aws ecs update-service --cluster "${cluster}" --service "${service}" --force-new-deployment >/dev/null
-  done
+  done < <(platform_output platform | jq -r --argjson new "${new}" --argjson old "${before}" \
+    '.catalog | to_entries[] | select(.key as $k | $old | index($k)) | select(any(.value.calls[]; . as $c | $new | index($c))) | .key')
 fi
-mapfile -t names < <(terraform -chdir="${INFRA_DIR}/apps" output -json deployed_services | jq -r '.[].service_name')
+names=()
+while IFS= read -r name; do names+=("${name}"); done < <(terraform -chdir="${INFRA_DIR}/apps" output -json deployed_services | jq -r '.[].service_name')
 log "Esperando a que ${#names[@]} servicios queden estables"
 for ((i = 0; i < ${#names[@]}; i += 10)); do
   aws ecs wait services-stable --cluster "${cluster}" --services "${names[@]:i:10}"

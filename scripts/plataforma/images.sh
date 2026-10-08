@@ -14,7 +14,8 @@ tf_init platform
 
 repositories="$(platform_output ecr_repositories)"
 registry=$(jq -r 'first(.[]) | split("/")[0]' <<<"${repositories}")
-mapfile -t services < <(selected_services)
+services=()
+while IFS= read -r service; do services+=("${service}"); done < <(selected_services)
 [ "${#services[@]}" -gt 0 ] || { warn "No hay servicios con Dockerfile en ${SRC_DIR} (ni SERVICES indicado); nada que publicar."; exit 0; }
 
 tag="$(git -C "${ROOT_DIR}" rev-parse --short=12 HEAD)"

@@ -40,7 +40,8 @@ log "1. Servicios ECS (${ENV})"
 if [ "$(jq 'length' <<<"${deployed}")" = "0" ]; then
   skip "No hay servicios desplegados (make infra-aplicaciones)."
 else
-  mapfile -t names < <(jq -r '.[].service_name' <<<"${deployed}")
+  names=()
+  while IFS= read -r name; do names+=("${name}"); done < <(jq -r '.[].service_name' <<<"${deployed}")
   for ((i = 0; i < ${#names[@]}; i += 10)); do
     while read -r name running desired; do
       if [ "${running}" = "${desired}" ] && [ "${desired}" -gt 0 ]; then
@@ -68,7 +69,7 @@ trap 'rm -f "${headers_file}"' EXIT
 code=$(http_code -D "${headers_file}" "${canales}/web/health")
 headers=$(tr -d '\r' <"${headers_file}")
 check "$(is "${code}" '^401$')" "sin token -> 401" "sin token -> ${code:-sin respuesta} (esperado 401)"
-check "$(is "${headers,,}" 'x-correlation-id:')" "la respuesta del borde incluye X-Correlation-Id" "falta X-Correlation-Id en la respuesta del borde"
+check "$(is "$(tr '[:upper:]' '[:lower:]' <<<"${headers}")" 'x-correlation-id:')" "la respuesta del borde incluye X-Correlation-Id" "falta X-Correlation-Id en la respuesta del borde"
 code=$(http_code -H "Authorization: Bearer token-invalido" "${canales}/movil/health")
 check "$(is "${code}" '^401$')" "token inválido -> 401" "token inválido -> ${code} (esperado 401)"
 

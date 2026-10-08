@@ -1,4 +1,4 @@
-# Plataforma Solventa en AWS (historias en Ready)
+# Plataforma Solventa en AWS
 
 Infraestructura para ejecutar en AWS las 13 historias de la columna **Ready** del backlog. Se basa en el modelo de despliegue (`docs/arquitectura/modelo_despliegue.puml`, `diagrama_despliegue_ecs_fargate.puml`), en la Entrega 8 de arquitectura (componentes, conectores y patrones).
 

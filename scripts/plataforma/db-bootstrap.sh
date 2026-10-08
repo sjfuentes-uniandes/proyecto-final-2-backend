@@ -18,7 +18,9 @@ task_arn=$(aws ecs run-task --cluster "${cluster}" \
   --launch-type FARGATE \
   --network-configuration "awsvpcConfiguration={subnets=[${subnets}],securityGroups=[${security_group}],assignPublicIp=DISABLED}" \
   --query 'tasks[0].taskArn' --output text)
-[ -n "${task_arn}" ] && [ "${task_arn}" != "None" ] || die "No se pudo iniciar la tarea db-bootstrap."
+if [ -z "${task_arn}" ] || [ "${task_arn}" = "None" ]; then
+  die "No se pudo iniciar la tarea db-bootstrap."
+fi
 
 echo "Tarea ${task_arn##*/}; esperando a que termine..."
 aws ecs wait tasks-stopped --cluster "${cluster}" --tasks "${task_arn}"
