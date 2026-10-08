@@ -17,7 +17,7 @@ use_customer_managed_key = false # true = clave KMS propia (~1 USD/mes)
 # gateway de S3 siempre se crea y es gratuito.
 # interface_endpoints = ["ecr.api", "ecr.dkr", "logs", "secretsmanager", "sqs", "sns", "xray", "kms"]
 
-db_instance_class = "db.t4g.micro"
+db_instance_class = "db.t3.micro"
 postgres_version  = "16"
 
 audit_retention_days = 30

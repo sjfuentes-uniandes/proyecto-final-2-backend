@@ -82,7 +82,7 @@ data "aws_ssm_parameter" "nat_ami" {
 resource "aws_security_group" "nat" {
   count       = var.egress_mode == "nat_instance" ? 1 : 0
   name        = "${local.prefix}-nat"
-  description = "NAT instance: tráfico saliente de las subredes privadas"
+  description = "NAT instance: trafico saliente de las subredes privadas"
   vpc_id      = aws_vpc.main.id
 }
 

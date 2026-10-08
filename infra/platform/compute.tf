@@ -90,7 +90,7 @@ resource "aws_iam_role_policy" "db_bootstrap" {
 
 resource "aws_security_group" "db_bootstrap" {
   name        = "${local.prefix}-db-bootstrap"
-  description = "Tarea puntual de preparación de bases"
+  description = "Tarea puntual de preparacion de bases"
   vpc_id      = aws_vpc.main.id
 }
 
