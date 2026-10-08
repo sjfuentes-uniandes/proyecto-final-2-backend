@@ -15,7 +15,7 @@ dev = [
     "pytest>=8.3",
     "httpx>=0.28",
     "ruff>=0.8",
-    "schemathesis>=3.38",
+    "schemathesis>=4.29.2",
 ]
 
 [tool.pytest.ini_options]
