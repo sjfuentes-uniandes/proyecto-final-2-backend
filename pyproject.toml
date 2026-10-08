@@ -13,7 +13,7 @@ exclude = ["services/simulador-aliados"]
 [dependency-groups]
 dev = [
     "pytest>=8.3",
-    "httpx>=0.28",
+    "httpx>=0.28.1",
     "ruff>=0.8",
     "schemathesis>=3.38",
 ]
