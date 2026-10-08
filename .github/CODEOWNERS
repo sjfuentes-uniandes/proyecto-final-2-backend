@@ -1,0 +1,12 @@
+# Dueño por servicio según el reparto del sprint.
+# TODO: reemplazar los comentarios por los usuarios de GitHub reales (@usuario).
+# services/api-socios/                       @integrante-1
+# services/bff-web/                          @integrante-1
+# services/clientes/src/clientes/domain/identidad/        @integrante-2
+# services/clientes/src/clientes/domain/consentimientos/  @integrante-3
+# services/adaptador-identidad/              @integrante-2
+# services/adaptador-datos/                  @integrante-4
+# services/simulador-aliados/mappings/kyc/            @integrante-2
+# services/simulador-aliados/mappings/open-finance/   @integrante-4
+# services/simulador-aliados/mappings/datos-abiertos/ @integrante-4
+# contracts/                                 @todo-el-equipo

@@ -1,0 +1,89 @@
+@startuml
+title Solventa - Modelo de contexto (VA-001)
+
+left to right direction
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam actorStyle awesome
+skinparam nodesep 35
+skinparam ranksep 55
+skinparam wrapWidth 170
+skinparam ArrowFontSize 12
+skinparam ArrowThickness 1
+skinparam ArrowColor #455A64
+skinparam LegendFontSize 11
+
+skinparam rectangle {
+  RoundCorner 12
+  BorderColor #607D8B
+  FontColor #263238
+}
+
+actor "Cliente\nasegurado" as Cliente
+actor "Asesor /\nOperaciones" as Operaciones
+actor "Actuaría /\nRiesgo" as Actuaria
+actor "Cumplimiento /\nRegulador" as Cumplimiento
+actor "Equipo Dev /\nSRE" as DevSRE
+actor "Socio de\ndistribución" as Socio
+
+rectangle "Solventa\nPlataforma aseguradora digital\n(web, móvil y API-first)" as Solventa #B8D8F2
+
+rectangle "Open Finance y\nOpen Data" as Datos #D9EAD3
+rectangle "KYC / AML e\nidentidad" as KYC #D9EAD3
+rectangle "Pasarelas de pago\ny redes de recaudo" as Pagos #D9EAD3
+rectangle "Firma electrónica y\nnotificaciones" as Firma #D9EAD3
+rectangle "Telemetría / IoT\nclima y vuelos" as IoT #D9EAD3
+rectangle "Reaseguradoras\ny estándar ACORD" as Reaseguro #D9EAD3
+rectangle "Peritos, talleres\ny prestadores" as Prestadores #D9EAD3
+
+Cliente -[hidden]down-> Operaciones
+Operaciones -[hidden]down-> Actuaria
+Actuaria -[hidden]down-> Cumplimiento
+Cumplimiento -[hidden]down-> DevSRE
+DevSRE -[hidden]down-> Socio
+
+Datos -[hidden]down-> KYC
+KYC -[hidden]down-> Pagos
+Pagos -[hidden]down-> Firma
+Firma -[hidden]down-> IoT
+IoT -[hidden]down-> Reaseguro
+Reaseguro -[hidden]down-> Prestadores
+
+Cliente -[#3F6F8F]right-> Solventa : (1)
+Operaciones -[#3F6F8F]right-> Solventa : (2)
+Actuaria -[#3F6F8F]right-> Solventa : (3)
+Cumplimiento -[#3F6F8F]right-> Solventa : (4)
+DevSRE -[#3F6F8F]right-> Solventa : (5)
+Socio -[#3F6F8F]right-> Solventa : (6)
+
+Solventa -[#2A7F74]right-> Datos : (7)
+Solventa -[#2A7F74]right-> KYC : (8)
+Solventa -[#2A7F74]right-> Pagos : (9)
+Solventa -[#2A7F74]right-> Firma : (10)
+IoT -[#6A4C93]left-> Solventa : (11)
+Solventa -[#2A7F74]right-> Reaseguro : (12)
+Solventa -[#2A7F74]right-> Prestadores : (13)
+
+legend bottom
+  |= Color |= Elemento |
+  | <#B8D8F2> | Sistema a diseñar |
+  | <#D9EAD3> | Sistema externo |
+
+  |= Ref. |= Interacción |
+  | (1) | Cotiza, compra, consulta y\nreporta siniestros |
+  | (2) | Gestiona pólizas, siniestros\ny operación |
+  | (3) | Administra reglas y\naudita decisiones |
+  | (4) | Consulta trazabilidad y\nrecibe reportes |
+  | (5) | Despliega, observa y\nrecupera la plataforma |
+  | (6) | Cotiza y emite\nseguros embebidos |
+  | (7) | Obtiene datos consentidos\npara el perfilamiento |
+  | (8) | Verifica identidad y\nlistas restrictivas |
+  | (9) | Cobra primas y paga\nindemnizaciones |
+  | (10) | Firma, emite y\nenvía avisos |
+  | (11) | Publica eventos\nparamétricos |
+  | (12) | Cede riesgo y reporta\ncartera y siniestros |
+  | (13) | Solicita evaluación\ny asistencia |
+endlegend
+
+@enduml

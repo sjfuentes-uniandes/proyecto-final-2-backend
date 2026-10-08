@@ -1,0 +1,41 @@
+@startuml
+!theme plain
+skinparam componentStyle uml2
+
+component "Cliente Web / Angular\n(Portal y Back-office)" as U_Web
+component "Cliente Móvil / Kotlin\n(Autoservicio y Siniestros)" as U_Mob
+component "Socio de Distribución" as U_Partner
+
+cloud "AWS CloudFront" as CloudFront
+node "Amazon API Gateway" as APIGW
+
+U_Web --> CloudFront
+CloudFront --> APIGW
+U_Mob --> APIGW
+U_Partner --> APIGW
+
+package "Ambiente Cloud AWS" {
+    
+    package "Amazon ECS / Fargate" {
+        component "Microservicios Core Seguro\n(Python o Java) / API REST\n- Consultas\n- Reclamos\n- Fallas Técnicas" as API_Core
+    }
+
+    queue "Amazon SQS / EventBridge\nEventos y Notificaciones" as SQS
+
+    database "Amazon RDS\nPostgreSQL (Transaccional)" as RDS
+    storage "Amazon S3\nAlmacenamiento Estático y Evidencias" as S3
+}
+
+APIGW --> API_Core
+
+API_Core --> RDS
+API_Core --> S3
+API_Core --> SQS
+
+node "Sistemas Externos\n(Pasarelas, KYC, CRM)" as Ext_Allies
+node "WireMock / Herramientas QA" as Ext_Simulators
+
+API_Core ..> Ext_Allies : Integraciones
+API_Core ..> Ext_Simulators : Pruebas de integración
+
+@enduml

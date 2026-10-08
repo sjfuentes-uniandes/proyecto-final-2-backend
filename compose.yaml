@@ -1,0 +1,44 @@
+# Ambiente local: Postgres, LocalStack (SNS/SQS/S3), WireMock y servicios.
+name: solventa
+
+x-servicio: &servicio
+  environment:
+    SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
+  depends_on: [postgres, localstack]
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: solventa
+      POSTGRES_PASSWORD: solventa
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+
+  localstack:
+    image: localstack/localstack:3
+    environment:
+      SERVICES: sns,sqs,s3
+    ports: ["4566:4566"]
+
+  simulador-aliados:
+    build: services/simulador-aliados
+    ports: ["8089:8080"]
+
+  bff-web:
+    <<: *servicio
+    build: { context: ., dockerfile: services/bff-web/Dockerfile }
+    ports: ["8080:8080"]
+
+  bff-movil:
+    <<: *servicio
+    build: { context: ., dockerfile: services/bff-movil/Dockerfile }
+    ports: ["8081:8080"]
+
+  api-socios:
+    <<: *servicio
+    build: { context: ., dockerfile: services/api-socios/Dockerfile }
+    ports: ["8082:8080"]
+
+volumes:
+  pgdata:

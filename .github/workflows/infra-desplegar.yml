@@ -1,0 +1,8 @@
+# Workflow existente: pendiente.
+name: infra-desplegar
+on: workflow_dispatch
+jobs:
+  pendiente:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Pendiente"

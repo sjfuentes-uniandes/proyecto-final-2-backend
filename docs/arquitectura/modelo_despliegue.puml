@@ -1,0 +1,274 @@
+@startuml
+title Solventa - Modelo de despliegue detallado (VA-004)
+
+top to bottom direction
+skinparam shadowing false
+skinparam linetype ortho
+skinparam componentStyle uml2
+skinparam nodesep 28
+skinparam ranksep 55
+skinparam ArrowFontSize 11
+skinparam ArrowColor #455A64
+skinparam node {
+  BackgroundColor #FFFDF5
+  BorderColor #607D8B
+  FontColor #263238
+}
+skinparam artifact {
+  BackgroundColor #FFFFFF
+  BorderColor #607D8B
+  FontColor #263238
+}
+skinparam database {
+  BackgroundColor #FFFFFF
+  BorderColor #607D8B
+  FontColor #263238
+}
+
+node "Dispositivo del usuario" as DispositivoUsuario <<device>> {
+  node "Navegador web" as Navegador <<executionEnvironment>> {
+    artifact "Portal de gestión\nde Solventa" as PortalWeb #D6EAF8
+  }
+}
+
+node "Dispositivo móvil" as DispositivoMovil <<device>> {
+  node "Sistema operativo móvil" as SistemaMovil <<executionEnvironment>> {
+    artifact "Aplicación móvil\nde Solventa" as AplicacionMovil #D6EAF8
+  }
+  database "Evidencia pendiente y\nclave de reintento cifradas" as AlmacenMovil <<Almacenamiento local>> #D6EAF8
+}
+
+node "Plataforma del socio\nde distribución" as PlataformaSocio <<externalSystem>> {
+  artifact "Canal de venta\ndel socio" as CanalSocio #D6EAF8
+}
+
+DispositivoUsuario -[hidden]right-> DispositivoMovil
+DispositivoMovil -[hidden]right-> PlataformaSocio
+
+node "Acceso global a Solventa" as AccesoGlobal <<cloud>> {
+  artifact "Protección y distribución\ndel contenido" as ProteccionGlobal <<WAF / CDN>> #D6EAF8
+  artifact "Enrutamiento hacia\nla región disponible" as EnrutamientoGlobal <<Balanceador global>> #D6EAF8
+  ProteccionGlobal --> EnrutamientoGlobal
+}
+
+PortalWeb --> ProteccionGlobal : HTTPS
+AplicacionMovil --> ProteccionGlobal : HTTPS
+CanalSocio --> ProteccionGlobal : HTTPS + mTLS
+AplicacionMovil --> AlmacenMovil : envío pendiente
+
+node "Nube de Solventa" as NubeSolventa <<cloud>> {
+  node "Región principal - operación activa" as RegionPrincipal <<region>> {
+
+    node "Acceso administrado" as AccesoPrincipal <<executionEnvironment>> {
+      artifact "Entrada segura\na la plataforma" as EntradaPrincipal <<API Gateway>> #B8D8F2
+      artifact "Autenticación y\nautorización centralizada" as Autorizacion <<OAuth2 / OIDC>> #B8D8F2
+    }
+
+    node "Plataforma de contenedores regional" as PlataformaPrincipal <<executionEnvironment>> {
+      node "Zona disponible A" as ZonaA <<zone>> #F8F9F9
+      node "Zona disponible B" as ZonaB <<zone>> #F8F9F9
+      artifact "Programador, monitor de salud\ny autoescalado" as Orquestador <<Control de plataforma>> #D6EAF8
+
+      node "Despliegues de acceso\n[2 o más réplicas entre A y B]" as GrupoAcceso <<grupoDeContenedores>> {
+        artifact "Servicios para\nel portal web" as ServiciosWeb <<BFF>> #B8D8F2
+        artifact "Servicios para\nla aplicación móvil" as ServiciosMovil <<BFF>> #B8D8F2
+        artifact "API para socios\nde distribución" as APISocios <<API>> #B8D8F2
+      }
+
+      node "Despliegues del negocio asegurador\n[2 o más réplicas entre A y B]" as GrupoNegocio <<grupoDeContenedores>> {
+        artifact "Clientes, identidad\ny consentimientos" as ClientesIdentidad <<Microservicio>> #FFF2CC
+        artifact "Catálogo de seguros\ny reglas del negocio" as CatalogoReglas <<Microservicio>> #FFF2CC
+        artifact "Perfil de riesgo,\nprecio y cotización" as PerfilCotizacion <<Microservicio>> #FFF2CC
+        artifact "Suscripción y\ngestión de pólizas" as SuscripcionPolizas <<Microservicio>> #FFF2CC
+        artifact "Atención de\nsiniestros" as AtencionSiniestros <<Microservicio>> #FFF2CC
+        artifact "Recaudos e\nindemnizaciones" as RecaudosIndemnizaciones <<Microservicio>> #FFF2CC
+        artifact "Gestión regulatoria\ny de reaseguro" as GestionRegulatoria <<Evolución>> #ECEFF1
+      }
+
+      node "Despliegues de eventos y automatización\n[consumidores escalables entre A y B]" as GrupoAutomatizacion <<grupoDeContenedores>> {
+        artifact "Publicadores confiables\nde eventos" as PublicadoresOutbox <<Relay de Outbox>> #E4D5F7
+        artifact "Emisión, avisos\ny conciliación" as EmisionAvisos <<Saga / Process Manager>> #E4D5F7
+        artifact "Pagos por eventos\nparamétricos" as PagosParametricos <<Consumidor idempotente>> #E4D5F7
+        artifact "Proyecciones para\nconsultas rápidas" as ProyeccionesConsulta <<CQRS limitado>> #E4D5F7
+        artifact "Actualización masiva de\nperfiles y analítica" as PerfilesAnalitica <<Evolución>> #ECEFF1
+      }
+
+      node "Despliegues de adaptadores\n[grupos aislados por aliado]" as GrupoConexiones <<grupoDeContenedores>> {
+        artifact "Finanzas Abiertas\ny Datos Abiertos" as ConexionDatos <<Adaptador>> #D9EAD3
+        artifact "Identidad, KYC\ny prevención de lavado" as ConexionIdentidad <<Adaptador>> #D9EAD3
+        artifact "Medios de pago" as ConexionPagos <<Adaptador>> #D9EAD3
+        artifact "Firma electrónica\ny notificaciones" as ConexionFirma <<Adaptador>> #D9EAD3
+        artifact "Telemetría y\nprestadores" as ConexionTelemetria <<Adaptador>> #D9EAD3
+        artifact "Reaseguradoras\ny estándar ACORD" as ConexionReaseguro <<Evolución>> #ECEFF1
+      }
+
+      Orquestador ..> ZonaA : programa réplicas
+      Orquestador ..> ZonaB : programa réplicas
+      GrupoAcceso ..> ZonaA : <<deploy>>
+      GrupoAcceso ..> ZonaB : <<deploy>>
+      GrupoNegocio ..> ZonaA : <<deploy>>
+      GrupoNegocio ..> ZonaB : <<deploy>>
+      GrupoAutomatizacion ..> ZonaA : <<deploy>>
+      GrupoAutomatizacion ..> ZonaB : <<deploy>>
+      GrupoConexiones ..> ZonaA : <<deploy>>
+      GrupoConexiones ..> ZonaB : <<deploy>>
+    }
+
+    node "Bases de datos administradas multi-zona" as BasesPrincipal <<executionEnvironment>> {
+      database "Clientes" as DatosClientes <<Repositorio privado>> #FADBD8
+      database "Catálogo y reglas" as DatosCatalogo <<Repositorio privado>> #FADBD8
+      database "Perfiles y cotizaciones" as DatosCotizacion <<Repositorio privado>> #FADBD8
+      database "Suscripciones y pólizas" as DatosPolizas <<Repositorio privado>> #FADBD8
+      database "Siniestros" as DatosSiniestros <<Repositorio privado>> #FADBD8
+      database "Movimientos de dinero" as DatosDinero <<Repositorio privado>> #FADBD8
+    }
+
+    node "Servicios de información administrados" as InformacionPrincipal <<executionEnvironment>> {
+      database "Caché de catálogo\ny reglas vigentes" as CacheCatalogo <<Cache-Aside>> #FADBD8
+      database "Vista de pólizas y\nsiniestros para consulta" as InformacionRapida <<Proyección CQRS>> #FADBD8
+      database "Evidencias de siniestros" as Evidencias <<Objetos cifrados>> #FADBD8
+      database "Historial de decisiones\ny uso de datos" as HistorialAuditoria <<Registro inmutable>> #FADBD8
+      database "Claves de idempotencia\ny mensajes procesados" as RegistroIdempotencia <<Inbox>> #FADBD8
+    }
+
+    node "Mensajería administrada multi-zona" as MensajeriaPrincipal <<executionEnvironment>> {
+      artifact "Eventos del negocio\n[P particiones replicadas]" as EventosNegocio <<Broker / Pub-Sub>> #E4D5F7
+      artifact "Colas de reintento" as ColasReintento <<Retry Queue>> #E4D5F7
+      artifact "Mensajes que requieren\nintervención" as MensajesFallidos <<Dead Letter Queue>> #E4D5F7
+    }
+
+    node "Seguridad, entrega y operación" as OperacionPrincipal <<executionEnvironment>> {
+      artifact "Identidades de usuarios\ny cargas de trabajo" as IdentidadesPermisos <<Mínimo privilegio>> #D6EAF8
+      artifact "Protección de claves\ny credenciales" as ClavesCredenciales <<KMS / Secretos>> #D6EAF8
+      artifact "Métricas, trazas, registros\ny alertas" as SeguimientoOperacion <<Observabilidad>> #D6EAF8
+      artifact "Entrega automática\ny despliegue gradual" as EntregaVersiones <<CI/CD>> #D6EAF8
+    }
+  }
+
+  node "Región de respaldo - recuperación regional" as RegionRespaldo <<region / Evolución>> #ECEFF1 {
+    artifact "Entrada segura\nde respaldo" as EntradaRespaldo <<API Gateway en espera>> #ECEFF1
+    node "Plataforma de contenedores\ncon capacidad mínima" as PlataformaRespaldo <<executionEnvironment>> {
+      artifact "Mismos despliegues de acceso, negocio,\neventos y adaptadores" as DesplieguesRespaldo <<Misma versión validada>> #ECEFF1
+    }
+    database "Copias de los repositorios\nprivados del negocio" as DatosRespaldo <<Réplica cifrada>> #ECEFF1
+    database "Copia de evidencias\ny auditoría" as EvidenciasAuditoriaRespaldo <<Réplica inmutable>> #ECEFF1
+    artifact "Copia de eventos\ndel negocio" as EventosRespaldo <<Réplica / Reproceso>> #ECEFF1
+  }
+}
+
+node "Aliados externos" as AliadosExternos <<externalSystems>> {
+  artifact "Finanzas Abiertas\ny Datos Abiertos" as ProveedoresDatos #D9EAD3
+  artifact "Identidad, KYC\ny AML" as ProveedoresIdentidad #D9EAD3
+  artifact "Medios de pago" as ProveedoresPago #D9EAD3
+  artifact "Firma electrónica\ny notificaciones" as ProveedoresFirma #D9EAD3
+  artifact "Telemetría, clima, vuelos\ny prestadores" as OtrosProveedores #D9EAD3
+  artifact "Reaseguradoras\ny ACORD" as ProveedoresReaseguro <<Evolución>> #ECEFF1
+}
+
+EnrutamientoGlobal --> EntradaPrincipal : región activa
+EnrutamientoGlobal ..> EntradaRespaldo : recuperación futura
+EntradaPrincipal --> Autorizacion : (1)
+EntradaPrincipal --> ServiciosWeb
+EntradaPrincipal --> ServiciosMovil
+EntradaPrincipal --> APISocios
+
+ServiciosWeb --> ClientesIdentidad
+ServiciosWeb --> SuscripcionPolizas
+ServiciosWeb --> AtencionSiniestros
+ServiciosMovil --> ClientesIdentidad
+ServiciosMovil --> SuscripcionPolizas
+ServiciosMovil --> AtencionSiniestros
+APISocios --> PerfilCotizacion
+APISocios --> SuscripcionPolizas
+
+PerfilCotizacion --> ClientesIdentidad
+PerfilCotizacion --> CatalogoReglas
+PerfilCotizacion --> SuscripcionPolizas
+EmisionAvisos --> RecaudosIndemnizaciones
+PagosParametricos --> AtencionSiniestros
+
+ClientesIdentidad --> DatosClientes
+CatalogoReglas --> DatosCatalogo
+PerfilCotizacion --> DatosCotizacion
+SuscripcionPolizas --> DatosPolizas
+AtencionSiniestros --> DatosSiniestros
+RecaudosIndemnizaciones --> DatosDinero
+AtencionSiniestros --> Evidencias
+CatalogoReglas --> CacheCatalogo : actualiza / invalida
+PerfilCotizacion --> CacheCatalogo : lectura
+ProyeccionesConsulta --> InformacionRapida
+
+ClientesIdentidad --> PublicadoresOutbox : (2)
+SuscripcionPolizas --> PublicadoresOutbox : (2)
+AtencionSiniestros --> PublicadoresOutbox : (2)
+RecaudosIndemnizaciones --> PublicadoresOutbox : (2)
+PublicadoresOutbox --> EventosNegocio
+EventosNegocio --> EmisionAvisos
+EventosNegocio --> PagosParametricos
+EventosNegocio --> ProyeccionesConsulta
+EventosNegocio --> PerfilesAnalitica
+EventosNegocio --> HistorialAuditoria
+EventosNegocio --> RegistroIdempotencia
+EventosNegocio --> ColasReintento : error transitorio
+ColasReintento --> EventosNegocio : reintento con demora
+ColasReintento --> MensajesFallidos : límite agotado
+
+ClientesIdentidad --> ConexionDatos
+ClientesIdentidad --> ConexionIdentidad
+PerfilCotizacion --> ConexionDatos
+RecaudosIndemnizaciones --> ConexionPagos
+EmisionAvisos --> ConexionFirma
+AtencionSiniestros --> ConexionTelemetria
+GestionRegulatoria --> ConexionReaseguro
+
+ConexionDatos --> ProveedoresDatos : TLS + timeout + circuito
+ConexionIdentidad --> ProveedoresIdentidad : TLS + timeout + circuito
+ConexionPagos --> ProveedoresPago : mTLS + idempotencia
+ConexionFirma --> ProveedoresFirma : TLS + reintento acotado
+ConexionTelemetria --> OtrosProveedores : mTLS / evento autenticado
+ConexionReaseguro --> ProveedoresReaseguro : mTLS + contrato ACORD
+
+EntradaPrincipal ..> IdentidadesPermisos
+PlataformaPrincipal ..> ClavesCredenciales
+MensajeriaPrincipal ..> IdentidadesPermisos : permisos por tópico
+GrupoConexiones ..> IdentidadesPermisos : identidad por adaptador
+AccesoPrincipal ..> SeguimientoOperacion
+PlataformaPrincipal ..> SeguimientoOperacion
+BasesPrincipal ..> SeguimientoOperacion
+MensajeriaPrincipal ..> SeguimientoOperacion
+EntregaVersiones ..> PlataformaPrincipal : despliegue gradual
+EntregaVersiones ..> PlataformaRespaldo : misma versión validada
+
+BasesPrincipal ==> DatosRespaldo : réplica cifrada futura
+Evidencias ==> EvidenciasAuditoriaRespaldo : réplica futura
+HistorialAuditoria ==> EvidenciasAuditoriaRespaldo : réplica inmutable futura
+EventosNegocio ==> EventosRespaldo : réplica y reprocesamiento futuro
+
+note right of RegionPrincipal
+MVP de 112 puntos: operación activa-activa entre dos zonas
+de una región. Autoescalado independiente por despliegue.
+end note
+
+note right of RegionRespaldo
+Arquitectura objetivo completa. El failover regional
+no forma parte del compromiso de 112 puntos.
+end note
+
+legend bottom
+  |= Color / estereotipo |= Alcance |
+  | <#B8D8F2> / <#FFF2CC> / <#E4D5F7> / <#D9EAD3> / <#FADBD8> | Despliegue del núcleo priorizado por las 42 historias y 112 puntos |
+  | <#ECEFF1> <<Evolución>> | Despliegue objetivo posterior al MVP |
+
+  |= Elemento UML |= Uso en Solventa |
+  | Artefacto | Componente desplegable del modelo de componentes |
+  | Entorno de ejecución | Plataforma que ejecuta o administra artefactos |
+  | Base de datos | Repositorio privado, proyección o almacenamiento especializado |
+  | <<deploy>> | Réplicas programadas en cada zona disponible |
+  | Flecha doble | Replicación para recuperación regional |
+
+  |= Ref. |= Decisión |
+  | (1) | Toda entrada se autentica y autoriza antes de llegar al negocio |
+  | (2) | Cada servicio registra el evento en su Outbox y el relay lo publica |
+endlegend
+
+@enduml

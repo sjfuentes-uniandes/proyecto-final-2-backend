@@ -1,0 +1,160 @@
+@startuml
+title Solventa - Despliegue objetivo en Amazon ECS Fargate (VA-004)
+!pragma layout smetana
+
+scale max 1500 width
+top to bottom direction
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam ArrowFontSize 12
+skinparam nodesep 28
+skinparam ranksep 42
+skinparam node {
+  BackgroundColor #FFFDF5
+  BorderColor #607D8B
+  FontColor #263238
+}
+skinparam artifact {
+  BackgroundColor #FFFFFF
+  BorderColor #607D8B
+}
+
+node "Dispositivos y socios" as Canales <<devices>> {
+  artifact "Portal web" as Web
+  artifact "Aplicación móvil" as Movil
+  artifact "Canal del socio" as Socio
+  Web -[hidden]right-> Movil
+  Movil -[hidden]right-> Socio
+}
+
+cloud "AWS - Región principal" as Region {
+  node "Acceso administrado" as Edge <<managed>> {
+    artifact "AWS WAF" as WAF
+    artifact "Amazon API Gateway" as APIGW
+    artifact "VPC Link + NLB" as NLB
+    WAF -right-> APIGW
+    APIGW -right-> NLB
+  }
+
+  node "VPC de Solventa" as VPC {
+    node "Amazon ECS - Fargate" as ECS <<executionEnvironment>> {
+      node "Zona disponible A" as AZA <<zone>> {
+        artifact "Acceso A\nBFF web, BFF móvil, API socios" as AccesoA
+        artifact "Núcleo A\nClientes, catálogo, cotización" as CoreA
+        artifact "Operación A\nPólizas, siniestros, dinero" as OpsA
+        artifact "Workers A\nOutbox, Saga, adaptadores" as WorkersA
+        AccesoA -[hidden]right-> CoreA
+        OpsA -[hidden]right-> WorkersA
+        AccesoA -[hidden]down-> OpsA
+      }
+
+      node "Zona disponible B" as AZB <<zone>> {
+        artifact "Acceso B\nBFF web, BFF móvil, API socios" as AccesoB
+        artifact "Núcleo B\nClientes, catálogo, cotización" as CoreB
+        artifact "Operación B\nPólizas, siniestros, dinero" as OpsB
+        artifact "Workers B\nOutbox, Saga, adaptadores" as WorkersB
+        AccesoB -[hidden]right-> CoreB
+        OpsB -[hidden]right-> WorkersB
+        AccesoB -[hidden]down-> OpsB
+      }
+
+      artifact "ECS Service Connect\nDescubrimiento, enrutamiento y métricas" as ServiceConnect
+    }
+
+    node "Datos administrados" as Data <<managed>> {
+      database "RDS PostgreSQL\nBases por servicio\nMulti-AZ" as RDS
+      database "Proyección de consulta\nPólizas y siniestros" as ReadDB
+      folder "Amazon S3\nEvidencias y auditoría" as S3
+      RDS -[hidden]right-> ReadDB
+      ReadDB -[hidden]right-> S3
+    }
+
+    node "Mensajería administrada" as Messaging <<managed>> {
+      queue "Amazon SNS\nEventos del negocio" as SNS
+      queue "Amazon SQS\nColas por consumidor" as SQS
+      queue "SQS DLQ\nMensajes fallidos" as DLQ
+      SNS -right-> SQS : fan-out
+      SQS -right-> DLQ : reintentos agotados
+    }
+  }
+
+  node "Operación y seguridad" as Ops <<managed>> {
+    artifact "Amazon ECR" as ECR
+    artifact "Secrets Manager + KMS" as Secrets
+    artifact "CloudWatch + X-Ray" as Observability
+    ECR -[hidden]right-> Secrets
+    Secrets -[hidden]right-> Observability
+  }
+}
+
+cloud "Aliados externos" as Aliados {
+  artifact "Finanzas abiertas y KYC" as DatosExt
+  artifact "Pagos, firma y avisos" as OperacionExt
+  artifact "Telemetría y prestadores" as EventosExt
+  DatosExt -[hidden]right-> OperacionExt
+  OperacionExt -[hidden]right-> EventosExt
+}
+
+Canales -[hidden]down-> Edge
+Edge -[hidden]down-> ECS
+ECS -[hidden]down-> Data
+Data -[hidden]down-> Messaging
+Messaging -[hidden]down-> Ops
+Ops -[hidden]down-> Aliados
+
+Web -down-> WAF : HTTPS
+Movil -down-> WAF : HTTPS
+Socio -down-> WAF : HTTPS + mTLS
+
+NLB -down-> AccesoA : HTTP privado\ndestino IP saludable
+NLB -down-> AccesoB : HTTP privado\ndestino IP saludable
+
+AccesoA -down-> ServiceConnect
+AccesoB -down-> ServiceConnect
+ServiceConnect -up-> CoreA : REST interno
+ServiceConnect -up-> CoreB : REST interno
+ServiceConnect -up-> OpsA : REST interno
+ServiceConnect -up-> OpsB : REST interno
+
+CoreA -down-> RDS : SQL/TLS
+CoreB -down-> RDS : SQL/TLS
+OpsA -down-> RDS : SQL/TLS
+OpsB -down-> RDS : SQL/TLS
+OpsA -down-> S3 : HTTPS + hash
+OpsB -down-> S3 : HTTPS + hash
+
+WorkersA -down-> SNS : HTTPS publicar
+WorkersB -down-> SNS : HTTPS publicar
+SQS -up-> WorkersA : long polling
+SQS -up-> WorkersB : long polling
+WorkersA -down-> ReadDB : actualizar proyección
+WorkersB -down-> ReadDB : actualizar proyección
+
+WorkersA -right-> DatosExt : HTTPS / mTLS
+WorkersA -right-> OperacionExt : HTTPS / mTLS
+EventosExt -left-> APIGW : eventos autenticados
+
+ECR ..> ECS : imagen por digest
+Secrets ..> ECS : secretos cifrados
+ECS ..> Observability : logs, métricas y trazas
+RDS ..> Observability
+Messaging ..> Observability
+
+note bottom of AZA
+Los servicios críticos mantienen réplicas
+activas distribuidas entre A y B.
+end note
+
+legend bottom
+  |= Conector desplegado |= Responsabilidad |
+  | HTTPS/mTLS | Acceso externo autenticado y cifrado |
+  | VPC Link + NLB | Entrada privada y balanceo entre tareas ECS |
+  | Service Connect | Descubrimiento y llamadas ECS a ECS |
+  | SNS + SQS | Fan-out, desacoplamiento, backpressure y reintento |
+  | SQL/TLS / HTTPS | Persistencia cifrada en RDS y S3 |
+endlegend
+
+@enduml

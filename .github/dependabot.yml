@@ -1,0 +1,21 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+  - package-ecosystem: uv
+    directory: /
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directories:
+      - /services/adaptador-datos
+      - /services/adaptador-identidad
+      - /services/api-socios
+      - /services/auditoria
+      - /services/bff-movil
+      - /services/bff-web
+      - /services/catalogo
+      - /services/clientes
+      - /services/cotizacion
+      - /services/simulador-aliados
+    schedule: { interval: weekly }

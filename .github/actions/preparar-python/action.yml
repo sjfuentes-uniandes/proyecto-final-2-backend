@@ -1,0 +1,11 @@
+name: Preparar Python
+description: Instala uv con caché y sincroniza el workspace
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+        python-version: "3.12"
+    - run: uv sync --all-packages --frozen
+      shell: bash

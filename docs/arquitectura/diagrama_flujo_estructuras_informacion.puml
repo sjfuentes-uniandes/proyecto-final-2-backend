@@ -1,0 +1,63 @@
+@startuml
+title Solventa - Flujo y estructuras de información (VA-005B)
+!pragma layout smetana
+
+scale max 1500 width
+left to right direction
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam ArrowFontSize 12
+skinparam componentStyle uml2
+skinparam packageStyle rectangle
+skinparam nodesep 28
+skinparam ranksep 42
+
+package "Comando y publicación confiable" #EAF2F8 {
+  component "Servicio propietario\nValida el agregado" as Owner
+  database "RDS propia\nDato + Outbox" as Primary
+  component "Publicador\nOutbox" as Publisher
+  queue "SNS\nEventos del negocio" as SNS
+
+  Owner -down-> Primary : 1. TX local ACID\ndato + evento pendiente
+  Publisher -up-> Primary : 2. lee pendientes
+  Publisher -down-> SNS : 3. publica después\ndel commit
+}
+
+package "Consumo y vistas derivadas" #FCF3CF {
+  queue "SQS por consumidor\n+ DLQ" as SQS
+  component "Consumidor\nidempotente" as Consumer
+  database "RDS destino\nInbox + agregado" as Target
+  database "Proyección CQRS\nPólizas y siniestros" as Projection
+
+  SQS -down-> Consumer : 4. entrega al menos una vez
+  Consumer -down-> Target : 5. TX local\nInbox + cambio
+  Consumer -down-> Projection : 6. actualiza vista
+}
+
+package "Contratos intercambiados" #F5EEF8 {
+  artifact "SobreEvento JSON\neventId: UUID\naggregateId: UUID\ntype + version\noccurredAt\ncorrelationId\npayload" as SobreEvento
+
+  artifact "RegistroAuditoria\nactor + acción\nresourceId\ntimestamp\npreviousHash" as RegistroAuditoria <<Inmutable>>
+}
+
+SNS -right-> SQS : fan-out filtrado
+SNS ..> SobreEvento : contrato versionado
+Consumer ..> RegistroAuditoria : registra decisión
+
+note bottom of Projection
+Dato derivado, eventualmente consistente.
+Puede reconstruirse desde eventos archivados.
+end note
+
+legend bottom
+  |= Conector |= Responsabilidad |
+  | SQL/TLS | Transacción local; un único servicio escritor |
+  | SNS -> SQS | Distribuir y retener trabajo por consumidor |
+  | Inbox | Evitar repetir el efecto de un eventId |
+  | Proyección | Optimizar consultas sin ser fuente de verdad |
+endlegend
+
+@enduml

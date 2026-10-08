@@ -1,0 +1,113 @@
+@startuml
+title Solventa - Componentes y responsabilidades (VA-003A)
+!pragma layout smetana
+
+scale max 1500 width
+top to bottom direction
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam componentStyle uml2
+skinparam packageStyle rectangle
+skinparam defaultFontName Arial
+skinparam defaultFontSize 15
+skinparam ArrowFontSize 13
+skinparam nodesep 32
+skinparam ranksep 48
+skinparam component {
+  BackgroundColor #FFFFFF
+  BorderColor #607D8B
+  FontColor #263238
+}
+
+package "Canales de Solventa" #EAF2F8 {
+  component "Portal web" as Web
+  component "Aplicación móvil" as Movil
+  component "Canal del socio" as Socio
+  Web -[hidden]right-> Movil
+  Movil -[hidden]right-> Socio
+}
+
+package "Acceso" #D6EAF8 {
+  component "Entrada segura\nAutentica, limita y enruta" as Gateway <<API Gateway>>
+  component "Servicios por canal\nCompone respuestas web, móvil y socios" as CanalesAPI <<BFF-API>>
+  Gateway -right-> CanalesAPI : HTTPS interno\npropaga correlación
+}
+
+package "Núcleo asegurador" #FCF3CF {
+  component "Clientes e identidad\nGestiona cliente y consentimiento" as Clientes
+  component "Catálogo y reglas\nVersiona productos y reglas" as Catalogo
+  component "Cotización y riesgo\nCalcula perfil, prima y oferta" as Cotizacion
+  component "Pólizas\nSuscribe, emite y administra vigencia" as Polizas
+  component "Siniestros\nRegistra, evalúa y decide casos" as Siniestros
+  component "Dinero\nRecauda primas y paga indemnizaciones" as Dinero
+
+  Clientes -[hidden]right-> Catalogo
+  Catalogo -[hidden]right-> Cotizacion
+  Polizas -[hidden]right-> Siniestros
+  Siniestros -[hidden]right-> Dinero
+  Clientes -[hidden]down-> Polizas
+}
+
+package "Coordinación confiable" #F5EEF8 {
+  component "Outbox por servicio\nPublica cambios confirmados" as Outbox <<Transactional Outbox>>
+  component "Eventos del negocio\nDistribuye por consumidor" as Eventos <<SNS + SQS>>
+  component "Gestor de procesos\nCoordina contratación y pago" as Saga <<Saga / Process Manager>>
+  component "Vista de consulta\nPólizas y siniestros" as Consulta <<CQRS>>
+
+  Outbox -right-> Eventos : HTTPS\npublicación al menos una vez
+  Eventos -right-> Saga : SQS\nconsume con Inbox
+  Eventos -right-> Consulta : SQS\nactualiza proyección
+}
+
+package "Aliados" #E8F8F5 {
+  component "Adaptadores de aliados\nAíslan contratos, fallas y tiempos" as Adaptadores <<Anti-Corruption Layer>>
+  component "Finanzas abiertas, KYC, pagos,\nfirma, telemetría y prestadores" as Externos <<Sistemas externos>>
+  Adaptadores -right-> Externos : HTTPS / mTLS\ntraduce y protege
+}
+
+database "Datos privados\npor servicio" as Datos
+folder "Evidencias de\nsiniestros" as Evidencias
+
+Web -down-> Gateway : HTTPS
+Movil -down-> Gateway : HTTPS
+Socio -down-> Gateway : HTTPS + mTLS
+
+CanalesAPI -down-> Clientes : REST\nidentidad y consentimiento
+CanalesAPI -down-> Cotizacion : REST\ncotizar
+CanalesAPI -down-> Polizas : REST\ncontratar y consultar
+CanalesAPI -down-> Siniestros : REST\nreportar y seguir
+
+Cotizacion -left-> Clientes : REST\nvalida consentimiento
+Cotizacion -left-> Catalogo : REST\nconsulta reglas vigentes
+Cotizacion -down-> Polizas : REST\nenvía oferta aceptada
+Polizas -right-> Dinero : REST\nsolicita recaudo idempotente
+Siniestros -right-> Dinero : REST\nsolicita indemnización idempotente
+
+Polizas -down-> Outbox : transacción local
+Siniestros -down-> Outbox : transacción local
+Dinero -down-> Outbox : transacción local
+Saga -up-> Polizas : comando compensable
+Saga -up-> Dinero : comando idempotente
+
+Clientes -left-> Datos : SQL/TLS\núnico escritor
+Cotizacion -left-> Datos : SQL/TLS\núnico escritor
+Polizas -left-> Datos : SQL/TLS\núnico escritor
+Siniestros -left-> Datos : SQL/TLS\núnico escritor
+Dinero -left-> Datos : SQL/TLS\núnico escritor
+Siniestros -right-> Evidencias : HTTPS\nobjeto + hash
+
+Clientes -down-> Adaptadores : datos e identidad
+Cotizacion -down-> Adaptadores : datos consentidos
+Polizas -down-> Adaptadores : firma y aviso
+Siniestros -down-> Adaptadores : telemetría y prestadores
+Dinero -down-> Adaptadores : recaudo y pago
+
+legend bottom
+  |= Conector |= Responsabilidad |
+  | HTTPS / REST | Solicitud síncrona con respuesta inmediata |
+  | SNS / SQS | Evento asíncrono durable y reprocesable |
+  | SQL / HTTPS | Persistencia cuyo escritor es el servicio propietario |
+endlegend
+
+@enduml

@@ -1,0 +1,187 @@
+@startuml
+title Solventa - Modelo de componentes detallado (VA-003)
+
+top to bottom direction
+skinparam shadowing false
+skinparam linetype ortho
+skinparam componentStyle uml2
+skinparam packageStyle rectangle
+skinparam nodesep 35
+skinparam ranksep 55
+skinparam ArrowFontSize 11
+skinparam ArrowColor #455A64
+skinparam component {
+  BackgroundColor #FFFFFF
+  BorderColor #607D8B
+  FontColor #263238
+}
+
+package "Experiencias de Solventa" as Experiencias #EAF2F8 {
+  component "Portal de gestión\nde Solventa" as PortalWeb <<MVP 112 SP>> #D6EAF8
+  component "Aplicación móvil\nde Solventa" as AplicacionMovil <<MVP 112 SP>> #D6EAF8
+  component "Canal de venta\ndel socio" as CanalSocio <<MVP 112 SP>> #D6EAF8
+}
+
+package "Acceso y seguridad" as Acceso #D6EAF8 {
+  component "Entrada segura\na la plataforma" as EntradaSegura <<API Gateway>> #B8D8F2
+  component "Autenticación y\nautorización centralizada" as Autorizacion <<OAuth2 / OIDC>> #B8D8F2
+  component "Servicios para\nel portal web" as ServiciosWeb <<BFF>> #B8D8F2
+  component "Servicios para\nla aplicación móvil" as ServiciosMovil <<BFF>> #B8D8F2
+  component "API para socios\nde distribución" as APISocios <<API>> #B8D8F2
+
+  Autorizacion -[hidden]right-> EntradaSegura
+  ServiciosWeb -[hidden]right-> ServiciosMovil
+  ServiciosMovil -[hidden]right-> APISocios
+}
+
+package "Microservicios del negocio asegurador" as Dominio #FCF3CF {
+  component "Clientes, identidad\ny consentimientos" as ClientesIdentidad <<Microservicio>> #FFF2CC
+  component "Catálogo de seguros\ny reglas del negocio" as CatalogoReglas <<Microservicio>> #FFF2CC
+  component "Perfil de riesgo,\nprecio y cotización" as PerfilCotizacion <<Microservicio>> #FFF2CC
+  component "Suscripción y\ngestión de pólizas" as SuscripcionPolizas <<Microservicio>> #FFF2CC
+  component "Atención de\nsiniestros" as AtencionSiniestros <<Microservicio>> #FFF2CC
+  component "Recaudos e\nindemnizaciones" as RecaudosIndemnizaciones <<Microservicio>> #FFF2CC
+  component "Gestión regulatoria\ny de reaseguro" as GestionRegulatoria <<Evolución>> #ECEFF1
+
+  ClientesIdentidad -[hidden]right-> CatalogoReglas
+  CatalogoReglas -[hidden]right-> PerfilCotizacion
+  PerfilCotizacion -[hidden]right-> SuscripcionPolizas
+  SuscripcionPolizas -[hidden]right-> AtencionSiniestros
+  AtencionSiniestros -[hidden]right-> RecaudosIndemnizaciones
+}
+
+package "Eventos y automatización" as Automatizacion #F5EEF8 {
+  component "Publicadores confiables\nde eventos" as PublicadoresOutbox <<Relay de Outbox>> #E4D5F7
+  component "Eventos del negocio" as EventosNegocio <<Broker / Pub-Sub>> #E4D5F7
+  component "Mensajes que requieren\nintervención" as MensajesFallidos <<Cola de mensajes fallidos>> #E4D5F7
+  component "Emisión, avisos\ny conciliación" as EmisionAvisos <<Gestor de proceso / Saga>> #E4D5F7
+  component "Pagos por eventos\nparamétricos" as PagosParametricos <<Consumidor idempotente>> #E4D5F7
+  component "Proyecciones para\nconsultas rápidas" as ProyeccionesConsulta <<CQRS limitado>> #E4D5F7
+  component "Actualización masiva de\nperfiles y analítica" as PerfilesAnalitica <<Evolución>> #ECEFF1
+
+  PublicadoresOutbox --> EventosNegocio : (7)
+  EventosNegocio --> MensajesFallidos : (8)
+}
+
+package "Adaptadores para aliados" as Integraciones #E8F8F5 {
+  component "Finanzas Abiertas\ny Datos Abiertos" as ConexionDatos <<Adaptador>> #D9EAD3
+  component "Identidad, KYC\ny prevención de lavado" as ConexionIdentidad <<Adaptador>> #D9EAD3
+  component "Medios de pago" as ConexionPagos <<Adaptador>> #D9EAD3
+  component "Firma electrónica\ny notificaciones" as ConexionFirma <<Adaptador>> #D9EAD3
+  component "Telemetría y\nprestadores" as ConexionTelemetria <<Adaptador>> #D9EAD3
+  component "Reaseguradoras y\nestándar ACORD" as ConexionReaseguro <<Evolución>> #ECEFF1
+  component "Protección de\ndependencias externas" as ProteccionDependencias <<Timeout / Circuit Breaker>> #D9EAD3
+}
+
+package "Información por propietario" as Informacion #FDEDEC {
+  component "Información de\nclientes" as DatosClientes <<Repositorio privado>> #FADBD8
+  component "Catálogo y\nreglas versionadas" as DatosCatalogo <<Repositorio privado>> #FADBD8
+  component "Perfiles y\ncotizaciones" as DatosCotizacion <<Repositorio privado>> #FADBD8
+  component "Suscripciones y\npólizas" as DatosPolizas <<Repositorio privado>> #FADBD8
+  component "Siniestros" as DatosSiniestros <<Repositorio privado>> #FADBD8
+  component "Movimientos\nde dinero" as DatosDinero <<Repositorio privado>> #FADBD8
+  component "Catálogo y reglas\nde consulta rápida" as CacheCatalogo <<Cache-Aside>> #FADBD8
+  component "Pólizas y siniestros\nde consulta rápida" as InformacionRapida <<Proyección CQRS>> #FADBD8
+  component "Evidencias de\nsiniestros" as Evidencias <<Almacenamiento de objetos>> #FADBD8
+  component "Historial de decisiones\ny uso de datos" as HistorialAuditoria <<Registro inmutable>> #FADBD8
+}
+
+package "Operación transversal" as Operacion #ECEFF1 {
+  component "Seguimiento de la\noperación de Solventa" as SeguimientoOperacion <<Métricas / Trazas / Logs>>
+  component "Identidades de usuarios\ny cargas de trabajo" as IdentidadesPermisos <<Mínimo privilegio>>
+}
+
+PortalWeb --> EntradaSegura
+AplicacionMovil --> EntradaSegura
+CanalSocio --> EntradaSegura
+EntradaSegura --> Autorizacion : (1)
+EntradaSegura --> ServiciosWeb
+EntradaSegura --> ServiciosMovil
+EntradaSegura --> APISocios
+
+ServiciosWeb --> ClientesIdentidad
+ServiciosWeb --> SuscripcionPolizas
+ServiciosWeb --> AtencionSiniestros
+ServiciosMovil --> ClientesIdentidad
+ServiciosMovil --> SuscripcionPolizas
+ServiciosMovil --> AtencionSiniestros
+APISocios --> PerfilCotizacion
+APISocios --> SuscripcionPolizas
+
+PerfilCotizacion --> ClientesIdentidad : (2)
+PerfilCotizacion --> CatalogoReglas : (3)
+PerfilCotizacion --> SuscripcionPolizas : (4)
+EmisionAvisos --> RecaudosIndemnizaciones
+EmisionAvisos --> SuscripcionPolizas
+EmisionAvisos --> AtencionSiniestros
+
+ClientesIdentidad --> DatosClientes
+CatalogoReglas --> DatosCatalogo
+PerfilCotizacion --> DatosCotizacion
+SuscripcionPolizas --> DatosPolizas
+AtencionSiniestros --> DatosSiniestros
+RecaudosIndemnizaciones --> DatosDinero
+AtencionSiniestros --> Evidencias
+CatalogoReglas --> CacheCatalogo : actualiza / invalida
+PerfilCotizacion --> CacheCatalogo : lectura
+ProyeccionesConsulta --> InformacionRapida
+
+ClientesIdentidad --> PublicadoresOutbox
+SuscripcionPolizas --> PublicadoresOutbox : (5)
+AtencionSiniestros --> PublicadoresOutbox : (6)
+RecaudosIndemnizaciones --> PublicadoresOutbox
+ConexionTelemetria --> PublicadoresOutbox
+EventosNegocio --> EmisionAvisos
+EventosNegocio --> PagosParametricos
+EventosNegocio --> ProyeccionesConsulta
+EventosNegocio --> PerfilesAnalitica
+PagosParametricos --> AtencionSiniestros
+EventosNegocio --> HistorialAuditoria
+
+ClientesIdentidad --> ProteccionDependencias
+PerfilCotizacion --> ProteccionDependencias
+EmisionAvisos --> ProteccionDependencias
+AtencionSiniestros --> ProteccionDependencias
+GestionRegulatoria --> ProteccionDependencias
+ProteccionDependencias --> ConexionDatos
+ProteccionDependencias --> ConexionIdentidad
+ProteccionDependencias --> ConexionPagos
+ProteccionDependencias --> ConexionFirma
+ProteccionDependencias --> ConexionTelemetria
+ProteccionDependencias --> ConexionReaseguro
+
+EntradaSegura ..> SeguimientoOperacion
+Dominio ..> SeguimientoOperacion
+EventosNegocio ..> SeguimientoOperacion
+Integraciones ..> SeguimientoOperacion
+Autorizacion ..> IdentidadesPermisos
+EventosNegocio ..> IdentidadesPermisos : mTLS y permisos por tópico
+Integraciones ..> IdentidadesPermisos
+
+note right of Dominio
+Cada microservicio es dueño de sus datos.
+No existe una base compartida entre dominios.
+end note
+
+note right of Automatizacion
+Los consumidores son idempotentes.
+Los mensajes agotados pasan a la cola de fallidos.
+end note
+
+legend bottom
+  |= Color / estereotipo |= Alcance |
+  | <#B8D8F2> / <#FFF2CC> / <#E4D5F7> / <#D9EAD3> | Núcleo priorizado por las 42 historias y 112 puntos |
+  | <#ECEFF1> <<Evolución>> | Arquitectura objetivo; no comprometida en el MVP |
+
+  |= Ref. |= Interacción o decisión |
+  | (1) | El API Gateway autentica, autoriza, limita cuotas y enruta |
+  | (2) | Cotización valida identidad y consentimiento |
+  | (3) | Cotización consulta productos y reglas vigentes |
+  | (4) | Una oferta aceptada inicia la suscripción |
+  | (5) | La oferta aceptada publica el evento que inicia recaudo, firma y emisión |
+  | (6) | El siniestro aprobado publica el evento que inicia indemnización y conciliación |
+  | (7) | Outbox publica el cambio confirmado sin transacción distribuida |
+  | (8) | Tras reintentos acotados, el mensaje pasa a revisión |
+endlegend
+
+@enduml

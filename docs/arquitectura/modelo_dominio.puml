@@ -1,0 +1,150 @@
+@startuml
+title Solventa - Modelo de dominio
+
+hide methods
+skinparam shadowing false
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #F7F9FB
+  BorderColor #46637F
+  ArrowColor #46637F
+}
+
+class "Cliente asegurado" as Cliente {
+  - identificador
+  - estado de identidad
+  - datos personales protegidos
+}
+
+class "Consentimiento para usar datos" as Consentimiento {
+  - identificador
+  - datos autorizados
+  - fecha de autorización
+  - fecha de revocación
+  - estado
+}
+
+class "Fuente de información" as FuenteInformacion {
+  - identificador
+  - tipo: Finanzas Abiertas | Datos Abiertos
+  - versión
+  - nivel de confianza
+}
+
+class "Perfil de riesgo" as PerfilRiesgo {
+  - identificador
+  - nivel de riesgo
+  - fecha de cálculo
+  - versión del modelo
+  - evidencia de cálculo
+}
+
+class "Socio de distribución" as SocioDistribucion {
+  - identificador
+  - canal de venta
+  - límite de solicitudes
+  - estado
+}
+
+class "Producto de seguro" as ProductoSeguro {
+  - identificador
+  - ramo
+  - coberturas
+  - país
+  - versión
+}
+
+class "Regla de precio y suscripción" as ReglaNegocio {
+  - identificador
+  - versión
+  - vigencia
+  - condición
+  - resultado
+}
+
+class "Cotización" as Cotizacion {
+  - identificador
+  - fecha
+  - prima calculada
+  - moneda
+  - estado
+}
+
+class "Decisión de suscripción" as DecisionSuscripcion {
+  - identificador
+  - resultado
+  - ajustes aplicados
+  - motivos
+  - versión de reglas
+}
+
+class "Póliza" as Poliza {
+  - número de póliza
+  - fecha de inicio
+  - fecha de fin
+  - estado
+  - prima
+}
+
+class "Movimiento de dinero" as MovimientoDinero {
+  - identificador
+  - tipo: Recaudo | Indemnización
+  - valor
+  - referencia única
+  - estado de conciliación
+}
+
+class "Siniestro" as Siniestro {
+  - identificador
+  - fecha de aviso
+  - tipo
+  - estado
+  - valor aprobado
+}
+
+class "Evidencia del siniestro" as EvidenciaSiniestro {
+  - identificador
+  - tipo
+  - ubicación
+  - huella digital
+  - fecha de captura
+}
+
+class "Evento paramétrico" as EventoParametrico {
+  - identificador
+  - tipo
+  - valor observado
+  - umbral de activación
+  - fecha de ocurrencia
+}
+
+class "Cesión a reaseguradora" as CesionReaseguro {
+  - identificador
+  - porcentaje cedido
+  - estado de conciliación
+}
+
+Cliente "1" *-- "0..*" Consentimiento : autoriza o revoca
+Consentimiento "1" --> "1..*" FuenteInformacion : permite consultar
+Cliente "1" -- "0..*" PerfilRiesgo : posee
+PerfilRiesgo "0..*" --> "1..*" FuenteInformacion : se calcula con
+
+SocioDistribucion "0..1" --> "0..*" Cotizacion : solicita
+Cliente "1" --> "0..*" Cotizacion : recibe
+Cotizacion "0..*" --> "1" ProductoSeguro : ofrece
+Cotizacion "1" o-- "0..1" PerfilRiesgo : utiliza
+ProductoSeguro "1" *-- "1..*" ReglaNegocio : se configura con
+Cotizacion "1" --> "0..1" DecisionSuscripcion : produce
+
+DecisionSuscripcion "1" --> "0..1" Poliza : genera al ser aprobada
+Cliente "1" -- "0..*" Poliza : contrata
+Poliza "0..*" --> "1" ProductoSeguro : corresponde a
+Poliza "1" *-- "0..*" MovimientoDinero : genera
+Poliza "1" *-- "0..*" Siniestro : cubre
+Siniestro "1" *-- "0..*" EvidenciaSiniestro : contiene
+Siniestro "1" --> "0..1" MovimientoDinero : origina indemnización
+EventoParametrico "0..*" --> "0..*" Siniestro : activa automáticamente
+Poliza "1" --> "0..*" CesionReaseguro : transfiere riesgo
+
+@enduml

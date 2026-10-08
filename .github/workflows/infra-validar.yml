@@ -1,0 +1,8 @@
+# Workflow existente: pendiente.
+name: infra-validar
+on: workflow_dispatch
+jobs:
+  pendiente:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Pendiente"

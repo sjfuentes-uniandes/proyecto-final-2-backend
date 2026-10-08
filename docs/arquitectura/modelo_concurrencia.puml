@@ -1,0 +1,164 @@
+@startuml
+title Solventa - Modelo de concurrencia detallado (VA-006)
+
+top to bottom direction
+skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
+skinparam componentStyle uml2
+skinparam nodesep 35
+skinparam ranksep 60
+skinparam ArrowFontSize 11
+skinparam ArrowColor #455A64
+skinparam component {
+  BackgroundColor #FFFFFF
+  BorderColor #607D8B
+  FontColor #263238
+}
+
+package "Solicitudes en línea" as Entrada #EAF2F8 {
+  component "Solicitudes del portal,\nla aplicación móvil y socios" as Solicitudes <<Flujo HTTPS>> #D6EAF8
+  component "Procesos de entrada segura\n[N réplicas]" as Gateway <<API Gateway>> #D6EAF8
+  component "Procesos de autenticación\ny autorización [N réplicas]" as Autorizacion <<OAuth2 / OIDC>> #D6EAF8
+  component "Procesos BFF web, BFF móvil\ny API de socios [N réplicas]" as ProcesosAcceso <<Grupo de procesos>> #D6EAF8
+
+  Solicitudes --> Gateway : TLS / mTLS
+  Gateway --> Autorizacion : valida token y permisos
+  Gateway --> ProcesosAcceso : solicitud autorizada
+}
+
+package "Procesamiento síncrono del negocio" as Sincrono #FCF3CF {
+  component "Procesos de clientes, identidad\ny consentimientos [N réplicas]" as ProcesosCliente <<Grupo de procesos>> #FFF2CC
+  component "Procesos de catálogo\ny reglas [N réplicas]" as ProcesosCatalogo <<Grupo de procesos>> #FFF2CC
+  component "Procesos de perfil, precio\ny cotización [N réplicas]" as ProcesosCotizacion <<Grupo de procesos>> #FFF2CC
+  component "Procesos de suscripción\ny pólizas [N réplicas]" as ProcesosPoliza <<Grupo de procesos>> #FFF2CC
+  component "Procesos de atención\nde siniestros [N réplicas]" as ProcesosSiniestro <<Grupo de procesos>> #FFF2CC
+  component "Procesos de recaudos\ne indemnizaciones [N réplicas]" as ProcesosDinero <<Grupo de procesos>> #FFF2CC
+
+  ProcesosCliente -[hidden]right-> ProcesosCatalogo
+  ProcesosCatalogo -[hidden]right-> ProcesosCotizacion
+  ProcesosCotizacion -[hidden]right-> ProcesosPoliza
+  ProcesosPoliza -[hidden]right-> ProcesosSiniestro
+  ProcesosSiniestro -[hidden]right-> ProcesosDinero
+}
+
+package "Protección de dependencias" as Proteccion #E8F8F5 {
+  component "Grupos aislados por aliado" as Bulkheads <<Bulkhead>> #D9EAD3
+  component "Tiempo máximo, reintento acotado,\ncircuito y respuesta degradada" as ControlDependencias <<Protección de llamada>> #D9EAD3
+  component "Finanzas Abiertas, KYC, pagos,\nfirma, telemetría y prestadores" as DependenciasExternas <<Sistemas externos>> #D9EAD3
+
+  Bulkheads --> ControlDependencias
+  ControlDependencias --> DependenciasExternas : TLS / mTLS
+}
+
+package "Publicación confiable" as Publicacion #F5EEF8 {
+  component "Transacción del servicio:\ndato del dominio + registro pendiente" as TransaccionOutbox <<Outbox por servicio>> #E4D5F7
+  component "Procesos publicadores\n[N réplicas con bloqueo de lote]" as Publicadores <<Relay de Outbox>> #E4D5F7
+  component "Particiones de eventos\ndel negocio [P particiones]" as ParticionesEventos <<Broker durable>> #E4D5F7
+
+  TransaccionOutbox --> Publicadores : cambios confirmados
+  Publicadores --> ParticionesEventos : publicación al menos una vez
+}
+
+package "Procesamiento paralelo de eventos" as Asincrono #F5EEF8 {
+  component "Grupo de emisión, avisos\ny conciliación [N consumidores]" as ConsumidoresOperacion <<Saga / Process Manager>> #E4D5F7
+  component "Grupo de eventos\nparamétricos [N consumidores]" as ConsumidoresParametricos <<Consumidor idempotente>> #E4D5F7
+  component "Grupo de proyecciones de\nconsulta [N consumidores]" as ConsumidoresConsulta <<CQRS limitado>> #E4D5F7
+  component "Grupo de auditoría\n[N consumidores]" as ConsumidoresAuditoria <<Consumidor idempotente>> #E4D5F7
+  component "Grupo de actualización masiva\n[N trabajadores]" as ConsumidoresPerfiles <<Evolución>> #ECEFF1
+  component "Registro de mensajes procesados\ny claves de idempotencia" as RegistroIdempotencia <<Inbox>> #E4D5F7
+  component "Colas de reintento con\ndemora y límite" as ColasReintento <<Retry Queue>> #E4D5F7
+  component "Mensajes que requieren\nintervención" as ColaFallidos <<Dead Letter Queue>> #E4D5F7
+
+  ConsumidoresOperacion -[hidden]right-> ConsumidoresParametricos
+  ConsumidoresParametricos -[hidden]right-> ConsumidoresConsulta
+  ConsumidoresConsulta -[hidden]right-> ConsumidoresAuditoria
+}
+
+package "Control de capacidad y salud" as Control #ECEFF1 {
+  component "Monitor de salud y\nretiro de réplicas fallidas" as MonitorSalud <<Health Check>>
+  component "Escalador de procesos síncronos\npor CPU, latencia y solicitudes" as EscaladorSincrono <<Autoescalado>>
+  component "Escalador de consumidores\npor atraso de particiones" as EscaladorAsincrono <<Autoescalado>>
+  component "Métricas, trazas y registros\ncorrelacionados" as Observabilidad <<Observabilidad>>
+}
+
+ProcesosAcceso --> ProcesosCliente
+ProcesosAcceso --> ProcesosCotizacion
+ProcesosAcceso --> ProcesosPoliza
+ProcesosAcceso --> ProcesosSiniestro
+
+ProcesosCotizacion --> ProcesosCliente : (1)
+ProcesosCotizacion --> ProcesosCatalogo : (2)
+ProcesosCotizacion --> ProcesosPoliza : (3)
+ProcesosCliente --> Bulkheads
+ProcesosCotizacion --> Bulkheads
+ProcesosPoliza --> Bulkheads
+ProcesosSiniestro --> Bulkheads
+ProcesosDinero --> Bulkheads
+
+ProcesosCliente --> TransaccionOutbox
+ProcesosPoliza --> TransaccionOutbox : (4)
+ProcesosSiniestro --> TransaccionOutbox : (5)
+ProcesosDinero --> TransaccionOutbox
+ControlDependencias --> TransaccionOutbox : eventos externos válidos
+
+ParticionesEventos --> ConsumidoresOperacion
+ParticionesEventos --> ConsumidoresParametricos
+ParticionesEventos --> ConsumidoresConsulta
+ParticionesEventos --> ConsumidoresAuditoria
+ParticionesEventos --> ConsumidoresPerfiles
+
+ConsumidoresOperacion --> RegistroIdempotencia
+ConsumidoresParametricos --> RegistroIdempotencia
+ConsumidoresConsulta --> RegistroIdempotencia
+ConsumidoresAuditoria --> RegistroIdempotencia
+ConsumidoresOperacion --> ColasReintento : error transitorio
+ConsumidoresParametricos --> ColasReintento : error transitorio
+ColasReintento --> ParticionesEventos : reintento con demora
+ColasReintento --> ColaFallidos : límite agotado
+
+ConsumidoresOperacion --> ProcesosDinero : (6)
+ConsumidoresOperacion --> ProcesosPoliza : (7)
+ConsumidoresOperacion --> ProcesosSiniestro : (8)
+ConsumidoresParametricos --> ProcesosSiniestro : (9)
+
+MonitorSalud ..> Gateway
+MonitorSalud ..> Sincrono
+MonitorSalud ..> Asincrono
+EscaladorSincrono ..> Gateway
+EscaladorSincrono ..> Sincrono
+EscaladorAsincrono ..> Asincrono
+Entrada ..> Observabilidad
+Sincrono ..> Observabilidad
+Publicacion ..> Observabilidad
+Asincrono ..> Observabilidad
+Proteccion ..> Observabilidad
+
+note right of TransaccionOutbox
+El cambio del dominio y el registro pendiente
+se confirman en la misma transacción local.
+end note
+
+note right of RegistroIdempotencia
+La entrega puede repetirse; el efecto del negocio no.
+Pago, emisión y creación de siniestro usan una clave única.
+end note
+
+legend bottom
+  |= Color / estereotipo |= Alcance |
+  | <#D6EAF8> / <#FFF2CC> / <#E4D5F7> / <#D9EAD3> | Procesamiento del MVP priorizado de 112 puntos |
+  | <#ECEFF1> <<Evolución>> | Capacidad objetivo posterior al MVP |
+
+  |= Ref. |= Coordinación entre procesos |
+  | (1) | Cotización valida identidad y consentimiento |
+  | (2) | Cotización obtiene el producto y las reglas vigentes |
+  | (3) | La oferta aceptada inicia la suscripción |
+  | (4) | Pólizas inicia la saga de recaudo, firma y emisión |
+  | (5) | Siniestros inicia la saga de decisión e indemnización |
+  | (6) | La saga solicita un recaudo o una indemnización idempotente |
+  | (7) | La saga confirma o compensa la emisión de la póliza |
+  | (8) | La saga actualiza el resultado del siniestro |
+  | (9) | Un evento paramétrico válido crea un siniestro una sola vez |
+endlegend
+
+@enduml

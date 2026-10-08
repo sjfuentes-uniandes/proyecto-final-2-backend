@@ -1,0 +1,66 @@
+@startuml
+title Solventa - Estrategia de replicación y recuperación (VA-005C)
+!pragma layout smetana
+
+scale max 1500 width
+top to bottom direction
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam ArrowFontSize 12
+skinparam componentStyle uml2
+skinparam packageStyle rectangle
+skinparam nodesep 36
+skinparam ranksep 48
+
+package "Región principal" #EAF2F8 {
+  database "RDS primaria\nDatos por servicio" as RDSPrimary
+  database "RDS standby\nZona B" as RDSStandby
+  folder "S3 principal\nEvidencias + auditoría\n+ archivo de eventos" as S3Primary
+  queue "SNS\nEventos del negocio" as SNS
+  component "Archivador de eventos\nFirehose / consumidor" as Archiver
+  database "Proyección CQRS\nPólizas y siniestros" as Projection
+
+  RDSPrimary =[#1F618D]=> RDSStandby : 1. réplica síncrona Multi-AZ
+  SNS -right-> Archiver : 2. entrega eventos
+  Archiver -right-> S3Primary : archiva para reproceso
+  SNS -down-> Projection : 3. actualiza vista derivada
+}
+
+package "Región de recuperación" #E8F8F5 {
+  database "RDS réplica regional\nDatos por servicio" as RDSCross
+  folder "S3 réplica regional\nEvidencias + auditoría\n+ archivo de eventos" as S3Replica
+  component "Orquestador de replay\nLectura y publicación" as Replay
+  queue "SNS de recuperación\nEventos del negocio" as SNSRecovery
+  database "Proyección reconstruida\nPólizas y siniestros" as ProjectionRecovery
+
+  S3Replica -right-> Replay : 6. lee archivo
+  Replay -right-> SNSRecovery : replay controlado
+  SNSRecovery -down-> ProjectionRecovery : 7. reconstruye proyección
+}
+
+RDSPrimary =[#2A7F74]=> RDSCross : 4. réplica asíncrona\nRPO objetivo ≤ 30 s
+S3Primary =[#2A7F74]=> S3Replica : 5. replicación entre regiones
+
+note right of RDSStandby
+El standby atiende fallas de instancia o zona;
+no se usa para lecturas ordinarias.
+end note
+
+note bottom of S3Replica
+La recuperación regional es arquitectura objetivo.
+El experimento inicial puede ejecutarse en una zona.
+end note
+
+legend bottom
+  |= Información |= Estrategia |= Consistencia |
+  | Agregados | RDS Multi-AZ | Síncrona dentro de la región |
+  | Recuperación RDS | Réplica o backup regional | Asíncrona; RPO medido |
+  | Evidencia y auditoría | S3 versionado y replicado | Asíncrona |
+  | Eventos | Outbox + archivo durable + replay | Eventual |
+  | Proyección CQRS | Reconstrucción desde eventos | Eventual |
+endlegend
+
+@enduml

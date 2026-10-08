@@ -1,0 +1,204 @@
+@startuml
+title Solventa - Modelo de información detallado (VA-005)
+
+top to bottom direction
+skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
+skinparam componentStyle uml2
+skinparam nodesep 40
+skinparam ranksep 60
+skinparam ArrowFontSize 11
+skinparam ArrowColor #546E7A
+skinparam component {
+  BackgroundColor #FFFFFF
+  BorderColor #607D8B
+  FontColor #263238
+}
+skinparam database {
+  BackgroundColor #FFFFFF
+  BorderColor #607D8B
+  FontColor #263238
+}
+skinparam artifact {
+  BackgroundColor #FFFFFF
+  BorderColor #607D8B
+  FontColor #263238
+}
+
+package "Fuentes de información externas" as Fuentes #E8F8F5 {
+  component "Finanzas Abiertas\ny Datos Abiertos" as DatosExternos <<Sistema externo>> #D9EAD3
+  component "Identidad, KYC\ny AML" as IdentidadExterna <<Sistema externo>> #D9EAD3
+  component "Telemetría, clima\ny vuelos" as Telemetria <<Sistema externo>> #D9EAD3
+  component "Medios de pago" as MediosPago <<Sistema externo>> #D9EAD3
+  component "Reaseguradoras\ny ACORD" as Reaseguradoras <<Evolución>> #ECEFF1
+}
+
+package "Clientes y consentimiento" as ContextoCliente #EAF2F8 {
+  component "Clientes, identidad\ny consentimientos" as PropietarioCliente <<Propietario>> #D6EAF8
+  database "Repositorio privado\nde clientes" as RepoClientes <<Base por servicio>> #D6EAF8
+  artifact "Cliente asegurado" as ClienteInfo <<Maestra / sensible>>
+  artifact "Consentimiento y\nrevocación" as ConsentimientoInfo <<Maestra / sensible>>
+
+  PropietarioCliente --> RepoClientes
+  RepoClientes --> ClienteInfo
+  RepoClientes --> ConsentimientoInfo
+}
+
+package "Catálogo y reglas" as ContextoCatalogo #FCF3CF {
+  component "Catálogo de seguros\ny reglas del negocio" as PropietarioCatalogo <<Propietario>> #FFF2CC
+  database "Repositorio privado\nde catálogo" as RepoCatalogo <<Base por servicio>> #FFF2CC
+  artifact "Producto, cobertura\ny regla versionada" as ProductoReglaInfo <<Maestra versionada>>
+
+  PropietarioCatalogo --> RepoCatalogo
+  RepoCatalogo --> ProductoReglaInfo
+}
+
+package "Perfil y cotización" as ContextoCotizacion #FCF3CF {
+  component "Perfil de riesgo,\nprecio y cotización" as PropietarioCotizacion <<Propietario>> #FFF2CC
+  database "Repositorio privado\nde cotización" as RepoCotizacion <<Base por servicio>> #FFF2CC
+  artifact "Perfil de riesgo" as PerfilInfo <<Derivada / sensible>>
+  artifact "Cotización" as CotizacionInfo <<Transaccional>>
+
+  PropietarioCotizacion --> RepoCotizacion
+  RepoCotizacion --> PerfilInfo
+  RepoCotizacion --> CotizacionInfo
+}
+
+package "Suscripción y pólizas" as ContextoPoliza #FCF3CF {
+  component "Suscripción y\ngestión de pólizas" as PropietarioPoliza <<Propietario>> #FFF2CC
+  database "Repositorio privado\nde pólizas" as RepoPolizas <<Base por servicio>> #FFF2CC
+  artifact "Decisión de\nsuscripción" as DecisionInfo <<Explicable>>
+  artifact "Póliza" as PolizaInfo <<Transaccional>>
+
+  PropietarioPoliza --> RepoPolizas
+  RepoPolizas --> DecisionInfo
+  RepoPolizas --> PolizaInfo
+}
+
+package "Siniestros" as ContextoSiniestro #FDEDEC {
+  component "Atención de\nsiniestros" as PropietarioSiniestro <<Propietario>> #FADBD8
+  database "Repositorio privado\nde siniestros" as RepoSiniestros <<Base por servicio>> #FADBD8
+  database "Evidencias de\nsiniestros" as RepoEvidencias <<Objetos cifrados>> #FADBD8
+  artifact "Siniestro" as SiniestroInfo <<Transaccional>>
+  artifact "Evidencia y\nmetadatos" as EvidenciaInfo <<Documento sensible>>
+
+  PropietarioSiniestro --> RepoSiniestros
+  PropietarioSiniestro --> RepoEvidencias
+  RepoSiniestros --> SiniestroInfo
+  RepoEvidencias --> EvidenciaInfo
+}
+
+package "Recaudos e indemnizaciones" as ContextoDinero #FDEDEC {
+  component "Recaudos e\nindemnizaciones" as PropietarioDinero <<Propietario>> #FADBD8
+  database "Repositorio privado\nde movimientos" as RepoDinero <<Base por servicio>> #FADBD8
+  artifact "Movimiento de dinero\ny clave de idempotencia" as MovimientoInfo <<Conciliable>>
+
+  PropietarioDinero --> RepoDinero
+  RepoDinero --> MovimientoInfo
+}
+
+package "Intercambio asíncrono confiable" as Intercambio #F5EEF8 {
+  artifact "Registro pendiente\nde publicación" as RegistroOutbox <<Outbox>> #E4D5F7
+  component "Eventos del negocio" as CanalEventos <<Canal particionado y durable>> #E4D5F7
+  artifact "Sobre de evento: identificador,\ntipo, versión, fecha y correlación" as SobreEvento <<Contrato versionado>> #E4D5F7
+  artifact "Póliza emitida" as EventoPoliza <<Evento>>
+  artifact "Siniestro registrado\no decidido" as EventoSiniestro <<Evento>>
+  artifact "Movimiento confirmado" as EventoDinero <<Evento>>
+  artifact "Evento paramétrico\nobservado" as EventoParametrico <<Evento externo>>
+  artifact "Registro de mensaje\nprocesado" as RegistroInbox <<Inbox / Idempotencia>> #E4D5F7
+
+  RegistroOutbox --> CanalEventos : publica
+  CanalEventos --> SobreEvento : valida contrato
+  SobreEvento --> EventoPoliza
+  SobreEvento --> EventoSiniestro
+  SobreEvento --> EventoDinero
+  SobreEvento --> EventoParametrico
+  CanalEventos --> RegistroInbox : controla duplicados
+}
+
+package "Consulta y trazabilidad" as Consulta #ECEFF1 {
+  database "Caché de catálogo y\nreglas vigentes" as CacheCatalogo <<Cache-Aside>> #E4D5F7
+  component "Proyector de pólizas\ny siniestros" as ProyectorConsulta <<CQRS limitado>> #E4D5F7
+  database "Vista de consulta rápida" as VistaConsulta <<Proyección reemplazable>> #E4D5F7
+  database "Historial de decisiones\ny uso de datos" as HistorialAuditoria <<Registro inmutable>> #E4D5F7
+  artifact "Registro de auditoría" as AuditoriaInfo <<Quién / qué / cuándo>>
+  artifact "Linaje y versión\nde reglas" as LinajeInfo <<Integridad verificable>>
+
+  ProyectorConsulta --> VistaConsulta
+  HistorialAuditoria --> AuditoriaInfo
+  HistorialAuditoria --> LinajeInfo
+}
+
+package "Información posterior al MVP" as InformacionEvolucion #ECEFF1 {
+  database "Repositorio regulatorio\ny de reaseguro" as RepoRegulatorio <<Evolución>>
+  database "Repositorio analítico\ny perfiles masivos" as RepoAnalitico <<Evolución>>
+}
+
+DatosExternos --> PropietarioCotizacion : datos mínimos consentidos
+IdentidadExterna --> PropietarioCliente : verificación
+Telemetria --> CanalEventos : evento autenticado
+MediosPago --> PropietarioDinero : confirmación idempotente
+Reaseguradoras --> RepoRegulatorio : intercambio ACORD
+
+ConsentimientoInfo --> PerfilInfo : (1)
+ProductoReglaInfo --> CotizacionInfo : (2)
+PerfilInfo --> CotizacionInfo : (3)
+CotizacionInfo --> DecisionInfo : (4)
+DecisionInfo --> PolizaInfo : (5)
+PolizaInfo --> SiniestroInfo : (6)
+PolizaInfo --> MovimientoInfo : (7)
+SiniestroInfo --> EvidenciaInfo : (8)
+SiniestroInfo --> MovimientoInfo : (9)
+
+RepoClientes --> RegistroOutbox : misma transacción local
+RepoPolizas --> RegistroOutbox : misma transacción local
+RepoSiniestros --> RegistroOutbox : misma transacción local
+RepoDinero --> RegistroOutbox : misma transacción local
+CanalEventos --> ProyectorConsulta
+CanalEventos --> HistorialAuditoria
+PropietarioCatalogo --> CacheCatalogo : actualiza / invalida
+PropietarioCotizacion --> CacheCatalogo : lectura
+EventoParametrico --> PropietarioSiniestro : (10)
+CanalEventos --> RepoAnalitico
+
+note right of ContextoCliente
+El servicio propietario es el único que escribe su repositorio.
+Los demás acceden mediante API o eventos autorizados.
+end note
+
+note right of Intercambio
+Consistencia eventual entre contextos.
+Los contratos son versionados y compatibles hacia atrás.
+No se usa una transacción distribuida entre microservicios.
+end note
+
+note right of Consulta
+La vista contiene duplicados mínimos para lectura rápida.
+Puede reconstruirse desde eventos; no es fuente de verdad.
+end note
+
+note bottom of RepoEvidencias
+Datos sensibles cifrados en tránsito y reposo.
+Acceso por identidad, rol y propósito; toda lectura queda auditada.
+end note
+
+legend bottom
+  |= Color / estereotipo |= Alcance |
+  | <#D6EAF8> / <#FFF2CC> / <#FADBD8> / <#E4D5F7> | Información necesaria para el MVP priorizado de 112 puntos |
+  | <#ECEFF1> <<Evolución>> | Información de la arquitectura objetivo posterior al MVP |
+
+  |= Ref. |= Transformación de información |
+  | (1) | El consentimiento vigente habilita el perfilamiento |
+  | (2) | El producto y la regla versionada determinan cobertura y precio |
+  | (3) | El perfil de riesgo sustenta la cotización |
+  | (4) | La cotización aceptada se evalúa durante la suscripción |
+  | (5) | Una decisión aprobada origina la póliza |
+  | (6) | La póliza vigente define la cobertura del siniestro |
+  | (7) | La póliza origina el recaudo de la prima |
+  | (8) | El siniestro conserva evidencias en almacenamiento separado |
+  | (9) | El siniestro aprobado origina una indemnización |
+  | (10) | Un evento paramétrico válido puede crear un siniestro una sola vez |
+endlegend
+
+@enduml
