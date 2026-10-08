@@ -171,7 +171,8 @@ AUTO_APPROVE=1 make infra-destruir ENV=int  # sin pregunta (CI)
 | --- | --- |
 | 1 | Destruye `apps` (servicios, IAM, alarmas, tablero). |
 | 2 | Vacía el bucket de auditoría saltando la retención GOVERNANCE de Object Lock. Con `audit_lock_mode = "COMPLIANCE"`, AWS no permite borrar antes del vencimiento y la destrucción de ese bucket falla. |
-| 3 | Destruye `platform`: RDS sin snapshot final, repositorios ECR con sus imágenes, Cognito, colas, NAT, ALB, API Gateway, WAF y VPC. |
+| 3 | Borra todas las imágenes de los repositorios ECR del ambiente, así la destrucción no depende de que el estado tenga `force_delete = true`. |
+| 4 | Destruye `platform`: RDS sin snapshot final, repositorios ECR, Cognito, colas, NAT, ALB, API Gateway, WAF y VPC. |
 
 - **Idempotencia:** si una raíz ya no tiene recursos, se omite.
 - **Lo que se conserva:** el bucket de estado y el rol de GitHub (bootstrap).

@@ -12,7 +12,7 @@ if [ "${AUTO_APPROVE}" != "1" ]; then
   [ "${answer}" = "${ENV}" ] || die "Cancelado."
 fi
 
-log "1/3 Aplicaciones (${ENV})"
+log "1/4 Aplicaciones (${ENV})"
 tf_init apps
 if state_has_resources apps; then
   # image_digests vacío: el plan elimina todos los servicios sin consultar ECR.
@@ -22,7 +22,7 @@ else
   echo "Sin recursos en el estado de apps."
 fi
 
-log "2/3 Vaciando el bucket de auditoría (Object Lock en modo GOVERNANCE)"
+log "2/4 Vaciando el bucket de auditoría (Object Lock en modo GOVERNANCE)"
 tf_init platform
 if state_has_resources platform; then
   bucket=$(platform_output platform | jq -r '.audit_bucket.name')
@@ -37,7 +37,21 @@ if state_has_resources platform; then
     done
   fi
 
-  log "3/3 Plataforma (${ENV})"
+  # force_delete del estado puede ser false (repositorios creados antes de
+  # activarlo): se borran las imágenes para que destroy no dependa de ello.
+  log "3/4 Vaciando los repositorios ECR"
+  while IFS= read -r repository; do
+    aws ecr describe-repositories --repository-names "${repository}" >/dev/null 2>&1 || continue
+    while :; do
+      ids=$(aws ecr list-images --repository-name "${repository}" --max-items 100 \
+        --query 'imageIds' --output json)
+      [ "$(jq 'length' <<<"${ids}")" -gt 0 ] || break
+      aws ecr batch-delete-image --repository-name "${repository}" --image-ids "${ids}" >/dev/null
+    done
+    echo "  ${repository}: vacío"
+  done < <(platform_output ecr_repositories | jq -r '.[] | sub("^[^/]+/"; "")')
+
+  log "4/4 Plataforma (${ENV})"
   terraform -chdir="${INFRA_DIR}/platform" destroy -input=false -auto-approve \
     -var-file="${ENV_DIR}/platform.tfvars"
 else
