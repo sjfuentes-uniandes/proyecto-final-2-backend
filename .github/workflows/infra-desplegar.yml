@@ -6,6 +6,13 @@ name: Infra - Desplegar
 #   bases           solo la tarea que crea base y usuario por servicio en RDS
 #   aplicaciones    solo infra/apps con las imágenes que ya están en ECR
 #   microservicios  imagen + despliegue de los servicios indicados
+#
+# Cada raíz de Terraform se aplica en dos jobs: "plan" calcula el plan y lo deja en
+# el resumen de la ejecución y como artefacto; luego el job de apply (con
+# environment: <ambiente>, donde están los required reviewers) pide la aprobación
+# y aplica ese mismo plan guardado. Si el plan no tiene cambios no se pide
+# aprobación. En "completo" hay dos aprobaciones: plataforma y aplicaciones (el
+# plan de apps depende de la plataforma y de las imágenes recién publicadas).
 on:
   workflow_dispatch:
     inputs:
@@ -40,16 +47,19 @@ concurrency:
   group: infra-${{ inputs.ambiente }}
   cancel-in-progress: false
 
+env:
+  ENV: ${{ inputs.ambiente }}
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  AUTO_APPROVE: "1"
+  SERVICES: ${{ inputs.servicios }}
+
 jobs:
-  desplegar:
+  plan-plataforma:
+    if: inputs.alcance == 'completo' || inputs.alcance == 'plataforma'
     runs-on: ubuntu-latest
-    environment: ${{ inputs.ambiente }}
-    timeout-minutes: 90
-    env:
-      ENV: ${{ inputs.ambiente }}
-      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
-      AUTO_APPROVE: "1"
-      SERVICES: ${{ inputs.servicios }}
+    timeout-minutes: 30
+    outputs:
+      cambios: ${{ steps.plan.outputs.cambios }}
     steps:
       - uses: actions/checkout@v4
 
@@ -58,33 +68,131 @@ jobs:
           aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
+      - name: Plan
+        id: plan
+        uses: ./.github/actions/plan-terraform
+        with:
+          raiz: platform
+          titulo: Plataforma
+
+  plataforma:
+    needs: plan-plataforma
+    if: needs.plan-plataforma.outputs.cambios == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.ambiente }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/preparar-infra
+        with:
+          aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: plan-platform
+          path: ${{ runner.temp }}
+
+      - name: Aplicar plan aprobado
+        env:
+          PLAN_FILE: ${{ runner.temp }}/platform.tfplan
+        run: make infra-plataforma
+
+  bases:
+    needs: [plan-plataforma, plataforma]
+    if: >-
+      !cancelled() && !failure() &&
+      (inputs.alcance == 'completo' || inputs.alcance == 'bases')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/preparar-infra
+        with:
+          aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Bases por servicio
+        run: make infra-bases
+
+  imagenes:
+    needs: [plan-plataforma, plataforma, bases]
+    if: >-
+      !cancelled() && !failure() &&
+      ((inputs.alcance == 'completo' && inputs.construir_imagenes) || inputs.alcance == 'microservicios')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
       - name: Validar entradas
         if: inputs.alcance == 'microservicios' && inputs.servicios == ''
         run: |
           echo "::error::El alcance microservicios requiere la lista de servicios."
           exit 1
 
-      - name: Plataforma
-        if: inputs.alcance == 'completo' || inputs.alcance == 'plataforma'
-        run: make infra-plataforma
+      - uses: actions/checkout@v4
 
-      - name: Bases por servicio
-        if: inputs.alcance == 'completo' || inputs.alcance == 'bases'
-        run: make infra-bases
+      - uses: ./.github/actions/preparar-infra
+        with:
+          aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
       - uses: docker/setup-buildx-action@v3
-        if: (inputs.alcance == 'completo' && inputs.construir_imagenes) || inputs.alcance == 'microservicios'
 
       - name: Imágenes
-        if: (inputs.alcance == 'completo' && inputs.construir_imagenes) || inputs.alcance == 'microservicios'
         run: make infra-imagenes
 
-      - name: Aplicaciones
-        if: inputs.alcance == 'completo' || inputs.alcance == 'aplicaciones' || inputs.alcance == 'microservicios'
+  plan-aplicaciones:
+    needs: [plan-plataforma, plataforma, bases, imagenes]
+    if: >-
+      !cancelled() && !failure() &&
+      (inputs.alcance == 'completo' || inputs.alcance == 'aplicaciones' || inputs.alcance == 'microservicios')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      cambios: ${{ steps.plan.outputs.cambios }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/preparar-infra
+        with:
+          aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Plan
+        id: plan
+        uses: ./.github/actions/plan-terraform
+        with:
+          raiz: apps
+          titulo: Aplicaciones
+
+  aplicaciones:
+    needs: plan-aplicaciones
+    if: "!cancelled() && needs.plan-aplicaciones.outputs.cambios == 'true'"
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.ambiente }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/preparar-infra
+        with:
+          aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: plan-apps
+          path: ${{ runner.temp }}
+
+      - name: Aplicar plan aprobado
+        env:
+          PLAN_FILE: ${{ runner.temp }}/apps.tfplan
         run: make infra-aplicaciones
 
       - name: Prueba rápida
-        if: inputs.probar && (inputs.alcance == 'completo' || inputs.alcance == 'aplicaciones' || inputs.alcance == 'microservicios')
+        if: inputs.probar
         run: make infra-probar
 
       - name: Resumen

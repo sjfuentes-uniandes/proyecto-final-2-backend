@@ -186,7 +186,8 @@ AUTO_APPROVE=1 make infra-destruir ENV=int  # sin pregunta (CI)
 2. En GitHub, en **Settings → Secrets and variables → Actions → Variables**, crear:
    - `AWS_ROLE_ARN`: el valor que imprimió el bootstrap.
    - `AWS_REGION`: por ejemplo `us-east-1`.
-3. Opcional: en **Settings → Environments**, crear el ambiente (`int`, `qa`…) con *required reviewers* para exigir aprobación antes de desplegar o destruir. Los workflows usan `environment: <ambiente>`.
+   Deben ser variables **del repositorio**, no del environment: los jobs de plan no usan el environment.
+3. Opcional: en **Settings → Environments**, crear el ambiente (`int`, `qa`…) con *required reviewers* para exigir aprobación antes de desplegar o destruir. En **Infra - Desplegar** solo los jobs que aplican usan `environment: <ambiente>`, así que la aprobación se pide cuando el plan ya está en el resumen de la ejecución.
 4. Los workflows `workflow_dispatch` solo aparecen en la pestaña **Actions** cuando están en la rama por defecto (`main`).
 
 No se guardan llaves de AWS en GitHub: los workflows obtienen credenciales temporales por OIDC.
@@ -195,7 +196,7 @@ No se guardan llaves de AWS en GitHub: los workflows obtienen credenciales tempo
 
 | Workflow | Disparador | Qué hace |
 | --- | --- | --- |
-| **Infra - Desplegar** (`infra-desplegar.yml`) | Manual | Alcance `completo`, `plataforma`, `bases`, `aplicaciones` o `microservicios` (con la lista `servicios`). En `completo`, `construir_imagenes` decide si se publican imágenes antes de `apps`. Deja las URLs en el resumen de la ejecución. |
+| **Infra - Desplegar** (`infra-desplegar.yml`) | Manual | Alcance `completo`, `plataforma`, `bases`, `aplicaciones` o `microservicios` (con la lista `servicios`). Por cada raíz (`platform`, `apps`) calcula el plan, lo publica en el resumen, pide la aprobación del environment y aplica ese plan guardado; sin cambios no pide aprobación. En `completo` hay dos aprobaciones (plataforma y aplicaciones) y `construir_imagenes` decide si se publican imágenes antes del plan de `apps`. Deja las URLs en el resumen de la ejecución. |
 | **Infra - Imágenes a ECR** (`infra-imagenes.yml`) | Manual | Build y push de los servicios indicados (o todos los que tienen Dockerfile), sin desplegar. |
 | **Infra - Destruir** (`infra-destruir.yml`) | Manual | Exige escribir `destruir <ambiente>`. Ejecuta `make infra-destruir`. |
 | **Infra - Validar** (`infra-validar.yml`) | Pull requests que tocan `infra/` o los scripts | `fmt`, `validate` y `terraform test` de las tres raíces, más `shellcheck`. No usa AWS. |
@@ -208,6 +209,7 @@ Los workflows de un mismo ambiente comparten un grupo de concurrencia, así que 
 | --- | --- |
 | `No existe el bucket de estado` | Falta `make infra-bootstrap` en esta cuenta o región. |
 | `Falta la variable AWS_ROLE_ARN` (Actions) | Configurar las variables del repositorio (sección 7). |
+| `Not authorized to perform sts:AssumeRoleWithWebIdentity` (Actions) | AWS rechazó el token de GitHub. El paso *Diagnóstico OIDC* imprime el rol pedido y los claims del token. Revisar: (1) que `AWS_ROLE_ARN` sea exactamente el `github_role_arn` del bootstrap y de la misma cuenta; (2) que `sub` empiece por `repo:<owner>/<repo>:` con el mismo `github_repository` del bootstrap (repositorio renombrado, transferido o fork, o una plantilla de `sub` personalizada en la organización); (3) que el rol y el proveedor OIDC existan (`aws iam get-role --role-name solventa-github-deploy`). Corregir y volver a ejecutar `make infra-bootstrap`. |
 | `Error acquiring the state lock` | Otro despliegue del mismo ambiente está en curso. Si quedó colgado: `terraform -chdir=infra/<raíz> force-unlock <id>` tras `tf_init`. |
 | `db-bootstrap falló` | Revisar el log group `/ecs/solventa-<ambiente>/db-bootstrap`. Si RDS aún no está disponible, repetir `make infra-bases`. |
 | Un servicio no queda estable | `aws ecs describe-services` y el log group `/ecs/solventa-<ambiente>/<servicio>`. Si el health check falla, el *circuit breaker* revierte el despliegue. |

@@ -2,19 +2,27 @@
 # Paso 4: infra/apps. Despliega los servicios que tienen imagen en ECR y espera
 # a que queden estables.
 # Uso: apps.sh [apply|plan]   (PAUSED=1 lleva todo a 0 tareas; PAUSED=0 reanuda)
+# Con PLAN_FILE (ruta absoluta), plan guarda el plan ahí y apply aplica ese plan
+# exacto (sin recalcular digests ni variables).
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 require terraform aws jq
 require_env
 export_apps_vars
 
 action="${1:-apply}"
-"$(dirname "${BASH_SOURCE[0]}")/digests.sh"
+saved_plan=""
+[ "${action}" = "apply" ] && saved_plan="${PLAN_FILE:-}"
 images="${ENV_DIR}/images.tfvars.json"
-if [ "$(jq '.image_digests | length' "${images}")" = "0" ]; then
-  warn "Ningún servicio tiene imagen en ECR todavía: no hay aplicaciones que desplegar. Ejecute make infra-imagenes."
-  exit 0
+if [ -z "${saved_plan}" ]; then
+  "$(dirname "${BASH_SOURCE[0]}")/digests.sh"
+  if [ "$(jq '.image_digests | length' "${images}")" = "0" ]; then
+    warn "Ningún servicio tiene imagen en ECR todavía: no hay aplicaciones que desplegar. Ejecute make infra-imagenes."
+    exit 0
+  fi
 fi
 
+out_args=()
+[ -n "${PLAN_FILE:-}" ] && out_args=(-out="${PLAN_FILE}")
 pause_args=()
 if [ -n "${PAUSED:-}" ]; then
   pause_args=(-var "paused=$([ "${PAUSED}" = "1" ] && echo true || echo false)")
@@ -29,13 +37,17 @@ before="$(deployed_services)"
 case "${action}" in
   plan)
     terraform -chdir="${INFRA_DIR}/apps" plan -input=false \
-      -var-file="${ENV_DIR}/apps.tfvars" -var-file="${images}" "${pause_args[@]}"
+      -var-file="${ENV_DIR}/apps.tfvars" -var-file="${images}" "${pause_args[@]}" "${out_args[@]}"
     exit 0
     ;;
   apply)
-    # shellcheck disable=SC2046
-    terraform -chdir="${INFRA_DIR}/apps" apply -input=false $(approve_flag) \
-      -var-file="${ENV_DIR}/apps.tfvars" -var-file="${images}" "${pause_args[@]}"
+    if [ -n "${saved_plan}" ]; then
+      terraform -chdir="${INFRA_DIR}/apps" apply -input=false "${saved_plan}"
+    else
+      # shellcheck disable=SC2046
+      terraform -chdir="${INFRA_DIR}/apps" apply -input=false $(approve_flag) \
+        -var-file="${ENV_DIR}/apps.tfvars" -var-file="${images}" "${pause_args[@]}"
+    fi
     ;;
   *) die "Acción no soportada: ${action}" ;;
 esac

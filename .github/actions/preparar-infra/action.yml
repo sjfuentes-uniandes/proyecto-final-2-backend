@@ -21,12 +21,31 @@ runs:
         fi
 
     - name: Credenciales AWS (OIDC)
+      id: aws
       uses: aws-actions/configure-aws-credentials@v4
       with:
         role-to-assume: ${{ inputs.aws-role-arn }}
         aws-region: ${{ inputs.aws-region }}
         role-session-name: gh-${{ github.run_id }}
         role-duration-seconds: 7200
+
+    # Si AWS rechaza el token, muestra los claims que recibió (no el token) para
+    # compararlos con la política de confianza del rol (infra/bootstrap/main.tf):
+    # aud = sts.amazonaws.com y sub = repo:<owner>/<repo>:*
+    - name: Diagnóstico OIDC
+      if: failure() && steps.aws.outcome == 'failure'
+      shell: bash
+      env:
+        ROLE: ${{ inputs.aws-role-arn }}
+      run: |
+        token=$(curl -sSf -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+          "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" | jq -r .value)
+        payload=$(cut -d. -f2 <<<"$token" | tr '_-' '/+')
+        while [ $(( ${#payload} % 4 )) -ne 0 ]; do payload="${payload}="; done
+        echo "Rol solicitado: ${ROLE}"
+        echo "Claims del token de GitHub:"
+        base64 -d <<<"$payload" | jq '{sub, aud, iss, repository, environment, ref, job_workflow_ref}'
+        echo "::error::AWS rechazó el token. Verifique que el rol exista en esa cuenta y que su política de confianza acepte el sub anterior (ver infra/DESPLIEGUE.md, sección 8)."
 
     - name: Terraform
       uses: hashicorp/setup-terraform@v3
