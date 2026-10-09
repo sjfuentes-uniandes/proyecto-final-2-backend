@@ -177,7 +177,6 @@ AUTO_APPROVE=1 make infra-destruir ENV=int  # sin pregunta (CI)
 
 - **Idempotencia:** si una raíz ya no tiene recursos, se omite.
 - **Lo que se conserva:** el bucket de estado y el rol de GitHub (bootstrap).
-<<<<<<< HEAD
 - **Recrear:** volver a ejecutar `make infra-desplegar`; las imágenes se reconstruyen porque ECR se borró con el ambiente. Después hay que crear de nuevo el primer administrador y publicar el portal (sección 6.1).
 - **Datos:** la base de datos, los usuarios de Cognito y la auditoría **se pierden**. Exportar lo necesario antes de destruir.
 
@@ -206,11 +205,6 @@ make infra-salidas ENV=int
 
 Si el correo no llega, volver a ejecutar el paso 2: mientras el usuario no haya hecho su primer ingreso, reenvía otra contraseña temporal.
 
-=======
-- **Recrear:** basta con volver a ejecutar `make infra-desplegar`. Las imágenes se reconstruyen porque ECR se borró con el ambiente.
-- **Datos:** la base de datos, los usuarios de Cognito y la auditoría **se pierden**. Exportar lo necesario antes de destruir.
-
->>>>>>> main
 ## 7. GitHub Actions
 
 ### Configuración (una vez)
@@ -223,11 +217,8 @@ Si el correo no llega, volver a ejecutar el paso 2: mientras el usuario no haya 
 3. Opcional: en **Settings → Environments**, crear el ambiente (`int`, `qa`…) con *required reviewers* para exigir aprobación antes de desplegar o destruir. En **Infra - Desplegar** solo los jobs que aplican usan `environment: <ambiente>`, así que la aprobación se pide cuando el plan ya está en el resumen de la ejecución.
 4. Los workflows `workflow_dispatch` solo aparecen en la pestaña **Actions** cuando están en la rama por defecto (`main`).
 
-<<<<<<< HEAD
 5. En el repo **proyecto-final-2-frontend**, crear las variables `AWS_WEB_ROLE_ARN` (salida `github_web_role_arn`) y `AWS_REGION`, y el environment `int` (opcionalmente con *required reviewers*). El workflow **CD web** publica el portal en cada push a `main` (ambiente `int`) o a mano en otro ambiente.
 
-=======
->>>>>>> main
 No se guardan llaves de AWS en GitHub: los workflows obtienen credenciales temporales por OIDC.
 
 ### Workflows
@@ -241,7 +232,6 @@ No se guardan llaves de AWS en GitHub: los workflows obtienen credenciales tempo
 
 Los workflows de un mismo ambiente comparten un grupo de concurrencia, así que no se ejecutan dos a la vez. Además, el estado remoto tiene bloqueo.
 
-<<<<<<< HEAD
 ### Portal web (repo proyecto-final-2-frontend)
 
 `infra/platform` crea el bucket privado, CloudFront y el parámetro SSM `/solventa/<ambiente>/web/config` (bucket, distribución, URL de la API de canales, IDs públicos de Cognito y tablero; sin secretos). El repo del portal lo usa para publicar:
@@ -265,8 +255,6 @@ GRUPOS=operacion EMAIL=luis@solventa.co make infra-usuario-admin ENV=int      # 
 
 Cognito envía al correo una contraseña temporal con el enlace `<portal>/ingresar`. El correo sale de `no-reply@verificationemail.com` (revisar spam; el envío por defecto de Cognito permite unos 50 al día). Si no llega, volver a ejecutar el mismo comando: mientras el usuario no haya hecho su primer ingreso, se genera y reenvía otra contraseña temporal. En el primer ingreso la persona define su contraseña (12+ caracteres con mayúsculas, minúsculas, números y símbolos) y registra su aplicación de autenticación con el código QR. Grupos: `administradores` (crea usuarios), `operacion` (tablero y trazas) y `administradores-socios` (socios, credenciales y cuotas).
 
-=======
->>>>>>> main
 ## 8. Problemas frecuentes
 
 | Síntoma | Causa y solución |
