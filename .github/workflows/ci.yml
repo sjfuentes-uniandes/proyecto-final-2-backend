@@ -29,9 +29,50 @@ jobs:
       fail-fast: false
       matrix:
         servicio: ${{ fromJson(needs.cambios.outputs.servicios) }}
+    env:
+      # Imágenes de Docker Hub que usan las pruebas de módulo y el build del simulador.
+      IMAGENES_DOCKER: ${{ contains(fromJson('["adaptador-datos","simulador-aliados"]'), matrix.servicio) && 'wiremock/wiremock:3.9.2' || '' }}
+      # El runner es efímero y las fixtures detienen sus contenedores: Ryuk (otra imagen de
+      # Docker Hub) no hace falta en la CI.
+      TESTCONTAINERS_RYUK_DISABLED: "true"
+      # Opcional: con estos secretos el pull es autenticado y el límite de Docker Hub es mayor.
+      DOCKERHUB_USUARIO: ${{ secrets.DOCKERHUB_USUARIO }}
     steps:
       - uses: actions/checkout@v4
+      - if: env.IMAGENES_DOCKER != '' && env.DOCKERHUB_USUARIO != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USUARIO }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - if: env.IMAGENES_DOCKER != ''
+        name: Descargar imágenes de Docker Hub (con reintentos ante 429)
+        run: |
+          for imagen in $IMAGENES_DOCKER; do
+            for intento in 1 2 3 4 5; do
+              docker pull --quiet "$imagen" && break
+              [ "$intento" -eq 5 ] && exit 1
+              espera=$((15 * intento))
+              echo "::warning::Falló el pull de $imagen (intento $intento); reintento en ${espera}s"
+              sleep "$espera"
+            done
+          done
       - if: matrix.servicio != 'simulador-aliados'
         uses: ./.github/actions/preparar-python
+      # lint solo en los servicios que ya cumplen ruff; el resto tiene código previo sin
+      # formatear (02, CS-11). Agregar cada servicio aquí cuando su historia lo deje limpio.
+      - if: contains(fromJson('["cotizacion","adaptador-datos"]'), matrix.servicio)
+        run: make lint SERVICE=${{ matrix.servicio }}
       - if: matrix.servicio != 'simulador-aliados'
-        run: make test-unit SERVICE=${{ matrix.servicio }}
+        run: make test-cov SERVICE=${{ matrix.servicio }}
+      - if: matrix.servicio != 'simulador-aliados'
+        run: make test-module SERVICE=${{ matrix.servicio }}
+      - if: matrix.servicio != 'simulador-aliados'
+        run: make test-contract SERVICE=${{ matrix.servicio }}
+      - if: matrix.servicio == 'simulador-aliados'
+        name: Validar los JSON de los mapeos
+        run: |
+          shopt -s globstar
+          for f in services/simulador-aliados/mappings/**/*.json; do jq empty "$f"; done
+      - if: matrix.servicio == 'simulador-aliados'
+        name: Construir la imagen del simulador
+        run: docker build -f services/simulador-aliados/Dockerfile .

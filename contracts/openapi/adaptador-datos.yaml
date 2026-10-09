@@ -1,0 +1,207 @@
+openapi: 3.1.0
+info:
+  title: adaptador-datos
+  version: 0.1.0
+paths:
+  /v1/consultas:
+    post:
+      tags:
+      - consultas
+      summary: Consultar
+      description: Consulta una fuente autorizada y devuelve solo los campos autorizados.
+      operationId: consultar_v1_consultas_post
+      parameters:
+      - name: X-Deadline-Ms
+        in: header
+        required: false
+        schema:
+          type: integer
+          maximum: 700
+          minimum: 1
+          title: X-Deadline-Ms
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudConsulta'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaConsultaDto'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA, CAMPOS_NO_SOPORTADOS o CONSENTIMIENTO_REQUERIDO
+            (sin consentimiento no se llama al proveedor)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '502':
+          description: RESPUESTA_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: FUENTE_NO_DISPONIBLE (detalles.motivo y detalles.circuito)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '504':
+          description: TIEMPO_AGOTADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Health Get
+components:
+  schemas:
+    ErrorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        mensaje:
+          type: string
+          title: Mensaje
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          type: object
+          title: Detalles
+      type: object
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
+    Fuente:
+      type: string
+      enum:
+      - FA_PRODUCTOS_VIGENTES
+      - FA_HISTORIAL_PAGOS_12M
+      - FA_INGRESOS_AGREGADOS
+      - DA_REGISTROS_PUBLICOS
+      title: Fuente
+      description: 'Copia propia de la de cotizacion: son servicios distintos.'
+    RespuestaConsultaDto:
+      properties:
+        fuente:
+          $ref: '#/components/schemas/Fuente'
+        tipo:
+          type: string
+          enum:
+          - FINANZAS_ABIERTAS
+          - DATOS_ABIERTOS
+          title: Tipo
+        proveedor:
+          type: string
+          title: Proveedor
+        versionFuente:
+          type: string
+          title: Versionfuente
+        confianza:
+          type: number
+          title: Confianza
+        consultadaEn:
+          type: string
+          format: date-time
+          title: Consultadaen
+        campos:
+          additionalProperties:
+            $ref: '#/components/schemas/ValorCampoDto'
+          type: object
+          title: Campos
+        camposDescartados:
+          type: integer
+          title: Camposdescartados
+      type: object
+      required:
+      - fuente
+      - tipo
+      - proveedor
+      - versionFuente
+      - confianza
+      - consultadaEn
+      - campos
+      - camposDescartados
+      title: RespuestaConsultaDto
+    SolicitudConsulta:
+      properties:
+        fuente:
+          $ref: '#/components/schemas/Fuente'
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        consentimientoId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Consentimientoid
+        proposito:
+          type: string
+          const: PERFILAMIENTO_PRECIO
+          title: Proposito
+        camposAutorizados:
+          items:
+            type: string
+            minLength: 1
+          type: array
+          minItems: 1
+          title: Camposautorizados
+      type: object
+      required:
+      - fuente
+      - clienteId
+      - proposito
+      - camposAutorizados
+      title: SolicitudConsulta
+    ValorCampoDto:
+      properties:
+        estado:
+          type: string
+          enum:
+          - DISPONIBLE
+          - NO_DISPONIBLE
+          title: Estado
+        valor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Valor
+          description: Decimal en texto; null si no está disponible
+      type: object
+      required:
+      - estado
+      - valor
+      title: ValorCampoDto

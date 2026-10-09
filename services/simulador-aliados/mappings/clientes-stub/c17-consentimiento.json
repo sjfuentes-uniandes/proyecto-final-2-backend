@@ -1,0 +1,41 @@
+{
+  "name": "clientes-stub C17 verificación de consentimiento",
+  "request": {
+    "method": "POST",
+    "urlPath": "/clientes-stub/v1/clientes/00000000-0000-4000-8000-000000000011/consentimientos/verificaciones",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.proposito == 'PERFILAMIENTO_PRECIO')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "decision": "PERMITIDO_PARCIAL",
+      "consentimientoId": "00000000-0000-4000-9000-000000000011",
+      "vigenteHasta": "2027-10-01T00:00:00Z",
+      "alcancesPermitidos": [
+        "DA_REGISTROS_PUBLICOS"
+      ],
+      "alcancesRechazados": [
+        {
+          "alcance": "FA_PRODUCTOS_VIGENTES",
+          "causa": "ALCANCE_NO_AUTORIZADO"
+        },
+        {
+          "alcance": "FA_HISTORIAL_PAGOS_12M",
+          "causa": "ALCANCE_NO_AUTORIZADO"
+        },
+        {
+          "alcance": "FA_INGRESOS_AGREGADOS",
+          "causa": "ALCANCE_NO_AUTORIZADO"
+        }
+      ],
+      "causa": null
+    }
+  }
+}

@@ -1,0 +1,159 @@
+# Propuesta del consumidor (cotizacion). Ratificar con los dueños de HU-W30/W31 (PD-01).
+openapi: 3.1.0
+info:
+  title: clientes (propuesta de cotizacion)
+  version: 0.1.0
+  description: >-
+    Contrato que cotizacion espera de clientes para la identidad y el consentimiento del
+    perfilamiento (docs/sprint_1/01-acuerdos-tecnicos.md §3.4.1). En Sprint 1 lo sirve el
+    stub de simulador-aliados en /clientes-stub (DT-02).
+  license:
+    name: Uso académico
+    identifier: CC-BY-4.0
+servers:
+  - url: http://simulador-aliados:8080/clientes-stub
+    description: Stub local y en int (Sprint 1)
+security: []
+tags:
+  - name: identidad
+    description: Estado de la verificación de identidad
+  - name: consentimientos
+    description: Verificación del consentimiento para un propósito y unos alcances
+paths:
+  /v1/clientes/{clienteId}/identidad:
+    get:
+      operationId: obtenerIdentidad
+      summary: Estado de la verificación de identidad del cliente
+      tags: [identidad]
+      parameters:
+        - $ref: '#/components/parameters/ClienteId'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Estado de la identidad
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Identidad'
+        '404':
+          $ref: '#/components/responses/ClienteNoEncontrado'
+  /v1/clientes/{clienteId}/consentimientos/verificaciones:
+    post:
+      operationId: verificarConsentimiento
+      summary: Verifica el consentimiento vigente del cliente para un propósito y unos alcances
+      tags: [consentimientos]
+      parameters:
+        - $ref: '#/components/parameters/ClienteId'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudVerificacion'
+      responses:
+        '200':
+          description: Decisión del consentimiento
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Verificacion'
+        '404':
+          $ref: '#/components/responses/ClienteNoEncontrado'
+components:
+  parameters:
+    ClienteId:
+      name: clienteId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      schema:
+        type: string
+  responses:
+    ClienteNoEncontrado:
+      description: El cliente no existe
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Alcance:
+      type: string
+      enum: [FA_PRODUCTOS_VIGENTES, FA_HISTORIAL_PAGOS_12M, FA_INGRESOS_AGREGADOS, DA_REGISTROS_PUBLICOS]
+    Identidad:
+      type: object
+      required: [clienteId, estado, verificadoEn]
+      properties:
+        clienteId:
+          type: string
+          format: uuid
+        estado:
+          type: string
+          enum: [VERIFICADO, RECHAZADO, PENDIENTE]
+        verificadoEn:
+          type: [string, 'null']
+          format: date-time
+    SolicitudVerificacion:
+      type: object
+      required: [proposito, alcances]
+      properties:
+        proposito:
+          type: string
+          enum: [PERFILAMIENTO_PRECIO]
+        alcances:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/Alcance'
+    AlcanceRechazado:
+      type: object
+      required: [alcance, causa]
+      properties:
+        alcance:
+          $ref: '#/components/schemas/Alcance'
+        causa:
+          type: string
+          enum: [ALCANCE_NO_AUTORIZADO]
+    Verificacion:
+      type: object
+      required: [decision, consentimientoId, vigenteHasta, alcancesPermitidos, alcancesRechazados, causa]
+      properties:
+        decision:
+          type: string
+          enum: [PERMITIDO, PERMITIDO_PARCIAL, RECHAZADO]
+        consentimientoId:
+          type: [string, 'null']
+          format: uuid
+        vigenteHasta:
+          type: [string, 'null']
+          format: date-time
+        alcancesPermitidos:
+          type: array
+          items:
+            $ref: '#/components/schemas/Alcance'
+        alcancesRechazados:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlcanceRechazado'
+        causa:
+          type: [string, 'null']
+          enum: [SIN_CONSENTIMIENTO, REVOCADO, VENCIDO, PROPOSITO_NO_AUTORIZADO, null]
+    Error:
+      type: object
+      required: [codigo, mensaje, correlationId, detalles]
+      properties:
+        codigo:
+          type: string
+          enum: [CLIENTE_NO_ENCONTRADO]
+        mensaje:
+          type: string
+        correlationId:
+          type: [string, 'null']
+        detalles:
+          type: object

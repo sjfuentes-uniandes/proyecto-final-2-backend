@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "3.1",
+  "confidenceScore": 0.95,
+  "data": {
+    "oldestProductYears": 7,
+    "totalMonthlyInstallment": {
+      "amount": "1800000.00",
+      "currency": "COP"
+    },
+    "creditorCount": 2
+  }
+}

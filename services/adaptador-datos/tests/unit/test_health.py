@@ -1,6 +1,5 @@
-from fastapi.testclient import TestClient
-
 from adaptador_datos.main import app
+from fastapi.testclient import TestClient
 
 
 def test_health() -> None:
