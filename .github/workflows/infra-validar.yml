@@ -1,8 +1,38 @@
-# Workflow existente: pendiente.
-name: infra-validar
-on: workflow_dispatch
+name: Infra - Validar
+
+# Sin credenciales de AWS: formato, validación y pruebas de Terraform con
+# proveedores simulados, y shellcheck de los scripts de despliegue.
+on:
+  pull_request:
+    paths:
+      - "infra/bootstrap/**"
+      - "infra/platform/**"
+      - "infra/apps/**"
+      - "infra/envs/**"
+      - "infra/plataforma.mk"
+      - "scripts/plataforma/**"
+      - ".github/workflows/infra-*.yml"
+      - ".github/actions/preparar-infra/**"
+      - ".github/actions/plan-terraform/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
-  pendiente:
+  validar:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - run: echo "Pendiente"
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.16"
+          terraform_wrapper: false
+
+      - name: Terraform (fmt, validate, test)
+        run: make infra-validar
+
+      - name: Shellcheck
+        run: shellcheck -x -P scripts/plataforma scripts/plataforma/*.sh

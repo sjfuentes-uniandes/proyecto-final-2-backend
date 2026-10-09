@@ -1,8 +1,53 @@
-# Workflow existente: pendiente.
-name: infra-destruir
-on: workflow_dispatch
+name: Infra - Destruir
+
+# Elimina el ambiente completo (apps y luego platform), incluidos los datos de
+# RDS y la auditoría. Se conservan el bucket de estado y el rol de GitHub.
+on:
+  workflow_dispatch:
+    inputs:
+      ambiente:
+        description: Ambiente a destruir
+        type: string
+        default: int
+        required: true
+      confirmacion:
+        description: 'Escriba "destruir <ambiente>" para confirmar (p. ej. destruir int)'
+        type: string
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: infra-${{ inputs.ambiente }}
+  cancel-in-progress: false
+
 jobs:
-  pendiente:
+  destruir:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.ambiente }}
+    timeout-minutes: 90
+    env:
+      ENV: ${{ inputs.ambiente }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      AUTO_APPROVE: "1"
     steps:
-      - run: echo "Pendiente "
+      - name: Confirmación
+        env:
+          CONFIRMACION: ${{ inputs.confirmacion }}
+        run: |
+          if [ "$CONFIRMACION" != "destruir ${ENV}" ]; then
+            echo "::error::Confirmación incorrecta: se esperaba \"destruir ${ENV}\"."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/preparar-infra
+        with:
+          aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Destruir
+        run: make infra-destruir

@@ -1,0 +1,12 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
+
+# Configuración por ambiente versionada (sin secretos). Los digests generados
+# (envs/*/images.tfvars.json) siguen ignorados por *.tfvars.json.
+!envs/*/*.tfvars

@@ -3,7 +3,10 @@ name = "solventa-common"
 version = "0.1.0"
 description = "Correlación, logs JSON, OTel/métricas, Outbox, Inbox y errores comunes"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "opentelemetry-propagator-aws-xray>=1.0",
+    "pydantic-settings>=2.6",
+]
 
 [build-system]
 requires = ["hatchling"]

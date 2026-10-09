@@ -1,0 +1,67 @@
+name: Plan de Terraform
+description: >-
+  Calcula el plan de una raíz (platform o apps) con los scripts de la plataforma,
+  lo publica en el resumen de la ejecución y, si tiene cambios, lo sube como
+  artefacto plan-<raiz> para que el job de apply aplique exactamente ese plan.
+inputs:
+  raiz:
+    description: Raíz de Terraform (platform o apps).
+    required: true
+  titulo:
+    description: Título de la sección en el resumen.
+    required: true
+outputs:
+  cambios:
+    description: true si el plan tiene cambios que aplicar.
+    value: ${{ steps.revisar.outputs.cambios }}
+runs:
+  using: composite
+  steps:
+    - name: Terraform plan
+      shell: bash
+      env:
+        PLAN_FILE: ${{ runner.temp }}/${{ inputs.raiz }}.tfplan
+        RAIZ: ${{ inputs.raiz }}
+      run: scripts/plataforma/$([ "$RAIZ" = platform ] && echo platform.sh || echo apps.sh) plan
+
+    - name: Revisar y resumir
+      id: revisar
+      shell: bash
+      env:
+        PLAN_FILE: ${{ runner.temp }}/${{ inputs.raiz }}.tfplan
+        RAIZ: ${{ inputs.raiz }}
+        TITULO: ${{ inputs.titulo }}
+      run: |
+        # apps.sh termina sin plan cuando ningún servicio tiene imagen en ECR.
+        if [ ! -f "$PLAN_FILE" ]; then
+          echo "cambios=false" >> "$GITHUB_OUTPUT"
+          echo "### ${TITULO}: sin plan (no hay nada que desplegar)" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+        cambios=$(terraform -chdir="infra/${RAIZ}" show -json "$PLAN_FILE" | jq '
+          ([.resource_changes[]?.change.actions | select(. != ["no-op"] and . != ["read"])] | length > 0) or
+          ([(.output_changes // {})[].actions | select(. != ["no-op"])] | length > 0)')
+        echo "cambios=${cambios}" >> "$GITHUB_OUTPUT"
+        {
+          if [ "$cambios" = "true" ]; then
+            echo "### ${TITULO}: plan pendiente de aprobación"
+          else
+            echo "### ${TITULO}: sin cambios"
+          fi
+          echo '<details><summary>terraform plan</summary>'
+          echo
+          echo '```'
+          # El resumen de un paso admite hasta 1 MiB.
+          terraform -chdir="infra/${RAIZ}" show -no-color "$PLAN_FILE" | head -c 900000 || true
+          echo '```'
+          echo '</details>'
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Guardar plan
+      if: steps.revisar.outputs.cambios == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: plan-${{ inputs.raiz }}
+        path: ${{ runner.temp }}/${{ inputs.raiz }}.tfplan
+        retention-days: 1
+        if-no-files-found: error

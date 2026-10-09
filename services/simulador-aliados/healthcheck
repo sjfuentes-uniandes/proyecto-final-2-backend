@@ -1,0 +1,3 @@
+#!/bin/sh
+# Contrato de las imágenes (infra/apps, health_check_command): sale con 0 si GET /health responde 200.
+exec curl -fsS -o /dev/null --max-time 2 "http://127.0.0.1:${PORT:-8080}/health"
