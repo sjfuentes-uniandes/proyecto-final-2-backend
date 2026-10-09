@@ -8,3 +8,5 @@ __pycache__/
 *.tfstate
 *.tfstate.*
 *.tfplan
+cobertura.json
+.coverage

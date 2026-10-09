@@ -1,0 +1,110 @@
+{
+  "proposito": {
+    "codigo": "PERFILAMIENTO_PRECIO",
+    "texto": {
+      "es-CO": "Perfilamiento y cálculo de precio",
+      "en-US": "Profiling and pricing"
+    }
+  },
+  "alcances": [
+    {
+      "alcance": "FA_PRODUCTOS_VIGENTES",
+      "tipo": "FINANZAS_ABIERTAS",
+      "texto": {
+        "es-CO": "Productos financieros vigentes",
+        "en-US": "Active financial products"
+      },
+      "campos": [
+        {
+          "campo": "antiguedad_productos_anios",
+          "tipo": "entero",
+          "minimo": 0
+        },
+        {
+          "campo": "cuota_mensual_obligaciones",
+          "tipo": "decimal",
+          "moneda": "COP",
+          "minimo": 0
+        },
+        {
+          "campo": "entidades_con_deuda",
+          "tipo": "entero",
+          "minimo": 0
+        }
+      ]
+    },
+    {
+      "alcance": "FA_HISTORIAL_PAGOS_12M",
+      "tipo": "FINANZAS_ABIERTAS",
+      "texto": {
+        "es-CO": "Historial de pagos de 12 meses",
+        "en-US": "12-month payment history"
+      },
+      "campos": [
+        {
+          "campo": "moras_12m",
+          "tipo": "entero",
+          "minimo": 0
+        }
+      ]
+    },
+    {
+      "alcance": "FA_INGRESOS_AGREGADOS",
+      "tipo": "FINANZAS_ABIERTAS",
+      "texto": {
+        "es-CO": "Ingresos agregados",
+        "en-US": "Aggregated income"
+      },
+      "campos": [
+        {
+          "campo": "ingreso_mensual_estimado",
+          "tipo": "decimal",
+          "moneda": "COP",
+          "minimoExclusivo": 0
+        }
+      ]
+    },
+    {
+      "alcance": "DA_REGISTROS_PUBLICOS",
+      "tipo": "DATOS_ABIERTOS",
+      "texto": {
+        "es-CO": "Registros públicos del Estado",
+        "en-US": "Government public records"
+      },
+      "campos": [
+        {
+          "campo": "coincidencias_listas_restrictivas",
+          "tipo": "entero",
+          "minimo": 0
+        }
+      ]
+    }
+  ],
+  "declarados": {
+    "tipo": "DECLARADO",
+    "texto": {
+      "es-CO": "Dato declarado",
+      "en-US": "Declared data"
+    },
+    "campos": [
+      {
+        "campo": "edad",
+        "tipo": "entero",
+        "derivadoDe": "fechaNacimiento"
+      },
+      {
+        "campo": "plazo_credito_meses",
+        "tipo": "entero",
+        "minimo": 12,
+        "maximo": 360
+      },
+      {
+        "campo": "suma_asegurada",
+        "tipo": "decimal",
+        "moneda": "COP",
+        "minimo": 1,
+        "maximo": 5000000000
+      }
+    ]
+  }
+}

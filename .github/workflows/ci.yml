@@ -33,5 +33,21 @@ jobs:
       - uses: actions/checkout@v4
       - if: matrix.servicio != 'simulador-aliados'
         uses: ./.github/actions/preparar-python
+      # lint solo en los servicios que ya cumplen ruff; el resto tiene código previo sin
+      # formatear (02, CS-11). Agregar cada servicio aquí cuando su historia lo deje limpio.
+      - if: contains(fromJson('["cotizacion","adaptador-datos"]'), matrix.servicio)
+        run: make lint SERVICE=${{ matrix.servicio }}
       - if: matrix.servicio != 'simulador-aliados'
-        run: make test-unit SERVICE=${{ matrix.servicio }}
+        run: make test-cov SERVICE=${{ matrix.servicio }}
+      - if: matrix.servicio != 'simulador-aliados'
+        run: make test-module SERVICE=${{ matrix.servicio }}
+      - if: matrix.servicio != 'simulador-aliados'
+        run: make test-contract SERVICE=${{ matrix.servicio }}
+      - if: matrix.servicio == 'simulador-aliados'
+        name: Validar los JSON de los mapeos
+        run: |
+          shopt -s globstar
+          for f in services/simulador-aliados/mappings/**/*.json; do jq empty "$f"; done
+      - if: matrix.servicio == 'simulador-aliados'
+        name: Construir la imagen del simulador
+        run: docker build -f services/simulador-aliados/Dockerfile .
