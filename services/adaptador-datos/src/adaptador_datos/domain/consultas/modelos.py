@@ -49,3 +49,16 @@ class RespuestaInvalida(Exception):
     def __init__(self, motivo: str) -> None:
         super().__init__(motivo)
         self.motivo = motivo
+
+
+# Agregados de W10-P04 (dueño del paso).
+class ConsentimientoRequerido(Exception):
+    """La consulta llegó sin consentimientoId: no se llama al proveedor."""
+
+
+class CamposNoSoportados(Exception):
+    """Campos vacíos o que no pertenecen a la fuente."""
+
+    def __init__(self, campos_invalidos: tuple[str, ...]) -> None:
+        super().__init__(", ".join(campos_invalidos))
+        self.campos_invalidos = campos_invalidos

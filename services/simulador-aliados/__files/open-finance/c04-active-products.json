@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "3.1",
+  "confidenceScore": 0.95,
+  "data": {
+    "oldestProductYears": 7,
+    "totalMonthlyInstallment": {
+      "amount": "1800000.00",
+      "currency": "COP"
+    },
+    "creditorCount": 2,
+    "accountNumbers": [
+      "SIN-CTA-0004"
+    ],
+    "fullName": "Cliente Sintético 04",
+    "transactions": [
+      {
+        "amount": "123.00"
+      }
+    ]
+  }
+}

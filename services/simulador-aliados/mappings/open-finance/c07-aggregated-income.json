@@ -1,0 +1,25 @@
+{
+  "name": "open-finance C07 aggregated-income caido",
+  "request": {
+    "method": "GET",
+    "urlPath": "/open-finance/v3/customers/00000000-0000-4000-8000-000000000007/aggregated-income",
+    "queryParameters": {
+      "fields": {
+        "equalTo": "estimatedMonthlyIncome"
+      }
+    },
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "open-finance/c07-aggregated-income.json",
+    "fixedDelayMilliseconds": 50
+  }
+}

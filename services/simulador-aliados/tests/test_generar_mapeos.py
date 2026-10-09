@@ -88,3 +88,85 @@ def test_main_escribe_las_carpetas_del_subcomando(monkeypatch: pytest.MonkeyPatc
     )
     assert gm.main(["todo"]) == 0
     assert llamadas == [(len(gm.generar(SUBCOMANDOS, CASOS)), gm.carpetas_de(SUBCOMANDOS))]
+
+
+ALIADOS = gm.generar(["aliados"], CASOS)
+
+
+def _mapeo(ruta: str) -> dict:
+    return ALIADOS[f"mappings/{ruta}"]
+
+
+def _cuerpo(mapeo: dict) -> object:
+    return ALIADOS[f"__files/{mapeo['response']['bodyFileName']}"]
+
+
+def test_aliados_solicitud_exige_campos_exactos_y_api_key() -> None:
+    solicitud = _mapeo("open-finance/c01-active-products.json")["request"]
+    assert solicitud["urlPath"] == (
+        "/open-finance/v3/customers/00000000-0000-4000-8000-000000000001/active-products"
+    )
+    assert solicitud["queryParameters"] == {
+        "fields": {"equalTo": "creditorCount,oldestProductYears,totalMonthlyInstallment"}
+    }
+    assert solicitud["headers"] == {"X-Api-Key": {"matches": ".+"}}
+    historial = _mapeo("open-finance/c01-payment-history.json")["request"]["queryParameters"]
+    assert historial == {"months": {"equalTo": "12"}, "fields": {"equalTo": "lateCount"}}
+
+
+@pytest.mark.parametrize(
+    ("ruta", "estado", "demora"),
+    [
+        ("open-finance/c01-active-products.json", 200, 50),
+        ("open-finance/c18-active-products.json", 200, 150),
+        ("datos-abiertos/c06-registros.json", 200, 1000),
+        ("open-finance/c13-payment-history.json", 200, 1000),
+        ("open-finance/c07-aggregated-income.json", 503, 50),
+    ],
+)
+def test_aliados_demoras_y_estados(ruta: str, estado: int, demora: int) -> None:
+    respuesta = _mapeo(ruta)["response"]
+    assert (respuesta["status"], respuesta["fixedDelayMilliseconds"]) == (estado, demora)
+
+
+def test_aliados_variantes_del_cuerpo() -> None:
+    assert _cuerpo(_mapeo("open-finance/c03-payment-history.json"))["data"] == {}
+    adicional = _cuerpo(_mapeo("open-finance/c04-active-products.json"))["data"]
+    assert adicional["accountNumbers"] == ["SIN-CTA-0004"]
+    assert adicional["fullName"] == "Cliente Sintético 04"
+    assert adicional["oldestProductYears"] == 7
+    assert _cuerpo(_mapeo("open-finance/c05-active-products.json"))["data"] == "no-es-objeto"
+    assert _cuerpo(_mapeo("open-finance/c07-aggregated-income.json")) == {"error": "unavailable"}
+    c14 = _cuerpo(_mapeo("datos-abiertos/c14-registros.json"))["registro"]
+    assert c14 == {"listasRestrictivas": {"coincidencias": 1}}
+    assert _cuerpo(_mapeo("open-finance/c15-payment-history.json"))["data"] == {"lateCount": 1}
+
+
+def test_aliados_solo_las_fuentes_que_usa_cada_caso() -> None:
+    rutas = set(ALIADOS)
+    assert not any("/c02-aggregated-income" in r for r in rutas)
+    for sin_llamadas in ("c08", "c09", "c10", "c11", "c12", "c16", "c17"):
+        assert not any(f"/{sin_llamadas}-" in r for r in rutas)
+
+
+def test_aliados_escenario_de_recuperacion() -> None:
+    primero = _mapeo("datos-abiertos/c19-registros-1-lento.json")
+    segundo = _mapeo("datos-abiertos/c19-registros-2-restablecido.json")
+    assert primero["scenarioName"] == segundo["scenarioName"]
+    assert primero["scenarioName"] == "recuperacion-00000000-0000-4000-8000-000000000013"
+    assert (primero["requiredScenarioState"], primero["newScenarioState"]) == (
+        "Started",
+        "Restablecido",
+    )
+    assert segundo["requiredScenarioState"] == "Restablecido"
+    assert primero["response"]["fixedDelayMilliseconds"] == 1000
+    assert segundo["response"]["fixedDelayMilliseconds"] == 50
+
+
+@pytest.mark.parametrize("aliado", ["open-finance", "datos-abiertos"])
+def test_aliados_respaldo_404(aliado: str) -> None:
+    respaldo = _mapeo(f"{aliado}/zz-no-encontrado.json")
+    assert respaldo["priority"] == gm.PRIORIDAD_RESPALDO
+    assert respaldo["request"] == {"method": "ANY", "urlPathPattern": f"/{aliado}/.*"}
+    assert respaldo["response"]["status"] == 404
+    assert _cuerpo(respaldo) == {"error": "customer_not_found"}

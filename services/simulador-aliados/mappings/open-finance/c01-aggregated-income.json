@@ -1,0 +1,25 @@
+{
+  "name": "open-finance C01 aggregated-income nominal",
+  "request": {
+    "method": "GET",
+    "urlPath": "/open-finance/v3/customers/00000000-0000-4000-8000-000000000001/aggregated-income",
+    "queryParameters": {
+      "fields": {
+        "equalTo": "estimatedMonthlyIncome"
+      }
+    },
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "open-finance/c01-aggregated-income.json",
+    "fixedDelayMilliseconds": 50
+  }
+}

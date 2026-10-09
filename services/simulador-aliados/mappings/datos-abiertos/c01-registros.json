@@ -1,0 +1,25 @@
+{
+  "name": "datos-abiertos C01 registros nominal",
+  "request": {
+    "method": "GET",
+    "urlPath": "/datos-abiertos/v1/registros/00000000-0000-4000-8000-000000000001",
+    "queryParameters": {
+      "campos": {
+        "equalTo": "listasRestrictivas"
+      }
+    },
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "datos-abiertos/c01-registros.json",
+    "fixedDelayMilliseconds": 50
+  }
+}
