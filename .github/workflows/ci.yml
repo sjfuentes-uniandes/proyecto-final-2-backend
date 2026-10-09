@@ -8,7 +8,7 @@ jobs:
     outputs:
       servicios: ${{ steps.detectar.outputs.servicios }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - id: detectar
         name: Detectar servicios que cambiaron
@@ -30,7 +30,7 @@ jobs:
       matrix:
         servicio: ${{ fromJson(needs.cambios.outputs.servicios) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - if: matrix.servicio != 'simulador-aliados'
         uses: ./.github/actions/preparar-python
       - if: matrix.servicio != 'simulador-aliados'
