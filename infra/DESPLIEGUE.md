@@ -81,7 +81,8 @@ make infra-bootstrap AWS_REGION=us-east-1
 ```
 
 - **Crea** el bucket de estado (versionado, cifrado, sin acceso público y protegido contra borrado) y el rol `solventa-github-deploy`, que solo pueden asumir workflows de `sjfuentes-uniandes/proyecto-final-2-backend`, identificado por los ID del dueño y del repositorio (`sjfuentes-uniandes@196879525/proyecto-final-2-backend@1409601103`).
-- **Muestra** el `AWS_ROLE_ARN` para configurar GitHub (sección 7).
+- **Crea** también el rol `solventa-github-web-deploy` para el repo del portal (`sjfuentes-uniandes@196879525/proyecto-final-2-frontend@1409599583`, variable `github_web_repository`). Solo puede leer `/solventa/*/web/config` en SSM, escribir en los buckets `solventa-*-web-<cuenta>` e invalidar CloudFront: no toca Terraform ni su estado.
+- **Muestra** `AWS_ROLE_ARN` y `AWS_WEB_ROLE_ARN` para configurar GitHub (sección 7). Si el bootstrap ya estaba aplicado, basta con volver a ejecutar `make infra-bootstrap` para crear el rol del portal.
 - **Proveedor OIDC existente:** si la cuenta ya tiene el proveedor OIDC de GitHub, usar `CREATE_GITHUB_OIDC_PROVIDER=false make infra-bootstrap`.
 - **Estado local:** el estado del bootstrap queda en `infra/bootstrap/terraform.tfstate` (ignorado por Git). Guardarlo; si se pierde, los recursos se pueden importar de nuevo.
 
@@ -176,8 +177,33 @@ AUTO_APPROVE=1 make infra-destruir ENV=int  # sin pregunta (CI)
 
 - **Idempotencia:** si una raíz ya no tiene recursos, se omite.
 - **Lo que se conserva:** el bucket de estado y el rol de GitHub (bootstrap).
-- **Recrear:** basta con volver a ejecutar `make infra-desplegar`. Las imágenes se reconstruyen porque ECR se borró con el ambiente.
+- **Recrear:** volver a ejecutar `make infra-desplegar`; las imágenes se reconstruyen porque ECR se borró con el ambiente. Después hay que crear de nuevo el primer administrador y publicar el portal (sección 6.1).
 - **Datos:** la base de datos, los usuarios de Cognito y la auditoría **se pierden**. Exportar lo necesario antes de destruir.
+
+### 6.1 Volver a levantar el ambiente después de destruirlo
+
+El destroy borra el pool de Cognito del back-office, por lo que no queda ningún usuario que pueda entrar al portal ni crear otros, y el bucket y la distribución de CloudFront del portal, que quedan vacíos y con otra URL. El bootstrap y las variables de GitHub no cambian.
+
+```bash
+# 1. Backend: plataforma, bases, imágenes y servicios (sección 5)
+make infra-desplegar ENV=int
+make infra-probar ENV=int
+
+# 2. Primer administrador del back-office: el pool es nuevo y está vacío
+EMAIL=ana@solventa.co NOMBRE="Ana Pérez" make infra-usuario-admin ENV=int
+
+# 3. Portal: el bucket nuevo está vacío (en proyecto-final-2-frontend)
+make desplegar ENV=int
+
+# 4. URL del portal (cambia con cada CloudFront nuevo)
+make infra-salidas ENV=int
+```
+
+5. **Primer ingreso:** con la contraseña temporal que llega al correo, entrar a `<portal>/ingresar`, definir la contraseña y registrar la aplicación de autenticación con el QR (detalle en la sección 7.1).
+   - **Antes de escanear:** borrar de la aplicación de autenticación la entrada "Solventa" del ambiente anterior. El pool es nuevo, así que el código anterior ya no sirve y confunde al elegir la entrada.
+6. **Demás usuarios:** crearlos desde el portal (**Administración › Usuarios**). También funciona `make infra-usuario-admin` con `GRUPOS=`.
+
+Si el correo no llega, volver a ejecutar el paso 2: mientras el usuario no haya hecho su primer ingreso, reenvía otra contraseña temporal.
 
 ## 7. GitHub Actions
 
@@ -191,6 +217,8 @@ AUTO_APPROVE=1 make infra-destruir ENV=int  # sin pregunta (CI)
 3. Opcional: en **Settings → Environments**, crear el ambiente (`int`, `qa`…) con *required reviewers* para exigir aprobación antes de desplegar o destruir. En **Infra - Desplegar** solo los jobs que aplican usan `environment: <ambiente>`, así que la aprobación se pide cuando el plan ya está en el resumen de la ejecución.
 4. Los workflows `workflow_dispatch` solo aparecen en la pestaña **Actions** cuando están en la rama por defecto (`main`).
 
+5. En el repo **proyecto-final-2-frontend**, crear las variables `AWS_WEB_ROLE_ARN` (salida `github_web_role_arn`) y `AWS_REGION`, y el environment `int` (opcionalmente con *required reviewers*). El workflow **CD web** publica el portal en cada push a `main` (ambiente `int`) o a mano en otro ambiente.
+
 No se guardan llaves de AWS en GitHub: los workflows obtienen credenciales temporales por OIDC.
 
 ### Workflows
@@ -203,6 +231,29 @@ No se guardan llaves de AWS en GitHub: los workflows obtienen credenciales tempo
 | **Infra - Validar** (`infra-validar.yml`) | Pull requests que tocan `infra/` o los scripts | `fmt`, `validate` y `terraform test` de las tres raíces, más `shellcheck`. No usa AWS. |
 
 Los workflows de un mismo ambiente comparten un grupo de concurrencia, así que no se ejecutan dos a la vez. Además, el estado remoto tiene bloqueo.
+
+### Portal web (repo proyecto-final-2-frontend)
+
+`infra/platform` crea el bucket privado, CloudFront y el parámetro SSM `/solventa/<ambiente>/web/config` (bucket, distribución, URL de la API de canales, IDs públicos de Cognito y tablero; sin secretos). El repo del portal lo usa para publicar:
+
+```bash
+# En proyecto-final-2-frontend, con credenciales del ambiente
+make desplegar ENV=int        # compila, genera config.json desde SSM, sube a S3 e invalida CloudFront
+make config-local ENV=int     # para correr el portal en local contra la API y el Cognito de int
+```
+
+El workflow **CD web** del repo del portal ejecuta lo mismo con el rol `solventa-github-web-deploy`.
+
+## 7.1 Usuarios del back-office
+
+El pool de Cognito del back-office no permite registro abierto y exige MFA (TOTP). El primer administrador se crea desde aquí; los siguientes, desde el portal (**Administración › Usuarios**, grupo `administradores`):
+
+```bash
+EMAIL=ana@solventa.co NOMBRE="Ana Pérez" make infra-usuario-admin ENV=int     # grupos administradores,operacion
+GRUPOS=operacion EMAIL=luis@solventa.co make infra-usuario-admin ENV=int      # otros grupos
+```
+
+Cognito envía al correo una contraseña temporal con el enlace `<portal>/ingresar`. El correo sale de `no-reply@verificationemail.com` (revisar spam; el envío por defecto de Cognito permite unos 50 al día). Si no llega, volver a ejecutar el mismo comando: mientras el usuario no haya hecho su primer ingreso, se genera y reenvía otra contraseña temporal. En el primer ingreso la persona define su contraseña (12+ caracteres con mayúsculas, minúsculas, números y símbolos) y registra su aplicación de autenticación con el código QR. Grupos: `administradores` (crea usuarios), `operacion` (tablero y trazas) y `administradores-socios` (socios, credenciales y cuotas).
 
 ## 8. Problemas frecuentes
 

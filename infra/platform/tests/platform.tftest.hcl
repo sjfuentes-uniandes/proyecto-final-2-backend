@@ -81,6 +81,18 @@ run "minimo_costo" {
     error_message = "API Gateway debe integrarse con el ALB por VPC Link v2."
   }
   assert {
+    condition     = aws_api_gateway_integration.proxy["web"].request_parameters["integration.request.header.X-Authenticated-Groups"] == "context.authorizer.claims.cognito:groups" && !contains(keys(aws_api_gateway_integration.proxy["movil"].request_parameters), "integration.request.header.X-Authenticated-Groups")
+    error_message = "El BFF web recibe los grupos del token para exigir el grupo operacion (HU-W27)."
+  }
+  assert {
+    condition     = contains(keys(aws_cognito_user_group.backoffice), "administradores") && aws_cognito_user_pool.backoffice.admin_create_user_config[0].allow_admin_create_user_only
+    error_message = "Solo los administradores crean usuarios del back-office (grupo administradores)."
+  }
+  assert {
+    condition     = length(aws_cognito_user_pool.backoffice.admin_create_user_config[0].invite_message_template) == 1 && aws_ssm_parameter.web_config.name == "/solventa/int/web/config" && aws_ssm_parameter.web_config.type == "String" && aws_cognito_user_pool_client.backoffice.auth_session_validity == 15
+    error_message = "La invitación del back-office y el parámetro de configuración pública del portal deben existir."
+  }
+  assert {
     condition     = length(aws_ecr_repository.service) == length(local.catalog)
     error_message = "Debe existir un repositorio ECR por servicio del catálogo."
   }

@@ -103,3 +103,26 @@ resource "aws_s3_bucket_policy" "web" {
   })
   depends_on = [aws_s3_bucket_public_access_block.web]
 }
+
+# Configuración pública del portal (sin secretos). La lee el despliegue del frontend
+# (repo proyecto-final-2-frontend: make desplegar / CD web) para generar config.json,
+# sin acceso al estado de Terraform.
+resource "aws_ssm_parameter" "web_config" {
+  name        = "/${var.name}/${var.environment}/web/config"
+  description = "Bucket, distribución y configuración pública del portal web"
+  type        = "String"
+  value = jsonencode({
+    bucket         = aws_s3_bucket.web.id
+    distributionId = aws_cloudfront_distribution.web.id
+    url            = local.portal_url
+    config = {
+      apiBaseUrl   = aws_api_gateway_stage.main["canales"].invoke_url
+      dashboardUrl = "https://${var.aws_region}.console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards/dashboard/${local.prefix}"
+      cognito = {
+        region     = var.aws_region
+        backoffice = { userPoolId = aws_cognito_user_pool.backoffice.id, clientId = aws_cognito_user_pool_client.backoffice.id }
+        clientes   = { userPoolId = aws_cognito_user_pool.customers.id, clientId = aws_cognito_user_pool_client.web.id }
+      }
+    }
+  })
+}

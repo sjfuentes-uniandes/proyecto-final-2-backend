@@ -26,7 +26,9 @@ locals {
       "batch/metrics" = { timeout = "60s" }
     }
     exporters = {
-      awsxray = { region = local.p.region }
+      # correlation_id y operation como anotaciones: permiten buscar el recorrido en
+      # X-Ray (annotation.correlation_id = "...") desde la consola y desde bff-web.
+      awsxray = { region = local.p.region, indexed_attributes = ["correlation_id", "operation"] }
       awsemf = {
         region                           = local.p.region
         namespace                        = var.metrics_namespace
@@ -91,6 +93,9 @@ locals {
         PARTNERS_USAGE_PLANS     = jsonencode(local.p.usage_plans)
       } : {},
       service.tier == "acceso" ? { JWT_ISSUERS = jsonencode(local.p.cognito.issuers) } : {},
+      # Orígenes del portal para CORS: API Gateway reenvía el preflight al BFF.
+      contains(local.cors_services, name) ? { CORS_ORIGINS = jsonencode(local.web_origins) } : {},
+      contains(local.backoffice_user_admins, name) ? { BACKOFFICE_USER_POOL_ID = local.p.cognito.backoffice_pool_id } : {},
     )
   }
 

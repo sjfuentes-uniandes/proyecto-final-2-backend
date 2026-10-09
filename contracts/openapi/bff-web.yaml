@@ -1,0 +1,437 @@
+openapi: 3.1.0
+info:
+  title: bff-web
+  version: 0.1.0
+paths:
+  /operacion/trazas:
+    get:
+      tags:
+      - operacion
+      summary: Obtener Traza
+      operationId: obtener_traza_operacion_trazas_get
+      parameters:
+      - name: correlation_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 128
+          - type: 'null'
+          title: Correlation Id
+      - name: recorrido
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - api-socios
+            - bff-web
+            - bff-movil
+            type: string
+          - type: 'null'
+          title: Recorrido
+      - name: duracion_min_ms
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 600000
+          minimum: 0
+          default: 0
+          title: Duracion Min Ms
+      - name: horas
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 24
+          minimum: 1
+          default: 6
+          title: Horas
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrazaRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /backoffice/grupos:
+    get:
+      tags:
+      - administracion
+      summary: Listar Grupos
+      operationId: listar_grupos_backoffice_grupos_get
+      parameters:
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GrupoRespuesta'
+                title: Response Listar Grupos Backoffice Grupos Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /backoffice/usuarios:
+    get:
+      tags:
+      - administracion
+      summary: Listar Usuarios
+      operationId: listar_usuarios_backoffice_usuarios_get
+      parameters:
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UsuarioRespuesta'
+                title: Response Listar Usuarios Backoffice Usuarios Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - administracion
+      summary: Crear Usuario
+      operationId: crear_usuario_backoffice_usuarios_post
+      parameters:
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevoUsuarioSolicitud'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Health Get
+components:
+  schemas:
+    ContextoRespuesta:
+      properties:
+        canal:
+          type: string
+          title: Canal
+        servicio_entrada:
+          type: string
+          title: Servicio Entrada
+        servicios_internos:
+          type: integer
+          title: Servicios Internos
+        servicios_externos:
+          type: integer
+          title: Servicios Externos
+        ambiente:
+          type: string
+          title: Ambiente
+      type: object
+      required:
+      - canal
+      - servicio_entrada
+      - servicios_internos
+      - servicios_externos
+      - ambiente
+      title: ContextoRespuesta
+    GrupoRespuesta:
+      properties:
+        nombre:
+          type: string
+          title: Nombre
+        descripcion:
+          type: string
+          title: Descripcion
+      type: object
+      required:
+      - nombre
+      - descripcion
+      title: GrupoRespuesta
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    NuevoUsuarioSolicitud:
+      properties:
+        email:
+          type: string
+          maxLength: 254
+          minLength: 5
+          title: Email
+        nombre:
+          type: string
+          maxLength: 120
+          minLength: 2
+          title: Nombre
+        grupos:
+          items:
+            type: string
+          type: array
+          maxItems: 3
+          minItems: 1
+          title: Grupos
+      type: object
+      required:
+      - email
+      - nombre
+      - grupos
+      title: NuevoUsuarioSolicitud
+    TramoRespuesta:
+      properties:
+        servicio:
+          type: string
+          title: Servicio
+        operacion:
+          type: string
+          title: Operacion
+        externo:
+          type: boolean
+          title: Externo
+        inicio_ms:
+          type: integer
+          title: Inicio Ms
+        duracion_ms:
+          type: integer
+          title: Duracion Ms
+        propio_ms:
+          type: integer
+          title: Propio Ms
+        participacion:
+          type: number
+          title: Participacion
+        estado:
+          type: string
+          title: Estado
+        destacado:
+          type: boolean
+          title: Destacado
+      type: object
+      required:
+      - servicio
+      - operacion
+      - externo
+      - inicio_ms
+      - duracion_ms
+      - propio_ms
+      - participacion
+      - estado
+      - destacado
+      title: TramoRespuesta
+    TrazaRespuesta:
+      properties:
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        trace_ids:
+          items:
+            type: string
+          type: array
+          title: Trace Ids
+        inicio:
+          type: string
+          format: date-time
+          title: Inicio
+        duracion_total_ms:
+          type: integer
+          title: Duracion Total Ms
+        umbral_ms:
+          type: integer
+          title: Umbral Ms
+        resultado:
+          type: string
+          title: Resultado
+        tramos:
+          items:
+            $ref: '#/components/schemas/TramoRespuesta'
+          type: array
+          title: Tramos
+        interpretacion:
+          type: string
+          title: Interpretacion
+        contexto:
+          $ref: '#/components/schemas/ContextoRespuesta'
+      type: object
+      required:
+      - correlation_id
+      - trace_ids
+      - inicio
+      - duracion_total_ms
+      - umbral_ms
+      - resultado
+      - tramos
+      - interpretacion
+      - contexto
+      title: TrazaRespuesta
+    UsuarioRespuesta:
+      properties:
+        email:
+          type: string
+          title: Email
+        nombre:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Nombre
+        estado:
+          type: string
+          title: Estado
+        habilitado:
+          type: boolean
+          title: Habilitado
+        creado:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Creado
+        grupos:
+          items:
+            type: string
+          type: array
+          title: Grupos
+      type: object
+      required:
+      - email
+      - nombre
+      - estado
+      - habilitado
+      - creado
+      - grupos
+      title: UsuarioRespuesta
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

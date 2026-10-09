@@ -1,10 +1,32 @@
-# Ambiente local: Postgres, LocalStack (SNS/SQS/S3), WireMock y servicios.
+# Ambiente local: Postgres, LocalStack (SNS/SQS/S3), WireMock, colector OTel y servicios.
 name: solventa
 
 x-servicio: &servicio
   environment:
     SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
-  depends_on: [postgres, localstack]
+    # HU-W27: mismo contrato OTEL_* que en ECS, con el colector local en vez de ADOT.
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    OTEL_PROPAGATORS: tracecontext,baggage,xray
+    OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
+  depends_on: [postgres, localstack, otel-collector]
+
+# Colector local: imprime trazas y métricas (docker compose logs -f otel-collector).
+configs:
+  otel-collector:
+    content: |
+      receivers:
+        otlp:
+          protocols:
+            grpc: { endpoint: 0.0.0.0:4317 }
+            http: { endpoint: 0.0.0.0:4318 }
+      processors:
+        batch: {}
+      exporters:
+        debug: { verbosity: basic }
+      service:
+        pipelines:
+          traces: { receivers: [otlp], processors: [batch], exporters: [debug] }
+          metrics: { receivers: [otlp], processors: [batch], exporters: [debug] }
 
 services:
   postgres:
@@ -20,6 +42,14 @@ services:
     environment:
       SERVICES: sns,sqs,s3
     ports: ["4566:4566"]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    configs:
+      - source: otel-collector
+        target: /etc/otelcol/config.yaml
+    ports: ["4317:4317", "4318:4318"]
 
   simulador-aliados:
     build: { context: ., dockerfile: services/simulador-aliados/Dockerfile }

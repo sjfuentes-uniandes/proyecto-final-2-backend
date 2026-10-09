@@ -12,6 +12,12 @@ locals {
   # Capacidades que no se derivan del catálogo.
   audit_writers  = ["auditoria"]
   partner_admins = ["api-socios"]
+  # HU-W27: pantalla Operación › Trazas del portal (consulta X-Ray por correlationId).
+  trace_readers = ["bff-web"]
+  # Administración › Usuarios del portal: alta de usuarios del back-office y sus grupos.
+  backoffice_user_admins = ["bff-web"]
+  cors_services          = ["bff-web"]
+  web_origins            = compact(concat([try(data.terraform_remote_state.platform.outputs.web.url, null)], var.cors_extra_origins))
 }
 
 # --- Rol de ejecución: descargar imagen, escribir logs y leer secretos ---------
@@ -80,6 +86,17 @@ locals {
           Resource = ["arn:${local.partition}:logs:${local.p.region}:${local.p.account_id}:log-group:${local.p.metrics_log_group}:*"]
         },
       ],
+      # Lectura de trazas para el back-office de operación (HU-W27).
+      contains(local.trace_readers, name) ? [
+        { Effect = "Allow", Action = ["xray:GetTraceSummaries", "xray:BatchGetTraces"], Resource = ["*"] },
+      ] : [],
+      contains(local.backoffice_user_admins, name) ? [
+        {
+          Effect   = "Allow"
+          Action   = ["cognito-idp:AdminCreateUser", "cognito-idp:AdminAddUserToGroup", "cognito-idp:ListUsers", "cognito-idp:ListUsersInGroup"]
+          Resource = [local.p.cognito.backoffice_pool_arn]
+        },
+      ] : [],
       # Relay del Outbox.
       service.publishes ? [
         { Effect = "Allow", Action = ["sns:Publish"], Resource = [local.p.events_topic_arn] },
