@@ -131,7 +131,6 @@ run "todos_los_servicios" {
     error_message = "Las capas de Service Connect deben crear primero a los servicios invocados."
   }
   assert {
-<<<<<<< HEAD
     # EC2 rechaza descripciones de reglas con caracteres fuera de este conjunto (p. ej. ">" o tildes).
     condition = alltrue([
       for regla in aws_vpc_security_group_ingress_rule.internal : can(regex("^[a-zA-Z0-9. _:/()#,@\\[\\]+=&;{}!$*-]{0,255}$", regla.description))
@@ -139,8 +138,6 @@ run "todos_los_servicios" {
     error_message = "Las descripciones de las reglas de seguridad solo admiten los caracteres que acepta EC2."
   }
   assert {
-=======
->>>>>>> main
     condition     = contains(keys(local.service_links), "cotizacion-adaptador-datos") && !contains(keys(local.service_links), "bff-web-catalogo")
     error_message = "Solo se permiten los enlaces declarados en el catálogo."
   }
