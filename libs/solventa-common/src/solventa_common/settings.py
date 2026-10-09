@@ -1,15 +1,3 @@
-"""Configuración base de los servicios.
-
-Lee el contrato de variables de entorno que entrega infra/apps (ecs.tf) en AWS
-y mantiene valores locales por defecto para desarrollo:
-
-    SERVICE_NAME, ENVIRONMENT, CORRELATION_HEADER, REQUEST_ID_HEADER
-    DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DB_SSLMODE, DB_POOL_SIZE
-
-Las variables propias de cada servicio usan el prefijo SOLVENTA_. Para la base,
-la prioridad es: SOLVENTA_DATABASE_URL > DB_* (AWS) > Postgres local.
-"""
-
 from urllib.parse import quote
 
 from pydantic import AliasChoices, Field

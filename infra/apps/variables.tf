@@ -109,6 +109,12 @@ variable "metrics_namespace" {
   default = "Solventa"
 }
 
+variable "cors_extra_origins" {
+  description = "Orígenes adicionales del portal permitidos por CORS en el BFF web (la URL de CloudFront se agrega sola)."
+  type        = list(string)
+  default     = ["http://localhost:4200"]
+}
+
 variable "ally_endpoints" {
   description = "URL base por aliado. Sin valor, el adaptador apunta a simulador-aliados."
   type        = map(string)

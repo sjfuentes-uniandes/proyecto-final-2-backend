@@ -126,6 +126,8 @@ locals {
       identity = {
         "X-Authenticated-Sub"    = "context.authorizer.claims.sub"
         "X-Authenticated-Issuer" = "context.authorizer.claims.iss"
+        # Grupos de Cognito: bff-web exige "operacion" en Operación › Trazas (HU-W27).
+        "X-Authenticated-Groups" = "context.authorizer.claims.cognito:groups"
       }
     }
     movil = {
@@ -271,6 +273,11 @@ resource "aws_api_gateway_gateway_response" "main" {
   status_code   = local.gateway_status[each.value.type]
   response_parameters = merge(
     { "gatewayresponse.header.X-Correlation-Id" = "context.requestId" },
+    # El portal (CloudFront) debe poder leer el 401/403 del borde para volver a /ingresar.
+    each.value.api == "canales" ? {
+      "gatewayresponse.header.Access-Control-Allow-Origin"   = "'${local.portal_url}'"
+      "gatewayresponse.header.Access-Control-Expose-Headers" = "'X-Correlation-Id'"
+    } : {},
     contains(["QUOTA_EXCEEDED", "THROTTLED"], each.value.type) ? { "gatewayresponse.header.Retry-After" = "'${var.partner_retry_after_seconds}'" } : {}
   )
   response_templates = {

@@ -1,8 +1,9 @@
 from fastapi import FastAPI
+from solventa_common.telemetry import instrumentar
 
 from adaptador_identidad.config import settings
 
-app = FastAPI(title=settings.service_name)
+app = instrumentar(FastAPI(title=settings.service_name), settings)
 
 
 @app.get("/health")

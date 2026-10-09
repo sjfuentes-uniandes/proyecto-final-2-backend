@@ -130,7 +130,7 @@ make infra-destruir ENV=int       # todo el ambiente
 | `JWT_ISSUERS` | Acceso | Emisores válidos para revalidar el token (defensa en profundidad) |
 | `OTEL_*` | Todos | Exportación OTLP a `localhost:4317` (colector ADOT) |
 
-**Encabezados que agrega API Gateway** a partir del token validado (sobrescriben lo que envíe el cliente): `X-Authenticated-Sub` (canales), `X-Partner-Client-Id`, `X-Partner-Scopes` y `X-Partner-Key-Id` (socios). `api-socios` responde 403 cuando el permiso requerido no está en `X-Partner-Scopes` (HU-W01 AC4).
+**Encabezados que agrega API Gateway** a partir del token validado (sobrescriben lo que envíe el cliente): `X-Authenticated-Sub` (canales), `X-Authenticated-Issuer` y `X-Authenticated-Groups` (portal web, grupos de Cognito), `X-Partner-Client-Id`, `X-Partner-Scopes` y `X-Partner-Key-Id` (socios). `api-socios` responde 403 cuando el permiso requerido no está en `X-Partner-Scopes` (HU-W01 AC4).
 
 **Eventos:** el relay del Outbox publica en SNS con el atributo de mensaje `eventType` (`String`), por ejemplo `ConsentimientoOtorgado`, `ConsentimientoRevocado` o `IdentidadVerificada`. El cuerpo es el sobre del evento con `eventId`, que los consumidores usan para la idempotencia. La cola `auditoria` recibe todos los eventos; `consentimientos-cotizacion` recibe solo los `Consentimiento*`.
 
@@ -141,6 +141,15 @@ make infra-destruir ENV=int       # todo el ambiente
 El perfilamiento debe usar `Service=cotizacion` y `Operation=perfilamiento`.
 
 **Logs:** JSON por línea con `service`, `operation`, `result`, `duration_ms` y `correlation_id`. Nunca incluir secretos, tokens, biometría ni payloads financieros completos (HU-W27 AC4).
+
+**Instrumentación (HU-W27):** `solventa_common.telemetry.instrumentar(app, settings)` en el `main.py` de cada servicio aplica lo anterior:
+- Correlación: `X-Correlation-Id` válido (hasta 128 caracteres de `[A-Za-z0-9._:-]`), si no `X-Request-Id`, si no `uuid4`. Se devuelve en la respuesta y queda en `solventa_common.correlation.obtener()`. Para llamar a otro servicio: `correlation.cliente_async()` o `correlation.cliente()` (propagan el ID y la traza).
+- Métricas y log por solicitud con `Operation = "<MÉTODO> <plantilla de ruta>"`, y por operación de negocio con `with operacion("perfilamiento"):` o `@operacion("perfilamiento")` (resultado `ok`, `error`, `timeout` o `rechazado`). El healthcheck local de ECS no se mide ni se traza.
+- Logs: `extra={...}` pasa por `solventa_common.logging.sanitizar` (claves sensibles redactadas en cualquier nivel, textos truncados).
+- Trazas: el colector indexa `correlation_id` y `operation` como anotaciones de X-Ray: `annotation.correlation_id = "prueba-123"`.
+- `OTEL_SDK_DISABLED=true` o sin `OTEL_EXPORTER_OTLP_ENDPOINT`: todo funciona sin exportar.
+
+**Trazas en el portal:** `bff-web` expone `GET /web/operacion/trazas?correlation_id=&recorrido=&duracion_min_ms=&horas=` solo para el grupo `operacion` del back-office; consulta X-Ray (`xray:GetTraceSummaries`, `xray:BatchGetTraces`, solo en su rol de tarea). `CORS_ORIGINS` (JSON) lleva la URL de CloudFront y `cors_extra_origins`.
 
 ## Probar la alerta sin carga (HU-W28 AC4)
 

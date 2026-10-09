@@ -95,7 +95,8 @@ output "web" {
   value = {
     bucket          = aws_s3_bucket.web.id
     distribution_id = aws_cloudfront_distribution.web.id
-    url             = "https://${aws_cloudfront_distribution.web.domain_name}"
+    url             = local.portal_url
+    config_param    = aws_ssm_parameter.web_config.name
   }
 }
 

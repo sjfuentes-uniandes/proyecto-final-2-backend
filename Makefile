@@ -14,10 +14,10 @@ dev-down:
 	docker compose down
 
 test-unit:
-	uv run pytest $(if $(SERVICE),services/$(SERVICE)/tests/unit,services/*/tests/unit libs/*/tests)
+	uv run pytest $(if $(SERVICE),services/$(SERVICE)/tests/unit,services/*/tests/unit libs/*/tests/unit)
 
 test-module:
-	uv run pytest services/$(SERVICE)/tests/module
+	uv run pytest $(if $(SERVICE),services/$(SERVICE)/tests/module,libs/*/tests/module)
 
 test-contract:
 	uv run pytest services/$(SERVICE)/tests/contract

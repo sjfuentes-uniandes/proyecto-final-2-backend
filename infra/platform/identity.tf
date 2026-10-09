@@ -6,6 +6,7 @@
 
 locals {
   cognito_domain_suffix = substr(sha1("${local.account_id}-${var.aws_region}"), 0, 8)
+  portal_url            = "https://${aws_cloudfront_distribution.web.domain_name}"
   web_callback_urls     = concat(["https://${aws_cloudfront_distribution.web.domain_name}/auth/callback"], var.web_callback_urls)
   web_logout_urls       = concat(["https://${aws_cloudfront_distribution.web.domain_name}/"], [for url in var.web_callback_urls : replace(url, "/auth/callback", "/")])
 }
@@ -116,8 +117,15 @@ resource "aws_cognito_user_pool" "backoffice" {
     enabled = true
   }
 
+  # Los usuarios los crea un administrador (portal: Administración › Usuarios, o
+  # make infra-usuario-admin para el primero). Cognito envía la contraseña temporal.
   admin_create_user_config {
     allow_admin_create_user_only = true
+    invite_message_template {
+      email_subject = "Acceso al portal de gestión de Solventa"
+      email_message = "Se creó su acceso al portal de gestión de Solventa (${local.portal_url}/ingresar). Usuario: {username}. Contraseña temporal: {####}. Al ingresar deberá cambiarla y registrar una aplicación de autenticación."
+      sms_message   = "Solventa: usuario {username}, contraseña temporal {####}"
+    }
   }
 
   password_policy {
@@ -138,7 +146,11 @@ resource "aws_cognito_user_pool" "backoffice" {
 }
 
 resource "aws_cognito_user_group" "backoffice" {
-  for_each     = { administradores-socios = "Gestiona socios, credenciales y cuotas", operacion = "Consulta tableros y alertas" }
+  for_each = {
+    administradores        = "Crea usuarios del back-office y asigna sus grupos"
+    administradores-socios = "Gestiona socios, credenciales y cuotas"
+    operacion              = "Consulta tableros y alertas"
+  }
   name         = each.key
   description  = each.value
   user_pool_id = aws_cognito_user_pool.backoffice.id
@@ -162,9 +174,12 @@ resource "aws_cognito_user_pool_client" "backoffice" {
   explicit_auth_flows                  = ["ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
   prevent_user_existence_errors        = "ENABLED"
   enable_token_revocation              = true
-  access_token_validity                = 30
-  id_token_validity                    = 30
-  refresh_token_validity               = 12
+  # Minutos para responder los retos del ingreso (por defecto 3): el primer ingreso
+  # cambia la contraseña y registra la aplicación TOTP con el QR en la misma sesión.
+  auth_session_validity  = 15
+  access_token_validity  = 30
+  id_token_validity      = 30
+  refresh_token_validity = 12
   token_validity_units {
     access_token  = "minutes"
     id_token      = "minutes"

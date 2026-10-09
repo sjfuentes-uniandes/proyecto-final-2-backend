@@ -131,6 +131,13 @@ run "todos_los_servicios" {
     error_message = "Las capas de Service Connect deben crear primero a los servicios invocados."
   }
   assert {
+    # EC2 rechaza descripciones de reglas con caracteres fuera de este conjunto (p. ej. ">" o tildes).
+    condition = alltrue([
+      for regla in aws_vpc_security_group_ingress_rule.internal : can(regex("^[a-zA-Z0-9. _:/()#,@\\[\\]+=&;{}!$*-]{0,255}$", regla.description))
+    ])
+    error_message = "Las descripciones de las reglas de seguridad solo admiten los caracteres que acepta EC2."
+  }
+  assert {
     condition     = contains(keys(local.service_links), "cotizacion-adaptador-datos") && !contains(keys(local.service_links), "bff-web-catalogo")
     error_message = "Solo se permiten los enlaces declarados en el catálogo."
   }
@@ -161,6 +168,51 @@ run "todos_los_servicios" {
   assert {
     condition     = !strcontains(jsonencode(local.task_statements), "kms:")
     error_message = "Sin clave propia no se otorgan permisos KMS."
+  }
+  # HU-W27
+  assert {
+    condition     = strcontains(local.otel_config, "correlation_id") && strcontains(local.otel_config, "^Operation.*")
+    error_message = "El colector debe indexar correlation_id en X-Ray y publicar las métricas Operation*."
+  }
+  assert {
+    condition = alltrue([
+      for name, statements in local.task_statements :
+      strcontains(jsonencode(statements), "xray:GetTraceSummaries") == (name == "bff-web")
+    ])
+    error_message = "Solo bff-web lee trazas de X-Ray (pantalla Operación › Trazas)."
+  }
+  assert {
+    condition     = jsondecode(local.environment["bff-web"]["CORS_ORIGINS"]) == ["http://localhost:4200"] && !contains(keys(local.environment["clientes"]), "CORS_ORIGINS")
+    error_message = "Solo el BFF web recibe los orígenes del portal para CORS."
+  }
+  assert {
+    condition = alltrue([
+      for widget in local.widgets : widget.type != "metric" || !strcontains(jsonencode(widget), "MetricName=\\\"Operation") || strcontains(jsonencode(widget), "Environment=\\\"int\\\"")
+    ])
+    error_message = "Las búsquedas de métricas de operación deben incluir el filtro reemplazable por la variable Servicio."
+  }
+  assert {
+    condition = (
+      length([for widget in local.widgets : widget if try(widget.properties.title, "") == "Tasa de error (%)"]) == 1 &&
+      contains([for value in local.dashboard_variables[0].values : value.label], "cotizacion") &&
+      length(local.dashboard_variables[0].values) == 11
+    )
+    error_message = "El tablero debe mostrar la tasa de error y filtrar por cada servicio desplegado (AC3)."
+  }
+  assert {
+    condition     = length([for widget in local.widgets : widget if strcontains(try(widget.properties.query, ""), "pct(duration_ms, 95)")]) == 1
+    error_message = "El tablero debe resumir volumen, tasa de error y p95 por operación."
+  }
+  assert {
+    condition = alltrue([
+      for name, statements in local.task_statements :
+      strcontains(jsonencode(statements), "cognito-idp:AdminCreateUser") == (name == "bff-web")
+    ]) && local.environment["bff-web"]["BACKOFFICE_USER_POOL_ID"] == "us-east-1_b"
+    error_message = "Solo bff-web administra usuarios del back-office, y únicamente en su pool."
+  }
+  assert {
+    condition     = length(one([for widget in local.widgets : widget.properties.metrics if try(widget.properties.title, "") == "Tareas en ejecución por servicio"])) == length(local.deployed)
+    error_message = "El tablero debe mostrar las tareas en ejecución de cada servicio desplegado."
   }
 }
 

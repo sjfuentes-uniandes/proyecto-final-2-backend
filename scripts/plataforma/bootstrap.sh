@@ -10,8 +10,11 @@ terraform -chdir="${INFRA_DIR}/bootstrap" init -input=false >/dev/null
 terraform -chdir="${INFRA_DIR}/bootstrap" apply -input=false $(approve_flag) \
   -var "aws_region=${AWS_REGION}" -var "name=${NAME}" \
   ${GITHUB_REPOSITORY:+-var "github_repository=${GITHUB_REPOSITORY}"} \
+  ${GITHUB_WEB_REPOSITORY:+-var "github_web_repository=${GITHUB_WEB_REPOSITORY}"} \
   ${CREATE_GITHUB_OIDC_PROVIDER:+-var "create_github_oidc_provider=${CREATE_GITHUB_OIDC_PROVIDER}"}
 
 log "Listo. Configurar en GitHub (Settings > Secrets and variables > Actions > Variables):"
-echo "  AWS_ROLE_ARN = $(terraform -chdir="${INFRA_DIR}/bootstrap" output -raw github_role_arn)"
-echo "  AWS_REGION   = ${AWS_REGION}"
+echo "  Repo back:     AWS_ROLE_ARN     = $(terraform -chdir="${INFRA_DIR}/bootstrap" output -raw github_role_arn)"
+echo "                 AWS_REGION       = ${AWS_REGION}"
+echo "  Repo frontend: AWS_WEB_ROLE_ARN = $(terraform -chdir="${INFRA_DIR}/bootstrap" output -raw github_web_role_arn)"
+echo "                 AWS_REGION       = ${AWS_REGION}"

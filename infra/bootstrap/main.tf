@@ -38,6 +38,13 @@ variable "github_repository" {
   default     = "sjfuentes-uniandes@196879525/proyecto-final-2-backend@1409601103"
 }
 
+# Repo del portal (Angular): solo publica el sitio, con un rol propio de mínimo privilegio.
+variable "github_web_repository" {
+  description = "owner@<id>/repo@<id> del frontend autorizado a desplegar el portal web."
+  type        = string
+  default     = "sjfuentes-uniandes@196879525/proyecto-final-2-frontend@1409599583"
+}
+
 variable "create_github_oidc_provider" {
   description = "false si la cuenta ya tiene el proveedor token.actions.githubusercontent.com."
   type        = bool
@@ -145,6 +152,55 @@ resource "aws_iam_role_policy_attachment" "github" {
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AdministratorAccess"
 }
 
+# --- GitHub Actions del frontend: publicar el portal ---------------------------------
+# Lee la configuración pública del ambiente (parámetro SSM que crea infra/platform),
+# sube el build al bucket del portal e invalida CloudFront. No toca Terraform ni
+# su estado (que contiene secretos).
+resource "aws_iam_role" "github_web" {
+  name                 = "${var.name}-github-web-deploy"
+  max_session_duration = 3600
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Federated = local.oidc_arn }
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = { "${local.oidc_url}:aud" = "sts.amazonaws.com" }
+        StringLike   = { "${local.oidc_url}:sub" = "repo:${var.github_web_repository}:*" }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "github_web" {
+  role = aws_iam_role.github_web.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "LeerConfiguracionDelPortal"
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter"]
+        Resource = ["arn:${data.aws_partition.current.partition}:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/${var.name}/*/web/config"]
+      },
+      {
+        Sid      = "PublicarSitio"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket", "s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource = ["arn:${data.aws_partition.current.partition}:s3:::${var.name}-*-web-${data.aws_caller_identity.current.account_id}", "arn:${data.aws_partition.current.partition}:s3:::${var.name}-*-web-${data.aws_caller_identity.current.account_id}/*"]
+      },
+      {
+        # CloudFront no admite restringir por etiqueta en invalidaciones; el ID sale del parámetro SSM.
+        Sid      = "InvalidarCache"
+        Effect   = "Allow"
+        Action   = ["cloudfront:CreateInvalidation", "cloudfront:GetInvalidation"]
+        Resource = ["arn:${data.aws_partition.current.partition}:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/*"]
+      },
+    ]
+  })
+}
+
 output "state_bucket" {
   value = aws_s3_bucket.state.id
 }
@@ -152,4 +208,9 @@ output "state_bucket" {
 output "github_role_arn" {
   description = "Guardar como variable AWS_ROLE_ARN del repositorio en GitHub."
   value       = aws_iam_role.github.arn
+}
+
+output "github_web_role_arn" {
+  description = "Guardar como variable AWS_WEB_ROLE_ARN del repositorio frontend en GitHub."
+  value       = aws_iam_role.github_web.arn
 }

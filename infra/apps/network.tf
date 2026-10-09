@@ -52,7 +52,7 @@ resource "aws_vpc_security_group_ingress_rule" "internal" {
   ip_protocol                  = "tcp"
   from_port                    = 8080
   to_port                      = 8080
-  description                  = "${each.value.from} -> ${each.value.to}"
+  description                  = "${each.value.from} to ${each.value.to}"
 }
 
 # SQL/TLS: cada servicio con base llega a PostgreSQL; el usuario de la base

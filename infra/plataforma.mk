@@ -19,7 +19,8 @@ export ENV AWS_REGION AUTO_APPROVE SERVICES
 
 .PHONY: infra-ayuda infra-bootstrap infra-plataforma infra-bases infra-imagenes \
 	infra-aplicaciones infra-microservicios infra-desplegar infra-destruir \
-	infra-pausar infra-reanudar infra-plan infra-salidas infra-validar infra-probar
+	infra-pausar infra-reanudar infra-plan infra-salidas infra-validar infra-probar \
+	infra-usuario-admin
 
 infra-ayuda: ## Lista los targets de la plataforma
 	@grep -hE '^infra-[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{ printf "  %-22s %s\n", $$1, $$2 }'
@@ -55,6 +56,9 @@ infra-destruir: ## Elimina el ambiente completo (apps y luego platform)
 
 infra-probar: ## Smoke test del ambiente desplegado (SMOKE_ALERTA=1 prueba el correo de alertas)
 	@$(PLATAFORMA_SCRIPTS)/smoke.sh
+
+infra-usuario-admin: ## Usuario del back-office (EMAIL=, NOMBRE=, GRUPOS=administradores,operacion)
+	@$(PLATAFORMA_SCRIPTS)/usuario-admin.sh
 
 infra-pausar: ## Lleva todos los servicios a 0 tareas (sin costo de Fargate)
 	@PAUSED=1 $(PLATAFORMA_SCRIPTS)/apps.sh apply
