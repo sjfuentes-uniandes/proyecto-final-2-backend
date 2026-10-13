@@ -1,0 +1,511 @@
+{
+  "consumer": {
+    "name": "bff-web"
+  },
+  "interactions": [
+    {
+      "description": "una consulta de un socio inexistente",
+      "pending": false,
+      "request": {
+        "method": "GET",
+        "path": "/admin/socios/SOC-999999"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "detail": "Socio no encontrado"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.detail": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una consulta del detalle de un socio",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "existe el socio SOC-000001"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/admin/socios/SOC-000001"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "canal": "plataforma_digital",
+            "clientId": "3n2kq4v0example",
+            "creado": "2026-10-12T10:00:00Z",
+            "estado": "activo",
+            "id": "SOC-000001",
+            "nombre": "Fintech Caribe S.A.S.",
+            "permisos": [
+              "cotizar"
+            ],
+            "plan": "basico"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.canal": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.clientId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.creado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T.+$"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^SOC-\\d{6}$"
+                }
+              ]
+            },
+            "$.nombre": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.permisos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.plan": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una consulta del listado de socios",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "existe el socio SOC-000001"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/admin/socios"
+      },
+      "response": {
+        "body": {
+          "content": [
+            {
+              "canal": "plataforma_digital",
+              "clientId": "3n2kq4v0example",
+              "creado": "2026-10-12T10:00:00Z",
+              "estado": "activo",
+              "id": "SOC-000001",
+              "nombre": "Fintech Caribe S.A.S.",
+              "permisos": [
+                "cotizar"
+              ],
+              "plan": "basico"
+            }
+          ],
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[*].canal": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[*].clientId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[*].creado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T.+$"
+                }
+              ]
+            },
+            "$[*].id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^SOC-\\d{6}$"
+                }
+              ]
+            },
+            "$[*].nombre": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[*].permisos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[*].plan": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una desactivación de socio",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "existe el socio SOC-000001"
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/admin/socios/SOC-000001/desactivar"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "canal": "plataforma_digital",
+            "clientId": "3n2kq4v0example",
+            "creado": "2026-10-12T10:00:00Z",
+            "desactivado": "2026-10-12T10:00:00Z",
+            "estado": "desactivado",
+            "id": "SOC-000001",
+            "nombre": "Fintech Caribe S.A.S.",
+            "permisos": [
+              "cotizar"
+            ],
+            "plan": "basico"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.canal": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.clientId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.creado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T.+$"
+                }
+              ]
+            },
+            "$.desactivado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T.+$"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^SOC-\\d{6}$"
+                }
+              ]
+            },
+            "$.nombre": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.permisos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.plan": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una solicitud de alta de socio",
+      "pending": false,
+      "request": {
+        "body": {
+          "content": {
+            "canal": "plataforma_digital",
+            "nombre": "Fintech Caribe S.A.S.",
+            "permisos": [
+              "cotizar"
+            ],
+            "plan": "basico"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "X-Authenticated-Sub": [
+            "sub-paula"
+          ]
+        },
+        "method": "POST",
+        "path": "/admin/socios"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "apiKey": "api-key",
+            "canal": "plataforma_digital",
+            "clientId": "3n2kq4v0example",
+            "clientSecret": "secreto",
+            "creado": "2026-10-12T10:00:00Z",
+            "estado": "activo",
+            "id": "SOC-000001",
+            "nombre": "Fintech Caribe S.A.S.",
+            "permisos": [
+              "cotizar"
+            ],
+            "plan": "basico"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Cache-Control": [
+            "no-store"
+          ],
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.apiKey": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.canal": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.clientId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.clientSecret": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.creado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T.+$"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^SOC-\\d{6}$"
+                }
+              ]
+            },
+            "$.nombre": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.permisos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.plan": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactRust": {
+      "ffi": "0.5.8",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    }
+  },
+  "provider": {
+    "name": "api-socios"
+  }
+}
