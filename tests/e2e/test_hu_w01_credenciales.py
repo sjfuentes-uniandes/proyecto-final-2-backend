@@ -2,12 +2,16 @@
 
 Requisitos:
     make infra-microservicios SERVICES=api-socios,bff-web ENV=int
-    export E2E_ADMIN_TOKEN=<ID token de un usuario del grupo administradores-socios>
     make test-e2e            # o: uv run pytest tests/e2e -k hu_w01 -v
 
-El token del administrador se copia del portal (el pool backoffice exige MFA). Las
-URL y las credenciales de socio-b salen de `terraform output` de infra/platform
-(o de E2E_CANALES_URL, E2E_SOCIOS_URL, E2E_TOKEN_URL y E2E_SOCIO_B_*).
+Administrador (grupo administradores-socios del pool backoffice, que exige MFA), una de dos:
+    E2E_ADMIN_TOKEN                      ID token copiado del portal (uso local), o
+    E2E_ADMIN_USUARIO, E2E_ADMIN_CLAVE   usuario dedicado a la prueba, y
+    E2E_ADMIN_TOTP                       semilla base32 de su aplicación de autenticación
+                                         (ingreso SRP + código TOTP; así corre en .github/workflows/e2e.yml).
+
+Las URL, el pool backoffice y las credenciales de socio-b salen de `terraform output` de
+infra/platform (o de E2E_CANALES_URL, E2E_SOCIOS_URL, E2E_TOKEN_URL y E2E_SOCIO_B_*).
 """
 
 import json
@@ -36,23 +40,46 @@ def _salidas() -> dict[str, Any]:
     return {k: v["value"] for k, v in json.loads(texto).items()}
 
 
+def _token_admin(salidas: dict[str, Any]) -> str:
+    """ID token del administrador: el dado, o ingreso SRP + TOTP con el usuario de la prueba."""
+    if os.getenv("E2E_ADMIN_TOKEN"):
+        return os.environ["E2E_ADMIN_TOKEN"]
+    usuario, clave, semilla = (os.getenv(v, "") for v in ("E2E_ADMIN_USUARIO", "E2E_ADMIN_CLAVE", "E2E_ADMIN_TOTP"))
+    backoffice = salidas.get("cognito", {}).get("backoffice", {})
+    if not (usuario and clave and semilla and backoffice.get("pool_id")):
+        return ""
+    import pyotp
+    from pycognito import Cognito
+    from pycognito.exceptions import SoftwareTokenMFAChallengeException
+
+    sesion = Cognito(backoffice["pool_id"], backoffice["client_id"], username=usuario)
+    try:
+        sesion.authenticate(password=clave)
+    except SoftwareTokenMFAChallengeException as reto:
+        sesion.respond_to_software_token_mfa_challenge(pyotp.TOTP(semilla).now(), reto.get_tokens())
+    return sesion.id_token or ""
+
+
 def _config() -> dict[str, str]:
-    salidas = _salidas() if not os.getenv("E2E_CANALES_URL") else {}
+    salidas = _salidas()
     urls = salidas.get("api_urls", {})
     socio_b = salidas.get("partners", {}).get("socio-b", {})
     valores = {
-        "admin_token": os.getenv("E2E_ADMIN_TOKEN", ""),
+        "admin_token": _token_admin(salidas),
         "canales": os.getenv("E2E_CANALES_URL", urls.get("canales", "")),
         "socios": os.getenv("E2E_SOCIOS_URL", urls.get("socios_mtls") or urls.get("socios", "")),
-        "token_url": os.getenv("E2E_TOKEN_URL", salidas.get("platform", {}).get("cognito", {})
-                               .get("partners_token_url", "")),
+        "token_url": os.getenv("E2E_TOKEN_URL", salidas.get("cognito", {}).get("partners", {}).get("token_url", "")),
         "b_client_id": os.getenv("E2E_SOCIO_B_CLIENT_ID", socio_b.get("client_id") or ""),
         "b_client_secret": os.getenv("E2E_SOCIO_B_CLIENT_SECRET", socio_b.get("client_secret") or ""),
         "b_api_key": os.getenv("E2E_SOCIO_B_API_KEY", socio_b.get("api_key") or ""),
     }
     faltan = [k for k, v in valores.items() if not v]
     if faltan:
-        pytest.skip(f"N3 HU-W01 sin configurar: faltan {', '.join(faltan)}")
+        motivo = f"N3 HU-W01 sin configurar: faltan {', '.join(faltan)}"
+        # En el workflow E2E (E2E_REQUERIDO=1) la falta de configuración es un error, no un "skipped".
+        if os.getenv("E2E_REQUERIDO") == "1":
+            pytest.fail(motivo)
+        pytest.skip(motivo)
     return {k: v.rstrip("/") for k, v in valores.items()}
 
 
