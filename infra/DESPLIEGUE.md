@@ -235,8 +235,19 @@ No se guardan llaves de AWS en GitHub: los workflows obtienen credenciales tempo
 | **Infra - Imágenes a ECR** (`infra-imagenes.yml`) | Manual | Build y push de los servicios indicados (o todos los que tienen Dockerfile), sin desplegar. |
 | **Infra - Destruir** (`infra-destruir.yml`) | Manual | Exige escribir `destruir <ambiente>`. Ejecuta `make infra-destruir`. |
 | **Infra - Validar** (`infra-validar.yml`) | Pull requests que tocan `infra/` o los scripts | `fmt`, `validate` y `terraform test` de las tres raíces, más `shellcheck`. No usa AWS. |
+| **E2E (N3)** (`e2e.yml`) | Manual | `pytest tests/e2e` contra el ambiente indicado (filtro `-k` opcional). Lee las salidas de `infra/platform` y llama a las APIs públicas; no cambia la infraestructura. Falla si falta configuración, en vez de omitir las pruebas. |
 
 Los workflows de un mismo ambiente comparten un grupo de concurrencia, así que no se ejecutan dos a la vez. Además, el estado remoto tiene bloqueo.
+
+### Pruebas E2E (N3)
+
+El usuario administrador de la prueba (HU-W01: crear y desactivar un socio) es del pool del back-office, que exige MFA. El workflow ingresa con SRP y un código TOTP generado con la semilla guardada como secreto:
+
+1. Crear un usuario dedicado, solo con el grupo `administradores-socios`: `GRUPOS=administradores-socios EMAIL=e2e-socios@solventa.co make infra-usuario-admin ENV=int`.
+2. Hacer su primer ingreso en el portal. Al registrar la aplicación de autenticación, copiar la **clave de configuración** (texto base32 bajo el código QR): es la semilla.
+3. En **Settings → Secrets and variables → Actions → Secrets**, crear `E2E_ADMIN_USUARIO`, `E2E_ADMIN_CLAVE` y `E2E_ADMIN_TOTP`.
+
+En local se puede usar `E2E_ADMIN_TOKEN` (ID token copiado del portal) en vez de las tres variables: `E2E_ADMIN_TOKEN=... make test-e2e`. La prueba de HU-W01 deja el socio que crea desactivado; `make infra-destruir` borra su API key (paso 4/5).
 
 ### Portal web (repo proyecto-final-2-frontend)
 

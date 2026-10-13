@@ -1,13 +1,83 @@
-# name: E2E (N3)
-# on:
-#   workflow_dispatch:
-#   schedule:
-#     - cron: "0 6 * * *"
+name: E2E (N3)
 
-# jobs:
-#   e2e:
-#     runs-on: ubuntu-latest
-#     steps:
-#       - uses: actions/checkout@v4
-#       - uses: ./.github/actions/preparar-python
-#       - run: make test-e2e
+# Pruebas integrales (tests/e2e) contra un ambiente desplegado. Solo leen el estado de
+# Terraform y llaman a las APIs públicas; no cambian la infraestructura.
+#
+# Requisitos (infra/DESPLIEGUE.md):
+#   - Ambiente con api-socios y bff-web desplegados (Infra - Desplegar, alcance microservicios).
+#   - Variable AWS_ROLE_ARN (rol OIDC de make infra-bootstrap).
+#   - Secretos del usuario de prueba del back-office, en el grupo administradores-socios:
+#       E2E_ADMIN_USUARIO, E2E_ADMIN_CLAVE y E2E_ADMIN_TOTP (semilla base32 de su
+#       aplicación de autenticación; el pool exige MFA).
+on:
+  workflow_dispatch:
+    inputs:
+      ambiente:
+        description: Ambiente (carpeta infra/envs/<ambiente>)
+        type: string
+        default: int
+        required: true
+      filtro:
+        description: "Expresión -k de pytest (vacío = todas las pruebas E2E)"
+        type: string
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+# No corre a la vez que un despliegue o destrucción del mismo ambiente.
+concurrency:
+  group: infra-${{ inputs.ambiente }}
+  cancel-in-progress: false
+
+env:
+  ENV: ${{ inputs.ambiente }}
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/preparar-python
+      - uses: ./.github/actions/preparar-infra
+        with:
+          aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Leer el estado de la plataforma
+        run: |
+          . scripts/plataforma/lib.sh
+          require_env
+          tf_init platform
+
+      - name: Pruebas E2E
+        env:
+          E2E_REQUERIDO: "1"
+          E2E_ADMIN_USUARIO: ${{ secrets.E2E_ADMIN_USUARIO }}
+          E2E_ADMIN_CLAVE: ${{ secrets.E2E_ADMIN_CLAVE }}
+          E2E_ADMIN_TOTP: ${{ secrets.E2E_ADMIN_TOTP }}
+          FILTRO: ${{ inputs.filtro }}
+        run: uv run pytest tests/e2e -v -rA ${FILTRO:+-k "$FILTRO"} --junitxml=e2e.xml
+
+      - name: Resumen
+        if: always()
+        run: |
+          {
+            echo "### E2E en \`${ENV}\`"
+            if [ -f e2e.xml ]; then
+              python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          raiz = ET.parse("e2e.xml").getroot()
+          suite = raiz if raiz.tag == "testsuite" else raiz.find("testsuite")
+          print(f"- Pruebas: {suite.get('tests')} · fallas: {suite.get('failures')} · errores: {suite.get('errors')} · omitidas: {suite.get('skipped')}")
+          for caso in suite.iter("testcase"):
+              estado = "❌" if caso.find("failure") is not None or caso.find("error") is not None else "✅"
+              print(f"- {estado} `{caso.get('name')}`")
+          PY
+            else
+              echo "No se ejecutaron las pruebas."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
