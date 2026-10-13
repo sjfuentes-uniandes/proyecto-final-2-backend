@@ -19,7 +19,7 @@ GRUPOS="${GRUPOS:-administradores,operacion}"
 
 tf_init platform
 pool=$(platform_output platform | jq -r '.cognito.backoffice_pool_id')
-[ -n "${pool}" ] && [ "${pool}" != "null" ] || die "No se encontró el pool del back-office (¿make infra-plataforma?)."
+[[ -n "${pool}" && "${pool}" != "null" ]] || die "No se encontró el pool del back-office (¿make infra-plataforma?)."
 
 log "Usuario ${EMAIL} en el pool ${pool} (${ENV})"
 if estado=$(aws cognito-idp admin-get-user --user-pool-id "${pool}" --username "${EMAIL}" \
