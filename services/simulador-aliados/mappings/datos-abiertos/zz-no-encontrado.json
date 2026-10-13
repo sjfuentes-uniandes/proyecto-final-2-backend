@@ -1,0 +1,15 @@
+{
+  "name": "datos-abiertos ruta no cubierta",
+  "priority": 10,
+  "request": {
+    "method": "ANY",
+    "urlPathPattern": "/datos-abiertos/.*"
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "datos-abiertos/zz-no-encontrado.json"
+  }
+}

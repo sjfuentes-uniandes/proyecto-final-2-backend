@@ -1,0 +1,18 @@
+{
+  "name": "clientes-stub C04 identidad",
+  "request": {
+    "method": "GET",
+    "urlPath": "/clientes-stub/v1/clientes/00000000-0000-4000-8000-000000000004/identidad"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "clienteId": "00000000-0000-4000-8000-000000000004",
+      "estado": "VERIFICADO",
+      "verificadoEn": "2026-10-01T00:00:00Z"
+    }
+  }
+}

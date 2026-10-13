@@ -1,0 +1,15 @@
+{
+  "name": "open-finance ruta no cubierta",
+  "priority": 10,
+  "request": {
+    "method": "ANY",
+    "urlPathPattern": "/open-finance/.*"
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "open-finance/zz-no-encontrado.json"
+  }
+}
