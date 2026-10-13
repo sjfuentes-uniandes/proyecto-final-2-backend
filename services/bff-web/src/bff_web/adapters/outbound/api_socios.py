@@ -7,10 +7,14 @@ from solventa_common.correlation import cliente_async
 
 
 class ErrorApiSocios(Exception):
-    def __init__(self, status: int, detalle: Any) -> None:
+    """Error de api-socios con su cuerpo {codigo, mensaje, detalles} (contracts/codigos-error.md)."""
+
+    def __init__(self, status: int, codigo: str | None, mensaje: str | None, detalles: dict[str, Any]) -> None:
         super().__init__(f"api-socios respondió {status}")
         self.status = status
-        self.detalle = detalle
+        self.codigo = codigo
+        self.mensaje = mensaje
+        self.detalles = detalles
 
 
 class ApiSocios:
@@ -25,10 +29,12 @@ class ApiSocios:
             respuesta = await cliente.request(metodo, f"/admin/socios{ruta}", json=cuerpo, headers=encabezados)
         if respuesta.status_code >= 400:
             try:
-                detalle = respuesta.json().get("detail")
+                cuerpo = respuesta.json()
             except ValueError:
-                detalle = None
-            raise ErrorApiSocios(respuesta.status_code, detalle)
+                cuerpo = {}
+            cuerpo = cuerpo if isinstance(cuerpo, dict) else {}
+            raise ErrorApiSocios(respuesta.status_code, cuerpo.get("codigo"), cuerpo.get("mensaje"),
+                                 cuerpo.get("detalles") or {})
         return respuesta.json()
 
     async def listar(self, administrador: str | None) -> list[dict[str, Any]]:

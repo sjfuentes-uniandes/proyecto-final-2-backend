@@ -230,12 +230,31 @@ paths:
                 items:
                   $ref: '#/components/schemas/SocioRespuesta'
                 title: Response Listar Socios Socios Get
-        '422':
-          description: Validation Error
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo administradores-socios o
+            no es del back-office'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: api-socios no respondió'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
     post:
       tags:
       - socios
@@ -271,12 +290,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SocioCreado'
-        '422':
-          description: Validation Error
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo administradores-socios o
+            no es del back-office'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: api-socios no respondió'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /socios/{socio_id}:
     get:
       tags:
@@ -314,12 +352,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SocioRespuesta'
-        '422':
-          description: Validation Error
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo administradores-socios o
+            no es del back-office'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: api-socios no respondió'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /socios/{socio_id}/desactivar:
     post:
       tags:
@@ -357,12 +414,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SocioRespuesta'
-        '422':
-          description: Validation Error
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo administradores-socios o
+            no es del back-office'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: api-socios no respondió'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -412,6 +488,30 @@ components:
       - servicios_externos
       - ambiente
       title: ContextoRespuesta
+    ErrorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        mensaje:
+          type: string
+          title: Mensaje
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          type: object
+          title: Detalles
+      type: object
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
     Estado:
       type: string
       enum:

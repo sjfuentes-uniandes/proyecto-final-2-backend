@@ -85,10 +85,11 @@ async def test_consultar_socio_inexistente(pacto: Pact) -> None:
     (pacto.upon_receiving("una consulta de un socio inexistente")
         .with_request("GET", "/admin/socios/SOC-999999")
         .will_respond_with(404)
-        .with_body({"detail": match.like("Socio no encontrado")}, content_type="application/json"))
+        .with_body({"codigo": "SOCIO_NO_ENCONTRADO", "mensaje": match.like("El socio no existe"),
+                    "correlationId": match.like("c0rr3l4c10n"), "detalles": {}}, content_type="application/json"))
     with pacto.serve() as servidor, pytest.raises(ErrorApiSocios) as error:
         await ApiSocios(str(servidor.url)).obtener("SOC-999999", None)
-    assert error.value.status == 404
+    assert (error.value.status, error.value.codigo) == (404, "SOCIO_NO_ENCONTRADO")
 
 
 async def test_desactivar_socio(pacto: Pact) -> None:

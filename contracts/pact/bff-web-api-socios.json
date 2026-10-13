@@ -13,7 +13,10 @@
       "response": {
         "body": {
           "content": {
-            "detail": "Socio no encontrado"
+            "codigo": "SOCIO_NO_ENCONTRADO",
+            "correlationId": "c0rr3l4c10n",
+            "detalles": {},
+            "mensaje": "El socio no existe"
           },
           "contentType": "application/json",
           "encoded": false
@@ -25,7 +28,15 @@
         },
         "matchingRules": {
           "body": {
-            "$.detail": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensaje": {
               "combine": "AND",
               "matchers": [
                 {

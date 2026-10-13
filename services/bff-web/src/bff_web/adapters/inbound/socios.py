@@ -9,16 +9,41 @@ from enum import StrEnum
 from functools import lru_cache
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Path, Response
+import httpx
+from fastapi import APIRouter, Depends, Header, Path, Response
 from pydantic import BaseModel, ConfigDict, Field
+from solventa_common.errors import ErrorNegocio, RutaB2
 
 from bff_web.adapters.inbound.autorizacion import requerir_grupo
 from bff_web.adapters.outbound.api_socios import ApiSocios, ErrorApiSocios
 from bff_web.config import settings
 
+
+class ErrorDto(BaseModel):
+    codigo: str
+    mensaje: str
+    correlationId: str | None
+    detalles: dict[str, Any]
+
+
+def _error(descripcion: str) -> dict[str, Any]:
+    return {"model": ErrorDto, "description": descripcion}
+
+
+# Ruta nueva: errores en el formato estable (RutaB2), sin cambiar las de HU-W27.
 router = APIRouter(
-    prefix="/socios", tags=["socios"], dependencies=[Depends(requerir_grupo(settings.grupo_administradores_socios))]
+    prefix="/socios", tags=["socios"], route_class=RutaB2,
+    dependencies=[Depends(requerir_grupo(settings.grupo_administradores_socios))],
+    responses={
+        403: _error("ROL_NO_AUTORIZADO: falta el grupo administradores-socios o no es del back-office"),
+        404: _error("SOCIO_NO_ENCONTRADO"),
+        422: _error("SOLICITUD_INVALIDA (detalles.campos)"),
+        503: _error("SERVICIO_NO_DISPONIBLE: api-socios no respondió"),
+    },
 )
+
+# Códigos de api-socios que llegan tal cual al portal; cualquier otro es una falla de la dependencia.
+_REENVIADOS = {404, 409, 422}
 
 
 class Permiso(StrEnum):
@@ -89,9 +114,11 @@ async def _proteger(llamada: Any) -> Any:
     try:
         return await llamada
     except ErrorApiSocios as error:
-        if error.status in (400, 404, 409):
-            raise HTTPException(error.status, error.detalle or "Solicitud rechazada por api-socios") from error
-        raise HTTPException(502, "api-socios no respondió correctamente") from error
+        if error.status in _REENVIADOS and error.codigo:
+            raise ErrorNegocio(error.codigo, error.mensaje or "Solicitud rechazada", error.status, error.detalles) from error
+        raise ErrorNegocio("SERVICIO_NO_DISPONIBLE", "api-socios no respondió correctamente", 503) from error
+    except httpx.HTTPError as error:
+        raise ErrorNegocio("SERVICIO_NO_DISPONIBLE", "api-socios no respondió", 503) from error
 
 
 @router.get("", response_model=list[SocioRespuesta], response_model_by_alias=True)
