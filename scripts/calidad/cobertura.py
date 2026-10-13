@@ -21,6 +21,8 @@ UMBRALES: dict[str, Umbral] = {
     "catalogo": Umbral(90, 85),
     "adaptador-datos": Umbral(90, 0),
     "bff-web": Umbral(85, 0),
+    # HU-W01: la persistencia también se cubre con un doble de psycopg (la base real, en N2).
+    "api-socios": Umbral(90, 85),
 }
 SIN_UMBRAL = Umbral(0, 0)
 
