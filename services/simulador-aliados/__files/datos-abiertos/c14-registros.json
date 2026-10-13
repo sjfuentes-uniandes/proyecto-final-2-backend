@@ -1,0 +1,9 @@
+{
+  "version": "1.8",
+  "nivelConfianza": 0.88,
+  "registro": {
+    "listasRestrictivas": {
+      "coincidencias": 1
+    }
+  }
+}

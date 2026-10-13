@@ -70,5 +70,23 @@ services:
     build: { context: ., dockerfile: services/api-socios/Dockerfile }
     ports: ["8082:8080"]
 
+  adaptador-datos:
+    <<: *servicio
+    build: { context: ., dockerfile: services/adaptador-datos/Dockerfile }
+    ports: ["8086:8080"]
+    # El ancla define environment: se repiten sus variables junto con las propias.
+    environment:
+      SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_PROPAGATORS: tracecontext,baggage,xray
+      OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
+      ALLY_OPEN_FINANCE_URL: http://simulador-aliados:8080/open-finance
+      ALLY_DATOS_ABIERTOS_URL: http://simulador-aliados:8080/datos-abiertos
+      ALLY_OPEN_FINANCE_TIMEOUT_MS: "700"
+      ALLY_DATOS_ABIERTOS_TIMEOUT_MS: "700"
+      # Credenciales sintéticas solo para el ambiente local (en AWS vienen de Secrets Manager).
+      ALLY_OPEN_FINANCE_CREDENTIALS: '{"client_id":"local-sintetico","client_secret":"local-sintetico"}'
+      ALLY_DATOS_ABIERTOS_CREDENTIALS: '{"client_id":"local-sintetico","client_secret":"local-sintetico"}'
+
 volumes:
   pgdata:

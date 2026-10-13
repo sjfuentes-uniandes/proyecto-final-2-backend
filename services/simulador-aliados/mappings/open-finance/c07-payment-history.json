@@ -1,0 +1,28 @@
+{
+  "name": "open-finance C07 payment-history nominal",
+  "request": {
+    "method": "GET",
+    "urlPath": "/open-finance/v3/customers/00000000-0000-4000-8000-000000000007/payment-history",
+    "queryParameters": {
+      "months": {
+        "equalTo": "12"
+      },
+      "fields": {
+        "equalTo": "lateCount"
+      }
+    },
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "open-finance/c07-payment-history.json",
+    "fixedDelayMilliseconds": 50
+  }
+}

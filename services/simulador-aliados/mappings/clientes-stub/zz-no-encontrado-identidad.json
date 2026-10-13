@@ -1,0 +1,20 @@
+{
+  "name": "clientes-stub GET cliente no encontrado",
+  "priority": 10,
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/clientes-stub/v1/clientes/[^/]+/identidad"
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "codigo": "CLIENTE_NO_ENCONTRADO",
+      "mensaje": "Cliente no encontrado",
+      "correlationId": null,
+      "detalles": {}
+    }
+  }
+}

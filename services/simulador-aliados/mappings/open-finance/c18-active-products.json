@@ -1,0 +1,25 @@
+{
+  "name": "open-finance C18 active-products demora150",
+  "request": {
+    "method": "GET",
+    "urlPath": "/open-finance/v3/customers/00000000-0000-4000-8000-000000000012/active-products",
+    "queryParameters": {
+      "fields": {
+        "equalTo": "creditorCount,oldestProductYears,totalMonthlyInstallment"
+      }
+    },
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "open-finance/c18-active-products.json",
+    "fixedDelayMilliseconds": 150
+  }
+}
