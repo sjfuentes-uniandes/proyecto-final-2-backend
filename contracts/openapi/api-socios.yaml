@@ -19,15 +19,25 @@ paths:
                   $ref: '#/components/schemas/SocioRespuesta'
                 type: array
                 title: Response Listar Socios Admin Socios Get
-        '404':
-          description: Socio inexistente o solicitud desde el API de socios
-          content: &id001
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '400':
-          description: Solicitud inválida
-          content: *id001
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO, o NO_ENCONTRADO si la solicitud llega
+            desde el API de socios
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
     post:
       tags:
       - administracion
@@ -46,12 +56,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SocioCreado'
-        '404':
-          description: Socio inexistente o solicitud desde el API de socios
-          content: *id001
         '400':
-          description: Solicitud inválida
-          content: *id001
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO, o NO_ENCONTRADO si la solicitud llega
+            desde el API de socios
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /admin/socios/{socio_id}:
     get:
       tags:
@@ -73,12 +96,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SocioRespuesta'
-        '404':
-          description: Socio inexistente o solicitud desde el API de socios
-          content: *id001
         '400':
-          description: Solicitud inválida
-          content: *id001
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO, o NO_ENCONTRADO si la solicitud llega
+            desde el API de socios
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /admin/socios/{socio_id}/desactivar:
     post:
       tags:
@@ -100,12 +136,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SocioRespuesta'
-        '404':
-          description: Socio inexistente o solicitud desde el API de socios
-          content: *id001
         '400':
-          description: Solicitud inválida
-          content: *id001
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO, o NO_ENCONTRADO si la solicitud llega
+            desde el API de socios
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /socio/me:
     get:
       tags:
@@ -145,14 +194,23 @@ paths:
               schema:
                 $ref: '#/components/schemas/PerfilSocio'
         '401':
-          description: Credenciales inexistentes, incorrectas o desactivadas
-          content: *id001
+          description: 'NO_AUTENTICADO: credenciales inexistentes, incorrectas o desactivadas'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
         '403':
-          description: El socio no tiene el permiso de la operación
-          content: *id001
-        '400':
-          description: Solicitud inválida
-          content: *id001
+          description: PERMISO_NO_ASIGNADO (detalles.permiso)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /cotizaciones:
     post:
       tags:
@@ -191,17 +249,29 @@ paths:
             application/json:
               schema: {}
         '401':
-          description: Credenciales inexistentes, incorrectas o desactivadas
-          content: *id001
+          description: 'NO_AUTENTICADO: credenciales inexistentes, incorrectas o desactivadas'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
         '403':
-          description: El socio no tiene el permiso de la operación
-          content: *id001
+          description: PERMISO_NO_ASIGNADO (detalles.permiso)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
         '501':
-          description: No disponible
-          content: *id001
-        '400':
-          description: Solicitud inválida
-          content: *id001
+          description: OPERACION_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /cotizaciones/{cotizacion_id}:
     get:
       tags:
@@ -247,17 +317,29 @@ paths:
             application/json:
               schema: {}
         '401':
-          description: Credenciales inexistentes, incorrectas o desactivadas
-          content: *id001
+          description: 'NO_AUTENTICADO: credenciales inexistentes, incorrectas o desactivadas'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
         '403':
-          description: El socio no tiene el permiso de la operación
-          content: *id001
+          description: PERMISO_NO_ASIGNADO (detalles.permiso)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
         '501':
-          description: No disponible
-          content: *id001
-        '400':
-          description: Solicitud inválida
-          content: *id001
+          description: OPERACION_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /polizas:
     post:
       tags:
@@ -296,17 +378,29 @@ paths:
             application/json:
               schema: {}
         '401':
-          description: Credenciales inexistentes, incorrectas o desactivadas
-          content: *id001
+          description: 'NO_AUTENTICADO: credenciales inexistentes, incorrectas o desactivadas'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
         '403':
-          description: El socio no tiene el permiso de la operación
-          content: *id001
+          description: PERMISO_NO_ASIGNADO (detalles.permiso)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
         '501':
-          description: No disponible
-          content: *id001
-        '400':
-          description: Solicitud inválida
-          content: *id001
+          description: OPERACION_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /polizas/{poliza_id}:
     get:
       tags:
@@ -352,17 +446,29 @@ paths:
             application/json:
               schema: {}
         '401':
-          description: Credenciales inexistentes, incorrectas o desactivadas
-          content: *id001
+          description: 'NO_AUTENTICADO: credenciales inexistentes, incorrectas o desactivadas'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
         '403':
-          description: El socio no tiene el permiso de la operación
-          content: *id001
+          description: PERMISO_NO_ASIGNADO (detalles.permiso)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
         '501':
-          description: No disponible
-          content: *id001
-        '400':
-          description: Solicitud inválida
-          content: *id001
+          description: OPERACION_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /siniestros:
     post:
       tags:
@@ -401,17 +507,29 @@ paths:
             application/json:
               schema: {}
         '401':
-          description: Credenciales inexistentes, incorrectas o desactivadas
-          content: *id001
+          description: 'NO_AUTENTICADO: credenciales inexistentes, incorrectas o desactivadas'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
         '403':
-          description: El socio no tiene el permiso de la operación
-          content: *id001
+          description: PERMISO_NO_ASIGNADO (detalles.permiso)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
         '501':
-          description: No disponible
-          content: *id001
-        '400':
-          description: Solicitud inválida
-          content: *id001
+          description: OPERACION_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -436,6 +554,30 @@ components:
       - comercio
       - otro
       title: CanalVenta
+    ErrorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        mensaje:
+          type: string
+          title: Mensaje
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          type: object
+          title: Detalles
+      type: object
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
     Estado:
       type: string
       enum:
@@ -620,26 +762,3 @@ components:
       - plan
       - permisos
       title: SocioSolicitud
-    Error:
-      title: Error
-      type: object
-      required:
-      - detail
-      properties:
-        detail:
-          anyOf:
-          - type: string
-          - type: array
-            items:
-              type: object
-              required:
-              - loc
-              - msg
-              - type
-              properties:
-                loc:
-                  type: array
-                msg:
-                  type: string
-                type:
-                  type: string

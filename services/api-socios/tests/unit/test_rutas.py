@@ -49,17 +49,34 @@ def test_secreto_ausente_de_los_logs_del_recorrido(entorno, capturar_logs: Calla
     ALTA | {"clientSecret": "elegido-por-el-cliente"},
     {"nombre": "Sin permisos"},
 ])
-def test_alta_invalida_responde_400(entorno, cuerpo: dict) -> None:
+def test_alta_invalida_responde_422_solicitud_invalida(entorno, cuerpo: dict) -> None:
     respuesta = entorno.cliente.post("/admin/socios", json=cuerpo)
-    assert respuesta.status_code == 400
+    assert respuesta.status_code == 422
+    error = respuesta.json()
+    assert error["codigo"] == "SOLICITUD_INVALIDA" and error["detalles"]["campos"]
+    assert set(error) == {"codigo", "mensaje", "correlationId", "detalles"}
     assert "elegido-por-el-cliente" not in respuesta.text  # no se refleja lo recibido
     assert not entorno.identidad.clientes
 
 
+def test_razon_social_en_blanco_es_solicitud_invalida(entorno) -> None:
+    respuesta = entorno.cliente.post("/admin/socios", json=ALTA | {"nombre": "     "})
+    assert respuesta.status_code == 422
+    assert respuesta.json()["detalles"] == {"campos": ["nombre"]}
+
+
+def test_json_ilegible_es_solicitud_invalida(entorno) -> None:
+    respuesta = entorno.cliente.post("/admin/socios", content=b"{no-es-json",
+                                     headers={"Content-Type": "application/json"})
+    assert respuesta.status_code == 422 and respuesta.json()["codigo"] == "SOLICITUD_INVALIDA"
+    assert "no-es-json" not in respuesta.text
+
+
 def test_consultar_y_desactivar_inexistente_responden_404(entorno) -> None:
-    assert entorno.cliente.get("/admin/socios/SOC-999999").status_code == 404
-    assert entorno.cliente.post("/admin/socios/SOC-999999/desactivar").status_code == 404
-    assert entorno.cliente.get("/admin/socios/no-es-id").status_code == 400
+    for respuesta in (entorno.cliente.get("/admin/socios/SOC-999999"),
+                      entorno.cliente.post("/admin/socios/SOC-999999/desactivar")):
+        assert respuesta.status_code == 404 and respuesta.json()["codigo"] == "SOCIO_NO_ENCONTRADO"
+    assert entorno.cliente.get("/admin/socios/no-es-id").status_code == 422
 
 
 def test_desactivar_es_idempotente_por_http(entorno) -> None:
@@ -81,6 +98,8 @@ def test_admin_rechaza_trafico_del_api_de_socios(entorno, metodo: str, ruta: str
     creado = alta(entorno)
     respuesta = entorno.cliente.request(metodo, ruta, json=ALTA, headers={encabezado: creado["clientId"]})
     assert respuesta.status_code == 404
+    # Igual que una ruta inexistente: no revela que la administración existe.
+    assert respuesta.json()["codigo"] == entorno.cliente.get("/no-existe").json()["codigo"] == "NO_ENCONTRADO"
     assert len(entorno.repositorio.socios) == 1
     assert entorno.repositorio.socios["SOC-000001"].activo
 
@@ -113,7 +132,7 @@ def test_credenciales_invalidas_responden_401(entorno, encabezados, caso: str) -
     }[caso]
     respuesta = entorno.cliente.get("/socio/me", headers=headers)
     assert respuesta.status_code == 401
-    assert respuesta.headers["www-authenticate"].startswith("Bearer")
+    assert respuesta.json()["codigo"] == "NO_AUTENTICADO"
     # AC3: el otro socio sigue autenticándose.
     assert entorno.cliente.get("/socio/me", headers=encabezados(b, "cotizar")).status_code == 200
 
@@ -132,7 +151,9 @@ def test_operacion_sin_permiso_responde_403(entorno, encabezados, metodo: str, r
     sin_permiso = entorno.cliente.request(metodo, ruta, headers=encabezados(socio, *otros))
     con_permiso = entorno.cliente.request(metodo, ruta, headers=encabezados(socio, permiso))
     assert sin_permiso.status_code == 403
+    assert sin_permiso.json()["codigo"] == "PERMISO_NO_ASIGNADO" and sin_permiso.json()["detalles"] == {"permiso": permiso}
     assert con_permiso.status_code == 501  # autorizada; la operación llega en otra historia
+    assert con_permiso.json()["codigo"] == "OPERACION_NO_DISPONIBLE"
 
 
 def test_alcance_del_token_no_amplia_los_permisos_del_socio(entorno, encabezados) -> None:

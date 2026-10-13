@@ -11,16 +11,21 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Path, Request
+from fastapi import APIRouter, Depends, Header, Path, Request
 from pydantic import BaseModel, ConfigDict, Field
+from solventa_common.errors import ErrorNegocio
 
 from api_socios.adapters.inbound.dependencias import autenticar_socio
+from api_socios.adapters.inbound.errores import (
+    OPERACION_NO_DISPONIBLE,
+    PERMISO_NO_ASIGNADO,
+    error,
+    no_autenticado,
+)
 from api_socios.application.socios import AutenticarSocio
 from api_socios.config import settings
 from api_socios.domain.operaciones import permiso_requerido
 from api_socios.domain.socios import CanalVenta, Estado, Permiso, Plan, Socio, permisos_de_alcances
-
-NO_AUTENTICADO = {"WWW-Authenticate": 'Bearer realm="socios"'}
 
 
 @dataclass(frozen=True)
@@ -37,7 +42,7 @@ async def socio_autenticado(
 ) -> SocioAutenticado:
     socio = await asyncio.to_thread(caso.ejecutar, x_partner_client_id, x_partner_key_id)
     if socio is None:
-        raise HTTPException(401, "Credenciales inexistentes, incorrectas o desactivadas", headers=NO_AUTENTICADO)
+        raise no_autenticado()
     # Los permisos salen del token emitido por Cognito, acotados a los que tiene el socio.
     permisos = permisos_de_alcances(x_partner_scopes, settings.partners_resource_server) & socio.permisos
     return SocioAutenticado(socio=socio, permisos=permisos)
@@ -48,16 +53,19 @@ Autenticado = Annotated[SocioAutenticado, Depends(socio_autenticado)]
 
 async def autorizado(request: Request, autenticado: Autenticado) -> SocioAutenticado:
     """Busca el permiso de la ruta en PERMISO_POR_OPERACION; sin él responde 403."""
-    if permiso_requerido(request.method, request.scope["route"].path) not in autenticado.permisos:
-        raise HTTPException(403, "El socio no tiene permiso para esta operación")
+    permiso = permiso_requerido(request.method, request.scope["route"].path)
+    if permiso not in autenticado.permisos:
+        raise ErrorNegocio(PERMISO_NO_ASIGNADO, "El socio no tiene permiso para esta operación", 403,
+                           {"permiso": permiso.value})
     return autenticado
 
 
 Autorizado = Annotated[SocioAutenticado, Depends(autorizado)]
 
 router = APIRouter(tags=["socio"], responses={
-    401: {"description": "Credenciales inexistentes, incorrectas o desactivadas"},
-    403: {"description": "El socio no tiene el permiso de la operación"},
+    401: error("NO_AUTENTICADO: credenciales inexistentes, incorrectas o desactivadas"),
+    403: error("PERMISO_NO_ASIGNADO (detalles.permiso)"),
+    422: error("SOLICITUD_INVALIDA (detalles.campos)"),
 })
 
 
@@ -84,32 +92,32 @@ async def perfil(autenticado: Autenticado) -> PerfilSocio:
                        creado=socio.creado)
 
 
-def _no_disponible() -> HTTPException:
-    return HTTPException(501, "Operación aún no disponible para socios")
+def _no_disponible() -> ErrorNegocio:
+    return ErrorNegocio(OPERACION_NO_DISPONIBLE, "Operación aún no disponible para socios", 501)
 
 
 # Operaciones de negocio: la autorización ya aplica; cotizacion y polizas las implementan
 # en historias posteriores (al reenviarlas se debe filtrar por autenticado.socio.id).
-@router.post("/cotizaciones", status_code=201, responses={501: {"description": "No disponible"}})
+@router.post("/cotizaciones", status_code=201, responses={501: error("OPERACION_NO_DISPONIBLE")})
 async def solicitar_cotizacion(autenticado: Autorizado) -> None:
     raise _no_disponible()
 
 
-@router.get("/cotizaciones/{cotizacion_id}", responses={501: {"description": "No disponible"}})
+@router.get("/cotizaciones/{cotizacion_id}", responses={501: error("OPERACION_NO_DISPONIBLE")})
 async def consultar_cotizacion(autenticado: Autorizado, cotizacion_id: Annotated[str, Path(max_length=64)]) -> None:
     raise _no_disponible()
 
 
-@router.post("/polizas", status_code=201, responses={501: {"description": "No disponible"}})
+@router.post("/polizas", status_code=201, responses={501: error("OPERACION_NO_DISPONIBLE")})
 async def emitir_poliza(autenticado: Autorizado) -> None:
     raise _no_disponible()
 
 
-@router.get("/polizas/{poliza_id}", responses={501: {"description": "No disponible"}})
+@router.get("/polizas/{poliza_id}", responses={501: error("OPERACION_NO_DISPONIBLE")})
 async def consultar_poliza(autenticado: Autorizado, poliza_id: Annotated[str, Path(max_length=64)]) -> None:
     raise _no_disponible()
 
 
-@router.post("/siniestros", status_code=201, responses={501: {"description": "No disponible"}})
+@router.post("/siniestros", status_code=201, responses={501: error("OPERACION_NO_DISPONIBLE")})
 async def avisar_siniestro(autenticado: Autorizado) -> None:
     raise _no_disponible()
