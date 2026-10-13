@@ -1,4 +1,7 @@
-"""Catálogo de fuentes: aliado, ruta y correspondencia canónica → proveedor (03 §B.5)."""
+"""Catálogo de fuentes: aliado, ruta y correspondencia canónica → clave del proveedor.
+
+Es el mapeo técnico de la capa anticorrupción; las entidades de dominio son `Fuente` y `TipoFuente`.
+"""
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass

@@ -1,4 +1,4 @@
-"""Schemathesis 4 contra la app con SinProteccion y el proveedor simulado (03, W10-P07)."""
+"""Schemathesis 4 contra la app con SinProteccion y el proveedor simulado."""
 
 import httpx
 import schemathesis

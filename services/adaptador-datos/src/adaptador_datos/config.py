@@ -4,7 +4,9 @@ from solventa_common.settings import ServiceSettings
 
 
 def _env(nombre: str) -> AliasChoices:
-    # Acepta el nombre que entrega la infraestructura y su variante SOLVENTA_.
+    # La infraestructura entrega ALLY_<ALIADO>_URL, _TIMEOUT_MS y _CREDENTIALS
+    # (infra/apps/ecs.tf), con <ALIADO> = OPEN_FINANCE o DATOS_ABIERTOS. La variante con el
+    # prefijo SOLVENTA_ es la convención de los demás servicios (por ejemplo, para ejecutar en local).
     return AliasChoices(nombre, f"SOLVENTA_{nombre}")
 
 
@@ -18,7 +20,7 @@ class CredencialesAliado(BaseModel):
     client_secret: SecretStr
 
 
-# Solo para el ambiente local: en AWS llegan de Secrets Manager (01 §3.2).
+# Solo para el ambiente local: en AWS llegan de Secrets Manager.
 _LOCAL = CredencialesAliado(client_id="local-sintetico", client_secret="local-sintetico")
 
 
@@ -47,7 +49,7 @@ class Settings(ServiceSettings):
     ally_datos_abiertos_credentials: CredencialesAliado = Field(
         _LOCAL, validation_alias=_env("ALLY_DATOS_ABIERTOS_CREDENTIALS"), repr=False
     )
-    # Protección (W12, DT-21).
+    # Parámetros de la protección completa (circuit breaker y bulkhead); aún no se usan.
     cb_fallos_consecutivos: int = 5
     cb_apertura_s: int = 30
     bulkhead_max: int = 50

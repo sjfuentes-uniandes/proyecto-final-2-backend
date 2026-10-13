@@ -1,7 +1,8 @@
-"""Protección de llamadas a terceros (regla 7, DT-10 y DT-21).
+"""Protección de llamadas a terceros: timeout efectivo y errores de dependencia.
 
-Sprint 1, HU-W10: solo la estructura y `SinProteccion` (timeout efectivo).
-HU-W12 agrega `ProteccionDependencia` (reintento, circuit breaker y bulkhead).
+Aquí solo está lo que ya usa `adaptador-datos`: las excepciones, el contrato `Proteccion` y
+`SinProteccion`, que únicamente aplica el timeout. El reintento, el circuit breaker y el
+bulkhead (`ProteccionDependencia`) los agrega la historia de consulta en paralelo.
 """
 
 import asyncio
@@ -18,7 +19,10 @@ EstadoCircuito = Literal["CERRADO", "ABIERTO", "SEMIABIERTO"]
 
 
 class TiempoAgotado(Exception):
-    """La dependencia no respondió dentro del timeout efectivo."""
+    """La dependencia no respondió dentro del timeout efectivo.
+
+    Excepción marcadora: se distingue por tipo y no necesita datos adicionales.
+    """
 
 
 class DependenciaNoDisponible(Exception):

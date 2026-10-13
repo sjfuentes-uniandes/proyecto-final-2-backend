@@ -1,4 +1,4 @@
-"""Puertos del perfilamiento (02, CS-05).
+"""Puertos del perfilamiento.
 
 Identidad, consentimiento y modelo pueden lanzar ClienteNoEncontrado, ModeloNoDisponible y
 DependenciaNoDisponible. PuertoFuente.consultar no lanza por errores del proveedor: los

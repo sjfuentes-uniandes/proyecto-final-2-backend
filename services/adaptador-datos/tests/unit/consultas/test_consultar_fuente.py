@@ -88,7 +88,7 @@ async def test_usa_el_timeout_del_aliado_sin_deadline() -> None:
     assert respuesta.campos["coincidencias_listas_restrictivas"].estado == "NO_DISPONIBLE"
 
 
-async def test_ut_w10_16_sin_consentimiento_no_llama_al_proveedor() -> None:
+async def test_sin_consentimiento_no_llama_al_proveedor() -> None:
     proveedor = ProveedorFalso()
     with pytest.raises(ConsentimientoRequerido):
         await _consultar(proveedor, consentimiento_id=None)
@@ -99,9 +99,7 @@ async def test_ut_w10_16_sin_consentimiento_no_llama_al_proveedor() -> None:
     ("campos", "invalidos"),
     [([], ()), (["moras_12m", "ingreso_mensual_estimado"], ("ingreso_mensual_estimado",))],
 )
-async def test_ut_w10_17_campos_no_soportados(
-    campos: list[str], invalidos: tuple[str, ...]
-) -> None:
+async def test_campos_no_soportados(campos: list[str], invalidos: tuple[str, ...]) -> None:
     proveedor = ProveedorFalso()
     with pytest.raises(CamposNoSoportados) as error:
         await _consultar(proveedor, campos=campos)
@@ -109,12 +107,12 @@ async def test_ut_w10_17_campos_no_soportados(
     assert proveedor.llamadas == []
 
 
-async def test_ut_w10_18_timeout() -> None:
+async def test_timeout() -> None:
     with pytest.raises(TiempoAgotado):
         await _consultar(ProveedorFalso(error=httpx.ReadTimeout("lento")))
 
 
-async def test_ut_w10_18_5xx() -> None:
+async def test_5xx() -> None:
     error = httpx.HTTPStatusError(
         "503", request=httpx.Request("GET", "http://sim"), response=httpx.Response(503)
     )
@@ -138,7 +136,7 @@ async def test_respuesta_invalida_se_relanza() -> None:
         (ProveedorFalso(respuesta="malformada"), {}, "error"),
     ],
 )
-async def test_ut_w10_19_metrica_y_log_con_resultado(
+async def test_metrica_y_log_con_resultado(
     telemetria: Any, proveedor: ProveedorFalso, cambios: dict[str, Any], resultado: str
 ) -> None:
     with contextlib.suppress(Exception):

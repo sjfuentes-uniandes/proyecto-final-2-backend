@@ -1,12 +1,12 @@
 # simulador-aliados
 
-WireMock 3.9.2 con los simuladores de terceros (regla 9: nunca proveedores reales). Datos **100 % sintéticos**.
+WireMock 3.9.2 con los simuladores de terceros (nunca se usan proveedores reales). Datos **100 % sintéticos**.
 
 | Carpeta de mapeos | Qué simula | Origen |
 | --- | --- | --- |
-| `mappings/clientes-stub/` | Stub **temporal** de `clientes` (identidad y consentimiento) según la propuesta `contracts/openapi/clientes.propuesta-cotizacion.yaml` (DT-02). Se retira cuando existan HU-W30/W31 | Generado (02, CS-08) |
-| `mappings/open-finance/`, `__files/open-finance/` | Aliado Open Finance: productos vigentes, historial de pagos de 12 meses e ingresos agregados | Generado (03, W10-P06) |
-| `mappings/datos-abiertos/`, `__files/datos-abiertos/` | Aliado Datos Abiertos: registros públicos (listas restrictivas) | Generado (03, W10-P06) |
+| `mappings/clientes-stub/` | Stub **temporal** de `clientes` (identidad y consentimiento) según la propuesta `contracts/openapi/clientes.propuesta-cotizacion.yaml` . Se retira cuando exista el servicio `clientes` | Generado |
+| `mappings/open-finance/`, `__files/open-finance/` | Aliado Open Finance: productos vigentes, historial de pagos de 12 meses e ingresos agregados | Generado |
+| `mappings/datos-abiertos/`, `__files/datos-abiertos/` | Aliado Datos Abiertos: registros públicos (listas restrictivas) | Generado |
 | `mappings/kyc/` | Proveedor de identidad | — |
 | `mappings/health.json` | `GET /health` para el *healthcheck* | A mano |
 
@@ -57,7 +57,7 @@ Cada mapeo exige `X-Api-Key` (cualquier valor) y el parámetro de campos **exact
 
 | Comportamiento | Respuesta |
 | --- | --- |
-| `nominal` | 200 nominal (01 §3.6) en 50 ms |
+| `nominal` | 200 nominal en 50 ms |
 | `demora150` | 200 nominal en 150 ms |
 | `lento` | 200 nominal en 1000 ms |
 | `caido` | 503 `{"error":"unavailable"}` en 50 ms |

@@ -1,4 +1,4 @@
-"""Los mapeos versionados son los que genera el script (02, CS-08 y 03, W10-P06).
+"""Los mapeos versionados son los que genera el script .
 
 Se corre con: uv run --with pytest pytest services/simulador-aliados/tests
 Si falla, regenerar con: python services/simulador-aliados/scripts/generar_mapeos.py todo

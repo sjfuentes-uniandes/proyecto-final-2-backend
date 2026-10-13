@@ -1,4 +1,4 @@
-"""Caso de uso: consultar una fuente autorizada y devolverla en el modelo canónico (03, W10-P04)."""
+"""Caso de uso: consultar una fuente autorizada y devolverla en el modelo canónico."""
 
 import logging
 from collections.abc import Callable, Mapping, Sequence
@@ -86,7 +86,7 @@ class ConsultarFuente:
             except RespuestaInvalida:
                 op.marcar("error")
                 raise
-            # Solo metadatos: nunca el cuerpo del proveedor ni los valores (regla 10).
+            # Solo metadatos: nunca el cuerpo del proveedor ni los valores.
             logger.info(
                 "consulta procesada",
                 extra={"fuente": str(fuente), "campos_descartados": descartados},

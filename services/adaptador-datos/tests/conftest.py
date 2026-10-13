@@ -1,4 +1,4 @@
-"""Fixtures de telemetría y logs (patrón de libs/solventa-common/tests/conftest.py, DT-20)."""
+"""Fixtures de telemetría y logs (patrón de libs/solventa-common/tests/conftest.py)."""
 
 import io
 import json

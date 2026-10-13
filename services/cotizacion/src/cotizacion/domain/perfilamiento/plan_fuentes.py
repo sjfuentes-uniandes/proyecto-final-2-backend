@@ -1,4 +1,4 @@
-"""Qué fuentes y campos se consultan según el consentimiento (03 §B.3 paso 2; DT-05 y DT-07)."""
+"""Qué fuentes y campos se consultan según el consentimiento."""
 
 from cotizacion.domain.perfilamiento.modelo_riesgo import ModeloRiesgo
 from cotizacion.domain.perfilamiento.modelos import (

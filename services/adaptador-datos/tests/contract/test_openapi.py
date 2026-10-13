@@ -1,10 +1,4 @@
-"""El contrato publicado (contracts/openapi/adaptador-datos.yaml) es el que sirve la app (DT-12).
-
-Si cambia la API, regenerar con:
-    uv run python -c "import yaml; from adaptador_datos.main import app; \
-open('contracts/openapi/adaptador-datos.yaml', 'w').write(yaml.safe_dump(app.openapi(), sort_keys=False, allow_unicode=True))"
-y avisar a cotizacion (AdaptadorDatosHttp).
-"""
+"""El contrato publicado (contracts/openapi/adaptador-datos.yaml) es el que sirve la app."""
 
 from pathlib import Path
 

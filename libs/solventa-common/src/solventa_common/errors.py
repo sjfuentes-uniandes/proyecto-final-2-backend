@@ -1,7 +1,7 @@
-"""Errores con respuesta estable {codigo, mensaje, correlationId, detalles} (regla 19).
+"""Errores con respuesta estable {codigo, mensaje, correlationId, detalles}.
 
 `registrar_manejadores` aplica el formato a toda la app; `RutaB2` lo aplica solo al
-router que la usa (bff-web conserva {"detail"} en las rutas de HU-W27).
+router que la usa (bff-web conserva {"detail"} en sus rutas ya publicadas).
 """
 
 import logging
@@ -34,7 +34,7 @@ _MENSAJES = {
     ERROR_HTTP: "Error en la solicitud",
     ERROR_INTERNO: "Error interno",
 }
-# Traducción por código HTTP dentro de RutaB2 (DT-16).
+# Traducción por código HTTP dentro de RutaB2.
 _CODIGOS_RUTA_B2 = {
     400: SOLICITUD_INVALIDA,
     401: NO_AUTENTICADO,

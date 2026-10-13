@@ -1,4 +1,4 @@
-"""Errores de dominio del perfilamiento (02, CS-05).
+"""Errores de dominio del perfilamiento.
 
 `DependenciaNoDisponible` es el error de dominio de cotizacion; no es la clase homónima de
 `solventa_common.resiliencia`, que nunca se importa en este dominio.

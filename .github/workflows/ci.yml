@@ -59,7 +59,7 @@ jobs:
       - if: matrix.servicio != 'simulador-aliados'
         uses: ./.github/actions/preparar-python
       # lint solo en los servicios que ya cumplen ruff; el resto tiene código previo sin
-      # formatear (02, CS-11). Agregar cada servicio aquí cuando su historia lo deje limpio.
+      # formatear. Agregar cada servicio aquí cuando su historia lo deje limpio.
       - if: contains(fromJson('["cotizacion","adaptador-datos"]'), matrix.servicio)
         run: make lint SERVICE=${{ matrix.servicio }}
       - if: matrix.servicio != 'simulador-aliados'

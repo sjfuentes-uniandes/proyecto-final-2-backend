@@ -1,4 +1,4 @@
-"""Compuerta de cobertura por servicio (docs/sprint_1/01-acuerdos-tecnicos.md §3.11).
+"""Compuerta de cobertura por servicio.
 
 Uso: python scripts/calidad/cobertura.py <servicio> <ruta de cobertura.json>
 Termina con 1 si las líneas o las ramas quedan bajo el umbral del servicio.

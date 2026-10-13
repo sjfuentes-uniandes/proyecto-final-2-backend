@@ -1,12 +1,12 @@
-# Propuesta del consumidor (cotizacion). Ratificar con los dueños de HU-W30/W31 (PD-01).
+# Propuesta del consumidor (cotizacion). Ratificar con quienes construyan el servicio clientes (HU-W30/W31).
 openapi: 3.1.0
 info:
   title: clientes (propuesta de cotizacion)
   version: 0.1.0
   description: >-
     Contrato que cotizacion espera de clientes para la identidad y el consentimiento del
-    perfilamiento (docs/sprint_1/01-acuerdos-tecnicos.md §3.4.1). En Sprint 1 lo sirve el
-    stub de simulador-aliados en /clientes-stub (DT-02).
+    perfilamiento. Mientras no exista el servicio, lo sirve el stub de simulador-aliados en
+    /clientes-stub.
   license:
     name: Uso académico
     identifier: CC-BY-4.0

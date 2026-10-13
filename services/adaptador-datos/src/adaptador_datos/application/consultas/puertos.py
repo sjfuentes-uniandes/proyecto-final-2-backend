@@ -1,4 +1,4 @@
-"""Puertos del adaptador de datos (02, CS-06)."""
+"""Puertos del adaptador de datos."""
 
 from collections.abc import Mapping
 from typing import Any, Protocol

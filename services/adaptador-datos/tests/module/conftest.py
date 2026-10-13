@@ -1,4 +1,4 @@
-"""Arnés de módulo: WireMock 3.9.2 real con los mapeos versionados (03, W10-P08; lo reutiliza W12-P05)."""
+"""Arnés de módulo: WireMock 3.9.2 real con los mapeos versionados del simulador."""
 
 import io
 import logging
@@ -21,7 +21,7 @@ from testcontainers.core.container import DockerContainer
 SIMULADOR = Path(__file__).resolve().parents[3] / "simulador-aliados"
 IMAGEN = "wiremock/wiremock:3.9.2"
 
-# Valores que nunca pueden aparecer en logs ni trazas (01 §3.9 y 03 §B.9).
+# Valores que nunca pueden aparecer en logs ni trazas.
 CENTINELAS = (
     "1800000",
     "6500000",

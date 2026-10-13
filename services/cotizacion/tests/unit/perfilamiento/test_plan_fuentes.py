@@ -1,4 +1,4 @@
-"""UT-W10-20 a 25 con las fuentes y obligatorios del modelo candidato 2026.10.1 (04 §B.6.1)."""
+"""Plan de fuentes con las fuentes y los obligatorios del modelo candidato 2026.10.1."""
 
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -57,13 +57,13 @@ def _verificacion(
     )
 
 
-def test_ut_w10_20_permitido_las_cuatro_fuentes() -> None:
+def test_permitido_las_cuatro_fuentes() -> None:
     plan = plan_fuentes(MODELO, _verificacion(DecisionConsentimiento.PERMITIDO, {P, H, I, D}))
     assert plan.a_consultar == tuple(SolicitudFuente(f, CAMPOS[f]) for f in (P, H, I, D))
     assert (plan.no_autorizadas, plan.no_consultadas) == ((), ())
 
 
-def test_ut_w10_21_parcial_sin_ingresos_c02() -> None:
+def test_parcial_sin_ingresos_c02() -> None:
     plan = plan_fuentes(MODELO, _verificacion(DecisionConsentimiento.PERMITIDO_PARCIAL, {P, H, D}))
     assert [s.fuente for s in plan.a_consultar] == [P, H, D]
     assert plan.no_autorizadas == (I,)
@@ -71,7 +71,7 @@ def test_ut_w10_21_parcial_sin_ingresos_c02() -> None:
 
 
 @pytest.mark.parametrize("permitidas", [set(), {P, H, I, D}])
-def test_ut_w10_22_rechazado_c08_ignora_los_alcances(permitidas: set[Fuente]) -> None:
+def test_rechazado_c08_ignora_los_alcances(permitidas: set[Fuente]) -> None:
     plan = plan_fuentes(
         MODELO, _verificacion(DecisionConsentimiento.RECHAZADO, permitidas, "REVOCADO")
     )
@@ -80,21 +80,21 @@ def test_ut_w10_22_rechazado_c08_ignora_los_alcances(permitidas: set[Fuente]) ->
     assert plan.no_consultadas == ()
 
 
-def test_ut_w10_23_sin_historial_c16_no_consulta_nada() -> None:
+def test_sin_historial_c16_no_consulta_nada() -> None:
     plan = plan_fuentes(MODELO, _verificacion(DecisionConsentimiento.PERMITIDO_PARCIAL, {P, I, D}))
     assert plan.a_consultar == ()
     assert plan.no_autorizadas == (H,)
     assert plan.no_consultadas == (P, I, D)
 
 
-def test_ut_w10_24_solo_datos_abiertos_c17() -> None:
+def test_solo_datos_abiertos_c17() -> None:
     plan = plan_fuentes(MODELO, _verificacion(DecisionConsentimiento.PERMITIDO_PARCIAL, {D}))
     assert plan.a_consultar == ()
     assert plan.no_autorizadas == (P, H, I)
     assert plan.no_consultadas == (D,)
 
 
-def test_ut_w10_25_siempre_en_el_orden_del_modelo() -> None:
+def test_siempre_en_el_orden_del_modelo() -> None:
     invertido = ModeloRiesgo(
         **{
             **{f: getattr(MODELO, f) for f in MODELO.__slots__},  # type: ignore[attr-defined]

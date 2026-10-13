@@ -42,7 +42,7 @@ def _nombre(caso: Mapping[str, Any]) -> str:
     return str(caso["id"]).lower()
 
 
-# --- clientes-stub (02, CS-08) -------------------------------------------------------
+# --- clientes-stub -------------------------------------------------------
 def _base_clientes(cliente_id: str) -> str:
     return f"/clientes-stub/v1/clientes/{cliente_id}"
 
@@ -128,8 +128,8 @@ def generar_clientes_stub(casos: Iterable[Mapping[str, Any]]) -> Archivos:
     return archivos
 
 
-# --- aliados: open-finance y datos-abiertos (03, W10-P06) ------------------------------
-# Fuente -> (aliado, recurso, ruta de la solicitud, parámetros fijos, nominal de 01 §3.6).
+# --- aliados: open-finance y datos-abiertos ------------------------------
+# Fuente -> (aliado, recurso, ruta de la solicitud, parámetros fijos, respuesta nominal).
 FUENTES: dict[str, dict[str, Any]] = {
     "FA_PRODUCTOS_VIGENTES": {
         "aliado": "open-finance",

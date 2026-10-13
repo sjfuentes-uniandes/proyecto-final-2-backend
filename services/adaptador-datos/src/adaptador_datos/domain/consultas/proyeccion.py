@@ -1,4 +1,4 @@
-"""Proyección y filtrado de la respuesta del proveedor (03 §B.5; W10 AC2 y AC4).
+"""Proyección y filtrado de la respuesta del proveedor.
 
 Solo se leen las rutas de los campos autorizados: lo demás nunca se copia ni se devuelve.
 """

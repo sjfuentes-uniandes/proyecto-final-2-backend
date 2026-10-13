@@ -1,6 +1,6 @@
 # Códigos de error
 
-Formato estable de todo error de las rutas nuevas (regla 19; `solventa_common.errors`):
+Formato estable de todo error de las rutas nuevas (`solventa_common.errors`):
 
 ```json
 {"codigo": "MAYUSCULAS", "mensaje": "texto genérico", "correlationId": "…", "detalles": {}}
@@ -8,9 +8,7 @@ Formato estable de todo error de las rutas nuevas (regla 19; `solventa_common.er
 
 - Los clientes (web, móvil y socios) traducen por `codigo`, nunca por `mensaje`.
 - El 422 de validación es `SOLICITUD_INVALIDA`, con `detalles.campos` = lista de rutas de los campos inválidos (nunca sus valores).
-- Las rutas de HU-W27 en `bff-web` conservan `{"detail"}` hasta PD-06.
-
-Fuente: `docs/sprint_1/01-acuerdos-tecnicos.md` §3.3 y 02, CS-02.
+- Las rutas de HU-W27 en `bff-web` conservan `{"detail"}` hasta que se migren a este formato.
 
 | Código | HTTP | Emisor | Cuándo |
 | --- | --- | --- | --- |

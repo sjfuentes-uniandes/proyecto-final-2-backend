@@ -1,4 +1,4 @@
-"""UT-W10-30 a 32: adaptador hacia adaptador-datos (03 §B.3 paso 5)."""
+"""Adaptador hacia adaptador-datos: cada respuesta se traduce a un estado de fuente."""
 
 import asyncio
 import json
@@ -104,7 +104,7 @@ def _lanzar(error: BaseException) -> Callable[[httpx.Request], httpx.Response]:
         ),
     ],
 )
-async def test_ut_w10_30_cada_respuesta_produce_su_estado(
+async def test_cada_respuesta_produce_su_estado(
     manejador: Callable[[httpx.Request], httpx.Response], estado: EstadoFuente
 ) -> None:
     resultado = await _adaptador(manejador).consultar(PRODUCTOS, CONTEXTO)
@@ -127,7 +127,7 @@ async def test_la_cancelacion_se_propaga() -> None:
         await _adaptador(_lanzar(asyncio.CancelledError())).consultar(PRODUCTOS, CONTEXTO)
 
 
-async def test_ut_w10_31_campos_decimales_y_linaje() -> None:
+async def test_campos_decimales_y_linaje() -> None:
     resultado = await _adaptador(lambda _: httpx.Response(200, json=OK)).consultar(
         PRODUCTOS, CONTEXTO
     )
@@ -155,7 +155,7 @@ async def test_un_campo_no_solicitado_nunca_entra_al_dominio() -> None:
     assert "ingreso_mensual_estimado" not in resultado.campos
 
 
-async def test_ut_w10_32_cuerpo_encabezado_y_timeout() -> None:
+async def test_cuerpo_encabezado_y_timeout() -> None:
     recibidas: list[httpx.Request] = []
     await _adaptador(lambda _: httpx.Response(200, json=OK), recibidas).consultar(
         PRODUCTOS, CONTEXTO
@@ -173,7 +173,7 @@ async def test_ut_w10_32_cuerpo_encabezado_y_timeout() -> None:
     assert request.extensions["timeout"]["read"] == pytest.approx(0.34)
 
 
-async def test_ut_w10_32_sin_consentimiento_se_envia_nulo() -> None:
+async def test_sin_consentimiento_se_envia_nulo() -> None:
     recibidas: list[httpx.Request] = []
     contexto = ContextoConsulta(CLIENTE, None, PROPOSITO_PERFILAMIENTO, 290)
     respuesta = httpx.Response(422, json={"codigo": "CONSENTIMIENTO_REQUERIDO"})

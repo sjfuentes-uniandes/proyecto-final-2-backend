@@ -3,7 +3,7 @@ from adaptador_datos.domain.consultas.catalogo_fuentes import CATALOGO, PROVEEDO
 from adaptador_datos.domain.consultas.modelos import Aliado, Fuente
 
 
-def test_ut_w10_01_las_cuatro_fuentes_completas() -> None:
+def test_las_cuatro_fuentes_completas() -> None:
     assert set(CATALOGO) == set(Fuente)
     assert set(PROVEEDOR) == set(Aliado)
     for fuente, definicion in CATALOGO.items():
@@ -17,7 +17,7 @@ def test_ut_w10_01_las_cuatro_fuentes_completas() -> None:
     assert CATALOGO[Fuente.DA_REGISTROS_PUBLICOS].aliado is Aliado.DATOS_ABIERTOS
 
 
-def test_ut_w10_02_claves_ordenadas_sin_duplicados() -> None:
+def test_claves_ordenadas_sin_duplicados() -> None:
     campos = [
         "entidades_con_deuda",
         "cuota_mensual_obligaciones",
@@ -37,6 +37,6 @@ def test_datos_abiertos_usa_la_clave_de_primer_nivel() -> None:
     ) == ("listasRestrictivas",)
 
 
-def test_ut_w10_03_campo_desconocido_lanza_key_error() -> None:
+def test_campo_desconocido_lanza_key_error() -> None:
     with pytest.raises(KeyError):
         claves_proveedor(Fuente.FA_HISTORIAL_PAGOS_12M, ["ingreso_mensual_estimado"])

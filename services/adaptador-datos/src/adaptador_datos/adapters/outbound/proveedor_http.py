@@ -1,4 +1,4 @@
-"""PuertoProveedor sobre HTTPX, parametrizado por el catálogo de fuentes (03, W10-P03)."""
+"""PuertoProveedor sobre HTTPX, parametrizado por el catálogo de fuentes."""
 
 from collections.abc import Mapping
 from typing import Any

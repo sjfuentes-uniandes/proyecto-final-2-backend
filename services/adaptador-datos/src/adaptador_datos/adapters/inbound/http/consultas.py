@@ -1,4 +1,4 @@
-"""API POST /v1/consultas (03 §B.4.1)."""
+"""API POST /v1/consultas: consulta una fuente con los campos que el cliente autorizó."""
 
 from datetime import datetime
 from typing import Annotated, Any, Literal

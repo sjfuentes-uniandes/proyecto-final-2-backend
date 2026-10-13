@@ -1,8 +1,6 @@
 # Operaciones medidas
 
-Nombres de `Operation` en `OperationDuration` y `OperationErrors` (`solventa_common.telemetry.operacion`). El colector exporta `^Operation.*` con la dimensión `Operation`; no se crean métricas nuevas (DT-11).
-
-Fuente: `docs/sprint_1/01-acuerdos-tecnicos.md` §3.10.
+Nombres de `Operation` en `OperationDuration` y `OperationErrors` (`solventa_common.telemetry.operacion`). El colector exporta `^Operation.*` con la dimensión `Operation`; no se crean métricas nuevas.
 
 | Operación (`Operation`) | Servicio | Dónde | Resultados |
 | --- | --- | --- | --- |

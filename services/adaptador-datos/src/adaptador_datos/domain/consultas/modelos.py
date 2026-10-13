@@ -1,4 +1,4 @@
-"""Modelo canónico del adaptador de datos (02, CS-06). Puro: sin E/S."""
+"""Modelo canónico del adaptador de datos. Puro: sin E/S."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -51,7 +51,7 @@ class RespuestaInvalida(Exception):
         self.motivo = motivo
 
 
-# Agregados de W10-P04 (dueño del paso).
+# Errores del caso de uso de consulta.
 class ConsentimientoRequerido(Exception):
     """La consulta llegó sin consentimientoId: no se llama al proveedor."""
 

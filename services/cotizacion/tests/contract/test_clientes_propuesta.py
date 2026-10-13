@@ -1,4 +1,4 @@
-"""CT-W10-01: los DTO de ClientesHttp, el stub (CS-08) y la propuesta de clientes coinciden.
+"""Contrato: los DTO de ClientesHttp, el stub de clientes y la propuesta de clientes coinciden.
 
 - Cada mapeo 200 de mappings/clientes-stub/ se valida con IdentidadDto o VerificacionDto.
 - Los campos obligatorios y los enum de los DTO son los de

@@ -1,7 +1,8 @@
-"""PuertoIdentidad y PuertoConsentimiento sobre el contrato propuesto de clientes (01 §3.4.1).
+"""PuertoIdentidad y PuertoConsentimiento sobre el contrato propuesto de clientes
+(contracts/openapi/clientes.propuesta-cotizacion.yaml).
 
-En Sprint 1 la URL apunta al stub de simulador-aliados (DT-02). Una respuesta fuera del
-contrato (estado o alcance desconocido) se trata como dependencia no disponible (03 §B.7).
+Mientras no exista `clientes`, la URL apunta al stub de simulador-aliados. Una respuesta fuera
+del contrato (estado o alcance desconocido) se trata como dependencia no disponible.
 """
 
 from collections.abc import Sequence

@@ -1,4 +1,4 @@
-"""PuertoFuente sobre POST /v1/consultas de adaptador-datos (03 §B.3 paso 5).
+"""PuertoFuente sobre POST /v1/consultas de adaptador-datos.
 
 No lanza por errores del proveedor ni del adaptador: los devuelve como estado de la fuente.
 Solo se propaga la cancelación (asyncio.CancelledError).
@@ -50,7 +50,7 @@ class AdaptadorDatosHttp:
         self._cliente = cliente
         self._url = f"{base_url.rstrip('/')}/v1/consultas"
         # Disponible para quien necesite el instante de la consulta en cotizacion;
-        # consultadaEn del linaje viene del adaptador (03 §B.5).
+        # consultadaEn del linaje viene del adaptador.
         self._reloj = reloj
 
     async def consultar(

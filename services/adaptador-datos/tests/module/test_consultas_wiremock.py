@@ -1,4 +1,4 @@
-"""MT-W10-08 a 16: adaptador-datos contra WireMock con los mapeos de C01–C19 (03, W10-P08)."""
+"""Pruebas de módulo: adaptador-datos contra WireMock con los mapeos de los clientes sintéticos."""
 
 import time
 from typing import Any
@@ -47,7 +47,7 @@ def _valores(respuesta: Any) -> dict[str, Any]:
     return {c: v["valor"] for c, v in respuesta.json()["campos"].items()}
 
 
-def test_mt_w10_08_c01_las_cuatro_fuentes_nominal(app_adaptador: Any) -> None:
+def test_c01_las_cuatro_fuentes_nominal(app_adaptador: Any) -> None:
     adaptador = app_adaptador()
     esperados = {
         "FA_PRODUCTOS_VIGENTES": (
@@ -73,7 +73,7 @@ def test_mt_w10_08_c01_las_cuatro_fuentes_nominal(app_adaptador: Any) -> None:
         assert cuerpo["consultadaEn"].endswith("Z")
 
 
-def test_mt_w10_09_journal_con_campos_exactos_y_correlacion(
+def test_journal_con_campos_exactos_y_correlacion(
     app_adaptador: Any, wiremock: Any, leer_encabezado: Any
 ) -> None:
     adaptador = app_adaptador()
@@ -87,7 +87,7 @@ def test_mt_w10_09_journal_con_campos_exactos_y_correlacion(
     assert leer_encabezado(solicitud, "X-Api-Key") == "local-sintetico"
 
 
-def test_mt_w10_10_c04_campos_adicionales_filtrados(app_adaptador: Any) -> None:
+def test_c04_campos_adicionales_filtrados(app_adaptador: Any) -> None:
     adaptador = app_adaptador()
     respuesta = _consultar(adaptador, "04", "FA_PRODUCTOS_VIGENTES")
     assert respuesta.status_code == 200
@@ -99,27 +99,27 @@ def test_mt_w10_10_c04_campos_adicionales_filtrados(app_adaptador: Any) -> None:
         assert centinela not in adaptador.texto_spans()
 
 
-def test_mt_w10_11_c03_dato_ausente_no_disponible(app_adaptador: Any) -> None:
+def test_c03_dato_ausente_no_disponible(app_adaptador: Any) -> None:
     respuesta = _consultar(app_adaptador(), "03", "FA_HISTORIAL_PAGOS_12M")
     assert respuesta.status_code == 200
     assert respuesta.json()["campos"] == {"moras_12m": {"estado": "NO_DISPONIBLE", "valor": None}}
 
 
-def test_mt_w10_12_c05_respuesta_malformada(app_adaptador: Any) -> None:
+def test_c05_respuesta_malformada(app_adaptador: Any) -> None:
     respuesta = _consultar(app_adaptador(), "05", "FA_PRODUCTOS_VIGENTES")
     assert respuesta.status_code == 502
     assert respuesta.json()["codigo"] == "RESPUESTA_INVALIDA"
     assert respuesta.json()["correlationId"] == CORRELACION
 
 
-def test_mt_w10_13_c07_proveedor_caido(app_adaptador: Any) -> None:
+def test_c07_proveedor_caido(app_adaptador: Any) -> None:
     respuesta = _consultar(app_adaptador(), "07", "FA_INGRESOS_AGREGADOS")
     assert respuesta.status_code == 503
     assert respuesta.json()["codigo"] == "FUENTE_NO_DISPONIBLE"
     assert respuesta.json()["detalles"] == {"motivo": "ERROR", "circuito": "CERRADO"}
 
 
-def test_mt_w10_14_c06_lento_corta_por_deadline(app_adaptador: Any) -> None:
+def test_c06_lento_corta_por_deadline(app_adaptador: Any) -> None:
     adaptador = app_adaptador()
     inicio = time.perf_counter()
     respuesta = _consultar(adaptador, "06", "DA_REGISTROS_PUBLICOS", {"X-Deadline-Ms": "290"})
@@ -129,16 +129,14 @@ def test_mt_w10_14_c06_lento_corta_por_deadline(app_adaptador: Any) -> None:
     assert duracion_ms <= 340, duracion_ms
 
 
-def test_mt_w10_15_sin_consentimiento_no_llama_al_proveedor(
-    app_adaptador: Any, wiremock: Any
-) -> None:
+def test_sin_consentimiento_no_llama_al_proveedor(app_adaptador: Any, wiremock: Any) -> None:
     respuesta = _consultar(app_adaptador(), "01", "FA_HISTORIAL_PAGOS_12M", consentimientoId=None)
     assert respuesta.status_code == 422
     assert respuesta.json()["codigo"] == "CONSENTIMIENTO_REQUERIDO"
     assert wiremock.solicitudes() == []
 
 
-def test_mt_w10_16_campo_no_soportado(app_adaptador: Any, wiremock: Any) -> None:
+def test_campo_no_soportado(app_adaptador: Any, wiremock: Any) -> None:
     respuesta = _consultar(
         app_adaptador(),
         "01",
@@ -151,7 +149,7 @@ def test_mt_w10_16_campo_no_soportado(app_adaptador: Any, wiremock: Any) -> None
 
 
 def test_zz_centinelas_ausentes_en_logs_y_spans(registro: Any, centinelas: tuple[str, ...]) -> None:
-    """Corre al final de la suite: ningún valor sensible quedó en logs ni trazas (01 §3.9)."""
+    """Corre al final de la suite: ningún valor sensible quedó en logs ni trazas."""
     assert registro.logs, "la suite no capturó logs"
     nombres = {s.name for e in registro.spans for s in e.get_finished_spans()}
     assert "consulta.FA_PRODUCTOS_VIGENTES" in nombres  # span de la operación

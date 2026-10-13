@@ -51,7 +51,7 @@ def crear_app(
                         settings.ally_datos_abiertos_credentials.client_secret,
                     ),
                 },
-                # W12-P05 la reemplaza por ProteccionDependencia.
+                # Solo timeout; la protección completa reemplaza a SinProteccion en la historia de W12.
                 proteccion=SinProteccion(),
                 timeouts_ms={
                     Aliado.OPEN_FINANCE: settings.ally_open_finance_timeout_ms,

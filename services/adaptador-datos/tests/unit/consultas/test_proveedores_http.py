@@ -63,7 +63,7 @@ def _proveedor(
         ),
     ],
 )
-async def test_ut_w10_13_url_parametros_y_api_key(
+async def test_url_parametros_y_api_key(
     clase: type[OpenFinanceHttp],
     base: str,
     fuente: Fuente,
@@ -88,20 +88,20 @@ async def test_ut_w10_13_url_parametros_y_api_key(
     assert request.extensions["timeout"]["read"] == 0.3
 
 
-async def test_ut_w10_14_404_es_respuesta_invalida() -> None:
+async def test_404_es_respuesta_invalida() -> None:
     proveedor = _proveedor(OpenFinanceHttp, lambda _: httpx.Response(404), "http://sim")
     with pytest.raises(RespuestaInvalida) as error:
         await proveedor.obtener(Fuente.FA_HISTORIAL_PAGOS_12M, CLIENTE, ("lateCount",), 0.3)
     assert error.value.motivo == "HTTP_4XX"
 
 
-async def test_ut_w10_14_503_lanza_http_status_error() -> None:
+async def test_503_lanza_http_status_error() -> None:
     proveedor = _proveedor(OpenFinanceHttp, lambda _: httpx.Response(503), "http://sim")
     with pytest.raises(httpx.HTTPStatusError):
         await proveedor.obtener(Fuente.FA_HISTORIAL_PAGOS_12M, CLIENTE, ("lateCount",), 0.3)
 
 
-async def test_ut_w10_14_json_invalido() -> None:
+async def test_json_invalido() -> None:
     proveedor = _proveedor(
         OpenFinanceHttp, lambda _: httpx.Response(200, text="<html>"), "http://sim"
     )
@@ -116,7 +116,7 @@ async def test_fuente_de_otro_aliado_se_rechaza() -> None:
         await proveedor.obtener(Fuente.FA_HISTORIAL_PAGOS_12M, CLIENTE, ("lateCount",), 0.3)
 
 
-def test_ut_w10_15_credenciales_fuera_de_repr_y_logs(
+def test_credenciales_fuera_de_repr_y_logs(
     monkeypatch: pytest.MonkeyPatch, capturar_logs: Callable[..., object]
 ) -> None:
     credenciales = json.dumps(
@@ -152,7 +152,7 @@ def test_ut_w10_15_credenciales_fuera_de_repr_y_logs(
     "credenciales",
     ['{"client_id": "solo-id"}', '{"client_secret": "solo-secreto"}', "no-es-json"],
 )
-def test_ut_w10_15_credenciales_incompletas_fallan(
+def test_credenciales_incompletas_fallan(
     monkeypatch: pytest.MonkeyPatch, credenciales: str
 ) -> None:
     monkeypatch.setenv("ALLY_OPEN_FINANCE_CREDENTIALS", credenciales)

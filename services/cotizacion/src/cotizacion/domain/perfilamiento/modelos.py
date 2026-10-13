@@ -1,4 +1,4 @@
-"""Modelos del perfilamiento (02, CS-05). Puros: sin Pydantic ni E/S."""
+"""Modelos del perfilamiento. Puros: sin Pydantic ni E/S."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass

@@ -63,7 +63,7 @@ def _todos(fuente: Fuente) -> list[str]:
 
 
 @pytest.mark.parametrize("fuente", list(Fuente))
-def test_ut_w10_04_nominal_de_cada_fuente(fuente: Fuente) -> None:
+def test_nominal_de_cada_fuente(fuente: Fuente) -> None:
     campos, descartados, version, confianza = proyectar(fuente, _todos(fuente), _nominal(fuente))
     assert {c: v.valor for c, v in campos.items()} == ESPERADO[fuente]
     assert all(v.estado == "DISPONIBLE" for v in campos.values())
@@ -74,7 +74,7 @@ def test_ut_w10_04_nominal_de_cada_fuente(fuente: Fuente) -> None:
     )
 
 
-def test_ut_w10_05_campos_adicionales_se_descartan() -> None:
+def test_campos_adicionales_se_descartan() -> None:
     cuerpo = _nominal(P)
     cuerpo["data"].update(copy.deepcopy(EXTRAS))
     campos, descartados, _, _ = proyectar(P, _todos(P), cuerpo)
@@ -95,7 +95,7 @@ def test_ut_w10_05_campos_adicionales_se_descartan() -> None:
         (D, lambda c: c["registro"]["listasRestrictivas"].pop("coincidencias")),
     ],
 )
-def test_ut_w10_06_campo_ausente_o_nulo_no_disponible(fuente: Fuente, cambio: Any) -> None:
+def test_campo_ausente_o_nulo_no_disponible(fuente: Fuente, cambio: Any) -> None:
     cuerpo = _nominal(fuente)
     cambio(cuerpo)
     campos, _, _, _ = proyectar(fuente, _todos(fuente), cuerpo)
@@ -114,13 +114,13 @@ def test_ut_w10_06_campo_ausente_o_nulo_no_disponible(fuente: Fuente, cambio: An
         (D, {"version": "1.8", "nivelConfianza": 0.88, "registro": {"listasRestrictivas": 5}}),
     ],
 )
-def test_ut_w10_07_sobre_invalido(fuente: Fuente, cuerpo: Any) -> None:
+def test_sobre_invalido(fuente: Fuente, cuerpo: Any) -> None:
     with pytest.raises(RespuestaInvalida):
         proyectar(fuente, _todos(fuente), cuerpo)
 
 
 @pytest.mark.parametrize("confianza", [-0.01, 1.01, True, "0.9"])
-def test_ut_w10_08_confianza_fuera_de_rango(confianza: Any) -> None:
+def test_confianza_fuera_de_rango(confianza: Any) -> None:
     cuerpo = _nominal(H)
     cuerpo["confidenceScore"] = confianza
     with pytest.raises(RespuestaInvalida) as error:
@@ -138,7 +138,7 @@ def test_confianza_en_los_extremos_es_valida() -> None:
 @pytest.mark.parametrize(
     "dinero", [{"amount": "1800000.00", "currency": "USD"}, {"amount": "1"}, "1800000"]
 )
-def test_ut_w10_09_moneda_distinta_de_cop(dinero: Any) -> None:
+def test_moneda_distinta_de_cop(dinero: Any) -> None:
     cuerpo = _nominal(P)
     cuerpo["data"]["totalMonthlyInstallment"] = dinero
     with pytest.raises(RespuestaInvalida) as error:
@@ -157,9 +157,7 @@ def test_ut_w10_09_moneda_distinta_de_cop(dinero: Any) -> None:
         (P, "totalMonthlyInstallment", "-0.01"),
     ],
 )
-def test_ut_w10_10_monto_no_decimal_o_fuera_de_rango(
-    fuente: Fuente, clave: str, monto: Any
-) -> None:
+def test_monto_no_decimal_o_fuera_de_rango(fuente: Fuente, clave: str, monto: Any) -> None:
     cuerpo = _nominal(fuente)
     cuerpo["data"][clave] = {"amount": monto, "currency": "COP"}
     with pytest.raises(RespuestaInvalida):
@@ -173,14 +171,14 @@ def test_cuota_cero_es_valida() -> None:
 
 
 @pytest.mark.parametrize("valor", [True, -1, 1.5, "0"])
-def test_ut_w10_11_entero_invalido(valor: Any) -> None:
+def test_entero_invalido(valor: Any) -> None:
     cuerpo = _nominal(H)
     cuerpo["data"]["lateCount"] = valor
     with pytest.raises(RespuestaInvalida):
         proyectar(H, _todos(H), cuerpo)
 
 
-def test_ut_w10_12_solo_se_proyectan_los_autorizados() -> None:
+def test_solo_se_proyectan_los_autorizados() -> None:
     campos, descartados, _, _ = proyectar(P, ["cuota_mensual_obligaciones"], _nominal(P))
     assert set(campos) == {"cuota_mensual_obligaciones"}
     assert descartados == 2

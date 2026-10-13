@@ -1,4 +1,4 @@
-"""Estructura del modelo de riesgo versionado (02, CS-05). El parser y el motor son de W11."""
+"""Estructura del modelo de riesgo versionado (solo datos; el motor que lo evalúa va aparte)."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass

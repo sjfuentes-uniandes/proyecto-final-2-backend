@@ -1,4 +1,4 @@
-"""UT-W10-26 a 29: adaptador hacia clientes (contrato propuesto, 01 §3.4.1)."""
+"""Adaptador hacia clientes (contrato propuesto de identidad y consentimiento)."""
 
 import json
 from collections.abc import Callable
@@ -55,7 +55,7 @@ def _verificacion(**cambios: Any) -> dict[str, Any]:
 
 
 @pytest.mark.parametrize("estado", list(EstadoIdentidad))
-async def test_ut_w10_26_cada_estado_de_identidad(estado: EstadoIdentidad) -> None:
+async def test_cada_estado_de_identidad(estado: EstadoIdentidad) -> None:
     recibidas: list[httpx.Request] = []
     clientes = _clientes(lambda _: httpx.Response(200, json=_identidad(estado, None)), recibidas)
     assert await clientes.estado(CLIENTE) is estado
@@ -66,7 +66,7 @@ async def test_ut_w10_26_cada_estado_de_identidad(estado: EstadoIdentidad) -> No
     assert request.extensions["timeout"]["read"] == 0.15
 
 
-async def test_ut_w10_26_consentimiento_permitido_con_vigencia_utc() -> None:
+async def test_consentimiento_permitido_con_vigencia_utc() -> None:
     recibidas: list[httpx.Request] = []
     cuerpo = _verificacion(vigenteHasta="2027-10-01T05:00:00+05:00")
     clientes = _clientes(lambda _: httpx.Response(200, json=cuerpo), recibidas)
@@ -87,7 +87,7 @@ async def test_ut_w10_26_consentimiento_permitido_con_vigencia_utc() -> None:
     }
 
 
-async def test_ut_w10_26_vigencia_sin_zona_se_interpreta_utc() -> None:
+async def test_vigencia_sin_zona_se_interpreta_utc() -> None:
     cuerpo = _verificacion(vigenteHasta="2027-10-01T00:00:00")
     verificacion = await _clientes(lambda _: httpx.Response(200, json=cuerpo)).verificar(
         CLIENTE, PROPOSITO_PERFILAMIENTO, TODAS
@@ -95,7 +95,7 @@ async def test_ut_w10_26_vigencia_sin_zona_se_interpreta_utc() -> None:
     assert verificacion.vigente_hasta == datetime(2027, 10, 1, tzinfo=UTC)
 
 
-async def test_ut_w10_27_consentimiento_parcial_y_rechazado() -> None:
+async def test_consentimiento_parcial_y_rechazado() -> None:
     parcial = _verificacion(
         decision="PERMITIDO_PARCIAL",
         alcancesPermitidos=[
@@ -126,7 +126,7 @@ async def test_ut_w10_27_consentimiento_parcial_y_rechazado() -> None:
     assert verificacion.causa == "REVOCADO"
 
 
-async def test_ut_w10_27_404_cliente_no_encontrado() -> None:
+async def test_404_cliente_no_encontrado() -> None:
     no_encontrado = {
         "codigo": "CLIENTE_NO_ENCONTRADO",
         "mensaje": "x",
@@ -158,7 +158,7 @@ def _lanzar(error: Exception) -> Callable[[httpx.Request], httpx.Response]:
         lambda _: httpx.Response(200, text="<html>"),
     ],
 )
-async def test_ut_w10_28_timeout_y_fallas_son_dependencia_del_dominio(
+async def test_timeout_y_fallas_son_dependencia_del_dominio(
     manejador: Callable[[httpx.Request], httpx.Response],
 ) -> None:
     clientes = _clientes(manejador)
@@ -180,7 +180,7 @@ async def test_ut_w10_28_timeout_y_fallas_son_dependencia_del_dominio(
         {"decision": "PERMITIDO"},
     ],
 )
-async def test_ut_w10_29_respuesta_fuera_de_contrato_en_consentimiento(
+async def test_respuesta_fuera_de_contrato_en_consentimiento(
     cuerpo: dict[str, Any],
 ) -> None:
     with pytest.raises(DependenciaNoDisponible) as error:
@@ -190,7 +190,7 @@ async def test_ut_w10_29_respuesta_fuera_de_contrato_en_consentimiento(
     assert error.value.dependencia == "clientes.consentimiento"
 
 
-async def test_ut_w10_29_estado_desconocido_de_identidad() -> None:
+async def test_estado_desconocido_de_identidad() -> None:
     clientes = _clientes(lambda _: httpx.Response(200, json=_identidad("EN_REVISION")))
     with pytest.raises(DependenciaNoDisponible) as error:
         await clientes.estado(CLIENTE)
