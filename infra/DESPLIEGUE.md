@@ -190,10 +190,16 @@ make infra-desplegar ENV=int
 make infra-probar ENV=int
 
 # 2. Primer administrador del back-office: el pool es nuevo y está vacío
-EMAIL=ana@solventa.co NOMBRE="Ana Pérez" make infra-usuario-admin ENV=int
+EMAIL=sj.fuentes@uniandes.edu.co NOMBRE="Santiago Fuentes" make infra-usuario-admin ENV=int
 
 # 3. Portal: el bucket nuevo está vacío (en proyecto-final-2-frontend)
 make desplegar ENV=int
+
+POOL=$(terraform -chdir=infra/platform output -json cognito | jq -r .backoffice.pool_id)
+echo "$POOL"
+
+aws cognito-idp admin-set-user-password --user-pool-id "$POOL" \         ─╯
+  --username sj.fuentes@uniandes.edu.co --password 'Temporal#2026abc'
 
 # 4. URL del portal (cambia con cada CloudFront nuevo)
 make infra-salidas ENV=int
@@ -203,7 +209,7 @@ make infra-salidas ENV=int
    - **Antes de escanear:** borrar de la aplicación de autenticación la entrada "Solventa" del ambiente anterior. El pool es nuevo, así que el código anterior ya no sirve y confunde al elegir la entrada.
 6. **Demás usuarios:** crearlos desde el portal (**Administración › Usuarios**). También funciona `make infra-usuario-admin` con `GRUPOS=`.
 
-Si el correo no llega, volver a ejecutar el paso 2: mientras el usuario no haya hecho su primer ingreso, reenvía otra contraseña temporal.
+Si el correo no llega, volver a ejecutar el paso 2: mientras el usuario no haya hecho su primer ingreso, reenvía otra contraseña temporal. Si sigue sin llegar, crear el usuario con una contraseña definida, sin correo (sección 7.1).
 
 ## 7. GitHub Actions
 
@@ -254,6 +260,21 @@ GRUPOS=operacion EMAIL=luis@solventa.co make infra-usuario-admin ENV=int      # 
 ```
 
 Cognito envía al correo una contraseña temporal con el enlace `<portal>/ingresar`. El correo sale de `no-reply@verificationemail.com` (revisar spam; el envío por defecto de Cognito permite unos 50 al día). Si no llega, volver a ejecutar el mismo comando: mientras el usuario no haya hecho su primer ingreso, se genera y reenvía otra contraseña temporal. En el primer ingreso la persona define su contraseña (12+ caracteres con mayúsculas, minúsculas, números y símbolos) y registra su aplicación de autenticación con el código QR. Grupos: `administradores` (crea usuarios), `operacion` (tablero y trazas) y `administradores-socios` (socios, credenciales y cuotas).
+
+### Sin correo: usuario con contraseña definida
+
+Si el correo no llega, el usuario se crea (o se restablece, si ya existe) con una contraseña que se define en la terminal, y Cognito no envía nada:
+
+```bash
+read -rs CLAVE && export CLAVE    # escribir la contraseña y Enter; no se muestra ni queda en el historial
+EMAIL=ana@solventa.co NOMBRE="Ana Pérez" make infra-usuario-admin ENV=int
+unset CLAVE
+```
+
+- **Política:** la contraseña debe tener 12 o más caracteres con mayúsculas, minúsculas, números y símbolos. Si no la cumple, Cognito la rechaza y el script lo indica.
+- **Temporal por defecto:** en el primer ingreso el portal pide cambiarla y luego registrar la aplicación de autenticación.
+- **Definitiva:** con `PERMANENTE=1` se omite el cambio y solo se registra la aplicación de autenticación.
+- **No se expone:** el script pasa la contraseña a la AWS CLI por la entrada estándar, así que no aparece en la lista de procesos.
 
 ## 8. Problemas frecuentes
 
