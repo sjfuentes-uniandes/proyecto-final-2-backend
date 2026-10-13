@@ -35,8 +35,8 @@ partner_tiers = {
 # pruebas N3 de HU-W01 y HU-W02. Para desactivar uno, poner enabled = false y
 # aplicar. Credenciales: terraform -chdir=infra/platform output -json partners
 partners = {
-  socio-a = { tier = "basico", scopes = ["cotizaciones.escribir", "cotizaciones.leer"] }
-  socio-b = { tier = "basico", scopes = ["cotizaciones.leer"] }
+  socio-a = { tier = "basico", scopes = ["cotizar", "consultar"] }
+  socio-b = { tier = "basico", scopes = ["cotizar"] }
 }
 
 # Dominio propio con mTLS para socios (requiere certificado ACM en la región).
