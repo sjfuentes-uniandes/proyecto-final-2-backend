@@ -16,7 +16,9 @@ class Grabadora:
         class NotFoundException(Exception):
             pass
 
-    def __init__(self, respuestas: dict[str, Any] | None = None, fallas: set[str] | None = None) -> None:
+    def __init__(
+        self, respuestas: dict[str, Any] | None = None, fallas: set[str] | None = None
+    ) -> None:
         self.llamadas: list[tuple[str, dict[str, Any]]] = []
         self.respuestas = respuestas or {}
         self.fallas = fallas or set()
@@ -25,15 +27,20 @@ class Grabadora:
         def llamar(**kwargs: Any) -> Any:
             self.llamadas.append((operacion, kwargs))
             if operacion in self.fallas:
-                raise (self.exceptions.ResourceNotFoundException if "user_pool" in operacion
-                       else self.exceptions.NotFoundException)()
+                raise (
+                    self.exceptions.ResourceNotFoundException
+                    if "user_pool" in operacion
+                    else self.exceptions.NotFoundException
+                )()
             return self.respuestas.get(operacion, {})
 
         return llamar
 
 
 def test_cliente_cognito_client_credentials_con_permisos_seleccionados() -> None:
-    cognito = Grabadora({"create_user_pool_client": {"UserPoolClient": {"ClientId": "abc", "ClientSecret": "s"}}})
+    cognito = Grabadora(
+        {"create_user_pool_client": {"UserPoolClient": {"ClientId": "abc", "ClientSecret": "s"}}}
+    )
     client_id, secreto = ClientesCognito(cognito, "us-east-1_p", "solventa").crear_cliente(
         "SOC-000007", frozenset({Permiso.CONSULTAR, Permiso.COTIZAR})
     )
@@ -48,7 +55,9 @@ def test_cliente_cognito_client_credentials_con_permisos_seleccionados() -> None
 def test_eliminar_cliente_inexistente_no_falla() -> None:
     cognito = Grabadora(fallas={"delete_user_pool_client"})
     ClientesCognito(cognito, "us-east-1_p", "solventa").eliminar_cliente("abc")
-    assert cognito.llamadas == [("delete_user_pool_client", {"UserPoolId": "us-east-1_p", "ClientId": "abc"})]
+    assert cognito.llamadas == [
+        ("delete_user_pool_client", {"UserPoolId": "us-east-1_p", "ClientId": "abc"})
+    ]
 
 
 def test_api_key_etiquetada_y_asociada_al_plan() -> None:
@@ -58,14 +67,20 @@ def test_api_key_etiquetada_y_asociada_al_plan() -> None:
     keys.asociar_plan("k1", Plan.ESTANDAR)
     (_, crear), (_, plan) = api.llamadas
     assert crear["name"] == "solventa-int-socio-SOC-000007" and crear["enabled"] is True
-    assert crear["tags"] == {"Project": "solventa", "Environment": "int", "Socio": "SOC-000007",
-                             "ManagedBy": "api-socios"}
+    assert crear["tags"] == {
+        "Project": "solventa",
+        "Environment": "int",
+        "Socio": "SOC-000007",
+        "ManagedBy": "api-socios",
+    }
     assert plan == {"usagePlanId": "plan-e", "keyId": "k1", "keyType": "API_KEY"}
 
 
 def test_plan_sin_configurar() -> None:
     with pytest.raises(LookupError):
-        ApiKeysApiGateway(Grabadora(), "int", {"basico": "plan-b"}).asociar_plan("k1", Plan.ESTANDAR)
+        ApiKeysApiGateway(Grabadora(), "int", {"basico": "plan-b"}).asociar_plan(
+            "k1", Plan.ESTANDAR
+        )
 
 
 def test_deshabilitar_y_eliminar_son_tolerantes() -> None:
@@ -73,5 +88,16 @@ def test_deshabilitar_y_eliminar_son_tolerantes() -> None:
     keys = ApiKeysApiGateway(api, "int", {})
     keys.deshabilitar("k1")
     keys.eliminar("k1")
-    assert api.llamadas[0] == ("update_api_key", {
-        "apiKey": "k1", "patchOperations": [{"op": "replace", "path": "/enabled", "value": "false"}]})
+    assert api.llamadas[0] == (
+        "update_api_key",
+        {
+            "apiKey": "k1",
+            "patchOperations": [{"op": "replace", "path": "/enabled", "value": "false"}],
+        },
+    )
+
+
+def test_deshabilitar_api_key_inexistente_no_falla() -> None:
+    api = Grabadora(fallas={"update_api_key"})
+    ApiKeysApiGateway(api, "int", {}).deshabilitar("k-borrada")  # desactivar es idempotente
+    assert [operacion for operacion, _ in api.llamadas] == ["update_api_key"]
