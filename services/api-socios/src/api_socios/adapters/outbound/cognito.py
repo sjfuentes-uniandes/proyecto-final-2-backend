@@ -38,4 +38,6 @@ class ClientesCognito:
 def crear_clientes(region: str, pool_id: str, servidor_recursos: str) -> ClientesCognito:
     import boto3
 
-    return ClientesCognito(boto3.client("cognito-idp", region_name=region), pool_id, servidor_recursos)
+    return ClientesCognito(
+        boto3.client("cognito-idp", region_name=region), pool_id, servidor_recursos
+    )

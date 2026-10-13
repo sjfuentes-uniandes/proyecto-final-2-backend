@@ -28,7 +28,12 @@ def test_contrato_documenta_los_codigos_de_la_historia() -> None:
             for codigo, respuesta in operacion["responses"].items():
                 if codigo.startswith(("4", "5")):
                     esquema = respuesta["content"]["application/json"]["schema"]["$ref"]
-                    assert esquema == "#/components/schemas/ErrorDto", (codigo, operacion["operationId"])
+                    assert esquema == "#/components/schemas/ErrorDto", (
+                        codigo,
+                        operacion["operationId"],
+                    )
     creado = app.openapi()["components"]["schemas"]["SocioCreado"]["properties"]
     respuesta = app.openapi()["components"]["schemas"]["SocioRespuesta"]["properties"]
-    assert {"clientSecret", "apiKey"} <= set(creado) and not {"clientSecret", "apiKey"} & set(respuesta)
+    assert {"clientSecret", "apiKey"} <= set(creado) and not {"clientSecret", "apiKey"} & set(
+        respuesta
+    )

@@ -44,7 +44,9 @@ async def socio_autenticado(
     if socio is None:
         raise no_autenticado()
     # Los permisos salen del token emitido por Cognito, acotados a los que tiene el socio.
-    permisos = permisos_de_alcances(x_partner_scopes, settings.partners_resource_server) & socio.permisos
+    permisos = (
+        permisos_de_alcances(x_partner_scopes, settings.partners_resource_server) & socio.permisos
+    )
     return SocioAutenticado(socio=socio, permisos=permisos)
 
 
@@ -55,18 +57,25 @@ async def autorizado(request: Request, autenticado: Autenticado) -> SocioAutenti
     """Busca el permiso de la ruta en PERMISO_POR_OPERACION; sin él responde 403."""
     permiso = permiso_requerido(request.method, request.scope["route"].path)
     if permiso not in autenticado.permisos:
-        raise ErrorNegocio(PERMISO_NO_ASIGNADO, "El socio no tiene permiso para esta operación", 403,
-                           {"permiso": permiso.value})
+        raise ErrorNegocio(
+            PERMISO_NO_ASIGNADO,
+            "El socio no tiene permiso para esta operación",
+            403,
+            {"permiso": permiso.value},
+        )
     return autenticado
 
 
 Autorizado = Annotated[SocioAutenticado, Depends(autorizado)]
 
-router = APIRouter(tags=["socio"], responses={
-    401: error("NO_AUTENTICADO: credenciales inexistentes, incorrectas o desactivadas"),
-    403: error("PERMISO_NO_ASIGNADO (detalles.permiso)"),
-    422: error("SOLICITUD_INVALIDA (detalles.campos)"),
-})
+router = APIRouter(
+    tags=["socio"],
+    responses={
+        401: error("NO_AUTENTICADO: credenciales inexistentes, incorrectas o desactivadas"),
+        403: error("PERMISO_NO_ASIGNADO (detalles.permiso)"),
+        422: error("SOLICITUD_INVALIDA (detalles.campos)"),
+    },
+)
 
 
 class PerfilSocio(BaseModel):
@@ -87,9 +96,16 @@ class PerfilSocio(BaseModel):
 @router.get("/socio/me", response_model=PerfilSocio, response_model_by_alias=True)
 async def perfil(autenticado: Autenticado) -> PerfilSocio:
     socio = autenticado.socio
-    return PerfilSocio(id=socio.id, nombre=socio.nombre, canal=socio.canal, plan=socio.plan,
-                       permisos=sorted(autenticado.permisos), estado=socio.estado, client_id=socio.client_id,
-                       creado=socio.creado)
+    return PerfilSocio(
+        id=socio.id,
+        nombre=socio.nombre,
+        canal=socio.canal,
+        plan=socio.plan,
+        permisos=sorted(autenticado.permisos),
+        estado=socio.estado,
+        client_id=socio.client_id,
+        creado=socio.creado,
+    )
 
 
 def _no_disponible() -> ErrorNegocio:
@@ -104,7 +120,9 @@ async def solicitar_cotizacion(autenticado: Autorizado) -> None:
 
 
 @router.get("/cotizaciones/{cotizacion_id}", responses={501: error("OPERACION_NO_DISPONIBLE")})
-async def consultar_cotizacion(autenticado: Autorizado, cotizacion_id: Annotated[str, Path(max_length=64)]) -> None:
+async def consultar_cotizacion(
+    autenticado: Autorizado, cotizacion_id: Annotated[str, Path(max_length=64)]
+) -> None:
     raise _no_disponible()
 
 
@@ -114,7 +132,9 @@ async def emitir_poliza(autenticado: Autorizado) -> None:
 
 
 @router.get("/polizas/{poliza_id}", responses={501: error("OPERACION_NO_DISPONIBLE")})
-async def consultar_poliza(autenticado: Autorizado, poliza_id: Annotated[str, Path(max_length=64)]) -> None:
+async def consultar_poliza(
+    autenticado: Autorizado, poliza_id: Annotated[str, Path(max_length=64)]
+) -> None:
     raise _no_disponible()
 
 

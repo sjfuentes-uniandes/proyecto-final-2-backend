@@ -25,7 +25,9 @@ def error(descripcion: str) -> dict[str, Any]:
 
 
 def no_autenticado() -> ErrorNegocio:
-    return ErrorNegocio(NO_AUTENTICADO, "Credenciales inexistentes, incorrectas o desactivadas", 401)
+    return ErrorNegocio(
+        NO_AUTENTICADO, "Credenciales inexistentes, incorrectas o desactivadas", 401
+    )
 
 
 def socio_no_encontrado() -> ErrorNegocio:

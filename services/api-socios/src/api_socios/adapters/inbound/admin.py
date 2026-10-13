@@ -42,17 +42,25 @@ def solo_administracion(
     x_authenticated_sub: Annotated[str | None, Header(include_in_schema=False)] = None,
 ) -> str | None:
     if x_partner_client_id is not None or x_partner_key_id is not None:
-        logger.warning("socio intentó usar la administración", extra={"client_id": x_partner_client_id})
+        logger.warning(
+            "socio intentó usar la administración", extra={"client_id": x_partner_client_id}
+        )
         raise no_encontrado()
     return x_authenticated_sub
 
 
-router = APIRouter(prefix="/admin/socios", tags=["administracion"], dependencies=[Depends(solo_administracion)],
-                   responses={
-                       400: error("ERROR_HTTP: el cuerpo no se puede leer como JSON"),
-                       404: error("SOCIO_NO_ENCONTRADO, o NO_ENCONTRADO si la solicitud llega desde el API de socios"),
-                       422: error("SOLICITUD_INVALIDA (detalles.campos)"),
-                   })
+router = APIRouter(
+    prefix="/admin/socios",
+    tags=["administracion"],
+    dependencies=[Depends(solo_administracion)],
+    responses={
+        400: error("ERROR_HTTP: el cuerpo no se puede leer como JSON"),
+        404: error(
+            "SOCIO_NO_ENCONTRADO, o NO_ENCONTRADO si la solicitud llega desde el API de socios"
+        ),
+        422: error("SOLICITUD_INVALIDA (detalles.campos)"),
+    },
+)
 
 Administrador = Annotated[str | None, Depends(solo_administracion)]
 Caso = Annotated[AdministrarSocios, Depends(administrar_socios)]
@@ -91,8 +99,15 @@ class SocioCreado(SocioRespuesta):
 
 def respuesta(socio: Socio) -> SocioRespuesta:
     return SocioRespuesta(
-        id=socio.id, nombre=socio.nombre, canal=socio.canal, plan=socio.plan, permisos=sorted(socio.permisos),
-        estado=socio.estado, client_id=socio.client_id, creado=socio.creado, desactivado=socio.desactivado,
+        id=socio.id,
+        nombre=socio.nombre,
+        canal=socio.canal,
+        plan=socio.plan,
+        permisos=sorted(socio.permisos),
+        estado=socio.estado,
+        client_id=socio.client_id,
+        creado=socio.creado,
+        desactivado=socio.desactivado,
     )
 
 
@@ -109,20 +124,30 @@ async def listar_socios(caso: Caso) -> list[SocioRespuesta]:
 
 
 @router.post("", response_model=SocioCreado, response_model_by_alias=True, status_code=201)
-async def habilitar_socio(solicitud: SocioSolicitud, caso: Caso, administrador: Administrador,
-                          http: Response) -> SocioCreado:
+async def habilitar_socio(
+    solicitud: SocioSolicitud, caso: Caso, administrador: Administrador, http: Response
+) -> SocioCreado:
     try:
-        nuevo = NuevoSocio(nombre=solicitud.nombre, canal=solicitud.canal, plan=solicitud.plan,
-                           permisos=frozenset(solicitud.permisos))
+        nuevo = NuevoSocio(
+            nombre=solicitud.nombre,
+            canal=solicitud.canal,
+            plan=solicitud.plan,
+            permisos=frozenset(solicitud.permisos),
+        )
     except ValueError as error:
         campo = "permisos" if "permiso" in str(error) else "nombre"
         raise ErrorNegocio(SOLICITUD_INVALIDA, str(error), 422, {"campos": [campo]}) from error
     socio, credenciales = await asyncio.to_thread(caso.habilitar, nuevo)
-    logger.info("alta de socio solicitada", extra={"socio_id": socio.id, "administrador": administrador})
+    logger.info(
+        "alta de socio solicitada", extra={"socio_id": socio.id, "administrador": administrador}
+    )
     # El secreto no debe quedar en cachés intermedias ni del navegador.
     http.headers["Cache-Control"] = "no-store"
-    return SocioCreado(**respuesta(socio).model_dump(), client_secret=credenciales.client_secret,
-                       api_key=credenciales.api_key)
+    return SocioCreado(
+        **respuesta(socio).model_dump(),
+        client_secret=credenciales.client_secret,
+        api_key=credenciales.api_key,
+    )
 
 
 @router.get("/{socio_id}", response_model=SocioRespuesta, response_model_by_alias=True)
@@ -131,10 +156,15 @@ async def consultar_socio(socio_id: IdSocio, caso: Caso) -> SocioRespuesta:
 
 
 @router.post("/{socio_id}/desactivar", response_model=SocioRespuesta, response_model_by_alias=True)
-async def desactivar_socio(socio_id: IdSocio, caso: Caso, administrador: Administrador) -> SocioRespuesta:
+async def desactivar_socio(
+    socio_id: IdSocio, caso: Caso, administrador: Administrador
+) -> SocioRespuesta:
     try:
         socio = await asyncio.to_thread(caso.desactivar, socio_id)
     except SocioNoEncontrado as error:
         raise socio_no_encontrado() from error
-    logger.info("desactivación de socio solicitada", extra={"socio_id": socio_id, "administrador": administrador})
+    logger.info(
+        "desactivación de socio solicitada",
+        extra={"socio_id": socio_id, "administrador": administrador},
+    )
     return respuesta(socio)

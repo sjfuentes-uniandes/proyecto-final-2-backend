@@ -23,8 +23,13 @@ _GUARDAR = (
 def migrar(url: str) -> None:
     """Aplica en orden las migraciones SQL del paquete; cada una es idempotente."""
     archivos = sorted(
-        (f for f in resources.files("api_socios.adapters.outbound").joinpath("migraciones").iterdir()
-         if f.name.endswith(".sql")),
+        (
+            f
+            for f in resources.files("api_socios.adapters.outbound")
+            .joinpath("migraciones")
+            .iterdir()
+            if f.name.endswith(".sql")
+        ),
         key=lambda f: f.name,
     )
     with psycopg.connect(url, autocommit=True) as conexion:
@@ -39,9 +44,15 @@ def migrar(url: str) -> None:
 
 def _socio(fila: dict[str, Any]) -> Socio:
     return Socio(
-        id=fila["id"], nombre=fila["nombre"], canal=CanalVenta(fila["canal"]), plan=Plan(fila["plan"]),
-        permisos=frozenset(Permiso(p) for p in fila["permisos"]), estado=Estado(fila["estado"]),
-        client_id=fila["client_id"], api_key_id=fila["api_key_id"], creado=fila["creado"],
+        id=fila["id"],
+        nombre=fila["nombre"],
+        canal=CanalVenta(fila["canal"]),
+        plan=Plan(fila["plan"]),
+        permisos=frozenset(Permiso(p) for p in fila["permisos"]),
+        estado=Estado(fila["estado"]),
+        client_id=fila["client_id"],
+        api_key_id=fila["api_key_id"],
+        creado=fila["creado"],
         desactivado=fila["desactivado"],
     )
 
@@ -64,8 +75,18 @@ class RepositorioPostgres:
         with self._conectar() as conexion:
             conexion.execute(
                 _GUARDAR,
-                (socio.id, socio.nombre, socio.canal.value, socio.plan.value, sorted(p.value for p in socio.permisos),
-                 socio.estado.value, socio.client_id, socio.api_key_id, socio.creado, socio.desactivado),
+                (
+                    socio.id,
+                    socio.nombre,
+                    socio.canal.value,
+                    socio.plan.value,
+                    sorted(p.value for p in socio.permisos),
+                    socio.estado.value,
+                    socio.client_id,
+                    socio.api_key_id,
+                    socio.creado,
+                    socio.desactivado,
+                ),
             )
 
     def obtener(self, socio_id: str) -> Socio | None:

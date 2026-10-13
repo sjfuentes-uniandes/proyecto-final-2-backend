@@ -21,7 +21,9 @@ def proveedor(entorno) -> Iterator[str]:
         s.bind(("127.0.0.1", 0))
         puerto = s.getsockname()[1]
     # Sin lifespan: los dobles en memoria reemplazan a Postgres (entorno en conftest).
-    servidor = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=puerto, lifespan="off", log_level="warning"))
+    servidor = uvicorn.Server(
+        uvicorn.Config(app, host="127.0.0.1", port=puerto, lifespan="off", log_level="warning")
+    )
     hilo = threading.Thread(target=servidor.run, daemon=True)
     hilo.start()
     while not servidor.started:
@@ -37,10 +39,18 @@ def test_api_socios_cumple_el_pacto_de_bff_web(entorno, proveedor: str) -> None:
     def estado(state: str, action: str) -> None:
         entorno.repositorio.socios.clear()
         if action == "setup" and state == "existe el socio SOC-000001":
-            entorno.repositorio.guardar(Socio(
-                id="SOC-000001", nombre="Fintech Caribe S.A.S.", canal=CanalVenta.PLATAFORMA_DIGITAL,
-                plan=Plan.BASICO, permisos=frozenset({Permiso.COTIZAR}), client_id="cliente-pacto",
-                api_key_id="key-pacto",
-            ))
+            entorno.repositorio.guardar(
+                Socio(
+                    id="SOC-000001",
+                    nombre="Fintech Caribe S.A.S.",
+                    canal=CanalVenta.PLATAFORMA_DIGITAL,
+                    plan=Plan.BASICO,
+                    permisos=frozenset({Permiso.COTIZAR}),
+                    client_id="cliente-pacto",
+                    api_key_id="key-pacto",
+                )
+            )
 
-    Verifier("api-socios", host="127.0.0.1").add_source(PACTO).add_transport(url=proveedor).state_handler(estado, teardown=True).verify()
+    Verifier("api-socios", host="127.0.0.1").add_source(PACTO).add_transport(
+        url=proveedor
+    ).state_handler(estado, teardown=True).verify()

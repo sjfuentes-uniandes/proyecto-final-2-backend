@@ -10,7 +10,9 @@ from api_socios.domain.socios import Plan
 
 
 class ApiKeysApiGateway:
-    def __init__(self, cliente: Any, ambiente: str, planes: dict[str, str], proyecto: str = "solventa") -> None:
+    def __init__(
+        self, cliente: Any, ambiente: str, planes: dict[str, str], proyecto: str = "solventa"
+    ) -> None:
         self.cliente = cliente
         self.ambiente = ambiente
         self.planes = planes
@@ -21,7 +23,12 @@ class ApiKeysApiGateway:
             name=f"{self.proyecto}-{self.ambiente}-socio-{socio_id}",
             description=f"Consumo atribuido al socio {socio_id} ({nombre})"[:250],
             enabled=True,
-            tags={"Project": self.proyecto, "Environment": self.ambiente, "Socio": socio_id, "ManagedBy": "api-socios"},
+            tags={
+                "Project": self.proyecto,
+                "Environment": self.ambiente,
+                "Socio": socio_id,
+                "ManagedBy": "api-socios",
+            },
         )
         return respuesta["id"], respuesta["value"]
 
@@ -35,7 +42,8 @@ class ApiKeysApiGateway:
     def deshabilitar(self, api_key_id: str) -> None:
         try:
             self.cliente.update_api_key(
-                apiKey=api_key_id, patchOperations=[{"op": "replace", "path": "/enabled", "value": "false"}]
+                apiKey=api_key_id,
+                patchOperations=[{"op": "replace", "path": "/enabled", "value": "false"}],
             )
         except self.cliente.exceptions.NotFoundException:
             pass

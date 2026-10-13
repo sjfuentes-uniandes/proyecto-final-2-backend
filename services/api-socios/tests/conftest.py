@@ -138,8 +138,11 @@ def capturar_logs() -> Iterator[Callable[[], io.StringIO]]:
 def encabezados_socio(socio: Socio, *permisos: str, key_id: str | None = None) -> dict[str, str]:
     """Lo que API Gateway envía a api-socios tras validar token y API key."""
     alcances = " ".join(f"solventa/{p}" for p in permisos)
-    return {"X-Partner-Client-Id": socio.client_id, "X-Partner-Key-Id": key_id or socio.api_key_id,
-            "X-Partner-Scopes": alcances}
+    return {
+        "X-Partner-Client-Id": socio.client_id,
+        "X-Partner-Key-Id": key_id or socio.api_key_id,
+        "X-Partner-Scopes": alcances,
+    }
 
 
 @pytest.fixture

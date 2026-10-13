@@ -1,6 +1,5 @@
-from fastapi.testclient import TestClient
-
 from api_socios.main import app
+from fastapi.testclient import TestClient
 
 
 def test_health() -> None:

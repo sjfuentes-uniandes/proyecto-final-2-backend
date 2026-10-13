@@ -28,7 +28,11 @@ def _administrar() -> AdministrarSocios:
 
     return AdministrarSocios(
         repositorio(),
-        crear_clientes(settings.aws_region, settings.partners_user_pool_id or "", settings.partners_resource_server),
+        crear_clientes(
+            settings.aws_region,
+            settings.partners_user_pool_id or "",
+            settings.partners_resource_server,
+        ),
         crear_api_keys(settings.aws_region, settings.environment, settings.partners_usage_plans),
     )
 
