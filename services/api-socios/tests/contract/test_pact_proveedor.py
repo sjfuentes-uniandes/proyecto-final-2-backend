@@ -1,5 +1,3 @@
-"""Pact proveedor: api-socios cumple lo que espera bff-web (contracts/pact/bff-web-api-socios.json)."""
-
 import socket
 import threading
 import time
@@ -20,7 +18,6 @@ def proveedor(entorno) -> Iterator[str]:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         puerto = s.getsockname()[1]
-    # Sin lifespan: los dobles en memoria reemplazan a Postgres (entorno en conftest).
     servidor = uvicorn.Server(
         uvicorn.Config(app, host="127.0.0.1", port=puerto, lifespan="off", log_level="warning")
     )

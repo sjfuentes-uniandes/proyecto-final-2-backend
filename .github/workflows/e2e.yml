@@ -1,14 +1,5 @@
 name: E2E (N3)
 
-# Pruebas integrales (tests/e2e) contra un ambiente desplegado. Solo leen el estado de
-# Terraform y llaman a las APIs públicas; no cambian la infraestructura.
-#
-# Requisitos (infra/DESPLIEGUE.md):
-#   - Ambiente con api-socios y bff-web desplegados (Infra - Desplegar, alcance microservicios).
-#   - Variable AWS_ROLE_ARN (rol OIDC de make infra-bootstrap).
-#   - Secretos del usuario de prueba del back-office, en el grupo administradores-socios:
-#       E2E_ADMIN_USUARIO, E2E_ADMIN_CLAVE y E2E_ADMIN_TOTP (semilla base32 de su
-#       aplicación de autenticación; el pool exige MFA).
 on:
   workflow_dispatch:
     inputs:
@@ -26,7 +17,7 @@ permissions:
   id-token: write
   contents: read
 
-# No corre a la vez que un despliegue o destrucción del mismo ambiente.
+# Mismo grupo que los despliegues del ambiente.
 concurrency:
   group: infra-${{ inputs.ambiente }}
   cancel-in-progress: false

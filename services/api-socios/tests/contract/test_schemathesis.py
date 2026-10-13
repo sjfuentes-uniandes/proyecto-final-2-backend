@@ -1,8 +1,3 @@
-"""Schemathesis sobre contracts/openapi/api-socios.yaml contra la app (dobles en memoria).
-
-Fuzz de todas las operaciones más casos explícitos para 201/400/401/403 (HU-W01 N2).
-"""
-
 from pathlib import Path
 
 import pytest
@@ -12,7 +7,7 @@ from hypothesis import HealthCheck, settings
 
 CONTRATO = Path(__file__).parents[4] / "contracts" / "openapi" / "api-socios.yaml"
 schema = schemathesis.openapi.from_path(CONTRATO)
-schema.app = app  # las llamadas van a la app ASGI
+schema.app = app
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -23,8 +18,7 @@ def dobles(entorno_compartido):
 @schema.parametrize()
 @settings(max_examples=25, deadline=None, suppress_health_check=list(HealthCheck))
 def test_contrato_api_socios(case: schemathesis.Case) -> None:
-    # El 405 de Starlette solo lista en Allow los métodos de la primera ruta que coincide
-    # (comportamiento del framework, no de HU-W01).
+    # Starlette solo lista en Allow los métodos de la primera ruta que coincide.
     case.call_and_validate(excluded_checks=[schemathesis.checks.allow_header_conformance])
 
 

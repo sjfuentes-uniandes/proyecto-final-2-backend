@@ -1,11 +1,3 @@
-"""Rutas que consume el canal del socio a través del API Gateway "socios".
-
-El borde ya validó el token client_credentials y la API key (401 si no) y
-sobrescribe X-Partner-Client-Id, X-Partner-Scopes y X-Partner-Key-Id. Aquí se
-confirma que el socio exista y siga activo con su propia API key (AC2), se exige
-el permiso de cada operación (AC4) y solo se devuelven sus propios datos.
-"""
-
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime
@@ -43,7 +35,6 @@ async def socio_autenticado(
     socio = await asyncio.to_thread(caso.ejecutar, x_partner_client_id, x_partner_key_id)
     if socio is None:
         raise no_autenticado()
-    # Los permisos salen del token emitido por Cognito, acotados a los que tiene el socio.
     permisos = (
         permisos_de_alcances(x_partner_scopes, settings.partners_resource_server) & socio.permisos
     )
@@ -54,7 +45,6 @@ Autenticado = Annotated[SocioAutenticado, Depends(socio_autenticado)]
 
 
 async def autorizado(request: Request, autenticado: Autenticado) -> SocioAutenticado:
-    """Busca el permiso de la ruta en PERMISO_POR_OPERACION; sin él responde 403."""
     permiso = permiso_requerido(request.method, request.scope["route"].path)
     if permiso not in autenticado.permisos:
         raise ErrorNegocio(
@@ -112,8 +102,7 @@ def _no_disponible() -> ErrorNegocio:
     return ErrorNegocio(OPERACION_NO_DISPONIBLE, "Operación aún no disponible para socios", 501)
 
 
-# Operaciones de negocio: la autorización ya aplica; cotizacion y polizas las implementan
-# en historias posteriores (al reenviarlas se debe filtrar por autenticado.socio.id).
+# Pendientes de otras historias: al reenviarlas, filtrar por autenticado.socio.id.
 @router.post("/cotizaciones", status_code=201, responses={501: error("OPERACION_NO_DISPONIBLE")})
 async def solicitar_cotizacion(autenticado: Autorizado) -> None:
     raise _no_disponible()

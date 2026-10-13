@@ -11,7 +11,6 @@ class Settings(ServiceSettings):
     grupo_operacion: str = "operacion"
     grupo_administradores: str = "administradores"
     grupo_administradores_socios: str = "administradores-socios"
-    # api-socios por Service Connect (infra/apps/ecs.tf: calls -> <SERVICIO>_URL).
     api_socios_url: str = Field("http://localhost:8082", validation_alias=AliasChoices("API_SOCIOS_URL", "SOLVENTA_API_SOCIOS_URL"))
     # Pool de Cognito del back-office (infra/apps/ecs.tf): Administración › Usuarios.
     backoffice_user_pool_id: str | None = Field(

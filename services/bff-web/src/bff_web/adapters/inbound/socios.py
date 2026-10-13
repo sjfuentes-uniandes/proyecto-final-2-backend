@@ -1,9 +1,3 @@
-"""Socios › alta, listado, detalle y desactivación (grupo administradores-socios, HU-W01).
-
-El portal llama a <canales>/web/socios; API Gateway valida el token del pool
-backoffice y sobrescribe X-Authenticated-Issuer y X-Authenticated-Groups.
-"""
-
 from datetime import datetime
 from enum import StrEnum
 from functools import lru_cache
@@ -30,7 +24,6 @@ def _error(descripcion: str) -> dict[str, Any]:
     return {"model": ErrorDto, "description": descripcion}
 
 
-# Ruta nueva: errores en el formato estable (RutaB2), sin cambiar las de HU-W27.
 router = APIRouter(
     prefix="/socios", tags=["socios"], route_class=RutaB2,
     dependencies=[Depends(requerir_grupo(settings.grupo_administradores_socios))],
@@ -42,7 +35,6 @@ router = APIRouter(
     },
 )
 
-# Códigos de api-socios que llegan tal cual al portal; cualquier otro es una falla de la dependencia.
 _REENVIADOS = {404, 409, 422}
 
 

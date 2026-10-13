@@ -1,5 +1,3 @@
-"""Construcción de dependencias y ciclo de vida de la app (sin AWS ni base reales)."""
-
 from collections.abc import Iterator
 
 import pytest

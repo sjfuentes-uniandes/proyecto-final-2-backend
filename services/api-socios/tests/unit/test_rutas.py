@@ -17,7 +17,6 @@ def alta(entorno, **cambios: object) -> dict:
     return respuesta.json()
 
 
-# --- Administración ----------------------------------------------------------------
 def test_alta_devuelve_credenciales_una_sola_vez(entorno) -> None:
     respuesta = entorno.cliente.post(
         "/admin/socios", json=ALTA | {"permisos": ["cotizar", "consultar"]}
@@ -120,7 +119,6 @@ def test_admin_rechaza_trafico_del_api_de_socios(
         metodo, ruta, json=ALTA, headers={encabezado: creado["clientId"]}
     )
     assert respuesta.status_code == 404
-    # Igual que una ruta inexistente: no revela que la administración existe.
     assert (
         respuesta.json()["codigo"]
         == entorno.cliente.get("/no-existe").json()["codigo"]
@@ -130,7 +128,6 @@ def test_admin_rechaza_trafico_del_api_de_socios(
     assert entorno.repositorio.socios["SOC-000001"].activo
 
 
-# --- Rutas del socio ---------------------------------------------------------------
 def test_socio_me_devuelve_solo_sus_datos(entorno, encabezados) -> None:
     alta(entorno, nombre="Socio A")
     alta(entorno, nombre="Socio B", permisos=["consultar"])
@@ -164,7 +161,7 @@ def test_credenciales_invalidas_responden_401(entorno, encabezados, caso: str) -
     respuesta = entorno.cliente.get("/socio/me", headers=headers)
     assert respuesta.status_code == 401
     assert respuesta.json()["codigo"] == "NO_AUTENTICADO"
-    # AC3: el otro socio sigue autenticándose.
+    # AC3
     assert entorno.cliente.get("/socio/me", headers=encabezados(b, "cotizar")).status_code == 200
 
 

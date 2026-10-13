@@ -1,5 +1,3 @@
-"""Clientes OAuth client_credentials de socios en el pool de Cognito "socios"."""
-
 from typing import Any
 
 from api_socios.domain.socios import Permiso
@@ -12,7 +10,7 @@ class ClientesCognito:
         self.servidor = servidor_recursos
 
     def crear_cliente(self, socio_id: str, permisos: frozenset[Permiso]) -> tuple[str, str]:
-        # Misma configuración que los socios de Terraform (infra/platform/identity.tf).
+        # Igual que los socios de infra/platform/identity.tf.
         respuesta = self.cliente.create_user_pool_client(
             UserPoolId=self.pool_id,
             ClientName=f"socio-{socio_id}",

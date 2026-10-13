@@ -1,5 +1,3 @@
-"""Errores de api-socios en el formato estable de contracts/codigos-error.md."""
-
 from typing import Any
 
 from pydantic import BaseModel
@@ -35,5 +33,5 @@ def socio_no_encontrado() -> ErrorNegocio:
 
 
 def no_encontrado() -> ErrorNegocio:
-    # Mismo cuerpo que el 404 global: no revela que la ruta existe.
+    # Igual al 404 global: no revela que la ruta existe.
     return ErrorNegocio(NO_ENCONTRADO, "Recurso no encontrado", 404)

@@ -1,6 +1,4 @@
-"""El contrato publicado (contracts/openapi/api-socios.yaml) es el que sirve la app.
-
-Si cambia la API, regenerar con:
+"""Regenerar el contrato con:
     uv run python -c "import yaml; from api_socios.main import app; \
 open('contracts/openapi/api-socios.yaml', 'w').write(yaml.safe_dump(app.openapi(), sort_keys=False, allow_unicode=True))"
 """
@@ -22,7 +20,6 @@ def test_contrato_documenta_los_codigos_de_la_historia() -> None:
     assert set(rutas["/admin/socios"]["post"]["responses"]) >= {"201", "400", "422"}
     assert set(rutas["/socio/me"]["get"]["responses"]) >= {"200", "401"}
     assert set(rutas["/polizas"]["post"]["responses"]) >= {"401", "403", "501"}
-    # Todos los errores con el formato estable (contracts/codigos-error.md).
     for operaciones in rutas.values():
         for operacion in operaciones.values():
             for codigo, respuesta in operacion["responses"].items():

@@ -25,8 +25,6 @@ ALTA = {"nombre": "Fintech Caribe S.A.S.", "canal": "plataforma_digital", "plan"
 
 
 class ApiSociosFalsa:
-    """Transporte httpx que simula /admin/socios y registra lo que recibe."""
-
     def __init__(self) -> None:
         self.solicitudes: list[httpx.Request] = []
         self.status: int | None = None
@@ -125,7 +123,6 @@ def test_errores_de_api_socios_en_formato_estable(api: ApiSociosFalsa) -> None:
 
 
 def test_las_rutas_de_hu_w27_conservan_su_formato() -> None:
-    # Las rutas ya publicadas (operación, back-office) siguen con {"detail"} (codigos-error.md).
     respuesta = cliente.get("/backoffice/usuarios", headers={"X-Authenticated-Groups": "[operacion]"})
     assert respuesta.status_code == 403 and "detail" in respuesta.json()
 

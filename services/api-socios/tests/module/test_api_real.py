@@ -1,9 +1,3 @@
-"""N2: API real de api-socios con Postgres efímero (testcontainers) y AWS simulado (moto).
-
-API Gateway no se simula: sus encabezados X-Partner-* se construyen con el
-clientId y la API key reales que quedaron en Cognito/API Gateway de moto.
-"""
-
 import os
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -30,7 +24,7 @@ ALTA = {"nombre": "Fintech Caribe S.A.S.", "canal": "plataforma_digital", "plan"
 
 @pytest.fixture(scope="module")
 def base() -> Iterator[str]:
-    # Ryuk no arranca en Docker Desktop (macOS); el "with" ya elimina el contenedor.
+    # Ryuk no arranca en Docker Desktop.
     os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
     from testcontainers.community.postgres import PostgresContainer
 
@@ -95,7 +89,6 @@ def api(base: str, aws: Aws) -> Iterator[TestClient]:
 
 
 def borde(aws: Aws, creado: dict[str, Any]) -> dict[str, str]:
-    """Encabezados que pondría API Gateway tras validar el token y la API key reales."""
     cliente = aws.cognito.describe_user_pool_client(
         UserPoolId=aws.pool_id, ClientId=creado["clientId"]
     )
@@ -120,7 +113,7 @@ def test_ciclo_de_vida_con_dos_socios(api: TestClient, aws: Aws) -> None:
     assert a.status_code == b.status_code == 201
     a, b = a.json(), b.json()
 
-    # AC1: cliente OAuth client_credentials con solo los permisos elegidos y API key en su plan.
+    # AC1
     cliente_a = aws.cognito.describe_user_pool_client(
         UserPoolId=aws.pool_id, ClientId=a["clientId"]
     )["UserPoolClient"]
@@ -136,17 +129,17 @@ def test_ciclo_de_vida_con_dos_socios(api: TestClient, aws: Aws) -> None:
 
     headers_a, headers_b = borde(aws, a), borde(aws, b)
     assert api.get("/socio/me", headers=headers_a).json()["id"] == a["id"]
-    # AC4: permiso no asignado.
+    # AC4
     assert api.post("/polizas", headers=headers_a).status_code == 403
     assert api.post("/polizas", headers=headers_b).status_code == 501
 
-    # AC3: desactivar a A no afecta a B.
+    # AC3
     assert api.post(f"/admin/socios/{a['id']}/desactivar").json()["estado"] == "desactivado"
     with pytest.raises(aws.cognito.exceptions.ResourceNotFoundException):
         aws.cognito.describe_user_pool_client(UserPoolId=aws.pool_id, ClientId=a["clientId"])
     assert not aws.apigateway.get_api_key(apiKey=headers_a["X-Partner-Key-Id"])["enabled"]
     assert aws.apigateway.get_api_key(apiKey=headers_b["X-Partner-Key-Id"])["enabled"]
-    # AC2: la credencial desactivada responde 401 aunque traiga un token aún vigente.
+    # AC2
     assert api.get("/socio/me", headers=headers_a).status_code == 401
     assert api.get("/socio/me", headers=headers_b).status_code == 200
     assert api.post(f"/admin/socios/{a['id']}/desactivar").status_code == 200  # idempotente
@@ -164,14 +157,12 @@ def test_un_socio_no_accede_a_los_recursos_de_otro(api: TestClient, aws: Aws) ->
         and b["id"] not in perfil_a.text
         and b["clientId"] not in perfil_a.text
     )
-    # Token de A con la API key de B: no puede consumir la cuota de otro.
     assert (
         api.get(
             "/socio/me", headers=headers_a | {"X-Partner-Key-Id": headers_b["X-Partner-Key-Id"]}
         ).status_code
         == 401
     )
-    # Un socio no llega a la administración (ni a los datos de otro socio).
     for ruta in ("/admin/socios", f"/admin/socios/{b['id']}"):
         assert api.get(ruta, headers=headers_a).status_code == 404
     assert api.post(f"/admin/socios/{b['id']}/desactivar", headers=headers_a).status_code == 404

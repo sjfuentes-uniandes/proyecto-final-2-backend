@@ -1,5 +1,3 @@
-"""Repositorio de socios en PostgreSQL (base api_socios)."""
-
 from importlib import resources
 from typing import Any
 
@@ -8,7 +6,6 @@ from psycopg.rows import dict_row
 
 from api_socios.domain.socios import CanalVenta, Estado, Permiso, Plan, Socio, identificador
 
-# Consultas literales completas: los valores siempre van como parámetros de psycopg.
 _SELECT = "SELECT id, nombre, canal, plan, permisos, estado, client_id, api_key_id, creado, desactivado FROM socio"
 _POR_ID = _SELECT + " WHERE id = %s"
 _POR_CLIENT_ID = _SELECT + " WHERE client_id = %s"
@@ -21,7 +18,6 @@ _GUARDAR = (
 
 
 def migrar(url: str) -> None:
-    """Aplica en orden las migraciones SQL del paquete; cada una es idempotente."""
     archivos = sorted(
         (
             f
@@ -33,7 +29,7 @@ def migrar(url: str) -> None:
         key=lambda f: f.name,
     )
     with psycopg.connect(url, autocommit=True) as conexion:
-        # Varias réplicas pueden arrancar a la vez: un candado serializa las migraciones.
+        # Serializa las migraciones entre réplicas.
         conexion.execute("SELECT pg_advisory_lock(hashtext('api_socios.migraciones'))")
         try:
             for archivo in archivos:

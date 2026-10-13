@@ -1,10 +1,4 @@
-"""/admin/socios: alta, consulta y desactivación de socios. Solo la invoca bff-web.
-
-API Gateway enruta todo el API de socios (/{proxy+}) hacia este servicio y
-siempre sobrescribe X-Partner-Client-Id y X-Partner-Key-Id. Una solicitud de
-administración con esos encabezados viene de un socio y se rechaza con 404
-para no revelar la ruta. bff-web llega por Service Connect, sin esos encabezados.
-"""
+"""Solo para bff-web: con encabezados X-Partner-* (un socio) responde 404."""
 
 import asyncio
 import logging
@@ -141,7 +135,7 @@ async def habilitar_socio(
     logger.info(
         "alta de socio solicitada", extra={"socio_id": socio.id, "administrador": administrador}
     )
-    # El secreto no debe quedar en cachés intermedias ni del navegador.
+    # El secreto no debe quedar en cachés.
     http.headers["Cache-Control"] = "no-store"
     return SocioCreado(
         **respuesta(socio).model_dump(),

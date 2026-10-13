@@ -1,4 +1,4 @@
--- HU-W01: socios de distribución y su credencial. El secreto no se almacena.
+-- El secreto no se almacena.
 CREATE SEQUENCE IF NOT EXISTS socio_secuencia MAXVALUE 999999;
 
 CREATE TABLE IF NOT EXISTS socio (

@@ -7,8 +7,6 @@ from api_socios.domain.socios import Permiso, Plan
 
 
 class Grabadora:
-    """Cliente boto3 falso que registra las llamadas."""
-
     class exceptions:
         class ResourceNotFoundException(Exception):
             pass

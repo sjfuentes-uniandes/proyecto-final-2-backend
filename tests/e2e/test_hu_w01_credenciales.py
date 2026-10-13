@@ -1,18 +1,4 @@
-"""N3 HU-W01 contra un ambiente desplegado (int).
-
-Requisitos:
-    make infra-microservicios SERVICES=api-socios,bff-web ENV=int
-    make test-e2e            # o: uv run pytest tests/e2e -k hu_w01 -v
-
-Administrador (grupo administradores-socios del pool backoffice, que exige MFA), una de dos:
-    E2E_ADMIN_TOKEN                      ID token copiado del portal (uso local), o
-    E2E_ADMIN_USUARIO, E2E_ADMIN_CLAVE   usuario dedicado a la prueba, y
-    E2E_ADMIN_TOTP                       semilla base32 de su aplicación de autenticación
-                                         (ingreso SRP + código TOTP; así corre en .github/workflows/e2e.yml).
-
-Las URL, el pool backoffice y las credenciales de socio-b salen de `terraform output` de
-infra/platform (o de E2E_CANALES_URL, E2E_SOCIOS_URL, E2E_TOKEN_URL y E2E_SOCIO_B_*).
-"""
+"""N3 HU-W01 contra un ambiente desplegado; configuración en infra/DESPLIEGUE.md."""
 
 import json
 import os
@@ -41,7 +27,6 @@ def _salidas() -> dict[str, Any]:
 
 
 def _token_admin(salidas: dict[str, Any]) -> str:
-    """ID token del administrador: el dado, o ingreso SRP + TOTP con el usuario de la prueba."""
     if os.getenv("E2E_ADMIN_TOKEN"):
         return os.environ["E2E_ADMIN_TOKEN"]
     usuario, clave, semilla = (os.getenv(v, "") for v in ("E2E_ADMIN_USUARIO", "E2E_ADMIN_CLAVE", "E2E_ADMIN_TOTP"))
@@ -76,7 +61,6 @@ def _config() -> dict[str, str]:
     faltan = [k for k, v in valores.items() if not v]
     if faltan:
         motivo = f"N3 HU-W01 sin configurar: faltan {', '.join(faltan)}"
-        # En el workflow E2E (E2E_REQUERIDO=1) la falta de configuración es un error, no un "skipped".
         if os.getenv("E2E_REQUERIDO") == "1":
             pytest.fail(motivo)
         pytest.skip(motivo)
@@ -89,7 +73,6 @@ def _token(config: dict[str, str], client_id: str, secreto: str) -> httpx.Respon
 
 
 def _hasta(condicion: Callable[[], httpx.Response], esperado: int) -> httpx.Response:
-    """Reintenta mientras Cognito y API Gateway propagan el cambio."""
     limite = time.monotonic() + ESPERA_S
     while True:
         respuesta = condicion()
@@ -103,7 +86,6 @@ def test_hu_w01_alta_consumo_rechazo_y_desactivacion_aislada() -> None:
     admin = {"Authorization": f"Bearer {config['admin_token']}"}
     sello = time.strftime("%Y%m%d%H%M%S")
 
-    # 1. Alta desde la administración (bff-web -> api-socios): secreto visible una sola vez.
     alta = httpx.post(f"{config['canales']}/web/socios", headers=admin, timeout=30, json={
         "nombre": f"E2E HU-W01 {sello}", "canal": "plataforma_digital", "plan": "basico", "permisos": ["cotizar"],
     })
@@ -114,23 +96,20 @@ def test_hu_w01_alta_consumo_rechazo_y_desactivacion_aislada() -> None:
     assert detalle.status_code == 200 and socio["clientSecret"] not in detalle.text
 
     try:
-        # 2. Token client_credentials + API key -> GET /socio/me = 200.
         token = _hasta(lambda: _token(config, socio["clientId"], socio["clientSecret"]), 200)
         assert token.status_code == 200, token.text
         acceso = {"Authorization": f"Bearer {token.json()['access_token']}", "x-api-key": socio["apiKey"]}
         perfil = _hasta(lambda: httpx.get(f"{config['socios']}/socio/me", headers=acceso, timeout=30), 200)
         assert perfil.status_code == 200, perfil.text
         assert perfil.json()["id"] == socio["id"] and "clientSecret" not in perfil.text
-        # AC4: permiso no asignado.
+        # AC4
         assert httpx.post(f"{config['socios']}/polizas", headers=acceso, timeout=30).status_code == 403
 
-        # 3. Secreto inválido: Cognito no emite token y el API responde 401 con correlationId.
         assert _token(config, socio["clientId"], "secreto-incorrecto").status_code in (400, 401)
         invalido = httpx.get(f"{config['socios']}/socio/me", timeout=30,
                              headers={"Authorization": "Bearer token-invalido", "x-api-key": socio["apiKey"]})
         assert invalido.status_code == 401 and invalido.headers.get("x-correlation-id")
     finally:
-        # 4. Desactivar (idempotente) y repetir: 401; socio-b sigue autenticándose.
         desactivado = httpx.post(f"{config['canales']}/web/socios/{socio['id']}/desactivar", headers=admin, timeout=30)
         assert desactivado.status_code == 200 and desactivado.json()["estado"] == "desactivado"
 

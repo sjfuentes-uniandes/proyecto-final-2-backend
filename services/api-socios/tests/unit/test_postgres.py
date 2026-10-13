@@ -1,5 +1,3 @@
-"""Repositorio Postgres con una conexión psycopg simulada (N1). La base real se prueba en N2."""
-
 from datetime import UTC, datetime
 from typing import Any, Self
 

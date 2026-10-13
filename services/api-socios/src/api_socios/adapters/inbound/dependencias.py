@@ -1,5 +1,3 @@
-"""Construcción perezosa de los casos de uso (las pruebas los reemplazan con dependency_overrides)."""
-
 from functools import lru_cache
 
 from fastapi import HTTPException

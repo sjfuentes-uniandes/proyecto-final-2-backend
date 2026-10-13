@@ -1,8 +1,4 @@
-"""API keys de socios y su plan de uso en API Gateway (cuota independiente por socio).
-
-Las keys se crean en tiempo de ejecución, fuera de Terraform; la etiqueta Socio
-permite borrarlas al destruir el ambiente (scripts/plataforma/destroy.sh).
-"""
+"""Las API keys se crean fuera de Terraform; destroy.sh las borra por la etiqueta Socio."""
 
 from typing import Any
 

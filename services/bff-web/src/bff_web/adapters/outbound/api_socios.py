@@ -1,5 +1,3 @@
-"""Cliente de la administración de api-socios (/admin/socios) por Service Connect."""
-
 from typing import Any
 
 import httpx
@@ -7,8 +5,6 @@ from solventa_common.correlation import cliente_async
 
 
 class ErrorApiSocios(Exception):
-    """Error de api-socios con su cuerpo {codigo, mensaje, detalles} (contracts/codigos-error.md)."""
-
     def __init__(self, status: int, codigo: str | None, mensaje: str | None, detalles: dict[str, Any]) -> None:
         super().__init__(f"api-socios respondió {status}")
         self.status = status

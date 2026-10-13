@@ -126,8 +126,7 @@ locals {
       identity = {
         "X-Authenticated-Sub"    = "context.authorizer.claims.sub"
         "X-Authenticated-Issuer" = "context.authorizer.claims.iss"
-        # Grupos de Cognito: bff-web exige "operacion" en Operación › Trazas (HU-W27) y
-        # "administradores-socios" en Socios (HU-W01), junto con el emisor del back-office.
+        # Grupos de Cognito que exige bff-web por ruta.
         "X-Authenticated-Groups" = "context.authorizer.claims.cognito:groups"
       }
     }

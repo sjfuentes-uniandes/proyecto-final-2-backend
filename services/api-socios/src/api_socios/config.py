@@ -10,7 +10,6 @@ class Settings(ServiceSettings):
     service_name: str = "api-socios"
 
     aws_region: str = Field("us-east-1", validation_alias=_env("AWS_REGION"))
-    # Socios en Cognito y API Gateway (infra/apps/ecs.tf, partner_admins).
     partners_user_pool_id: str | None = Field(None, validation_alias=_env("PARTNERS_USER_POOL_ID"))
     partners_resource_server: str = Field(
         "solventa", validation_alias=_env("PARTNERS_RESOURCE_SERVER")

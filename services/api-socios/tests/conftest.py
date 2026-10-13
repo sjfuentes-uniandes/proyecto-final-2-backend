@@ -1,5 +1,3 @@
-"""Dobles de prueba de los puertos de api-socios y captura de logs JSON."""
-
 import io
 import logging
 from collections.abc import Callable, Iterator
@@ -101,7 +99,7 @@ def _entorno() -> Iterator[Entorno]:
     caso = AdministrarSocios(repositorio, identidad, api_keys)
     app.dependency_overrides[administrar_socios] = lambda: caso
     app.dependency_overrides[autenticar_socio] = lambda: AutenticarSocio(repositorio)
-    # Sin "with": no corre el lifespan (migraciones) porque no hay base en N1.
+    # Sin "with": no corre el lifespan (migraciones).
     yield Entorno(repositorio, identidad, api_keys, caso, TestClient(app))
     app.dependency_overrides.clear()
 
@@ -113,13 +111,12 @@ def entorno() -> Iterator[Entorno]:
 
 @pytest.fixture(scope="module")
 def entorno_compartido() -> Iterator[Entorno]:
-    """Para Schemathesis: Hypothesis repite el test sin reiniciar fixtures de función."""
+    """Hypothesis no reinicia fixtures de función entre ejemplos."""
     yield from _entorno()
 
 
 @pytest.fixture
 def capturar_logs() -> Iterator[Callable[[], io.StringIO]]:
-    """Redirige el logger raíz al formateador JSON de producción sobre un buffer."""
     raiz = logging.getLogger()
     anteriores, nivel = list(raiz.handlers), raiz.level
 
@@ -136,7 +133,6 @@ def capturar_logs() -> Iterator[Callable[[], io.StringIO]]:
 
 
 def encabezados_socio(socio: Socio, *permisos: str, key_id: str | None = None) -> dict[str, str]:
-    """Lo que API Gateway envía a api-socios tras validar token y API key."""
     alcances = " ".join(f"solventa/{p}" for p in permisos)
     return {
         "X-Partner-Client-Id": socio.client_id,

@@ -20,12 +20,9 @@ jobs:
           else
             {
               awk -F/ '$1=="services"{print $2}' <<<"$cambios"
-              # El pacto bff-web -> api-socios y el contrato publicado de api-socios (HU-W01)
-              # viven en contracts/: los verifican las pruebas de contrato de ambos servicios.
               if grep -qE '^contracts/(pact/bff-web-api-socios.json|openapi/api-socios.yaml)$' <<<"$cambios"; then
                 printf '%s\n' api-socios bff-web
               fi
-              # La compuerta de cobertura (umbrales por servicio) aplica a todos.
               if grep -qE '^scripts/calidad/' <<<"$cambios"; then ls services; fi
             } | sort -u | sed '/^$/d' > "$RUNNER_TEMP/servicios.txt"
             servicios=$(jq -R . "$RUNNER_TEMP/servicios.txt" | jq -sc .)
@@ -41,8 +38,7 @@ jobs:
       matrix:
         servicio: ${{ fromJson(needs.cambios.outputs.servicios) }}
     env:
-      # Imágenes de Docker Hub que usan las pruebas de módulo y el build del simulador
-      # (api-socios: Postgres efímero con testcontainers, HU-W01 N2).
+      # Imágenes de Docker Hub que usan las pruebas de módulo y el build del simulador.
       IMAGENES_DOCKER: ${{ contains(fromJson('["adaptador-datos","simulador-aliados"]'), matrix.servicio) && 'wiremock/wiremock:3.9.2' || (matrix.servicio == 'api-socios' && 'postgres:16' || '') }}
       # El runner es efímero y las fixtures detienen sus contenedores: Ryuk (otra imagen de
       # Docker Hub) no hace falta en la CI.

@@ -1,9 +1,3 @@
-"""Socio de distribución y su credencial (docs/arquitectura/modelo_dominio.puml, HU-W01).
-
-El secreto lo genera Cognito y solo viaja en CredencialesEmitidas, que se
-entregan una vez al administrador y nunca se persisten ni se registran.
-"""
-
 import re
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
@@ -72,7 +66,7 @@ class NuevoSocio:
 
 @dataclass(frozen=True)
 class CredencialesEmitidas:
-    """Se entregan una sola vez. repr oculta los valores para que no lleguen a logs."""
+    """repr oculta los valores para que no lleguen a logs."""
 
     client_id: str
     client_secret: str = field(repr=False)
@@ -97,18 +91,15 @@ class Socio:
         return self.estado is Estado.ACTIVO
 
     def desactivar(self, ahora: datetime | None = None) -> "Socio":
-        """Idempotente: un socio ya desactivado conserva su fecha original."""
         if not self.activo:
             return self
         return replace(self, estado=Estado.DESACTIVADO, desactivado=ahora or datetime.now(UTC))
 
     def autentica(self, client_id: str, api_key_id: str | None) -> bool:
-        """El token y la API key deben ser del mismo socio y el socio debe estar activo."""
         return self.activo and client_id == self.client_id and api_key_id == self.api_key_id
 
 
 def permisos_de_alcances(alcances: str | None, servidor: str) -> frozenset[Permiso]:
-    """Convierte el claim scope ("solventa/cotizar solventa/emitir") en permisos conocidos."""
     validos = {p.value for p in Permiso}
     prefijo = f"{servidor}/"
     return frozenset(

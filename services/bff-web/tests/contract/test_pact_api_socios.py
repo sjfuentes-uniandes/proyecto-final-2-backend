@@ -1,9 +1,3 @@
-"""Pact consumidor: bff-web -> api-socios (/admin/socios), HU-W01 N2.
-
-Genera contracts/pact/bff-web-api-socios.json; api-socios lo verifica en
-services/api-socios/tests/contract/test_pact_proveedor.py.
-"""
-
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -40,7 +34,7 @@ def pacto_nuevo() -> None:
 
 @pytest.fixture
 def pacto() -> Iterator[Pact]:
-    # Un mock por interacción; write_file combina todas en el mismo archivo.
+    # Un mock por interacción; write_file las combina.
     pacto = Pact("bff-web", "api-socios").with_specification("V4")
     yield pacto
     pacto.write_file(PACTOS)

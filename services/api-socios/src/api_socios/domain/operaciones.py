@@ -1,8 +1,4 @@
-"""Operación del API de socios -> permiso requerido (HU-W01 AC4).
-
-La clave es (método, plantilla de ruta de FastAPI). GET /socio/me no aparece:
-basta con estar autenticado.
-"""
+"""GET /socio/me no aparece: solo exige autenticación."""
 
 from api_socios.domain.socios import Permiso
 

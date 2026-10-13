@@ -51,9 +51,7 @@ if state_has_resources platform; then
     echo "  ${repository}: vacío"
   done < <(platform_output ecr_repositories | jq -r '.[] | sub("^[^/]+/"; "")')
 
-  # api-socios crea las API keys de los socios en tiempo de ejecución (HU-W01), fuera
-  # del estado de Terraform. Solo se borran las que llevan la etiqueta Socio: las de
-  # los socios de prueba (partners) también tienen Project/Environment y las borra destroy.
+  # Las crea api-socios fuera de Terraform; las de partners no llevan la etiqueta Socio.
   log "4/5 API keys de socios creadas por api-socios"
   project=$(platform_output platform | jq -r '.name // "solventa"')
   keys=$(aws apigateway get-api-keys --output json \

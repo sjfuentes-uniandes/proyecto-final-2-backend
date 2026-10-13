@@ -1,5 +1,3 @@
-"""Casos de uso: habilitar, consultar y desactivar socios; autenticar sus solicitudes."""
-
 import logging
 from collections.abc import Callable
 from typing import Protocol
@@ -31,16 +29,12 @@ class RepositorioSocios(Protocol):
 
 
 class ProveedorIdentidad(Protocol):
-    """Cliente OAuth client_credentials por socio (Cognito)."""
-
     def crear_cliente(self, socio_id: str, permisos: frozenset[Permiso]) -> tuple[str, str]: ...
 
     def eliminar_cliente(self, client_id: str) -> None: ...
 
 
 class GestorApiKeys(Protocol):
-    """API key por socio asociada a un plan de uso (API Gateway)."""
-
     def crear(self, socio_id: str, nombre: str) -> tuple[str, str]: ...
 
     def asociar_plan(self, api_key_id: str, plan: Plan) -> None: ...
@@ -60,7 +54,7 @@ class AdministrarSocios:
 
     @operacion("habilitar_socio")
     def habilitar(self, nuevo: NuevoSocio) -> tuple[Socio, CredencialesEmitidas]:
-        """Crea cliente OAuth, API key y plan; si un paso falla deshace los anteriores."""
+        """Si un paso falla, deshace los anteriores."""
         socio_id = self.repositorio.siguiente_identificador()
         deshacer: list[Callable[[], None]] = []
         try:
@@ -118,7 +112,6 @@ class AdministrarSocios:
 
     @operacion("desactivar_socio")
     def desactivar(self, socio_id: str) -> Socio:
-        """Idempotente. Solo toca el cliente OAuth y la API key de este socio (AC3)."""
         socio = self.obtener(socio_id)
         if not socio.activo:
             return socio
@@ -131,8 +124,6 @@ class AdministrarSocios:
 
 
 class AutenticarSocio:
-    """Segunda verificación tras el borde: el socio existe, está activo y usa su propia API key."""
-
     def __init__(self, repositorio: RepositorioSocios) -> None:
         self.repositorio = repositorio
 
@@ -146,7 +137,6 @@ class AutenticarSocio:
                     if socio is None
                     else ("desactivado" if not socio.activo else "api_key_ajena")
                 )
-                # AC2: se registra el intento con el clientId; el secreto nunca llega hasta aquí.
                 logger.warning(
                     "credencial de socio rechazada",
                     extra={"client_id": client_id, "motivo": motivo},
