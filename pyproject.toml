@@ -16,6 +16,9 @@ dev = [
     "httpx>=0.28",
     "ruff>=0.8",
     "schemathesis>=3.38",
+    "testcontainers[postgres]>=4.8",
+    "moto[cognitoidp,apigateway]>=5.0",
+    "pact-python>=2.2",
 ]
 
 [tool.pytest.ini_options]
