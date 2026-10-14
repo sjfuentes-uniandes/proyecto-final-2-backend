@@ -5,6 +5,7 @@ from api_socios import main
 from api_socios.adapters.inbound import dependencias
 from api_socios.adapters.outbound import postgres
 from api_socios.adapters.outbound.apigateway import ApiKeysApiGateway, crear_api_keys
+from api_socios.adapters.outbound.cloudwatch import MetricasCloudWatch, crear_metricas
 from api_socios.adapters.outbound.cognito import ClientesCognito, crear_clientes
 from api_socios.application.socios import AdministrarSocios, AutenticarSocio
 from api_socios.config import settings
@@ -51,6 +52,7 @@ def test_construye_los_adaptadores_reales(monkeypatch: pytest.MonkeyPatch) -> No
         "basico": "p1",
         "estandar": "p2",
     }
+    assert isinstance(caso.metricas, MetricasCloudWatch)
     assert isinstance(caso.repositorio, postgres.RepositorioPostgres)
     assert caso.repositorio.url == "postgresql://u@h/api_socios"
     assert isinstance(dependencias.autenticar_socio(), AutenticarSocio)
@@ -62,6 +64,7 @@ def test_fabricas_boto3() -> None:
     keys = crear_api_keys("us-east-1", "int", {"basico": "p1"})
     assert clientes.cliente.meta.service_model.service_name == "cognito-idp"
     assert keys.cliente.meta.service_model.service_name == "apigateway" and keys.ambiente == "int"
+    assert crear_metricas("us-east-1").cliente.meta.service_model.service_name == "cloudwatch"
 
 
 @pytest.mark.parametrize("con_base", [True, False])

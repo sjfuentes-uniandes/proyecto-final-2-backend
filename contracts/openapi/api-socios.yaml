@@ -70,6 +70,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
         '422':
+          description: SOLICITUD_INVALIDA o PLAN_NO_DISPONIBLE (detalles.plan)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /admin/socios/planes:
+    get:
+      tags:
+      - administracion
+      summary: Listar Planes
+      operationId: listar_planes_admin_socios_planes_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/LimitesRespuesta'
+                type: array
+                title: Response Listar Planes Admin Socios Planes Get
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO, o NO_ENCONTRADO si la solicitud llega
+            desde el API de socios
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
           description: SOLICITUD_INVALIDA (detalles.campos)
           content:
             application/json:
@@ -136,6 +171,98 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SocioRespuesta'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO, o NO_ENCONTRADO si la solicitud llega
+            desde el API de socios
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /admin/socios/{socio_id}/plan:
+    put:
+      tags:
+      - administracion
+      summary: Cambiar Plan
+      operationId: cambiar_plan_admin_socios__socio_id__plan_put
+      parameters:
+      - name: socio_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^SOC-\d{6}$
+          title: Socio Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CambioPlan'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocioRespuesta'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO, o NO_ENCONTRADO si la solicitud llega
+            desde el API de socios
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA o PLAN_NO_DISPONIBLE (detalles.plan)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: SOCIO_DESACTIVADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /admin/socios/{socio_id}/consumo:
+    get:
+      tags:
+      - administracion
+      summary: Consultar Consumo
+      operationId: consultar_consumo_admin_socios__socio_id__consumo_get
+      parameters:
+      - name: socio_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^SOC-\d{6}$
+          title: Socio Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsumoRespuesta'
         '400':
           description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
           content:
@@ -546,6 +673,15 @@ paths:
                 title: Response Health Health Get
 components:
   schemas:
+    CambioPlan:
+      properties:
+        plan:
+          $ref: '#/components/schemas/Plan'
+      additionalProperties: false
+      type: object
+      required:
+      - plan
+      title: CambioPlan
     CanalVenta:
       type: string
       enum:
@@ -554,6 +690,45 @@ components:
       - comercio
       - otro
       title: CanalVenta
+    ConsumoRespuesta:
+      properties:
+        socioId:
+          type: string
+          title: Socioid
+        limites:
+          $ref: '#/components/schemas/LimitesRespuesta'
+        ventana:
+          $ref: '#/components/schemas/VentanaRespuesta'
+        usado:
+          type: integer
+          title: Usado
+        restante:
+          type: integer
+          title: Restante
+        porcentaje:
+          type: integer
+          title: Porcentaje
+        estado:
+          $ref: '#/components/schemas/EstadoCuota'
+        limitadas:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Limitadas
+          description: Respuestas 429 en la ventana; null si no hay métricas
+      type: object
+      required:
+      - socioId
+      - limites
+      - ventana
+      - usado
+      - restante
+      - porcentaje
+      - estado
+      - limitadas
+      title: ConsumoRespuesta
+      description: 'Solo datos del socio consultado: nunca su API key ni los de otro
+        socio.'
     ErrorDto:
       properties:
         codigo:
@@ -584,6 +759,36 @@ components:
       - activo
       - desactivado
       title: Estado
+    EstadoCuota:
+      type: string
+      enum:
+      - normal
+      - cerca_del_limite
+      - agotada
+      title: EstadoCuota
+    LimitesRespuesta:
+      properties:
+        plan:
+          $ref: '#/components/schemas/Plan'
+        limitePorSegundo:
+          type: number
+          title: Limiteporsegundo
+        rafaga:
+          type: integer
+          title: Rafaga
+        cuota:
+          type: integer
+          title: Cuota
+        periodo:
+          $ref: '#/components/schemas/Periodo'
+      type: object
+      required:
+      - plan
+      - limitePorSegundo
+      - rafaga
+      - cuota
+      - periodo
+      title: LimitesRespuesta
     PerfilSocio:
       properties:
         id:
@@ -622,6 +827,13 @@ components:
       - creado
       title: PerfilSocio
       description: Datos propios del socio; nunca incluye el secreto ni la API key.
+    Periodo:
+      type: string
+      enum:
+      - DAY
+      - WEEK
+      - MONTH
+      title: Periodo
     Permiso:
       type: string
       enum:
@@ -636,8 +848,12 @@ components:
       enum:
       - basico
       - estandar
+      - prueba
       title: Plan
-      description: 'Límite de solicitudes: plan de uso de API Gateway (infra: partner_tiers).'
+      description: 'Límite de solicitudes: plan de uso de API Gateway (infra: partner_tiers).
+
+
+        Un plan solo se puede asignar si el ambiente lo configura en PARTNERS_USAGE_PLANS.'
     SocioCreado:
       properties:
         id:
@@ -741,6 +957,7 @@ components:
           type: string
           maxLength: 120
           minLength: 2
+          pattern: ^[^\S\x00-\x1f\x7f-\x9f]*[^\s\x00-\x1f\x7f-\x9f][^\x00-\x1f\x7f-\x9f]*[^\s\x00-\x1f\x7f-\x9f][^\S\x00-\x1f\x7f-\x9f]*$
           title: Nombre
           description: Razón social
         canal:
@@ -762,3 +979,23 @@ components:
       - plan
       - permisos
       title: SocioSolicitud
+    VentanaRespuesta:
+      properties:
+        inicio:
+          type: string
+          format: date
+          title: Inicio
+        fin:
+          type: string
+          format: date
+          title: Fin
+        reinicio:
+          type: string
+          format: date-time
+          title: Reinicio
+      type: object
+      required:
+      - inicio
+      - fin
+      - reinicio
+      title: VentanaRespuesta

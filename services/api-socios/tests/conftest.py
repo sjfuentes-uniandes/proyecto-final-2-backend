@@ -2,11 +2,13 @@ import io
 import logging
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
+from datetime import date
 from itertools import count
 
 import pytest
 from api_socios.adapters.inbound.dependencias import administrar_socios, autenticar_socio
 from api_socios.application.socios import AdministrarSocios, AutenticarSocio
+from api_socios.domain.cuotas import LimitesPlan, Periodo
 from api_socios.domain.socios import Permiso, Plan, Socio, identificador
 from api_socios.main import app
 from fastapi.testclient import TestClient
@@ -56,13 +58,26 @@ class IdentidadFalsa:
         self.clientes.pop(client_id, None)
 
 
+LIMITES = {
+    Plan.BASICO: LimitesPlan(Plan.BASICO, 5, 10, 1000, Periodo.DIA),
+    Plan.ESTANDAR: LimitesPlan(Plan.ESTANDAR, 50, 100, 50000, Periodo.DIA),
+    Plan.PRUEBA: LimitesPlan(Plan.PRUEBA, 1, 2, 5, Periodo.DIA),
+}
+
+
 @dataclass
 class ApiKeysFalsas:
+    """Cada API key está en un solo plan, como en API Gateway."""
+
     keys: dict[str, bool] = field(default_factory=dict)
     planes: dict[str, Plan] = field(default_factory=dict)
     eliminadas: list[str] = field(default_factory=list)
+    disponibles: list[Plan] = field(default_factory=lambda: list(Plan))
+    usado: dict[str, int] = field(default_factory=dict)
+    consultas_uso: list[tuple[str, Plan, date, date]] = field(default_factory=list)
     falla_crear: bool = False
-    falla_plan: bool = False
+    falla_plan: bool | Plan = False
+    falla_desasociar: bool = False
     _n: count = field(default_factory=lambda: count(1))
 
     def crear(self, socio_id: str, nombre: str) -> tuple[str, str]:
@@ -72,10 +87,33 @@ class ApiKeysFalsas:
         self.keys[key_id] = True
         return key_id, f"valor-de-{key_id}-NO-REGISTRAR"
 
+    def planes_disponibles(self) -> list[Plan]:
+        return self.disponibles
+
     def asociar_plan(self, api_key_id: str, plan: Plan) -> None:
-        if self.falla_plan:
+        if self.falla_plan is True or self.falla_plan == plan:
             raise RuntimeError("plan inexistente")
+        if api_key_id in self.planes:
+            raise RuntimeError("la API key ya está en otro plan del stage")
         self.planes[api_key_id] = plan
+
+    def desasociar_plan(self, api_key_id: str, plan: Plan) -> None:
+        if self.falla_desasociar:
+            raise RuntimeError("apigateway no disponible")
+        if self.planes.get(api_key_id) is plan:
+            del self.planes[api_key_id]
+
+    def limites(self, plan: Plan) -> LimitesPlan:
+        return LIMITES[plan]
+
+    def uso(
+        self, api_key_id: str, plan: Plan, desde: date, hasta: date
+    ) -> dict[str, list[list[int]]]:
+        self.consultas_uso.append((api_key_id, plan, desde, hasta))
+        if api_key_id not in self.usado:
+            return {}
+        usado = self.usado[api_key_id]
+        return {api_key_id: [[usado, LIMITES[plan].cuota - usado]]}
 
     def deshabilitar(self, api_key_id: str) -> None:
         self.keys[api_key_id] = False
