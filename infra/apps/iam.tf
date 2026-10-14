@@ -137,6 +137,12 @@ locals {
             ]])
           )
         },
+        # CreateApiKey con tags exige apigateway:PUT sobre el ARN codificado de la key.
+        {
+          Effect   = "Allow"
+          Action   = ["apigateway:PUT"]
+          Resource = ["arn:${local.partition}:apigateway:${local.p.region}::/tags/arn%3A${local.partition}%3Aapigateway%3A${local.p.region}%3A%3A%2Fapikeys%2F*"]
+        },
         # 429 por socio (Solventa/Socios PartnerThrottled); GetMetricStatistics no admite ARN de recurso.
         { Effect = "Allow", Action = ["cloudwatch:GetMetricStatistics"], Resource = ["*"] },
       ] : [],
