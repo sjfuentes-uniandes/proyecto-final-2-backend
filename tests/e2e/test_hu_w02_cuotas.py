@@ -9,7 +9,7 @@ import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
-from typing import Any, TypeVar
+from typing import Any
 
 import httpx
 import pytest
@@ -20,7 +20,7 @@ RETRY_AFTER_LIMITE = os.getenv("E2E_RETRY_AFTER_LIMITE", "1")
 RETRY_AFTER_CUOTA = os.getenv("E2E_RETRY_AFTER_CUOTA", "3600")
 ESPERA_PLAN_S = int(os.getenv("E2E_ESPERA_PLAN_S", "60"))  # API Gateway aplica el plan nuevo de forma eventual
 ESPERA_LOGS_S = int(os.getenv("E2E_ESPERA_LOGS_S", "240"))
-T = TypeVar("T")
+PAUSA_USO_S = 10  # el uso de la ráfaga se contabiliza con retraso: se repone la cuota después
 
 
 class Aws:
@@ -58,7 +58,7 @@ class Aws:
         return int(sum(p["Sum"] for p in datos.get("Datapoints", [])))
 
 
-def _esperar(condicion: Callable[[], T], espera_s: int, pausa_s: float = 10) -> T:
+def _esperar[T](condicion: Callable[[], T], espera_s: int, pausa_s: float = 10) -> T:
     limite = time.monotonic() + espera_s
     while True:
         valor = condicion()
@@ -122,19 +122,28 @@ def test_hu_w02_n2_cuota_por_credencial_en_el_borde(ambiente, aws: Aws, socios_d
     inicio = datetime.now(UTC)
 
     # Límite por segundo: la ráfaga de 2 se supera y el 429 pide reintentar en 1 s.
-    with ThreadPoolExecutor(max_workers=6) as hilos:
-        rafaga = list(hilos.map(lambda _: httpx.get(f"{config['socios']}/health", headers=acceso_a, timeout=30),
-                                range(6)))
-    limitadas = [r for r in rafaga if r.status_code == 429]
-    assert limitadas, [r.status_code for r in rafaga]
+    def rafaga() -> list[httpx.Response] | None:
+        with ThreadPoolExecutor(max_workers=6) as hilos:
+            respuestas = list(hilos.map(
+                lambda _: httpx.get(f"{config['socios']}/health", headers=acceso_a, timeout=30), range(6)))
+        if any(r.status_code == 429 and r.json()["error"] == "QUOTA_EXCEEDED" for r in respuestas):
+            aws.reponer_cuota(a["api_key_id"])  # la cuota repuesta aún no se aplica en el borde
+            return None
+        return respuestas
+
+    respuestas = _esperar(rafaga, ESPERA_PLAN_S, pausa_s=5)
+    assert respuestas, "La cuota repuesta no se aplicó en el borde"
+    limitadas = [r for r in respuestas if r.status_code == 429]
+    assert limitadas, [r.status_code for r in respuestas]
     assert {r.json()["error"] for r in limitadas} == {"THROTTLED"}
     assert {r.headers["retry-after"] for r in limitadas} == {RETRY_AFTER_LIMITE}
+    time.sleep(PAUSA_USO_S)
     aws.reponer_cuota(a["api_key_id"])
     time.sleep(2)
 
     # AC1 y AC2: cinco solicitudes procesadas y la sexta rechazada en el borde.
     procesadas, sexta = _agotar(f"{config['socios']}/health", acceso_a)
-    assert procesadas == [200] * CUOTA, procesadas
+    assert procesadas == [200] * CUOTA, (procesadas, sexta.status_code, sexta.text)
     assert sexta.status_code == 429, sexta.text
     assert sexta.json()["error"] == "QUOTA_EXCEEDED"
     assert sexta.headers["retry-after"] == RETRY_AFTER_CUOTA
@@ -174,15 +183,17 @@ def test_hu_w02_n3_cambio_de_plan_desde_la_administracion(ambiente, aws: Aws, so
     assert alta.status_code == 201, alta.text
     socio = alta.json()
     try:
+        # Credenciales propagadas con el plan básico, para no gastar la cuota de prueba en la espera.
+        acceso = _acceso(ambiente, config, socio["clientId"], socio["clientSecret"], socio["apiKey"])
+        assert ambiente.hasta(lambda: httpx.get(f"{config['socios']}/socio/me", headers=acceso, timeout=30),
+                              200).status_code == 200
+
         cambio = httpx.put(f"{web}/{socio['id']}/plan", headers=admin, json={"plan": "prueba"}, timeout=30)
         assert cambio.status_code == 200 and cambio.json()["plan"] == "prueba", cambio.text
         consumo = httpx.get(f"{web}/{socio['id']}/consumo", headers=admin, timeout=30).json()
         assert consumo["limites"]["cuota"] == CUOTA and consumo["limites"]["plan"] == "prueba"
         assert "apiKey" not in str(consumo) and "clientSecret" not in str(consumo)
 
-        acceso = _acceso(ambiente, config, socio["clientId"], socio["clientSecret"], socio["apiKey"])
-        assert ambiente.hasta(lambda: httpx.get(f"{config['socios']}/socio/me", headers=acceso, timeout=30),
-                              200).status_code == 200
         time.sleep(ESPERA_PLAN_S)
         api_key_id = aws.id_de_api_key(socio["apiKey"])
         aws.reponer_cuota(api_key_id)
@@ -190,7 +201,7 @@ def test_hu_w02_n3_cambio_de_plan_desde_la_administracion(ambiente, aws: Aws, so
 
         # Operación de negocio atribuida al socio (AC1) hasta agotar la cuota nueva (AC2).
         procesadas, sexta = _agotar(f"{config['socios']}/socio/me", acceso)
-        assert procesadas == [200] * CUOTA, procesadas
+        assert procesadas == [200] * CUOTA, (procesadas, sexta.status_code, sexta.text)
         assert sexta.status_code == 429 and sexta.json()["error"] == "QUOTA_EXCEEDED", sexta.text
         assert sexta.headers["retry-after"] == RETRY_AFTER_CUOTA
 

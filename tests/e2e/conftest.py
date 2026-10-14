@@ -42,8 +42,26 @@ def _token_admin(salidas: dict[str, Any]) -> str:
     try:
         sesion.authenticate(password=clave)
     except SoftwareTokenMFAChallengeException as reto:
-        sesion.respond_to_software_token_mfa_challenge(pyotp.TOTP(semilla).now(), reto.get_tokens())
+        sesion.respond_to_software_token_mfa_challenge(pyotp.TOTP(_semilla_totp(semilla)).now(), reto.get_tokens())
     return sesion.id_token or ""
+
+
+def _semilla_totp(valor: str) -> str:
+    """Acepta la semilla base32 con espacios o minúsculas, o la URI otpauth:// del QR."""
+    import binascii
+    import re
+    from base64 import b32decode
+    from urllib.parse import parse_qs, urlparse
+
+    if valor.strip().startswith("otpauth://"):
+        valor = parse_qs(urlparse(valor.strip()).query).get("secret", [""])[0]
+    semilla = re.sub(r"[\s-]", "", valor).upper()
+    try:
+        b32decode(semilla + "=" * (-len(semilla) % 8))
+    except binascii.Error:
+        pytest.fail("E2E_ADMIN_TOTP debe ser la semilla base32 del autenticador (A-Z y 2-7), "
+                    "no el código de 6 dígitos; ver infra/DESPLIEGUE.md")
+    return semilla
 
 
 @dataclass(frozen=True)

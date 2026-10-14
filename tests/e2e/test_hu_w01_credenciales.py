@@ -32,7 +32,8 @@ def test_hu_w01_alta_consumo_rechazo_y_desactivacion_aislada(ambiente) -> None:
         assert perfil.status_code == 200, perfil.text
         assert perfil.json()["id"] == socio["id"] and "clientSecret" not in perfil.text
         # AC4
-        assert httpx.post(f"{config['socios']}/polizas", headers=acceso, timeout=30).status_code == 403
+        emitir = ambiente.hasta(lambda: httpx.post(f"{config['socios']}/polizas", headers=acceso, timeout=30), 403)
+        assert emitir.status_code == 403 and emitir.json()["codigo"] == "PERMISO_NO_ASIGNADO", emitir.text
 
         assert ambiente.token(config["token_url"], socio["clientId"], "secreto-incorrecto").status_code in (400, 401)
         invalido = httpx.get(f"{config['socios']}/socio/me", timeout=30,

@@ -284,12 +284,9 @@ resource "aws_api_gateway_gateway_response" "main" {
     } : {},
     contains(keys(local.retry_after), each.value.type) ? { "gatewayresponse.header.Retry-After" = "'${local.retry_after[each.value.type]}'" } : {}
   )
+  # messageString ya viene entre comillas: va sin comillas para que el cuerpo sea JSON válido.
   response_templates = {
-    "application/json" = jsonencode({
-      error         = each.value.type
-      message       = "$context.error.messageString"
-      correlationId = "$context.requestId"
-    })
+    "application/json" = "{\"error\":\"${each.value.type}\",\"message\":$context.error.messageString,\"correlationId\":\"$context.requestId\"}"
   }
 }
 

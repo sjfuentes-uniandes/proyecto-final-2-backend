@@ -148,6 +148,13 @@ run "minimo_costo" {
     error_message = "Retry-After separado (HU-W02): 1 s por límite por segundo y 3600 s por cuota agotada, con X-Correlation-Id."
   }
   assert {
+    condition = alltrue([for name, response in aws_api_gateway_gateway_response.main :
+      jsondecode(replace(replace(response.response_templates["application/json"], "$context.error.messageString", "\"Limit Exceeded\""), "$context.requestId", "id")) ==
+      { error = split("-", name)[1], message = "Limit Exceeded", correlationId = "id" }
+    ])
+    error_message = "El cuerpo de las respuestas del borde debe ser JSON válido con error, message y correlationId."
+  }
+  assert {
     condition     = !contains(keys(aws_api_gateway_gateway_response.main["socios-UNAUTHORIZED"].response_parameters), "gatewayresponse.header.Retry-After")
     error_message = "Solo los 429 indican cuándo reintentar."
   }

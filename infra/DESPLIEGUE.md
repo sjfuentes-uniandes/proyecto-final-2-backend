@@ -247,6 +247,8 @@ El usuario administrador de la prueba (HU-W01: crear y desactivar un socio) es d
 2. Hacer su primer ingreso en el portal. Al registrar la aplicación de autenticación, copiar la **clave de configuración** (texto base32 bajo el código QR): es la semilla.
 3. En **Settings → Secrets and variables → Actions → Secrets**, crear `E2E_ADMIN_USUARIO`, `E2E_ADMIN_CLAVE` y `E2E_ADMIN_TOTP`.
 
+`E2E_ADMIN_TOTP` es la semilla (letras A-Z y dígitos 2-7, p. ej. `JBSWY3DPEHPK3PXP`), no el código de 6 dígitos que cambia cada 30 s; también se acepta con espacios o como la URI `otpauth://` del QR. Cognito no permite recuperar una semilla ya registrada: si no se guardó, desactivar el TOTP del usuario (`aws cognito-idp admin-set-user-mfa-preference --user-pool-id <pool backoffice> --username <usuario> --software-token-mfa-settings Enabled=false,PreferredMfa=false`) y volver a ingresar al portal para registrar una nueva y copiarla.
+
 En local se puede usar `E2E_ADMIN_TOKEN` (ID token copiado del portal) en vez de las tres variables: `E2E_ADMIN_TOKEN=... make test-e2e`. La prueba de HU-W01 deja el socio que crea desactivado; `make infra-destruir` borra su API key (paso 4/5).
 
 **HU-W02 (`tests/e2e/test_hu_w02_cuotas.py`)** necesita, además, credenciales de AWS (las del workflow bastan) y el plan `prueba` en `partner_tiers`, asignado a `socio-a` y `socio-b`:
