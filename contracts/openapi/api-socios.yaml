@@ -1,0 +1,764 @@
+openapi: 3.1.0
+info:
+  title: api-socios
+  version: 0.1.0
+paths:
+  /admin/socios:
+    get:
+      tags:
+      - administracion
+      summary: Listar Socios
+      operationId: listar_socios_admin_socios_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/SocioRespuesta'
+                type: array
+                title: Response Listar Socios Admin Socios Get
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO, o NO_ENCONTRADO si la solicitud llega
+            desde el API de socios
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+    post:
+      tags:
+      - administracion
+      summary: Habilitar Socio
+      operationId: habilitar_socio_admin_socios_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SocioSolicitud'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocioCreado'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO, o NO_ENCONTRADO si la solicitud llega
+            desde el API de socios
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /admin/socios/{socio_id}:
+    get:
+      tags:
+      - administracion
+      summary: Consultar Socio
+      operationId: consultar_socio_admin_socios__socio_id__get
+      parameters:
+      - name: socio_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^SOC-\d{6}$
+          title: Socio Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocioRespuesta'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO, o NO_ENCONTRADO si la solicitud llega
+            desde el API de socios
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /admin/socios/{socio_id}/desactivar:
+    post:
+      tags:
+      - administracion
+      summary: Desactivar Socio
+      operationId: desactivar_socio_admin_socios__socio_id__desactivar_post
+      parameters:
+      - name: socio_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^SOC-\d{6}$
+          title: Socio Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocioRespuesta'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO, o NO_ENCONTRADO si la solicitud llega
+            desde el API de socios
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /socio/me:
+    get:
+      tags:
+      - socio
+      summary: Perfil
+      operationId: perfil_socio_me_get
+      parameters:
+      - name: x-partner-client-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Client-Id
+      - name: x-partner-key-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Key-Id
+      - name: x-partner-scopes
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Scopes
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilSocio'
+        '401':
+          description: 'NO_AUTENTICADO: credenciales inexistentes, incorrectas o desactivadas'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: PERMISO_NO_ASIGNADO (detalles.permiso)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /cotizaciones:
+    post:
+      tags:
+      - socio
+      summary: Solicitar Cotizacion
+      operationId: solicitar_cotizacion_cotizaciones_post
+      parameters:
+      - name: x-partner-client-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Client-Id
+      - name: x-partner-key-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Key-Id
+      - name: x-partner-scopes
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Scopes
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: 'NO_AUTENTICADO: credenciales inexistentes, incorrectas o desactivadas'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: PERMISO_NO_ASIGNADO (detalles.permiso)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '501':
+          description: OPERACION_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /cotizaciones/{cotizacion_id}:
+    get:
+      tags:
+      - socio
+      summary: Consultar Cotizacion
+      operationId: consultar_cotizacion_cotizaciones__cotizacion_id__get
+      parameters:
+      - name: cotizacion_id
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          title: Cotizacion Id
+      - name: x-partner-client-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Client-Id
+      - name: x-partner-key-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Key-Id
+      - name: x-partner-scopes
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Scopes
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: 'NO_AUTENTICADO: credenciales inexistentes, incorrectas o desactivadas'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: PERMISO_NO_ASIGNADO (detalles.permiso)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '501':
+          description: OPERACION_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /polizas:
+    post:
+      tags:
+      - socio
+      summary: Emitir Poliza
+      operationId: emitir_poliza_polizas_post
+      parameters:
+      - name: x-partner-client-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Client-Id
+      - name: x-partner-key-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Key-Id
+      - name: x-partner-scopes
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Scopes
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: 'NO_AUTENTICADO: credenciales inexistentes, incorrectas o desactivadas'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: PERMISO_NO_ASIGNADO (detalles.permiso)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '501':
+          description: OPERACION_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /polizas/{poliza_id}:
+    get:
+      tags:
+      - socio
+      summary: Consultar Poliza
+      operationId: consultar_poliza_polizas__poliza_id__get
+      parameters:
+      - name: poliza_id
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          title: Poliza Id
+      - name: x-partner-client-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Client-Id
+      - name: x-partner-key-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Key-Id
+      - name: x-partner-scopes
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Scopes
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: 'NO_AUTENTICADO: credenciales inexistentes, incorrectas o desactivadas'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: PERMISO_NO_ASIGNADO (detalles.permiso)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '501':
+          description: OPERACION_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /siniestros:
+    post:
+      tags:
+      - socio
+      summary: Avisar Siniestro
+      operationId: avisar_siniestro_siniestros_post
+      parameters:
+      - name: x-partner-client-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Client-Id
+      - name: x-partner-key-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Key-Id
+      - name: x-partner-scopes
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Scopes
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: 'NO_AUTENTICADO: credenciales inexistentes, incorrectas o desactivadas'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: PERMISO_NO_ASIGNADO (detalles.permiso)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '501':
+          description: OPERACION_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Health Get
+components:
+  schemas:
+    CanalVenta:
+      type: string
+      enum:
+      - plataforma_digital
+      - entidad_financiera
+      - comercio
+      - otro
+      title: CanalVenta
+    ErrorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        mensaje:
+          type: string
+          title: Mensaje
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          type: object
+          title: Detalles
+      type: object
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
+    Estado:
+      type: string
+      enum:
+      - activo
+      - desactivado
+      title: Estado
+    PerfilSocio:
+      properties:
+        id:
+          type: string
+          title: Id
+        nombre:
+          type: string
+          title: Nombre
+        canal:
+          $ref: '#/components/schemas/CanalVenta'
+        plan:
+          $ref: '#/components/schemas/Plan'
+        permisos:
+          items:
+            $ref: '#/components/schemas/Permiso'
+          type: array
+          title: Permisos
+        estado:
+          $ref: '#/components/schemas/Estado'
+        clientId:
+          type: string
+          title: Clientid
+        creado:
+          type: string
+          format: date-time
+          title: Creado
+      type: object
+      required:
+      - id
+      - nombre
+      - canal
+      - plan
+      - permisos
+      - estado
+      - clientId
+      - creado
+      title: PerfilSocio
+      description: Datos propios del socio; nunca incluye el secreto ni la API key.
+    Permiso:
+      type: string
+      enum:
+      - cotizar
+      - emitir
+      - consultar
+      - siniestros
+      title: Permiso
+      description: 'Alcances del servidor de recursos de Cognito (infra: partner_scopes).'
+    Plan:
+      type: string
+      enum:
+      - basico
+      - estandar
+      title: Plan
+      description: 'Límite de solicitudes: plan de uso de API Gateway (infra: partner_tiers).'
+    SocioCreado:
+      properties:
+        id:
+          type: string
+          title: Id
+        nombre:
+          type: string
+          title: Nombre
+        canal:
+          $ref: '#/components/schemas/CanalVenta'
+        plan:
+          $ref: '#/components/schemas/Plan'
+        permisos:
+          items:
+            $ref: '#/components/schemas/Permiso'
+          type: array
+          title: Permisos
+        estado:
+          $ref: '#/components/schemas/Estado'
+        clientId:
+          type: string
+          title: Clientid
+        creado:
+          type: string
+          format: date-time
+          title: Creado
+        desactivado:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Desactivado
+        clientSecret:
+          type: string
+          title: Clientsecret
+        apiKey:
+          type: string
+          title: Apikey
+      type: object
+      required:
+      - id
+      - nombre
+      - canal
+      - plan
+      - permisos
+      - estado
+      - clientId
+      - creado
+      - desactivado
+      - clientSecret
+      - apiKey
+      title: SocioCreado
+      description: Única respuesta que contiene el secreto y la API key (AC1).
+    SocioRespuesta:
+      properties:
+        id:
+          type: string
+          title: Id
+        nombre:
+          type: string
+          title: Nombre
+        canal:
+          $ref: '#/components/schemas/CanalVenta'
+        plan:
+          $ref: '#/components/schemas/Plan'
+        permisos:
+          items:
+            $ref: '#/components/schemas/Permiso'
+          type: array
+          title: Permisos
+        estado:
+          $ref: '#/components/schemas/Estado'
+        clientId:
+          type: string
+          title: Clientid
+        creado:
+          type: string
+          format: date-time
+          title: Creado
+        desactivado:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Desactivado
+      type: object
+      required:
+      - id
+      - nombre
+      - canal
+      - plan
+      - permisos
+      - estado
+      - clientId
+      - creado
+      - desactivado
+      title: SocioRespuesta
+    SocioSolicitud:
+      properties:
+        nombre:
+          type: string
+          maxLength: 120
+          minLength: 2
+          title: Nombre
+          description: Razón social
+        canal:
+          $ref: '#/components/schemas/CanalVenta'
+        plan:
+          $ref: '#/components/schemas/Plan'
+        permisos:
+          items:
+            $ref: '#/components/schemas/Permiso'
+          type: array
+          maxItems: 4
+          minItems: 1
+          title: Permisos
+      additionalProperties: false
+      type: object
+      required:
+      - nombre
+      - canal
+      - plan
+      - permisos
+      title: SocioSolicitud

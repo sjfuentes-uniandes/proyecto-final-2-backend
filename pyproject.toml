@@ -18,6 +18,10 @@ dev = [
     "schemathesis>=3.38",
     "pytest-cov>=7.1.0",
     "testcontainers[postgres]>=4.15.0",
+    "moto[cognitoidp,apigateway]>=5.0",
+    "pact-python>=2.2",
+    "pycognito>=2024.5.1",
+    "pyotp>=2.10.0",
 ]
 
 [tool.pytest.ini_options]

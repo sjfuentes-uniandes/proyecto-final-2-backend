@@ -117,6 +117,24 @@ run "minimo_costo" {
     error_message = "Solo el API de socios exige API key (cuota por socio)."
   }
   assert {
+    condition = alltrue([
+      aws_api_gateway_integration.proxy["web"].request_parameters["integration.request.header.X-Authenticated-Groups"] == "context.authorizer.claims.cognito:groups",
+      aws_api_gateway_integration.proxy["web"].request_parameters["integration.request.header.X-Authenticated-Issuer"] == "context.authorizer.claims.iss",
+    ])
+    error_message = "bff-web recibe del borde el emisor y los grupos del token (administradores-socios, HU-W01)."
+  }
+  assert {
+    condition = alltrue([
+      aws_api_gateway_integration.proxy["socios"].request_parameters["integration.request.header.X-Partner-Client-Id"] == "context.authorizer.claims.client_id",
+      aws_api_gateway_integration.proxy["socios"].request_parameters["integration.request.header.X-Partner-Key-Id"] == "context.identity.apiKeyId",
+    ])
+    error_message = "api-socios distingue el tráfico de socios por X-Partner-*, que el borde siempre sobrescribe (HU-W01)."
+  }
+  assert {
+    condition     = toset([for scope in aws_cognito_resource_server.partners.scope : scope.scope_name]) == toset(["cotizar", "emitir", "consultar", "siniestros"])
+    error_message = "Los permisos de socios son los del mockup de HU-W01."
+  }
+  assert {
     condition     = aws_api_gateway_gateway_response.main["socios-QUOTA_EXCEEDED"].status_code == "429"
     error_message = "El exceso de cuota debe responder 429."
   }
@@ -138,8 +156,8 @@ run "alta_disponibilidad_con_socios_y_mtls" {
     egress_mode              = "nat_gateway"
     use_customer_managed_key = true
     partners = {
-      socio-a = { tier = "basico", scopes = ["cotizaciones.escribir"] }
-      socio-b = { tier = "estandar", scopes = ["cotizaciones.leer"], enabled = false }
+      socio-a = { tier = "basico", scopes = ["cotizar"] }
+      socio-b = { tier = "estandar", scopes = ["consultar"], enabled = false }
     }
     custom_domain = {
       domain_name     = "socios.example.co"
@@ -179,7 +197,7 @@ run "socio_con_plan_inexistente" {
   command = plan
 
   variables {
-    partners = { socio-x = { tier = "premium", scopes = ["cotizaciones.leer"] } }
+    partners = { socio-x = { tier = "premium", scopes = ["cotizar"] } }
   }
 
   expect_failures = [aws_api_gateway_api_key.partner]
