@@ -8,6 +8,6 @@ jobs:
   desplegar:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # TODO: detectar servicios cambiados, construir imagen, publicar en ECR y desplegar a int.
       - run: echo "Pendiente"
