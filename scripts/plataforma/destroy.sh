@@ -12,7 +12,7 @@ if [ "${AUTO_APPROVE}" != "1" ]; then
   [ "${answer}" = "${ENV}" ] || die "Cancelado."
 fi
 
-log "1/4 Aplicaciones (${ENV})"
+log "1/5 Aplicaciones (${ENV})"
 tf_init apps
 if state_has_resources apps; then
   # image_digests vacío: el plan elimina todos los servicios sin consultar ECR.
@@ -22,7 +22,7 @@ else
   echo "Sin recursos en el estado de apps."
 fi
 
-log "2/4 Vaciando el bucket de auditoría (Object Lock en modo GOVERNANCE)"
+log "2/5 Vaciando el bucket de auditoría (Object Lock en modo GOVERNANCE)"
 tf_init platform
 if state_has_resources platform; then
   bucket=$(platform_output platform | jq -r '.audit_bucket.name')
@@ -39,7 +39,7 @@ if state_has_resources platform; then
 
   # force_delete del estado puede ser false (repositorios creados antes de
   # activarlo): se borran las imágenes para que destroy no dependa de ello.
-  log "3/4 Vaciando los repositorios ECR"
+  log "3/5 Vaciando los repositorios ECR"
   while IFS= read -r repository; do
     aws ecr describe-repositories --repository-names "${repository}" >/dev/null 2>&1 || continue
     while :; do
@@ -51,7 +51,18 @@ if state_has_resources platform; then
     echo "  ${repository}: vacío"
   done < <(platform_output ecr_repositories | jq -r '.[] | sub("^[^/]+/"; "")')
 
-  log "4/4 Plataforma (${ENV})"
+  # Las crea api-socios fuera de Terraform; las de partners no llevan la etiqueta Socio.
+  log "4/5 API keys de socios creadas por api-socios"
+  project=$(platform_output platform | jq -r '.name // "solventa"')
+  keys=$(aws apigateway get-api-keys --output json \
+    --query "items[?tags.Project=='${project}' && tags.Environment=='${ENV}' && tags.Socio != null].id" 2>/dev/null || echo '[]')
+  while IFS= read -r key; do
+    [ -n "${key}" ] || continue
+    aws apigateway delete-api-key --api-key "${key}"
+    echo "  ${key}: eliminada"
+  done < <(jq -r '.[]' <<<"${keys}")
+
+  log "5/5 Plataforma (${ENV})"
   terraform -chdir="${INFRA_DIR}/platform" destroy -input=false -auto-approve \
     -var-file="${ENV_DIR}/platform.tfvars"
 else

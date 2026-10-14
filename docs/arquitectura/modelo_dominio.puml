@@ -41,10 +41,21 @@ class "Perfil de riesgo" as PerfilRiesgo {
 }
 
 class "Socio de distribución" as SocioDistribucion {
-  - identificador
+  - identificador: SOC-NNNNNN
+  - razón social
   - canal de venta
-  - límite de solicitudes
-  - estado
+  - límite de solicitudes: plan de uso
+  - estado: Activo | Desactivado
+  - permisos: Cotizar | Emitir | Consultar | Siniestros
+  - fecha de alta
+  - fecha de desactivación
+}
+
+class "Credencial del socio" as CredencialSocio {
+  - clientId único
+  - identificador de API key
+  - fecha de emisión
+  - secreto: se muestra una vez, no se almacena
 }
 
 class "Producto de seguro" as ProductoSeguro {
@@ -130,6 +141,7 @@ Consentimiento "1" --> "1..*" FuenteInformacion : permite consultar
 Cliente "1" -- "0..*" PerfilRiesgo : posee
 PerfilRiesgo "0..*" --> "1..*" FuenteInformacion : se calcula con
 
+SocioDistribucion "1" *-- "0..1" CredencialSocio : se autentica con
 SocioDistribucion "0..1" --> "0..*" Cotizacion : solicita
 Cliente "1" --> "0..*" Cotizacion : recibe
 Cotizacion "0..*" --> "1" ProductoSeguro : ofrece

@@ -10,6 +10,8 @@ class Settings(ServiceSettings):
     jwt_issuers: dict[str, str] = Field(default_factory=dict, validation_alias=AliasChoices("JWT_ISSUERS", "SOLVENTA_JWT_ISSUERS"))
     grupo_operacion: str = "operacion"
     grupo_administradores: str = "administradores"
+    grupo_administradores_socios: str = "administradores-socios"
+    api_socios_url: str = Field("http://localhost:8082", validation_alias=AliasChoices("API_SOCIOS_URL", "SOLVENTA_API_SOCIOS_URL"))
     # Pool de Cognito del back-office (infra/apps/ecs.tf): Administración › Usuarios.
     backoffice_user_pool_id: str | None = Field(
         None, validation_alias=AliasChoices("BACKOFFICE_USER_POOL_ID", "SOLVENTA_BACKOFFICE_USER_POOL_ID")

@@ -35,6 +35,12 @@ Formato estable de todo error de las rutas nuevas (`solventa_common.errors`):
 | `SERVICIO_NO_DISPONIBLE` | 503 | `bff-web`, `bff-movil` | `cotizacion` (`bff-web`) o `clientes` (`bff-movil`) no respondieron |
 | `NO_AUTENTICADO` | 401 | `bff-web` (`RutaB2`), `bff-movil` | `HTTPException` 401 en un router con `RutaB2` (`bff-web`) o `ErrorNegocio` tras revalidar el JWT (`bff-movil`) |
 | `NO_ENCONTRADO` | 404 | Todos | Ruta inexistente (manejador global) o `HTTPException` 404 en `RutaB2` |
+| `SERVICIO_NO_DISPONIBLE` | 503 | `bff-web` | `cotizacion` o `api-socios` no respondieron |
+| `NO_AUTENTICADO` | 401 | `bff-web` (`RutaB2`), `api-socios` | `HTTPException` 401 dentro de un router con `RutaB2`. En `api-socios`: credenciales de socio inexistentes, incorrectas, desactivadas o con API key de otro socio (HU-W01 AC2) |
+| `PERMISO_NO_ASIGNADO` | 403 | `api-socios` | El socio no tiene el permiso de la operación (`detalles.permiso`, HU-W01 AC4) |
+| `SOCIO_NO_ENCONTRADO` | 404 | `api-socios`, `bff-web` | El socio no existe |
+| `OPERACION_NO_DISPONIBLE` | 501 | `api-socios` | Operación de socio autorizada pero aún no implementada |
+| `NO_ENCONTRADO` | 404 | Todos | Ruta inexistente (manejador global) o `HTTPException` 404 en `RutaB2`. `api-socios` también lo usa en `/admin/*` cuando la solicitud llega del API de socios, para no revelar la ruta |
 | `METODO_NO_PERMITIDO` | 405 | Todos | Método no soportado por la ruta |
 | `ERROR_HTTP` | otros | Todos | Cualquier otro `HTTPException` |
 | `ERROR_INTERNO` | 500 | Todos | Error no controlado; solo se registra el tipo |

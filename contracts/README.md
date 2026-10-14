@@ -13,6 +13,8 @@ Contratos que publica el backend para sus consumidores (web, móvil, socios y ot
 | Archivo | Contenido | Dueño | Cómo se regenera |
 | --- | --- | --- | --- |
 | `openapi/bff-web.yaml` | API de `bff-web` | Por confirmar (responsable de `bff-web`) | Ver [Regenerar un contrato](#regenerar-un-contrato) |
+| `openapi/api-socios.yaml` | API de `api-socios`: `/admin/socios` (solo `bff-web`) y rutas del socio (HU-W01) | Integrante 1 (`api-socios`) | Ver [Regenerar un contrato](#regenerar-un-contrato) |
+| `pact/bff-web-api-socios.json` | Pacto consumidor `bff-web` → proveedor `api-socios` (HU-W01) | Integrante 1 | `make test-contract SERVICE=bff-web` lo genera; `make test-contract SERVICE=api-socios` lo verifica |
 | `openapi/adaptador-datos.yaml` | API `/v1/consultas` de `adaptador-datos` (HU-W10) | @capbmaster | Ver [Regenerar un contrato](#regenerar-un-contrato) |
 | `openapi/clientes.propuesta-cotizacion.yaml` | Contrato propuesto `cotizacion` → `clientes` (identidad y consentimiento) | @capbmaster; lo ratifican quienes construyan `clientes` (HU-W30/W31) | A mano. `npx @redocly/cli lint` |
 | `alcances-perfilamiento.json` | Propósito, alcances (fuentes), tipo, textos es-CO / en-US y campos canónicos | @capbmaster | A mano |
@@ -30,6 +32,10 @@ uv run python -c "import yaml; from adaptador_datos.main import app; open('contr
 
 ```bash
 uv run python -c "import yaml; from bff_web.main import app; open('contracts/openapi/bff-web.yaml', 'w').write(yaml.safe_dump(app.openapi(), sort_keys=False, allow_unicode=True))"
+```
+
+```bash
+uv run python -c "import yaml; from api_socios.main import app; open('contracts/openapi/api-socios.yaml', 'w').write(yaml.safe_dump(app.openapi(), sort_keys=False, allow_unicode=True))"
 ```
 
 Después de cambiar `adaptador-datos.yaml`, avisar a `cotizacion` (usa `AdaptadorDatosHttp`). Después de cambiar `bff-web.yaml`, sincronizar el frontend con `scripts/sync-contracts.sh <ref>`.

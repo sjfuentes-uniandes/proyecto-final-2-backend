@@ -14,10 +14,18 @@ jobs:
         name: Detectar servicios que cambiaron
         run: |
           base="${{ github.event.pull_request.base.sha }}"
-          if git diff --name-only "$base" HEAD | grep -qE '^(libs/|pyproject.toml|uv.lock)'; then
+          cambios=$(git diff --name-only "$base" HEAD)
+          if grep -qE '^(libs/|pyproject.toml|uv.lock)' <<<"$cambios"; then
             servicios=$(ls services | jq -R . | jq -sc .)
           else
-            servicios=$(git diff --name-only "$base" HEAD | awk -F/ '$1=="services"{print $2}' | sort -u | jq -R . | jq -sc .)
+            {
+              awk -F/ '$1=="services"{print $2}' <<<"$cambios"
+              if grep -qE '^contracts/(pact/bff-web-api-socios.json|openapi/api-socios.yaml)$' <<<"$cambios"; then
+                printf '%s\n' api-socios bff-web
+              fi
+              if grep -qE '^scripts/calidad/' <<<"$cambios"; then ls services; fi
+            } | sort -u | sed '/^$/d' > "$RUNNER_TEMP/servicios.txt"
+            servicios=$(jq -R . "$RUNNER_TEMP/servicios.txt" | jq -sc .)
           fi
           echo "servicios=$servicios" >> "$GITHUB_OUTPUT"
 
@@ -31,7 +39,7 @@ jobs:
         servicio: ${{ fromJson(needs.cambios.outputs.servicios) }}
     env:
       # Imágenes de Docker Hub que usan las pruebas de módulo y el build del simulador.
-      IMAGENES_DOCKER: ${{ contains(fromJson('["adaptador-datos","simulador-aliados"]'), matrix.servicio) && 'wiremock/wiremock:3.9.2' || '' }}
+      IMAGENES_DOCKER: ${{ contains(fromJson('["adaptador-datos","simulador-aliados"]'), matrix.servicio) && 'wiremock/wiremock:3.9.2' || (matrix.servicio == 'api-socios' && 'postgres:16' || '') }}
       # El runner es efímero y las fixtures detienen sus contenedores: Ryuk (otra imagen de
       # Docker Hub) no hace falta en la CI.
       TESTCONTAINERS_RYUK_DISABLED: "true"
@@ -60,7 +68,7 @@ jobs:
         uses: ./.github/actions/preparar-python
       # lint solo en los servicios que ya cumplen ruff; el resto tiene código previo sin
       # formatear. Agregar cada servicio aquí cuando su historia lo deje limpio.
-      - if: contains(fromJson('["cotizacion","adaptador-datos"]'), matrix.servicio)
+      - if: contains(fromJson('["cotizacion","adaptador-datos","api-socios"]'), matrix.servicio)
         run: make lint SERVICE=${{ matrix.servicio }}
       - if: matrix.servicio != 'simulador-aliados'
         run: make test-cov SERVICE=${{ matrix.servicio }}

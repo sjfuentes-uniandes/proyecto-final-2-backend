@@ -43,7 +43,13 @@ def test_falla_por_ramas_insuficientes(tmp_path: Path, capsys: pytest.CaptureFix
 
 
 def test_servicio_sin_umbral_siempre_pasa(tmp_path: Path) -> None:
-    assert _correr(tmp_path, "api-socios", _reporte(0, 0, 10)) == 0
+    assert _correr(tmp_path, "auditoria", _reporte(0, 0, 10)) == 0
+
+
+def test_umbral_de_api_socios_lineas_y_ramas() -> None:
+    assert cobertura.evaluar("api-socios", _reporte(90, 85, 100)) == []
+    assert cobertura.evaluar("api-socios", _reporte(89.9, 100, 100)) != []
+    assert cobertura.evaluar("api-socios", _reporte(100, 84, 100)) != []
 
 
 def test_sin_ramas_cuenta_como_cien() -> None:

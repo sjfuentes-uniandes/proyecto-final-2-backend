@@ -197,6 +197,248 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /socios:
+    get:
+      tags:
+      - socios
+      summary: Listar Socios
+      operationId: listar_socios_socios_get
+      parameters:
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SocioRespuesta'
+                title: Response Listar Socios Socios Get
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo administradores-socios o
+            no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: api-socios no respondió'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+    post:
+      tags:
+      - socios
+      summary: Habilitar Socio
+      operationId: habilitar_socio_socios_post
+      parameters:
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevoSocioSolicitud'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocioCreado'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo administradores-socios o
+            no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: api-socios no respondió'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /socios/{socio_id}:
+    get:
+      tags:
+      - socios
+      summary: Consultar Socio
+      operationId: consultar_socio_socios__socio_id__get
+      parameters:
+      - name: socio_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^SOC-\d{6}$
+          title: Socio Id
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocioRespuesta'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo administradores-socios o
+            no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: api-socios no respondió'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /socios/{socio_id}/desactivar:
+    post:
+      tags:
+      - socios
+      summary: Desactivar Socio
+      operationId: desactivar_socio_socios__socio_id__desactivar_post
+      parameters:
+      - name: socio_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^SOC-\d{6}$
+          title: Socio Id
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocioRespuesta'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo administradores-socios o
+            no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: api-socios no respondió'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -213,6 +455,14 @@ paths:
                 title: Response Health Health Get
 components:
   schemas:
+    CanalVenta:
+      type: string
+      enum:
+      - plataforma_digital
+      - entidad_financiera
+      - comercio
+      - otro
+      title: CanalVenta
     ContextoRespuesta:
       properties:
         canal:
@@ -238,6 +488,36 @@ components:
       - servicios_externos
       - ambiente
       title: ContextoRespuesta
+    ErrorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        mensaje:
+          type: string
+          title: Mensaje
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          type: object
+          title: Detalles
+      type: object
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
+    Estado:
+      type: string
+      enum:
+      - activo
+      - desactivado
+      title: Estado
     GrupoRespuesta:
       properties:
         nombre:
@@ -260,6 +540,33 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    NuevoSocioSolicitud:
+      properties:
+        nombre:
+          type: string
+          maxLength: 120
+          minLength: 2
+          title: Nombre
+          description: Razón social
+        canal:
+          $ref: '#/components/schemas/CanalVenta'
+        plan:
+          $ref: '#/components/schemas/Plan'
+        permisos:
+          items:
+            $ref: '#/components/schemas/Permiso'
+          type: array
+          maxItems: 4
+          minItems: 1
+          title: Permisos
+      additionalProperties: false
+      type: object
+      required:
+      - nombre
+      - canal
+      - plan
+      - permisos
+      title: NuevoSocioSolicitud
     NuevoUsuarioSolicitud:
       properties:
         email:
@@ -285,6 +592,116 @@ components:
       - nombre
       - grupos
       title: NuevoUsuarioSolicitud
+    Permiso:
+      type: string
+      enum:
+      - cotizar
+      - emitir
+      - consultar
+      - siniestros
+      title: Permiso
+    Plan:
+      type: string
+      enum:
+      - basico
+      - estandar
+      title: Plan
+    SocioCreado:
+      properties:
+        id:
+          type: string
+          title: Id
+        nombre:
+          type: string
+          title: Nombre
+        canal:
+          $ref: '#/components/schemas/CanalVenta'
+        plan:
+          $ref: '#/components/schemas/Plan'
+        permisos:
+          items:
+            $ref: '#/components/schemas/Permiso'
+          type: array
+          title: Permisos
+        estado:
+          $ref: '#/components/schemas/Estado'
+        clientId:
+          type: string
+          title: Clientid
+        creado:
+          type: string
+          format: date-time
+          title: Creado
+        desactivado:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Desactivado
+        clientSecret:
+          type: string
+          title: Clientsecret
+        apiKey:
+          type: string
+          title: Apikey
+      type: object
+      required:
+      - id
+      - nombre
+      - canal
+      - plan
+      - permisos
+      - estado
+      - clientId
+      - creado
+      - clientSecret
+      - apiKey
+      title: SocioCreado
+      description: 'Credenciales completas: el portal las muestra una sola vez y no
+        se pueden volver a pedir.'
+    SocioRespuesta:
+      properties:
+        id:
+          type: string
+          title: Id
+        nombre:
+          type: string
+          title: Nombre
+        canal:
+          $ref: '#/components/schemas/CanalVenta'
+        plan:
+          $ref: '#/components/schemas/Plan'
+        permisos:
+          items:
+            $ref: '#/components/schemas/Permiso'
+          type: array
+          title: Permisos
+        estado:
+          $ref: '#/components/schemas/Estado'
+        clientId:
+          type: string
+          title: Clientid
+        creado:
+          type: string
+          format: date-time
+          title: Creado
+        desactivado:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Desactivado
+      type: object
+      required:
+      - id
+      - nombre
+      - canal
+      - plan
+      - permisos
+      - estado
+      - clientId
+      - creado
+      title: SocioRespuesta
     TramoRespuesta:
       properties:
         servicio:

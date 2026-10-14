@@ -171,9 +171,10 @@ variable "partner_scopes" {
   description = "Permisos asignables a socios en el servidor de recursos de Cognito."
   type        = map(string)
   default = {
-    "cotizaciones.leer"     = "Consultar cotizaciones"
-    "cotizaciones.escribir" = "Solicitar cotizaciones"
-    "polizas.leer"          = "Consultar pólizas"
+    cotizar    = "Solicitar y consultar cotizaciones embebidas"
+    emitir     = "Aceptar la oferta y emitir la póliza"
+    consultar  = "Ver el estado de sus propias pólizas"
+    siniestros = "Registrar avisos de siniestro en nombre del cliente"
   }
 }
 
