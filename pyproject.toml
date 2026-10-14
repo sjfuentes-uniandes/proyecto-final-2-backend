@@ -18,6 +18,7 @@ dev = [
     "schemathesis>=3.38",
     "pytest-cov>=7.1.0",
     "testcontainers[postgres]>=4.15.0",
+    "respx>=0.22",
 ]
 
 [tool.pytest.ini_options]

@@ -21,6 +21,7 @@ UMBRALES: dict[str, Umbral] = {
     "catalogo": Umbral(90, 85),
     "adaptador-datos": Umbral(90, 0),
     "bff-web": Umbral(85, 0),
+    "bff-movil": Umbral(85, 0),
 }
 SIN_UMBRAL = Umbral(0, 0)
 
