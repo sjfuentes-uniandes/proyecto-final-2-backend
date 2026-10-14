@@ -35,7 +35,7 @@ Socio ──HTTPS (+mTLS opc.)──► WAF ─► API Gateway "socios" ──�
 | Historia | Recursos |
 | --- | --- |
 | **HU-W01** Generación de credenciales | Pool Cognito `socios` con servidor de recursos `solventa` y permisos (`partner_scopes`). Un app client `client_credentials` por socio, con secreto generado por Cognito que se muestra una vez. `api-socios` tiene permisos IAM para crear, actualizar o eliminar clientes OAuth y API keys. Respuesta 401 para credenciales inválidas y 403 para permisos no asignados. Pool `backoffice` con grupo `administradores-socios` y MFA obligatorio. |
-| **HU-W02** Cuota por cada socio | API REST `socios` con `api_key_required` y planes de uso (`partner_tiers`). El límite y la cuota se aplican **por API key**. 429 con `Retry-After`. Filtro de métricas `Solventa/Socios PartnerThrottled` por `ApiKeyId`. |
+| **HU-W02** Cuota por cada socio | API REST `socios` con `api_key_required` y planes de uso (`partner_tiers`; en `int` también `prueba`: 1 solicitud/s, ráfaga 2 y 5 al día). El límite y la cuota se aplican **por API key**, así que el exceso de un socio no consume la capacidad de otro. 429 sin llegar a `api-socios`, con `X-Correlation-Id` y `Retry-After` por tipo: `partner_throttle_retry_after_seconds` (1 s, límite por segundo) y `partner_quota_retry_after_seconds` (3600 s, cuota agotada). Filtro de métricas `Solventa/Socios PartnerThrottled` por `ApiKeyId`. `api-socios` cambia el plan de una API key (`DELETE`/`POST /usageplans/{id}/keys`), lee los límites y el uso del plan (`GET /usageplans/{id}` y `/usage`) y los 429 del socio (`cloudwatch:GetMetricStatistics`). |
 | **HU-W10** Datos autorizados | `adaptador-datos` con credenciales en Secrets Manager (`open-finance`, `datos-abiertos`), timeout configurable y salida por NAT. Base `cotizacion` para guardar datos mínimos y su procedencia. |
 | **HU-W11** Cálculo perfil de riesgo | Servicios `cotizacion` y `catalogo`, cada uno con su base (versiones de reglas y perfiles). |
 | **HU-W12** Consulta fuentes en paralelo | Un adaptador por grupo de aliados (*bulkhead*). `ALLY_*_TIMEOUT_MS` por dependencia. Trazas padre/hijas en X-Ray a través de ADOT. |
@@ -126,7 +126,7 @@ make infra-destruir ENV=int       # todo el ambiente
 | `SQS_<COLA>_URL` | Consumidores | Por ejemplo `SQS_AUDITORIA_URL` |
 | `ALLY_<ALIADO>_URL`, `ALLY_<ALIADO>_TIMEOUT_MS`, `ALLY_<ALIADO>_CREDENTIALS` | Adaptadores | Endpoint, timeout y JSON de credenciales |
 | `AUDIT_BUCKET` | auditoria | Bucket con Object Lock |
-| `PARTNERS_USER_POOL_ID`, `PARTNERS_API_ID`, `PARTNERS_USAGE_PLANS`, `PARTNERS_TOKEN_URL` | api-socios | Alta de socios y asignación de plan |
+| `PARTNERS_USER_POOL_ID`, `PARTNERS_API_ID`, `PARTNERS_USAGE_PLANS`, `PARTNERS_TOKEN_URL` | api-socios | Alta de socios, cambio de plan y consumo. `PARTNERS_USAGE_PLANS` (JSON plan → id del plan de uso) define qué planes se pueden asignar en el ambiente |
 | `JWT_ISSUERS` | Acceso | Emisores válidos para revalidar el token (defensa en profundidad) |
 | `OTEL_*` | Todos | Exportación OTLP a `localhost:4317` (colector ADOT) |
 

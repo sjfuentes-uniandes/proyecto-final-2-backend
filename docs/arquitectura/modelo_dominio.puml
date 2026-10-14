@@ -44,7 +44,7 @@ class "Socio de distribución" as SocioDistribucion {
   - identificador: SOC-NNNNNN
   - razón social
   - canal de venta
-  - límite de solicitudes: plan de uso
+  - plan de uso: Básico | Estándar | Prueba
   - estado: Activo | Desactivado
   - permisos: Cotizar | Emitir | Consultar | Siniestros
   - fecha de alta
@@ -56,6 +56,19 @@ class "Credencial del socio" as CredencialSocio {
   - identificador de API key
   - fecha de emisión
   - secreto: se muestra una vez, no se almacena
+}
+
+class "Plan de uso" as PlanUso {
+  - nombre
+  - límite por segundo y ráfaga
+  - cuota por periodo: día | semana | mes
+}
+
+class "Consumo de la cuota" as ConsumoCuota {
+  - ventana del periodo vigente
+  - solicitudes usadas y restantes
+  - estado: Normal | Cerca del límite | Agotada
+  - respuestas 429 del socio
 }
 
 class "Producto de seguro" as ProductoSeguro {
@@ -142,6 +155,8 @@ Cliente "1" -- "0..*" PerfilRiesgo : posee
 PerfilRiesgo "0..*" --> "1..*" FuenteInformacion : se calcula con
 
 SocioDistribucion "1" *-- "0..1" CredencialSocio : se autentica con
+SocioDistribucion "0..*" --> "1" PlanUso : se limita con
+CredencialSocio "1" *-- "1" ConsumoCuota : acumula
 SocioDistribucion "0..1" --> "0..*" Cotizacion : solicita
 Cliente "1" --> "0..*" Cotizacion : recibe
 Cotizacion "0..*" --> "1" ProductoSeguro : ofrece

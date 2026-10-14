@@ -37,6 +37,8 @@ Formato estable de todo error de las rutas nuevas (`solventa_common.errors`):
 | `PERMISO_NO_ASIGNADO` | 403 | `api-socios` | El socio no tiene el permiso de la operación (`detalles.permiso`, HU-W01 AC4) |
 | `SOCIO_NO_ENCONTRADO` | 404 | `api-socios`, `bff-web` | El socio no existe |
 | `OPERACION_NO_DISPONIBLE` | 501 | `api-socios` | Operación de socio autorizada pero aún no implementada |
+| `SOCIO_DESACTIVADO` | 409 | `api-socios`, `bff-web` | No se puede cambiar el plan de un socio desactivado (HU-W02) |
+| `PLAN_NO_DISPONIBLE` | 422 | `api-socios`, `bff-web` | El plan no está en `PARTNERS_USAGE_PLANS` del ambiente (`detalles.plan`, HU-W02) |
 | `NO_ENCONTRADO` | 404 | Todos | Ruta inexistente (manejador global) o `HTTPException` 404 en `RutaB2`. `api-socios` también lo usa en `/admin/*` cuando la solicitud llega del API de socios, para no revelar la ruta |
 | `METODO_NO_PERMITIDO` | 405 | Todos | Método no soportado por la ruta |
 | `ERROR_HTTP` | otros | Todos | Cualquier otro `HTTPException` |
