@@ -210,6 +210,18 @@ run "todos_los_servicios" {
     ]) && local.environment["bff-web"]["BACKOFFICE_USER_POOL_ID"] == "us-east-1_b"
     error_message = "Solo bff-web administra usuarios del back-office, y únicamente en su pool."
   }
+  # HU-W02
+  assert {
+    condition = alltrue(concat(
+      [for name, statements in local.task_statements : strcontains(jsonencode(statements), "cloudwatch:GetMetricStatistics") == (name == "api-socios")],
+      [for plan in ["up1", "up2"] : alltrue([for sufijo in ["", "/keys", "/keys/*", "/usage"] : strcontains(jsonencode(local.task_statements["api-socios"]), "::/usageplans/${plan}${sufijo}\"")])],
+    ))
+    error_message = "api-socios lee cada plan de uso, mueve API keys entre planes, consulta su uso y lee los 429 por socio; ningún otro servicio."
+  }
+  assert {
+    condition     = jsondecode(local.environment["api-socios"]["PARTNERS_USAGE_PLANS"]) == { basico = "up1", estandar = "up2" }
+    error_message = "api-socios recibe el mapeo plan -> plan de uso."
+  }
   assert {
     condition     = length(one([for widget in local.widgets : widget.properties.metrics if try(widget.properties.title, "") == "Tareas en ejecución por servicio"])) == length(local.deployed)
     error_message = "El tablero debe mostrar las tareas en ejecución de cada servicio desplegado."
