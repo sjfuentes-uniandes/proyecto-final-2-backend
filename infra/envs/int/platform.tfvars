@@ -26,17 +26,21 @@ audit_lock_mode      = "GOVERNANCE"
 # WAF siempre activo (~7 USD/mes: Web ACL + 2 reglas). Solicitudes por IP en 5 min.
 waf_rate_limit = 2000
 
+# "prueba" es una cuota pequeña y determinista para las pruebas N2/N3 de HU-W02:
+# la sexta solicitud del día responde 429. tests/e2e/test_hu_w02_cuotas.py repone
+# la cuota de los socios de prueba al empezar y al terminar.
 partner_tiers = {
   basico   = { rate = 5, burst = 10, quota_limit = 1000, quota_period = "DAY" }
   estandar = { rate = 50, burst = 100, quota_limit = 50000, quota_period = "DAY" }
+  prueba   = { rate = 1, burst = 2, quota_limit = 5, quota_period = "DAY" }
 }
 
 # Dos socios de prueba: make infra-probar usa socio-a, y ambos sirven para las
 # pruebas N3 de HU-W01 y HU-W02. Para desactivar uno, poner enabled = false y
 # aplicar. Credenciales: terraform -chdir=infra/platform output -json partners
 partners = {
-  socio-a = { tier = "basico", scopes = ["cotizar", "consultar"] }
-  socio-b = { tier = "basico", scopes = ["cotizar"] }
+  socio-a = { tier = "prueba", scopes = ["cotizar", "consultar"] }
+  socio-b = { tier = "prueba", scopes = ["cotizar"] }
 }
 
 # Dominio propio con mTLS para socios (requiere certificado ACM en la región).

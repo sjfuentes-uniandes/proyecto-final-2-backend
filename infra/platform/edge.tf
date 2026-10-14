@@ -264,6 +264,10 @@ locals {
     QUOTA_EXCEEDED  = "429"
     THROTTLED       = "429"
   }
+  retry_after = {
+    THROTTLED      = var.partner_throttle_retry_after_seconds
+    QUOTA_EXCEEDED = var.partner_quota_retry_after_seconds
+  }
 }
 
 resource "aws_api_gateway_gateway_response" "main" {
@@ -278,7 +282,7 @@ resource "aws_api_gateway_gateway_response" "main" {
       "gatewayresponse.header.Access-Control-Allow-Origin"   = "'${local.portal_url}'"
       "gatewayresponse.header.Access-Control-Expose-Headers" = "'X-Correlation-Id'"
     } : {},
-    contains(["QUOTA_EXCEEDED", "THROTTLED"], each.value.type) ? { "gatewayresponse.header.Retry-After" = "'${var.partner_retry_after_seconds}'" } : {}
+    contains(keys(local.retry_after), each.value.type) ? { "gatewayresponse.header.Retry-After" = "'${local.retry_after[each.value.type]}'" } : {}
   )
   response_templates = {
     "application/json" = jsonencode({

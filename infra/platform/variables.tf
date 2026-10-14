@@ -151,10 +151,24 @@ variable "partner_tiers" {
   }
 }
 
-variable "partner_retry_after_seconds" {
-  description = "Valor de Retry-After en las respuestas 429 del API de socios."
+variable "partner_throttle_retry_after_seconds" {
+  description = "Retry-After del 429 por límite de solicitudes por segundo (THROTTLED): el balde se repone en segundos."
   type        = number
-  default     = 60
+  default     = 1
+  validation {
+    condition     = var.partner_throttle_retry_after_seconds >= 1 && var.partner_throttle_retry_after_seconds <= 60
+    error_message = "partner_throttle_retry_after_seconds debe estar entre 1 y 60."
+  }
+}
+
+variable "partner_quota_retry_after_seconds" {
+  description = "Retry-After del 429 por cuota agotada (QUOTA_EXCEEDED). La cuota se repone al iniciar el periodo (00:00 UTC en DAY) y API Gateway solo admite un valor fijo: se sugiere reintentar cada hora."
+  type        = number
+  default     = 3600
+  validation {
+    condition     = var.partner_quota_retry_after_seconds >= 60 && var.partner_quota_retry_after_seconds <= 86400
+    error_message = "partner_quota_retry_after_seconds debe estar entre 60 y 86400 (un día)."
+  }
 }
 
 variable "partners" {

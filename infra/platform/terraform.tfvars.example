@@ -27,13 +27,18 @@ waf_rate_limit = 2000
 partner_tiers = {
   basico   = { rate = 5, burst = 10, quota_limit = 1000, quota_period = "DAY" }
   estandar = { rate = 50, burst = 100, quota_limit = 50000, quota_period = "DAY" }
+  # prueba = { rate = 1, burst = 2, quota_limit = 5, quota_period = "DAY" }
 }
+
+# Retry-After de los 429 del API de socios (por defecto 1 s y 3600 s).
+# partner_throttle_retry_after_seconds = 1
+# partner_quota_retry_after_seconds    = 3600
 
 # Dos socios con cuotas pequeñas y deterministas para las pruebas N2/N3 de
 # HU-W01 y HU-W02. Para desactivar uno, poner enabled = false y aplicar.
 # partners = {
-#   socio-a = { tier = "basico", scopes = ["cotizar", "consultar"] }
-#   socio-b = { tier = "basico", scopes = ["cotizar"] }
+#   socio-a = { tier = "prueba", scopes = ["cotizar", "consultar"] }
+#   socio-b = { tier = "prueba", scopes = ["cotizar"] }
 # }
 
 # Dominio propio con mTLS para socios (requiere certificado ACM en la región).
