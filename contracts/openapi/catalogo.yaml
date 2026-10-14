@@ -1,0 +1,558 @@
+openapi: 3.1.0
+info:
+  title: catalogo
+  version: 0.1.0
+paths:
+  /v1/modelos-riesgo/vigente:
+    get:
+      tags:
+      - modelos-riesgo
+      summary: Vigente
+      description: El modelo del producto con el mayor vigenteDesde ≤ en.
+      operationId: vigente_v1_modelos_riesgo_vigente_get
+      parameters:
+      - name: productoId
+        in: query
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-z0-9-]{1,64}$
+          title: Productoid
+      - name: en
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          description: Instante ISO-8601 con zona; por defecto, ahora
+          title: En
+        description: Instante ISO-8601 con zona; por defecto, ahora
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModeloRiesgoRespuesta'
+        '404':
+          description: 'MODELO_NO_ENCONTRADO: no hay modelo vigente para el producto
+            en la fecha'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/modelos-riesgo/{version}:
+    get:
+      tags:
+      - modelos-riesgo
+      summary: Por Version
+      description: Una versión publicada; las versiones no cambian nunca.
+      operationId: por_version_v1_modelos_riesgo__version__get
+      parameters:
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^\d{4}\.\d{2}\.\d+$
+          title: Version
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModeloRiesgoRespuesta'
+        '404':
+          description: MODELO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/modelos-riesgo:
+    post:
+      tags:
+      - modelos-riesgo
+      summary: Publicar
+      description: Publica una versión nueva e inmutable del modelo.
+      operationId: publicar_v1_modelos_riesgo_post
+      parameters:
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudPublicacion'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModeloRiesgoRespuesta'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de ADMIN_REGLAS'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: VERSION_EXISTENTE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA, DEFINICION_INVALIDA (detalles.errores,
+            sin valores) o VIGENCIA_RETROACTIVA (vigenteDesde anterior a ahora − 5
+            s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+components:
+  schemas:
+    Ajuste:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        si:
+          items:
+            prefixItems:
+            - type: string
+            - type: string
+              enum:
+              - ==
+              - '!='
+              - <
+              - <=
+              - '>'
+              - '>='
+            - type: string
+              pattern: ^-?\d+(\.\d+)?$
+            type: array
+            maxItems: 3
+            minItems: 3
+          type: array
+          title: Si
+        efecto:
+          type: string
+          const: FORZAR_NIVEL
+          title: Efecto
+        nivel:
+          type: string
+          enum:
+          - BAJO
+          - MEDIO
+          - ALTO
+          title: Nivel
+      additionalProperties: false
+      type: object
+      required:
+      - codigo
+      - si
+      - efecto
+      - nivel
+      title: Ajuste
+    Confianza:
+      properties:
+        penalizacionNoAutorizada:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Penalizacionnoautorizada
+        penalizacionNoObtenida:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Penalizacionnoobtenida
+      additionalProperties: false
+      type: object
+      required:
+      - penalizacionNoAutorizada
+      - penalizacionNoObtenida
+      title: Confianza
+    DefFuente:
+      properties:
+        tipo:
+          type: string
+          enum:
+          - FINANZAS_ABIERTAS
+          - DATOS_ABIERTOS
+          title: Tipo
+        campos:
+          items:
+            type: string
+          type: array
+          title: Campos
+      additionalProperties: false
+      type: object
+      required:
+      - tipo
+      - campos
+      title: DefFuente
+    DefinicionModelo-Input:
+      properties:
+        productoId:
+          type: string
+          title: Productoid
+        proposito:
+          type: string
+          title: Proposito
+        fuentes:
+          additionalProperties:
+            $ref: '#/components/schemas/DefFuente'
+          type: object
+          title: Fuentes
+        declarados:
+          items:
+            type: string
+          type: array
+          title: Declarados
+        obligatorios:
+          items:
+            type: string
+          type: array
+          title: Obligatorios
+        derivados:
+          additionalProperties:
+            $ref: '#/components/schemas/Expresion-Input'
+          type: object
+          title: Derivados
+        factores:
+          items:
+            $ref: '#/components/schemas/Factor'
+          type: array
+          title: Factores
+        ajustes:
+          items:
+            $ref: '#/components/schemas/Ajuste'
+          type: array
+          title: Ajustes
+        niveles:
+          items:
+            $ref: '#/components/schemas/UmbralNivel'
+          type: array
+          title: Niveles
+        confianza:
+          $ref: '#/components/schemas/Confianza'
+      additionalProperties: false
+      type: object
+      required:
+      - productoId
+      - proposito
+      - fuentes
+      - declarados
+      - obligatorios
+      - derivados
+      - factores
+      - ajustes
+      - niveles
+      - confianza
+      title: DefinicionModelo
+    DefinicionModelo-Output:
+      properties:
+        productoId:
+          type: string
+          title: Productoid
+        proposito:
+          type: string
+          title: Proposito
+        fuentes:
+          additionalProperties:
+            $ref: '#/components/schemas/DefFuente'
+          type: object
+          title: Fuentes
+        declarados:
+          items:
+            type: string
+          type: array
+          title: Declarados
+        obligatorios:
+          items:
+            type: string
+          type: array
+          title: Obligatorios
+        derivados:
+          additionalProperties:
+            $ref: '#/components/schemas/Expresion-Output'
+          type: object
+          title: Derivados
+        factores:
+          items:
+            $ref: '#/components/schemas/Factor'
+          type: array
+          title: Factores
+        ajustes:
+          items:
+            $ref: '#/components/schemas/Ajuste'
+          type: array
+          title: Ajustes
+        niveles:
+          items:
+            $ref: '#/components/schemas/UmbralNivel'
+          type: array
+          title: Niveles
+        confianza:
+          $ref: '#/components/schemas/Confianza'
+      additionalProperties: false
+      type: object
+      required:
+      - productoId
+      - proposito
+      - fuentes
+      - declarados
+      - obligatorios
+      - derivados
+      - factores
+      - ajustes
+      - niveles
+      - confianza
+      title: DefinicionModelo
+    ErrorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        mensaje:
+          type: string
+          title: Mensaje
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          type: object
+          title: Detalles
+      type: object
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
+    Expresion-Input:
+      properties:
+        op:
+          type: string
+          enum:
+          - add
+          - sub
+          - mul
+          - div
+          title: Op
+        args:
+          items:
+            anyOf:
+            - type: string
+            - $ref: '#/components/schemas/Expresion-Input'
+          type: array
+          title: Args
+      additionalProperties: false
+      type: object
+      required:
+      - op
+      - args
+      title: Expresion
+    Expresion-Output:
+      properties:
+        op:
+          type: string
+          enum:
+          - add
+          - sub
+          - mul
+          - div
+          title: Op
+        args:
+          items:
+            anyOf:
+            - type: string
+            - $ref: '#/components/schemas/Expresion-Output'
+          type: array
+          title: Args
+      additionalProperties: false
+      type: object
+      required:
+      - op
+      - args
+      title: Expresion
+    Factor:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        fuente:
+          type: string
+          title: Fuente
+        peso:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Peso
+        reglas:
+          items:
+            $ref: '#/components/schemas/Regla'
+          type: array
+          title: Reglas
+      additionalProperties: false
+      type: object
+      required:
+      - codigo
+      - fuente
+      - peso
+      - reglas
+      title: Factor
+    ModeloRiesgoRespuesta:
+      properties:
+        version:
+          type: string
+          title: Version
+        productoId:
+          type: string
+          title: Productoid
+        vigenteDesde:
+          type: string
+          format: date-time
+          title: Vigentedesde
+        hash:
+          type: string
+          title: Hash
+        definicion:
+          $ref: '#/components/schemas/DefinicionModelo-Output'
+      type: object
+      required:
+      - version
+      - productoId
+      - vigenteDesde
+      - hash
+      - definicion
+      title: ModeloRiesgoRespuesta
+    Regla:
+      properties:
+        si:
+          items:
+            prefixItems:
+            - type: string
+            - type: string
+              enum:
+              - ==
+              - '!='
+              - <
+              - <=
+              - '>'
+              - '>='
+            - type: string
+              pattern: ^-?\d+(\.\d+)?$
+            type: array
+            maxItems: 3
+            minItems: 3
+          type: array
+          title: Si
+        contribucion:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Contribucion
+        direccion:
+          type: string
+          enum:
+          - REDUCE_RIESGO
+          - NEUTRO
+          - AUMENTA_LEVEMENTE
+          - AUMENTA_RIESGO
+          title: Direccion
+      additionalProperties: false
+      type: object
+      required:
+      - si
+      - contribucion
+      - direccion
+      title: Regla
+    SolicitudPublicacion:
+      properties:
+        version:
+          type: string
+          pattern: ^\d{4}\.\d{2}\.\d+$
+          title: Version
+        productoId:
+          type: string
+          pattern: ^[a-z0-9-]{1,64}$
+          title: Productoid
+        vigenteDesde:
+          type: string
+          format: date-time
+          title: Vigentedesde
+        definicion:
+          $ref: '#/components/schemas/DefinicionModelo-Input'
+      type: object
+      required:
+      - version
+      - productoId
+      - vigenteDesde
+      - definicion
+      title: SolicitudPublicacion
+    UmbralNivel:
+      properties:
+        desde:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Desde
+        nivel:
+          type: string
+          enum:
+          - BAJO
+          - MEDIO
+          - ALTO
+          title: Nivel
+      additionalProperties: false
+      type: object
+      required:
+      - desde
+      - nivel
+      title: UmbralNivel
