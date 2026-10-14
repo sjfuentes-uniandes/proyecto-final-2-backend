@@ -1,6 +1,8 @@
-"""Modelo candidato 2026.10.1 convertido a ModeloRiesgo y datos de C01 (01 §3.5)."""
+"""Modelo candidato 2026.10.1 convertido a ModeloRiesgo, datos de C01 (01 §3.5) y fakes."""
 
+import asyncio
 import json
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -9,19 +11,29 @@ from uuid import UUID
 
 import pytest
 from cotizacion.adapters.outbound.catalogo_http import ModeloRiesgoDto, a_modelo_riesgo
+from cotizacion.application.perfilamiento.crear_perfil import (
+    ComandoPerfil,
+    ConfigPerfilamiento,
+    CrearPerfil,
+)
+from cotizacion.domain.perfilamiento.errores import ConflictoIdempotencia
 from cotizacion.domain.perfilamiento.modelo_riesgo import ModeloRiesgo
 from cotizacion.domain.perfilamiento.modelos import (
+    ContextoConsulta,
     DatosDeclarados,
     DecisionConsentimiento,
     EstadoCampo,
     EstadoFuente,
+    EstadoIdentidad,
     Fuente,
     Perfil,
     ResultadoFuente,
+    SolicitudFuente,
     ValorCampo,
     VerificacionConsentimiento,
 )
 from cotizacion.domain.perfilamiento.motor import FuenteEvaluada, evaluar
+from cotizacion.domain.perfilamiento.plan_fuentes import plan_fuentes
 
 # La semilla que publica catalogo: las pruebas evalúan exactamente el modelo desplegado.
 SEMILLA = (
@@ -143,3 +155,187 @@ def perfil_c01(modelo: ModeloRiesgo, fuentes_c01: dict[Fuente, FuenteEvaluada]) 
         correlation_id="corr-c01",
         actor_id="asesor-sintetico",
     )
+
+
+# --- Fakes de los puertos de crear_perfil -------------------------------------------------
+
+AHORA = datetime(2026, 10, 15, 15, 0, tzinfo=UTC)
+CLIENTE_C01 = UUID("00000000-0000-4000-8000-000000000001")
+CONSENTIMIENTO_C01 = UUID("00000000-0000-4000-9000-000000000001")
+
+
+class Llamadas:
+    """Base de los fakes: registra cada llamada y puede dormir o lanzar."""
+
+    def __init__(self, respuesta: Any, demora_s: float = 0) -> None:
+        self.respuesta = respuesta
+        self.demora_s = demora_s
+        self.llamadas: list[tuple[Any, ...]] = []
+
+    async def _responder(self, *argumentos: Any) -> Any:
+        self.llamadas.append(argumentos)
+        if self.demora_s:
+            await asyncio.sleep(self.demora_s)
+        if isinstance(self.respuesta, BaseException):
+            raise self.respuesta
+        return self.respuesta
+
+
+class IdentidadFalsa(Llamadas):
+    async def estado(self, cliente_id: UUID) -> Any:
+        return await self._responder(cliente_id)
+
+
+class ConsentimientoFalso(Llamadas):
+    async def verificar(self, cliente_id: UUID, proposito: str, alcances: Any) -> Any:
+        return await self._responder(cliente_id, proposito, list(alcances))
+
+
+class ModelosFalsos(Llamadas):
+    async def vigente(self, producto_id: str, en: datetime) -> Any:
+        return await self._responder(producto_id, en)
+
+    async def por_version(self, version: str) -> Any:
+        return await self._responder(version)
+
+
+def resultado_nominal(solicitud: SolicitudFuente, **cambios: Any) -> ResultadoFuente:
+    """Lo que devuelve AdaptadorDatosHttp para C01, solo con los campos pedidos."""
+    resultado = ResultadoFuente(
+        fuente=solicitud.fuente,
+        estado=EstadoFuente.CONSULTADA,
+        campos_solicitados=solicitud.campos,
+        campos={c: ValorCampo(EstadoCampo.DISPONIBLE, VARIABLES_C01[c]) for c in solicitud.campos},
+        version_fuente="1.8" if solicitud.fuente is Fuente.DA_REGISTROS_PUBLICOS else "3.1",
+        confianza=CONFIANZA_C01[solicitud.fuente],
+        consultada_en=AHORA,
+        duracion_ms=50,
+        proveedor="simulador",
+    )
+    return replace(resultado, **cambios)
+
+
+class EjecutorFalso:
+    """Consulta nominal de C01; `cambios[fuente]` altera el resultado de esa fuente."""
+
+    def __init__(self, cambios: dict[Fuente, dict[str, Any]] | None = None) -> None:
+        self.cambios = cambios or {}
+        self.llamadas: list[tuple[tuple[SolicitudFuente, ...], ContextoConsulta]] = []
+
+    async def ejecutar(self, solicitudes: Any, contexto: ContextoConsulta) -> list[ResultadoFuente]:
+        self.llamadas.append((tuple(solicitudes), contexto))
+        return [resultado_nominal(s, **self.cambios.get(s.fuente, {})) for s in solicitudes]
+
+
+class RepositorioPerfilesMemoria:
+    def __init__(self) -> None:
+        self.perfiles: dict[UUID, Perfil] = {}
+        self.errores_al_guardar: list[Exception] = []
+        self.lecturas_idempotencia = 0
+
+    async def por_idempotencia(self, cliente_id: UUID, clave: UUID) -> Perfil | None:
+        self.lecturas_idempotencia += 1
+        return next(
+            (
+                p
+                for p in self.perfiles.values()
+                if p.cliente_id == cliente_id and p.idempotency_key == clave
+            ),
+            None,
+        )
+
+    async def guardar(self, perfil: Perfil) -> None:
+        if self.errores_al_guardar:
+            raise self.errores_al_guardar.pop(0)
+        if await self.por_idempotencia(perfil.cliente_id, perfil.idempotency_key):
+            raise ConflictoIdempotencia()
+        self.perfiles[perfil.id] = perfil
+
+    async def por_id(self, perfil_id: UUID) -> Perfil | None:
+        return self.perfiles.get(perfil_id)
+
+    async def por_cliente(self, cliente_id: UUID, limite: int) -> list[Perfil]:
+        propios = [p for p in self.perfiles.values() if p.cliente_id == cliente_id]
+        return sorted(propios, key=lambda p: p.calculado_en, reverse=True)[:limite]
+
+
+class RelojFijo:
+    def __init__(self, instante: datetime = AHORA) -> None:
+        self.instante = instante
+
+    def ahora(self) -> datetime:
+        return self.instante
+
+
+def verificacion(
+    decision: DecisionConsentimiento = DecisionConsentimiento.PERMITIDO,
+    permitidas: frozenset[Fuente] = frozenset(Fuente),
+    causa: str | None = None,
+) -> VerificacionConsentimiento:
+    rechazado = decision is DecisionConsentimiento.RECHAZADO
+    return VerificacionConsentimiento(
+        decision=decision,
+        consentimiento_id=None if rechazado else CONSENTIMIENTO_C01,
+        vigente_hasta=None if rechazado else datetime(2027, 10, 1, tzinfo=UTC),
+        alcances_permitidos=frozenset() if rechazado else permitidas,
+        causa=causa,
+    )
+
+
+@dataclass
+class Escenario:
+    identidad: IdentidadFalsa
+    consentimiento: ConsentimientoFalso
+    modelos: ModelosFalsos
+    ejecutor: EjecutorFalso
+    repo: RepositorioPerfilesMemoria
+    reloj: RelojFijo
+    config: ConfigPerfilamiento
+
+    def caso(self) -> CrearPerfil:
+        return CrearPerfil(
+            identidad=self.identidad,
+            consentimiento=self.consentimiento,
+            modelos=self.modelos,
+            plan_fuentes=plan_fuentes,
+            ejecutor=self.ejecutor,
+            repo=self.repo,
+            reloj=self.reloj,
+            config=self.config,
+        )
+
+
+@pytest.fixture
+def escenario(modelo: ModeloRiesgo) -> Escenario:
+    """C01 nominal: identidad verificada, 4 alcances y simulador nominal."""
+    return Escenario(
+        identidad=IdentidadFalsa(EstadoIdentidad.VERIFICADO),
+        consentimiento=ConsentimientoFalso(verificacion()),
+        modelos=ModelosFalsos(modelo),
+        ejecutor=EjecutorFalso(),
+        repo=RepositorioPerfilesMemoria(),
+        reloj=RelojFijo(),
+        config=ConfigPerfilamiento(dependencia_timeout_ms=150, fuente_timeout_ms=300),
+    )
+
+
+def comando(**cambios: Any) -> ComandoPerfil:
+    base = ComandoPerfil(
+        cliente_id=CLIENTE_C01,
+        producto_id="vida-hipotecario",
+        datos_declarados=DatosDeclarados(date(1990, 4, 18), 180, Decimal(180000000)),
+        idempotency_key=UUID("00000000-0000-4000-b000-0000000000c1"),
+        actor_id="asesor-sintetico",
+        correlation_id="corr-ut",
+    )
+    return replace(base, **cambios)
+
+
+@pytest.fixture
+def nuevo_comando() -> Any:
+    return comando
+
+
+@pytest.fixture
+def verificacion_de() -> Any:
+    return verificacion
