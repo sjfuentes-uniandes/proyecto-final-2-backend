@@ -132,12 +132,17 @@ def _expresion(dto: Expresion) -> ExpresionDominio:
 def a_modelo_riesgo(dto: ModeloRiesgoDto) -> ModeloRiesgo:
     """Convierte la respuesta de catalogo a las dataclasses del dominio (CS-05)."""
     d = dto.definicion
+    desconocidas = set(d.fuentes) - {f.value for f in Fuente}
+    if desconocidas:
+        raise ValueError(f"fuentes fuera del contrato: {sorted(desconocidas)}")
     return ModeloRiesgo(
         version=dto.version,
         hash=dto.hash,
         producto_id=dto.producto_id,
         proposito=d.proposito,
-        fuentes={Fuente(clave): tuple(f.campos) for clave, f in d.fuentes.items()},
+        # jsonb no conserva el orden de las claves: las fuentes van en el orden canónico de
+        # Fuente (CS-05), que es el del modelo. De él salen el linaje y los datos requeridos.
+        fuentes={f: tuple(d.fuentes[f.value].campos) for f in Fuente if f.value in d.fuentes},
         declarados=tuple(d.declarados),
         obligatorios=frozenset(d.obligatorios),
         derivados={nombre: _expresion(e) for nombre, e in d.derivados.items()},

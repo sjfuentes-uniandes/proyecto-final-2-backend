@@ -179,11 +179,21 @@ class _Contexto:
         self.modelo = modelo
         self.fuentes = fuentes
         self.valores: dict[str, Decimal] = dict(variables)
-        # Paso 1: derivados en el orden del modelo; sin argumentos o con divisor 0, faltan.
-        for nombre, expresion in modelo.derivados.items():
-            valor = self._calcular(expresion)
-            if valor is not None:
-                self.valores[nombre] = valor
+        # Paso 1: derivados; sin argumentos o con divisor 0, faltan. Cada uno se calcula
+        # después de los derivados que usa, así el resultado no depende del orden de las
+        # claves (jsonb no lo conserva).
+        self._pendientes = set(modelo.derivados)
+        for nombre in modelo.derivados:
+            self._derivar(nombre)
+
+    def _derivar(self, nombre: str) -> None:
+        if nombre not in self._pendientes:
+            return
+        # Sale de pendientes antes de calcular: un ciclo (catalogo ya los rechaza) no se repite.
+        self._pendientes.discard(nombre)
+        valor = self._calcular(self.modelo.derivados[nombre])
+        if valor is not None:
+            self.valores[nombre] = valor
 
     def _calcular(self, expresion: Expresion) -> Decimal | None:
         argumentos: list[Decimal] = []
@@ -193,6 +203,7 @@ class _Contexto:
             elif isinstance(arg, Decimal):
                 valor = arg
             else:
+                self._derivar(arg)
                 valor = self.valores.get(arg)
             if valor is None:
                 return None
@@ -211,15 +222,15 @@ class _Contexto:
                 primero /= valor
         return primero
 
-    def _base_faltante(self, variable: str) -> str:
+    def _base_faltante(self, variable: str, vistos: frozenset[str] = frozenset()) -> str:
         """La variable base que explica la falta: para un derivado, su primer argumento base
         faltante en el orden de sus args; si ninguno falta (divisor 0), el propio derivado."""
         expresion = self.modelo.derivados.get(variable)
-        if expresion is None:
+        if expresion is None or variable in vistos:
             return variable
         for nombre in _variables_de(expresion):
             if nombre not in self.valores:
-                return self._base_faltante(nombre)
+                return self._base_faltante(nombre, vistos | {variable})
         return variable
 
     def _motivo(self, variable: str) -> tuple[str, Fuente | None, MotivoDato | None]:

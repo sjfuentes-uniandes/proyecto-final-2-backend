@@ -1,0 +1,732 @@
+openapi: 3.1.0
+info:
+  title: cotizacion
+  version: 0.1.0
+paths:
+  /v1/perfiles:
+    post:
+      tags:
+      - perfiles
+      summary: Crear
+      description: Calcula el perfil de riesgo del cliente con el modelo vigente del
+        producto.
+      operationId: crear_v1_perfiles_post
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Idempotency-Key
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudPerfil'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilRespuesta'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: ROL_NO_AUTORIZADO o IDENTIDAD_NO_VERIFICADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '200':
+          description: Misma Idempotency-Key y mismo cuerpo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilRespuesta'
+        '404':
+          description: CLIENTE_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: IDENTIDAD_PENDIENTE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA, IDEMPOTENCIA_CONFLICTO o PRODUCTO_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+    get:
+      tags:
+      - perfiles
+      summary: Listar
+      description: Últimos perfiles del cliente, del más reciente al más antiguo.
+      operationId: listar_v1_perfiles_get
+      parameters:
+      - name: clienteId
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Clienteid
+      - name: limite
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 20
+          title: Limite
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaPerfiles'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de ASESOR'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/perfiles/{perfilId}:
+    get:
+      tags:
+      - perfiles
+      summary: Obtener
+      description: Un perfil calculado; los perfiles no cambian nunca.
+      operationId: obtener_v1_perfiles__perfilId__get
+      parameters:
+      - name: perfilId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Perfilid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilRespuesta'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de ASESOR'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: PERFIL_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/perfiles/{perfilId}/reconstruccion:
+    get:
+      tags:
+      - perfiles
+      summary: Reconstruir
+      description: Vuelve a evaluar los insumos con la misma versión y dice si el
+        resultado coincide.
+      operationId: reconstruir_v1_perfiles__perfilId__reconstruccion_get
+      parameters:
+      - name: perfilId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Perfilid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reconstruccion'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de ASESOR'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: PERFIL_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+components:
+  schemas:
+    AccionSugerida:
+      type: string
+      enum:
+      - COMPLETAR_CONSENTIMIENTO
+      - RECALCULAR
+      title: AccionSugerida
+    AjusteDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        efecto:
+          type: string
+          title: Efecto
+        nivel:
+          anyOf:
+          - $ref: '#/components/schemas/NivelRiesgo'
+          - type: 'null'
+      type: object
+      required:
+      - codigo
+      - efecto
+      - nivel
+      title: AjusteDto
+    ConsentimientoDto:
+      properties:
+        decision:
+          $ref: '#/components/schemas/DecisionConsentimiento'
+        causa:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Causa
+        vigenteHasta:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Vigentehasta
+      type: object
+      required:
+      - decision
+      - causa
+      - vigenteHasta
+      title: ConsentimientoDto
+    DatoRequeridoDto:
+      properties:
+        campo:
+          type: string
+          title: Campo
+        fuente:
+          anyOf:
+          - $ref: '#/components/schemas/Fuente'
+          - type: 'null'
+        motivo:
+          $ref: '#/components/schemas/MotivoDato'
+      type: object
+      required:
+      - campo
+      - fuente
+      - motivo
+      title: DatoRequeridoDto
+    DatosDeclaradosDto:
+      properties:
+        fechaNacimiento:
+          type: string
+          format: date
+          title: Fechanacimiento
+        plazoCreditoMeses:
+          type: integer
+          maximum: 360.0
+          minimum: 12.0
+          title: Plazocreditomeses
+        sumaAsegurada:
+          type: integer
+          maximum: 5000000000.0
+          minimum: 1.0
+          title: Sumaasegurada
+      type: object
+      required:
+      - fechaNacimiento
+      - plazoCreditoMeses
+      - sumaAsegurada
+      title: DatosDeclaradosDto
+    DecisionConsentimiento:
+      type: string
+      enum:
+      - PERMITIDO
+      - PERMITIDO_PARCIAL
+      - RECHAZADO
+      title: DecisionConsentimiento
+    Direccion:
+      type: string
+      enum:
+      - REDUCE_RIESGO
+      - NEUTRO
+      - AUMENTA_LEVEMENTE
+      - AUMENTA_RIESGO
+      title: Direccion
+    ErrorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        mensaje:
+          type: string
+          title: Mensaje
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          type: object
+          title: Detalles
+      type: object
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
+    EstadoFactor:
+      type: string
+      enum:
+      - EVALUADO
+      - NO_EVALUADO
+      title: EstadoFactor
+    EstadoFuente:
+      type: string
+      enum:
+      - CONSULTADA
+      - NO_AUTORIZADA
+      - NO_CONSULTADA
+      - TIEMPO_AGOTADO
+      - NO_DISPONIBLE
+      - RESPUESTA_INVALIDA
+      title: EstadoFuente
+    EstadoPerfil:
+      type: string
+      enum:
+      - CALCULADO
+      - DEGRADADO
+      - INFORMACION_INSUFICIENTE
+      title: EstadoPerfil
+    FactorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        fuente:
+          type: string
+          title: Fuente
+        peso:
+          type: number
+          title: Peso
+        estado:
+          $ref: '#/components/schemas/EstadoFactor'
+        contribucion:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Contribucion
+        direccion:
+          anyOf:
+          - $ref: '#/components/schemas/Direccion'
+          - type: 'null'
+        motivo:
+          anyOf:
+          - $ref: '#/components/schemas/MotivoDato'
+          - type: 'null'
+      type: object
+      required:
+      - codigo
+      - fuente
+      - peso
+      - estado
+      - contribucion
+      - direccion
+      - motivo
+      title: FactorDto
+    Fuente:
+      type: string
+      enum:
+      - FA_PRODUCTOS_VIGENTES
+      - FA_HISTORIAL_PAGOS_12M
+      - FA_INGRESOS_AGREGADOS
+      - DA_REGISTROS_PUBLICOS
+      title: Fuente
+    FuenteDto:
+      properties:
+        fuente:
+          $ref: '#/components/schemas/Fuente'
+        tipo:
+          $ref: '#/components/schemas/TipoFuente'
+        estado:
+          $ref: '#/components/schemas/EstadoFuente'
+        versionFuente:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Versionfuente
+        confianza:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Confianza
+        consultadaEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Consultadaen
+        duracionMs:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duracionms
+      type: object
+      required:
+      - fuente
+      - tipo
+      - estado
+      - versionFuente
+      - confianza
+      - consultadaEn
+      - duracionMs
+      title: FuenteDto
+    ListaPerfiles:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ResumenPerfil'
+          type: array
+          title: Items
+      type: object
+      required:
+      - items
+      title: ListaPerfiles
+    MotivoDato:
+      type: string
+      enum:
+      - NO_AUTORIZADO
+      - NO_DISPONIBLE_EN_FUENTE
+      - TIEMPO_AGOTADO
+      - FUENTE_NO_DISPONIBLE
+      - RESPUESTA_INVALIDA
+      title: MotivoDato
+    NivelRiesgo:
+      type: string
+      enum:
+      - BAJO
+      - MEDIO
+      - ALTO
+      title: NivelRiesgo
+    PerfilRespuesta:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        productoId:
+          type: string
+          title: Productoid
+        estado:
+          $ref: '#/components/schemas/EstadoPerfil'
+        nivelRiesgo:
+          anyOf:
+          - $ref: '#/components/schemas/NivelRiesgo'
+          - type: 'null'
+        puntaje:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Puntaje
+        confianza:
+          type: number
+          title: Confianza
+        factores:
+          items:
+            $ref: '#/components/schemas/FactorDto'
+          type: array
+          title: Factores
+        ajustes:
+          items:
+            $ref: '#/components/schemas/AjusteDto'
+          type: array
+          title: Ajustes
+        datosRequeridos:
+          items:
+            $ref: '#/components/schemas/DatoRequeridoDto'
+          type: array
+          title: Datosrequeridos
+        accionSugerida:
+          anyOf:
+          - $ref: '#/components/schemas/AccionSugerida'
+          - type: 'null'
+        consentimiento:
+          anyOf:
+          - $ref: '#/components/schemas/ConsentimientoDto'
+          - type: 'null'
+        fuentes:
+          items:
+            $ref: '#/components/schemas/FuenteDto'
+          type: array
+          title: Fuentes
+        fuentesConsultadas:
+          type: integer
+          title: Fuentesconsultadas
+        fuentesDeclaradas:
+          type: integer
+          title: Fuentesdeclaradas
+        versionModelo:
+          type: string
+          title: Versionmodelo
+        calculadoEn:
+          type: string
+          format: date-time
+          title: Calculadoen
+        duracionMs:
+          type: integer
+          title: Duracionms
+        presupuestoMs:
+          type: integer
+          title: Presupuestoms
+        perfilAnteriorId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Perfilanteriorid
+      type: object
+      required:
+      - id
+      - clienteId
+      - productoId
+      - estado
+      - nivelRiesgo
+      - puntaje
+      - confianza
+      - factores
+      - ajustes
+      - datosRequeridos
+      - accionSugerida
+      - consentimiento
+      - fuentes
+      - fuentesConsultadas
+      - fuentesDeclaradas
+      - versionModelo
+      - calculadoEn
+      - duracionMs
+      - presupuestoMs
+      - perfilAnteriorId
+      title: PerfilRespuesta
+    Reconstruccion:
+      properties:
+        coincide:
+          type: boolean
+          title: Coincide
+        versionModelo:
+          type: string
+          title: Versionmodelo
+        hashModelo:
+          type: string
+          title: Hashmodelo
+      type: object
+      required:
+      - coincide
+      - versionModelo
+      - hashModelo
+      title: Reconstruccion
+    ResumenPerfil:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        estado:
+          $ref: '#/components/schemas/EstadoPerfil'
+        nivelRiesgo:
+          anyOf:
+          - $ref: '#/components/schemas/NivelRiesgo'
+          - type: 'null'
+        confianza:
+          type: number
+          title: Confianza
+        versionModelo:
+          type: string
+          title: Versionmodelo
+        calculadoEn:
+          type: string
+          format: date-time
+          title: Calculadoen
+        perfilAnteriorId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Perfilanteriorid
+      type: object
+      required:
+      - id
+      - estado
+      - nivelRiesgo
+      - confianza
+      - versionModelo
+      - calculadoEn
+      - perfilAnteriorId
+      title: ResumenPerfil
+    SolicitudPerfil:
+      properties:
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        productoId:
+          type: string
+          pattern: ^[a-z0-9-]{1,64}$
+          title: Productoid
+        datosDeclarados:
+          $ref: '#/components/schemas/DatosDeclaradosDto'
+      type: object
+      required:
+      - clienteId
+      - productoId
+      - datosDeclarados
+      title: SolicitudPerfil
+    TipoFuente:
+      type: string
+      enum:
+      - FINANZAS_ABIERTAS
+      - DATOS_ABIERTOS
+      - DECLARADO
+      title: TipoFuente

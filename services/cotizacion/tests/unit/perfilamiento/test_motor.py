@@ -658,3 +658,36 @@ def test_operadores_de_comparacion(
     factor = DefFactor("OP", "DECLARADO", Decimal(1), (regla, defecto))
     resultado = evaluar(replace(modelo, factores=(factor,)), variables_c01, fuentes_c01)
     assert resultado.factores[0].contribucion == Decimal(0)
+
+
+# --- Orden de las claves (jsonb no lo conserva) -------------------------------------------
+
+
+@pytest.mark.parametrize("orden", [("b", "a"), ("a", "b")])
+def test_derivados_que_usan_otros_derivados_no_dependen_del_orden(
+    modelo: ModeloRiesgo, variables_c01: Variables, fuentes_c01: Fuentes, orden: tuple[str, ...]
+) -> None:
+    definiciones = {
+        "a": Expresion("add", ("b", Decimal(1))),
+        "b": Expresion("mul", ("edad", Decimal(2))),
+    }
+    regla = ReglaFactor((Condicion("a", "==", Decimal(73)),), Decimal(1), Direccion.NEUTRO)
+    defecto = ReglaFactor((), Decimal(0), Direccion.AUMENTA_RIESGO)
+    factor = DefFactor("A", "DECLARADO", Decimal(1), (regla, defecto))
+    con_a = replace(
+        modelo, derivados={k: definiciones[k] for k in orden}, factores=(factor,), ajustes=()
+    )
+    assert evaluar(con_a, variables_c01, fuentes_c01).factores[0].contribucion == Decimal(1)
+
+
+def test_un_ciclo_de_derivados_no_se_repite(
+    modelo: ModeloRiesgo, variables_c01: Variables, fuentes_c01: Fuentes
+) -> None:
+    ciclo = {"a": Expresion("add", ("b", Decimal(1))), "b": Expresion("add", ("a", Decimal(1)))}
+    regla = ReglaFactor((Condicion("a", ">", Decimal(0)),), Decimal(1), Direccion.NEUTRO)
+    factor = DefFactor("A", "DECLARADO", Decimal(1), (regla,))
+    con_ciclo = replace(modelo, derivados=ciclo, factores=(factor,), ajustes=())
+    assert (
+        evaluar(con_ciclo, variables_c01, fuentes_c01).estado
+        is EstadoPerfil.INFORMACION_INSUFICIENTE
+    )

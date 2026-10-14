@@ -203,3 +203,15 @@ async def test_un_error_no_queda_en_cache(respuesta_candidata: dict[str, Any]) -
         await catalogo.vigente("vida-hipotecario", EN)
     assert (await catalogo.vigente("vida-hipotecario", EN)).version == "2026.10.1"
     assert len(recibidas) == 2
+
+
+async def test_las_fuentes_quedan_en_el_orden_canonico(respuesta_candidata: dict[str, Any]) -> None:
+    """jsonb devuelve las claves por longitud y luego alfabéticamente: el orden no se conserva."""
+    fuentes = respuesta_candidata["definicion"]["fuentes"]
+    respuesta_candidata["definicion"]["fuentes"] = {
+        k: fuentes[k] for k in sorted(fuentes, key=lambda k: (len(k), k))
+    }
+    assert next(iter(respuesta_candidata["definicion"]["fuentes"])) == "DA_REGISTROS_PUBLICOS"
+    catalogo = _catalogo(lambda _: httpx.Response(200, json=respuesta_candidata), [])
+    modelo = await catalogo.por_version("2026.10.1")
+    assert list(modelo.fuentes) == list(Fuente)
