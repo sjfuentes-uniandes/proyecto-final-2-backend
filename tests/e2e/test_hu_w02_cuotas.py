@@ -31,7 +31,8 @@ class Aws:
         plataforma = salidas.get("platform", {})
         region = os.getenv("AWS_REGION") or plataforma.get("region") or "us-east-1"
         self.prefijo = plataforma.get("prefix") or f"solventa-{os.getenv('ENV', 'int')}"
-        self.plan_prueba = plataforma.get("usage_plans", {}).get("prueba", "")
+        self.planes = plataforma.get("usage_plans", {})
+        self.plan_prueba = self.planes.get("prueba", "")
         self.logs_borde = plataforma.get("apis", {}).get("socios", {}).get("log_group", "")
         self.apigateway = boto3.client("apigateway", region_name=region)
         self.logs = boto3.client("logs", region_name=region)
@@ -40,6 +41,16 @@ class Aws:
     def id_de_api_key(self, valor: str) -> str:
         paginas = self.apigateway.get_paginator("get_api_keys").paginate(includeValues=True)
         return next(k["id"] for pagina in paginas for k in pagina["items"] if k.get("value") == valor)
+
+    def planes_de_la_key(self, api_key_id: str) -> set[str]:
+        en: set[str] = set()
+        for nombre, plan in self.planes.items():
+            try:
+                self.apigateway.get_usage_plan_key(usagePlanId=plan, keyId=api_key_id)
+                en.add(nombre)
+            except self.apigateway.exceptions.NotFoundException:
+                pass
+        return en
 
     def reponer_cuota(self, api_key_id: str) -> None:
         self.apigateway.update_usage(usagePlanId=self.plan_prueba, keyId=api_key_id,
@@ -189,20 +200,22 @@ def test_hu_w02_n3_cambio_de_plan_desde_la_administracion(ambiente, aws: Aws, so
     assert alta.status_code == 201, alta.text
     socio = alta.json()
     try:
-        # Credenciales propagadas con el plan básico, para no gastar la cuota de prueba en la espera.
-        acceso = _acceso(ambiente, config, socio["clientId"], socio["clientSecret"], socio["apiKey"])
-        assert ambiente.hasta(lambda: httpx.get(f"{config['socios']}/socio/me", headers=acceso, timeout=30),
-                              200).status_code == 200
-
+        # Sin llamadas al borde antes del cambio: API Gateway guarda en caché el plan de cada key.
         cambio = httpx.put(f"{web}/{socio['id']}/plan", headers=admin, json={"plan": "prueba"}, timeout=30)
         assert cambio.status_code == 200 and cambio.json()["plan"] == "prueba", cambio.text
         consumo = httpx.get(f"{web}/{socio['id']}/consumo", headers=admin, timeout=30).json()
         assert consumo["limites"]["cuota"] == CUOTA and consumo["limites"]["plan"] == "prueba"
         assert "apiKey" not in str(consumo) and "clientSecret" not in str(consumo)
 
-        time.sleep(ESPERA_PLAN_S)
         api_key_id = aws.id_de_api_key(socio["apiKey"])
+        assert aws.planes_de_la_key(api_key_id) == {"prueba"}
+
+        acceso = _acceso(ambiente, config, socio["clientId"], socio["clientSecret"], socio["apiKey"])
+        assert ambiente.hasta(lambda: httpx.get(f"{config['socios']}/socio/me", headers=acceso, timeout=30),
+                              200).status_code == 200
+        time.sleep(ESPERA_PLAN_S)
         aws.reponer_cuota(api_key_id)
+        time.sleep(2)
         inicio = datetime.now(UTC)
 
         # Operación de negocio atribuida al socio (AC1) hasta agotar la cuota nueva (AC2).
