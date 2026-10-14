@@ -44,3 +44,12 @@ class ApiSocios:
 
     async def desactivar(self, socio_id: str, administrador: str | None) -> dict[str, Any]:
         return await self._llamar("POST", f"/{socio_id}/desactivar", administrador)
+
+    async def planes(self, administrador: str | None) -> list[dict[str, Any]]:
+        return await self._llamar("GET", "/planes", administrador)
+
+    async def cambiar_plan(self, socio_id: str, plan: str, administrador: str | None) -> dict[str, Any]:
+        return await self._llamar("PUT", f"/{socio_id}/plan", administrador, {"plan": plan})
+
+    async def consumo(self, socio_id: str, administrador: str | None) -> dict[str, Any]:
+        return await self._llamar("GET", f"/{socio_id}/consumo", administrador)
