@@ -66,6 +66,8 @@ class CotizacionFalsa:
     def __init__(self) -> None:
         self.solicitudes: list[httpx.Request] = []
         self.respuesta: httpx.Response | Exception = httpx.Response(201, json=PERFIL)
+        # GET /v1/perfiles/{id} con respuesta propia; sin entrada, PERFIL.
+        self.por_id: dict[str, httpx.Response] = {}
 
     def __call__(self, solicitud: httpx.Request) -> httpx.Response:
         self.solicitudes.append(solicitud)
@@ -74,7 +76,7 @@ class CotizacionFalsa:
         if solicitud.method == "GET" and solicitud.url.path == "/v1/perfiles":
             return httpx.Response(200, json={"items": [RESUMEN]})
         if solicitud.method == "GET":
-            return httpx.Response(200, json=PERFIL)
+            return self.por_id.get(solicitud.url.path.rsplit("/", 1)[-1], httpx.Response(200, json=PERFIL))
         return self.respuesta
 
 
@@ -106,7 +108,9 @@ def _crear(encabezados: dict[str, str] | None = None, cuerpo: dict[str, Any] | N
 )
 def test_solo_asesores_del_backoffice(cotizacion: CotizacionFalsa, encabezados: dict[str, str]) -> None:
     for metodo, url in (("post", "/v1/perfiles"), ("get", f"/v1/perfiles/{PERFIL_ID}"),
-                        ("get", f"/v1/perfiles?clienteId={C01['clienteId']}")):
+                        ("get", f"/v1/perfiles?clienteId={C01['clienteId']}"),
+                        ("post", f"/v1/perfiles/{PERFIL_ID}/recalculos"),
+                        ("get", f"/v1/perfiles/{PERFIL_ID}/comparacion")):
         respuesta = TestClient(app).request(metodo, url, json=C01, headers={**encabezados, "Idempotency-Key": CLAVE})
         assert respuesta.status_code == 403
         assert respuesta.json()["codigo"] == "ROL_NO_AUTORIZADO"
@@ -278,3 +282,105 @@ def test_el_cliente_real_se_construye_con_la_configuracion() -> None:
     assert servicio.cotizacion.url == settings.cotizacion_url
     assert servicio.cotizacion.timeout == 1.5
     assert ruta.perfilamiento() is servicio
+
+
+# --- HU-W12: recálculo y comparación (W12-P07) -------------------------------------------
+
+NUEVO_ID = "00000000-0000-4000-a000-000000000002"
+DEGRADADO = {**PERFIL, "estado": "DEGRADADO", "accionSugerida": "RECALCULAR"}
+RECALCULADO = {**PERFIL, "id": NUEVO_ID, "perfilAnteriorId": PERFIL_ID}
+
+
+def _recalcular(encabezados: dict[str, str] | None = None) -> httpx.Response:
+    return TestClient(app).post(
+        f"/v1/perfiles/{PERFIL_ID}/recalculos",
+        headers={**ASESOR, "Idempotency-Key": CLAVE} if encabezados is None else encabezados,
+    )
+
+
+def test_recalcular_reenvia_actor_rol_y_clave(cotizacion: CotizacionFalsa) -> None:
+    cotizacion.respuesta = httpx.Response(201, json=RECALCULADO)
+    respuesta = _recalcular()
+    assert respuesta.status_code == 201
+    assert respuesta.json() == RECALCULADO
+    (solicitud,) = cotizacion.solicitudes
+    assert (solicitud.method, str(solicitud.url)) == (
+        "POST", f"http://cotizacion:8080/v1/perfiles/{PERFIL_ID}/recalculos",
+    )
+    assert solicitud.headers["Idempotency-Key"] == CLAVE
+    assert solicitud.headers["X-Actor-Id"] == "sub-asesora"
+    assert solicitud.headers["X-Actor-Rol"] == "ASESOR"
+    assert solicitud.headers["X-Correlation-Id"] == "corr-bff-w11"
+    assert solicitud.content == b""
+
+
+def test_recalcular_con_la_misma_clave_responde_200(cotizacion: CotizacionFalsa) -> None:
+    cotizacion.respuesta = httpx.Response(200, json=RECALCULADO)
+    assert _recalcular().status_code == 200
+
+
+@pytest.mark.parametrize("clave", [None, "no-es-uuid"])
+def test_recalcular_exige_idempotency_key(cotizacion: CotizacionFalsa, clave: str | None) -> None:
+    encabezados = {**ASESOR} if clave is None else {**ASESOR, "Idempotency-Key": clave}
+    respuesta = _recalcular(encabezados)
+    assert respuesta.status_code == 422
+    assert respuesta.json()["codigo"] == "SOLICITUD_INVALIDA"
+    assert cotizacion.solicitudes == []
+
+
+@pytest.mark.parametrize(
+    ("estado", "codigo"),
+    [(404, "PERFIL_NO_ENCONTRADO"), (422, "IDEMPOTENCIA_CONFLICTO"), (503, "DEPENDENCIA_NO_DISPONIBLE")],
+)
+def test_recalcular_pasa_los_errores_b2(cotizacion: CotizacionFalsa, estado: int, codigo: str) -> None:
+    cotizacion.respuesta = httpx.Response(estado, json={"codigo": codigo, "mensaje": "m", "detalles": {}})
+    respuesta = _recalcular()
+    assert (respuesta.status_code, respuesta.json()["codigo"]) == (estado, codigo)
+
+
+def test_recalcular_con_cotizacion_caida_responde_503(cotizacion: CotizacionFalsa) -> None:
+    cotizacion.respuesta = httpx.ConnectError("sin conexión")
+    respuesta = _recalcular()
+    assert (respuesta.status_code, respuesta.json()["codigo"]) == (503, "SERVICIO_NO_DISPONIBLE")
+
+
+def _comparar(perfil_id: str = NUEVO_ID) -> httpx.Response:
+    return TestClient(app).get(f"/v1/perfiles/{perfil_id}/comparacion", headers=ASESOR)
+
+
+def test_comparacion_responde_anterior_y_actual(cotizacion: CotizacionFalsa) -> None:
+    cotizacion.por_id = {
+        NUEVO_ID: httpx.Response(200, json=RECALCULADO),
+        PERFIL_ID: httpx.Response(200, json=DEGRADADO),
+    }
+    respuesta = _comparar()
+    assert respuesta.status_code == 200
+    assert respuesta.json() == {"anterior": DEGRADADO, "actual": RECALCULADO}
+    assert [s.url.path for s in cotizacion.solicitudes] == [
+        f"/v1/perfiles/{NUEVO_ID}", f"/v1/perfiles/{PERFIL_ID}",
+    ]
+    assert {s.headers["X-Actor-Id"] for s in cotizacion.solicitudes} == {"sub-asesora"}
+
+
+def test_comparacion_sin_perfil_anterior_responde_422(cotizacion: CotizacionFalsa) -> None:
+    respuesta = _comparar(PERFIL_ID)
+    assert respuesta.status_code == 422
+    assert respuesta.json()["codigo"] == "SIN_PERFIL_ANTERIOR"
+    assert respuesta.json()["correlationId"] == "corr-bff-w11"
+    assert len(cotizacion.solicitudes) == 1
+
+
+@pytest.mark.parametrize("inexistente", [NUEVO_ID, PERFIL_ID], ids=["actual", "anterior"])
+def test_comparacion_con_un_perfil_inexistente_responde_404(
+    cotizacion: CotizacionFalsa, inexistente: str
+) -> None:
+    no_existe = httpx.Response(404, json={"codigo": "PERFIL_NO_ENCONTRADO", "mensaje": "m", "detalles": {}})
+    cotizacion.por_id = {NUEVO_ID: httpx.Response(200, json=RECALCULADO), inexistente: no_existe}
+    respuesta = _comparar()
+    assert (respuesta.status_code, respuesta.json()["codigo"]) == (404, "PERFIL_NO_ENCONTRADO")
+
+
+def test_comparacion_con_id_invalido_no_llega_a_cotizacion(cotizacion: CotizacionFalsa) -> None:
+    respuesta = _comparar("no-es-uuid")
+    assert (respuesta.status_code, respuesta.json()["codigo"]) == (422, "SOLICITUD_INVALIDA")
+    assert cotizacion.solicitudes == []

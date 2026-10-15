@@ -39,6 +39,11 @@ class CotizacionCliente:
     async def crear(self, cuerpo: dict[str, Any], actor: str, clave: UUID) -> tuple[int, dict[str, Any]]:
         return await self._llamar("POST", "", actor, json=cuerpo, headers={"Idempotency-Key": str(clave)})
 
+    async def recalcular(self, perfil_id: UUID, actor: str, clave: UUID) -> tuple[int, dict[str, Any]]:
+        return await self._llamar(
+            "POST", f"/{perfil_id}/recalculos", actor, headers={"Idempotency-Key": str(clave)}
+        )
+
     async def obtener(self, perfil_id: UUID, actor: str) -> dict[str, Any]:
         return (await self._llamar("GET", f"/{perfil_id}", actor))[1]
 
