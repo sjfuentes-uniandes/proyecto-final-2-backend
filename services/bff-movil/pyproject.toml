@@ -8,6 +8,7 @@ dependencies = [
     "pydantic-settings>=2.6",
     "psycopg[binary]>=3.2",
     "alembic>=1.14",
+    "pyjwt[crypto]>=2.10",
     "solventa-common",
 ]
 
