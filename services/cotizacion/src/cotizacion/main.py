@@ -27,6 +27,7 @@ from cotizacion.application.perfilamiento.puertos import (
     Reloj,
     RepositorioPerfiles,
 )
+from cotizacion.application.perfilamiento.recalcular_perfil import RecalcularPerfil
 from cotizacion.application.perfilamiento.reconstruir_perfil import ReconstruirPerfil
 from cotizacion.config import Settings
 from cotizacion.domain.perfilamiento.plan_fuentes import plan_fuentes
@@ -61,6 +62,7 @@ def _configurar_casos(app: FastAPI, puertos: Puertos, settings: Settings) -> Non
         config=config,
     )
     app.state.reconstruir_perfil = ReconstruirPerfil(puertos.perfiles, puertos.modelos)
+    app.state.recalcular_perfil = RecalcularPerfil(app.state.crear_perfil, puertos.perfiles)
     app.state.perfiles = puertos.perfiles
 
 

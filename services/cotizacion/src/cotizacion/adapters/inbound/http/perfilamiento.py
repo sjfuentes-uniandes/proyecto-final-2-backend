@@ -17,6 +17,7 @@ from solventa_common.errors import ROL_NO_AUTORIZADO, SOLICITUD_INVALIDA, ErrorN
 
 from cotizacion.application.perfilamiento.crear_perfil import ComandoPerfil, CrearPerfil
 from cotizacion.application.perfilamiento.puertos import RepositorioPerfiles
+from cotizacion.application.perfilamiento.recalcular_perfil import RecalcularPerfil
 from cotizacion.application.perfilamiento.reconstruir_perfil import ReconstruirPerfil
 from cotizacion.domain.perfilamiento.errores import (
     ClienteNoEncontrado,
@@ -327,6 +328,11 @@ def _reconstruir_perfil(request: Request) -> ReconstruirPerfil:
     return caso
 
 
+def _recalcular_perfil(request: Request) -> RecalcularPerfil:
+    caso: RecalcularPerfil = request.app.state.recalcular_perfil
+    return caso
+
+
 def _perfiles(request: Request) -> RepositorioPerfiles:
     repo: RepositorioPerfiles = request.app.state.perfiles
     return repo
@@ -368,6 +374,39 @@ async def crear(
     )
     try:
         perfil, creado = await crear_perfil.ejecutar(comando)
+    except ERRORES_TRADUCIBLES as error:
+        raise error_negocio(error) from error
+    if not creado:
+        respuesta.status_code = 200
+    return respuesta_de(perfil, crear_perfil.config.presupuesto_ms)
+
+
+@router.post(
+    "/{perfilId}/recalculos",
+    status_code=201,
+    response_model=PerfilRespuesta,
+    responses={
+        200: {"model": PerfilRespuesta, "description": "Misma Idempotency-Key"},
+        403: _error("ROL_NO_AUTORIZADO o IDENTIDAD_NO_VERIFICADA"),
+        404: _error("PERFIL_NO_ENCONTRADO o CLIENTE_NO_ENCONTRADO"),
+        409: _error("IDENTIDAD_PENDIENTE"),
+        422: _error("SOLICITUD_INVALIDA, IDEMPOTENCIA_CONFLICTO o PRODUCTO_NO_DISPONIBLE"),
+        503: _error("DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)"),
+    },
+)
+async def recalcular(
+    respuesta: Response,
+    actor: Annotated[str, Depends(actor_asesor)],
+    crear_perfil: Annotated[CrearPerfil, Depends(_crear_perfil)],
+    recalcular_perfil: Annotated[RecalcularPerfil, Depends(_recalcular_perfil)],
+    perfil_id: Annotated[UUID, Path(alias="perfilId")],
+    idempotency_key: Annotated[UUID, Header(alias="Idempotency-Key")],
+) -> PerfilRespuesta:
+    """Crea un perfil nuevo desde uno anterior, con el modelo vigente; el anterior no cambia."""
+    try:
+        perfil, creado = await recalcular_perfil.ejecutar(
+            perfil_id, idempotency_key, actor, correlation.obtener() or ""
+        )
     except ERRORES_TRADUCIBLES as error:
         raise error_negocio(error) from error
     if not creado:

@@ -154,6 +154,94 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/perfiles/{perfilId}/recalculos:
+    post:
+      tags:
+      - perfiles
+      summary: Recalcular
+      description: Crea un perfil nuevo desde uno anterior, con el modelo vigente;
+        el anterior no cambia.
+      operationId: recalcular_v1_perfiles__perfilId__recalculos_post
+      parameters:
+      - name: perfilId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Perfilid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Idempotency-Key
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilRespuesta'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: ROL_NO_AUTORIZADO o IDENTIDAD_NO_VERIFICADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '200':
+          description: Misma Idempotency-Key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilRespuesta'
+        '404':
+          description: PERFIL_NO_ENCONTRADO o CLIENTE_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: IDENTIDAD_PENDIENTE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA, IDEMPOTENCIA_CONFLICTO o PRODUCTO_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /v1/perfiles/{perfilId}:
     get:
       tags:
