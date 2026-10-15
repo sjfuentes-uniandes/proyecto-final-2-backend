@@ -11,7 +11,11 @@ class Settings(ServiceSettings):
     grupo_operacion: str = "operacion"
     grupo_administradores: str = "administradores"
     grupo_administradores_socios: str = "administradores-socios"
+    grupo_asesores: str = "asesores"
     api_socios_url: str = Field("http://localhost:8082", validation_alias=AliasChoices("API_SOCIOS_URL", "SOLVENTA_API_SOCIOS_URL"))
+    # HU-W11: perfilamiento en cotizacion (01 §3.2).
+    cotizacion_url: str = Field("http://localhost:8085", validation_alias=AliasChoices("COTIZACION_URL", "SOLVENTA_COTIZACION_URL"))
+    cotizacion_timeout_ms: int = 1500
     # Pool de Cognito del back-office (infra/apps/ecs.tf): Administración › Usuarios.
     backoffice_user_pool_id: str | None = Field(
         None, validation_alias=AliasChoices("BACKOFFICE_USER_POOL_ID", "SOLVENTA_BACKOFFICE_USER_POOL_ID")

@@ -8,6 +8,7 @@ from datetime import datetime
 GRUPOS = {
     "administradores": "Crea usuarios del back-office y asigna sus grupos",
     "administradores-socios": "Gestiona socios, credenciales y cuotas",
+    "asesores": "Perfila clientes y prepara ofertas",
     "operacion": "Consulta tableros, trazas y alertas",
 }
 _CORREO = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")

@@ -160,7 +160,7 @@ def test_solo_administradores(http: Any, grupos: str | None) -> None:
 def test_grupos_disponibles(http: Any) -> None:
     cliente, _ = http
     nombres = [g["nombre"] for g in cliente.get("/backoffice/grupos", headers=ADMIN).json()]
-    assert nombres == ["administradores", "administradores-socios", "operacion"]
+    assert nombres == ["administradores", "administradores-socios", "asesores", "operacion"]
 
 
 def test_sin_pool_configurado_503() -> None:
