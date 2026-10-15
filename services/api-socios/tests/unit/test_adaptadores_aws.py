@@ -1,9 +1,14 @@
+from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
 from api_socios.adapters.outbound.apigateway import ApiKeysApiGateway
+from api_socios.adapters.outbound.cloudwatch import MetricasCloudWatch
 from api_socios.adapters.outbound.cognito import ClientesCognito
+from api_socios.domain.cuotas import LimitesPlan, Periodo, PlanNoDisponible
 from api_socios.domain.socios import Permiso, Plan
+
+PLANES = {"basico": "plan-b", "estandar": "plan-e", "prueba": "plan-p"}
 
 
 class Grabadora:
@@ -75,10 +80,74 @@ def test_api_key_etiquetada_y_asociada_al_plan() -> None:
 
 
 def test_plan_sin_configurar() -> None:
+    keys = ApiKeysApiGateway(Grabadora(), "int", {"basico": "plan-b"})
+    with pytest.raises(PlanNoDisponible):
+        keys.asociar_plan("k1", Plan.ESTANDAR)
     with pytest.raises(LookupError):
-        ApiKeysApiGateway(Grabadora(), "int", {"basico": "plan-b"}).asociar_plan(
-            "k1", Plan.ESTANDAR
+        keys.desasociar_plan("k1", Plan.PRUEBA)
+    assert keys.planes_disponibles() == [Plan.BASICO]
+    assert keys.cliente.llamadas == []
+
+
+def test_desasociar_la_api_key_del_plan_anterior() -> None:
+    api = Grabadora(fallas={"delete_usage_plan_key"})
+    keys = ApiKeysApiGateway(Grabadora(), "int", PLANES)
+    keys.desasociar_plan("k1", Plan.BASICO)
+    assert keys.cliente.llamadas == [
+        ("delete_usage_plan_key", {"usagePlanId": "plan-b", "keyId": "k1"})
+    ]
+    ApiKeysApiGateway(api, "int", PLANES).desasociar_plan("k1", Plan.BASICO)  # ya no estaba
+
+
+def test_limites_del_plan_de_uso_con_cache() -> None:
+    api = Grabadora(
+        {
+            "get_usage_plan": {
+                "id": "plan-p",
+                "throttle": {"rateLimit": 1.0, "burstLimit": 2},
+                "quota": {"limit": 5, "offset": 0, "period": "DAY"},
+            }
+        }
+    )
+    reloj = iter([0.0, 10.0, 301.0])
+    keys = ApiKeysApiGateway(api, "int", PLANES, reloj=lambda: next(reloj))
+    esperado = LimitesPlan(Plan.PRUEBA, 1.0, 2, 5, Periodo.DIA, 0)
+    assert keys.limites(Plan.PRUEBA) == esperado
+    assert keys.limites(Plan.PRUEBA) == esperado
+    assert keys.limites(Plan.PRUEBA) == esperado
+    assert api.llamadas == [("get_usage_plan", {"usagePlanId": "plan-p"})] * 2
+
+
+def test_uso_solo_de_la_api_key_del_socio() -> None:
+    items = {"k1": [[3, 2]]}
+    api = Grabadora({"get_usage": {"usagePlanId": "plan-p", "items": items}})
+    keys = ApiKeysApiGateway(api, "int", PLANES)
+    assert keys.uso("k1", Plan.PRUEBA, date(2026, 10, 13), date(2026, 10, 13)) == items
+    assert api.llamadas == [
+        (
+            "get_usage",
+            {
+                "usagePlanId": "plan-p",
+                "keyId": "k1",
+                "startDate": "2026-10-13",
+                "endDate": "2026-10-13",
+            },
         )
+    ]
+    sin_trafico = ApiKeysApiGateway(Grabadora({"get_usage": {"items": {}}}), "int", PLANES)
+    assert sin_trafico.uso("k9", Plan.BASICO, date(2026, 10, 1), date(2026, 10, 2)) == {}
+
+
+def test_limitadas_por_api_key_en_cloudwatch() -> None:
+    cloudwatch = Grabadora({"get_metric_statistics": {"Datapoints": [{"Sum": 4.0}, {"Sum": 2.0}]}})
+    desde, hasta = datetime(2026, 10, 13, tzinfo=UTC), datetime(2026, 10, 13, 15, tzinfo=UTC)
+    assert MetricasCloudWatch(cloudwatch).limitadas("k1", desde, hasta) == 6
+    _, kwargs = cloudwatch.llamadas[0]
+    assert kwargs["Namespace"] == "Solventa/Socios" and kwargs["MetricName"] == "PartnerThrottled"
+    assert kwargs["Dimensions"] == [{"Name": "ApiKeyId", "Value": "k1"}]
+    assert (kwargs["StartTime"], kwargs["EndTime"], kwargs["Statistics"]) == (desde, hasta, ["Sum"])
+    vacio = Grabadora({"get_metric_statistics": {"Datapoints": []}})
+    assert MetricasCloudWatch(vacio).limitadas("k1", desde, hasta) == 0
 
 
 def test_deshabilitar_y_eliminar_son_tolerantes() -> None:

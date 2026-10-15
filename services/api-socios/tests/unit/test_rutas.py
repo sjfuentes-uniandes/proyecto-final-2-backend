@@ -55,6 +55,8 @@ def test_secreto_ausente_de_los_logs_del_recorrido(
         ALTA | {"permisos": ["administrar"]},
         ALTA | {"plan": "premium"},
         ALTA | {"nombre": "A"},
+        ALTA | {"nombre": "5\r"},
+        ALTA | {"nombre": "      \u001e      \u0017 \t\u000b  \t\t"},
         ALTA | {"canal": "tv"},
         ALTA | {"clientSecret": "elegido-por-el-cliente"},
         {"nombre": "Sin permisos"},

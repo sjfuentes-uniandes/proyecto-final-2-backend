@@ -130,6 +130,7 @@ output "partners" {
       client_id     = try(aws_cognito_user_pool_client.partner[name].id, null)
       client_secret = try(aws_cognito_user_pool_client.partner[name].client_secret, null)
       api_key       = aws_api_gateway_api_key.partner[name].value
+      api_key_id    = aws_api_gateway_api_key.partner[name].id
       tier          = partner.tier
       enabled       = partner.enabled
     }

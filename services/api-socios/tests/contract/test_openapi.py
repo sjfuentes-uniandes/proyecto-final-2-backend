@@ -20,6 +20,13 @@ def test_contrato_documenta_los_codigos_de_la_historia() -> None:
     assert set(rutas["/admin/socios"]["post"]["responses"]) >= {"201", "400", "422"}
     assert set(rutas["/socio/me"]["get"]["responses"]) >= {"200", "401"}
     assert set(rutas["/polizas"]["post"]["responses"]) >= {"401", "403", "501"}
+    assert set(rutas["/admin/socios/{socio_id}/plan"]["put"]["responses"]) >= {
+        "200",
+        "404",
+        "409",
+        "422",
+    }
+    assert set(rutas["/admin/socios/{socio_id}/consumo"]["get"]["responses"]) >= {"200", "404"}
     for operaciones in rutas.values():
         for operacion in operaciones.values():
             for codigo, respuesta in operacion["responses"].items():
@@ -29,6 +36,8 @@ def test_contrato_documenta_los_codigos_de_la_historia() -> None:
                         codigo,
                         operacion["operationId"],
                     )
+    consumo = app.openapi()["components"]["schemas"]["ConsumoRespuesta"]["properties"]
+    assert not {"apiKey", "apiKeyId", "clientSecret"} & set(consumo)
     creado = app.openapi()["components"]["schemas"]["SocioCreado"]["properties"]
     respuesta = app.openapi()["components"]["schemas"]["SocioRespuesta"]["properties"]
     assert {"clientSecret", "apiKey"} <= set(creado) and not {"clientSecret", "apiKey"} & set(

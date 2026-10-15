@@ -315,6 +315,64 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /socios/planes:
+    get:
+      tags:
+      - socios
+      summary: Listar Planes
+      operationId: listar_planes_socios_planes_get
+      parameters:
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LimitesPlan'
+                title: Response Listar Planes Socios Planes Get
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo administradores-socios o
+            no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: api-socios no respondió'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /socios/{socio_id}:
     get:
       tags:
@@ -439,6 +497,142 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /socios/{socio_id}/plan:
+    put:
+      tags:
+      - socios
+      summary: Cambiar Plan
+      operationId: cambiar_plan_socios__socio_id__plan_put
+      parameters:
+      - name: socio_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^SOC-\d{6}$
+          title: Socio Id
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CambioPlanSolicitud'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocioRespuesta'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo administradores-socios o
+            no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA o PLAN_NO_DISPONIBLE (detalles.plan)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: api-socios no respondió'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: SOCIO_DESACTIVADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /socios/{socio_id}/consumo:
+    get:
+      tags:
+      - socios
+      summary: Consultar Consumo
+      operationId: consultar_consumo_socios__socio_id__consumo_get
+      parameters:
+      - name: socio_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^SOC-\d{6}$
+          title: Socio Id
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsumoSocio'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo administradores-socios o
+            no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SOCIO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: api-socios no respondió'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -455,6 +649,15 @@ paths:
                 title: Response Health Health Get
 components:
   schemas:
+    CambioPlanSolicitud:
+      properties:
+        plan:
+          $ref: '#/components/schemas/Plan'
+      additionalProperties: false
+      type: object
+      required:
+      - plan
+      title: CambioPlanSolicitud
     CanalVenta:
       type: string
       enum:
@@ -463,6 +666,44 @@ components:
       - comercio
       - otro
       title: CanalVenta
+    ConsumoSocio:
+      properties:
+        socioId:
+          type: string
+          title: Socioid
+        limites:
+          $ref: '#/components/schemas/LimitesPlan'
+        ventana:
+          $ref: '#/components/schemas/VentanaCuota'
+        usado:
+          type: integer
+          title: Usado
+        restante:
+          type: integer
+          title: Restante
+        porcentaje:
+          type: integer
+          title: Porcentaje
+        estado:
+          $ref: '#/components/schemas/EstadoCuota'
+        limitadas:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Limitadas
+          description: Respuestas 429 en la ventana; null si no hay métricas
+      type: object
+      required:
+      - socioId
+      - limites
+      - ventana
+      - usado
+      - restante
+      - porcentaje
+      - estado
+      title: ConsumoSocio
+      description: 'Solo datos del socio consultado: el administrador nunca ve la
+        API key.'
     ContextoRespuesta:
       properties:
         canal:
@@ -518,6 +759,13 @@ components:
       - activo
       - desactivado
       title: Estado
+    EstadoCuota:
+      type: string
+      enum:
+      - normal
+      - cerca_del_limite
+      - agotada
+      title: EstadoCuota
     GrupoRespuesta:
       properties:
         nombre:
@@ -540,12 +788,36 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    LimitesPlan:
+      properties:
+        plan:
+          $ref: '#/components/schemas/Plan'
+        limitePorSegundo:
+          type: number
+          title: Limiteporsegundo
+        rafaga:
+          type: integer
+          title: Rafaga
+        cuota:
+          type: integer
+          title: Cuota
+        periodo:
+          $ref: '#/components/schemas/Periodo'
+      type: object
+      required:
+      - plan
+      - limitePorSegundo
+      - rafaga
+      - cuota
+      - periodo
+      title: LimitesPlan
     NuevoSocioSolicitud:
       properties:
         nombre:
           type: string
           maxLength: 120
           minLength: 2
+          pattern: ^[^\S\x00-\x1f\x7f-\x9f]*[^\s\x00-\x1f\x7f-\x9f][^\x00-\x1f\x7f-\x9f]*[^\s\x00-\x1f\x7f-\x9f][^\S\x00-\x1f\x7f-\x9f]*$
           title: Nombre
           description: Razón social
         canal:
@@ -592,6 +864,13 @@ components:
       - nombre
       - grupos
       title: NuevoUsuarioSolicitud
+    Periodo:
+      type: string
+      enum:
+      - DAY
+      - WEEK
+      - MONTH
+      title: Periodo
     Permiso:
       type: string
       enum:
@@ -605,6 +884,7 @@ components:
       enum:
       - basico
       - estandar
+      - prueba
       title: Plan
     SocioCreado:
       properties:
@@ -852,3 +1132,23 @@ components:
       - msg
       - type
       title: ValidationError
+    VentanaCuota:
+      properties:
+        inicio:
+          type: string
+          format: date
+          title: Inicio
+        fin:
+          type: string
+          format: date
+          title: Fin
+        reinicio:
+          type: string
+          format: date-time
+          title: Reinicio
+      type: object
+      required:
+      - inicio
+      - fin
+      - reinicio
+      title: VentanaCuota

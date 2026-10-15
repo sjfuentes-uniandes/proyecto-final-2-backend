@@ -9,6 +9,8 @@ SOCIO_NO_ENCONTRADO = "SOCIO_NO_ENCONTRADO"
 NO_ENCONTRADO = "NO_ENCONTRADO"
 SOLICITUD_INVALIDA = "SOLICITUD_INVALIDA"
 OPERACION_NO_DISPONIBLE = "OPERACION_NO_DISPONIBLE"
+SOCIO_DESACTIVADO = "SOCIO_DESACTIVADO"
+PLAN_NO_DISPONIBLE = "PLAN_NO_DISPONIBLE"
 
 
 class ErrorDto(BaseModel):
@@ -35,3 +37,13 @@ def socio_no_encontrado() -> ErrorNegocio:
 def no_encontrado() -> ErrorNegocio:
     # Igual al 404 global: no revela que la ruta existe.
     return ErrorNegocio(NO_ENCONTRADO, "Recurso no encontrado", 404)
+
+
+def socio_desactivado() -> ErrorNegocio:
+    return ErrorNegocio(SOCIO_DESACTIVADO, "El socio está desactivado", 409)
+
+
+def plan_no_disponible(plan: str) -> ErrorNegocio:
+    return ErrorNegocio(
+        PLAN_NO_DISPONIBLE, "El plan no está disponible en este ambiente", 422, {"plan": plan}
+    )

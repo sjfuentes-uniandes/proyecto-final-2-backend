@@ -130,12 +130,21 @@ locals {
               "arn:${local.partition}:apigateway:${local.p.region}::/apikeys/*",
             ],
             flatten([for plan in values(local.p.usage_plans) : [
+              "arn:${local.partition}:apigateway:${local.p.region}::/usageplans/${plan}",
               "arn:${local.partition}:apigateway:${local.p.region}::/usageplans/${plan}/keys",
               "arn:${local.partition}:apigateway:${local.p.region}::/usageplans/${plan}/keys/*",
               "arn:${local.partition}:apigateway:${local.p.region}::/usageplans/${plan}/usage",
             ]])
           )
         },
+        # CreateApiKey con tags exige apigateway:PUT sobre el ARN codificado de la key.
+        {
+          Effect   = "Allow"
+          Action   = ["apigateway:PUT"]
+          Resource = ["arn:${local.partition}:apigateway:${local.p.region}::/tags/arn%3A${local.partition}%3Aapigateway%3A${local.p.region}%3A%3A%2Fapikeys%2F*"]
+        },
+        # 429 por socio (Solventa/Socios PartnerThrottled); GetMetricStatistics no admite ARN de recurso.
+        { Effect = "Allow", Action = ["cloudwatch:GetMetricStatistics"], Resource = ["*"] },
       ] : [],
       # Clave de la plataforma para mensajería y auditoría cifradas.
       local.p.kms_key_arn != null && (service.publishes || length(service.consumes) > 0 || contains(local.audit_writers, name)) ? [

@@ -139,6 +139,33 @@ run "minimo_costo" {
     error_message = "El exceso de cuota debe responder 429."
   }
   assert {
+    condition = alltrue([
+      aws_api_gateway_gateway_response.main["socios-THROTTLED"].status_code == "429",
+      aws_api_gateway_gateway_response.main["socios-THROTTLED"].response_parameters["gatewayresponse.header.Retry-After"] == "'1'",
+      aws_api_gateway_gateway_response.main["socios-QUOTA_EXCEEDED"].response_parameters["gatewayresponse.header.Retry-After"] == "'3600'",
+      aws_api_gateway_gateway_response.main["socios-QUOTA_EXCEEDED"].response_parameters["gatewayresponse.header.X-Correlation-Id"] == "context.requestId",
+    ])
+    error_message = "Retry-After separado (HU-W02): 1 s por límite por segundo y 3600 s por cuota agotada, con X-Correlation-Id."
+  }
+  assert {
+    condition = alltrue([for name, response in aws_api_gateway_gateway_response.main :
+      jsondecode(replace(replace(response.response_templates["application/json"], "$context.error.messageString", "\"Limit Exceeded\""), "$context.requestId", "id")) ==
+      { error = split("-", name)[1], message = "Limit Exceeded", correlationId = "id" }
+    ])
+    error_message = "El cuerpo de las respuestas del borde debe ser JSON válido con error, message y correlationId."
+  }
+  assert {
+    condition     = !contains(keys(aws_api_gateway_gateway_response.main["socios-UNAUTHORIZED"].response_parameters), "gatewayresponse.header.Retry-After")
+    error_message = "Solo los 429 indican cuándo reintentar."
+  }
+  assert {
+    condition = alltrue([
+      aws_cloudwatch_log_metric_filter.partner_throttled.pattern == "{ $.status = 429 }",
+      aws_cloudwatch_log_metric_filter.partner_throttled.metric_transformation[0].dimensions["ApiKeyId"] == "$.apiKeyId",
+    ])
+    error_message = "Cada 429 se atribuye a la API key del socio en Solventa/Socios PartnerThrottled (HU-W02 AC2)."
+  }
+  assert {
     condition     = length(aws_wafv2_web_acl_association.api) == 2 && length(aws_wafv2_web_acl.api.rule) == 2
     error_message = "WAF mínimo (2 reglas) debe proteger ambos APIs."
   }
@@ -191,6 +218,55 @@ run "alta_disponibilidad_con_socios_y_mtls" {
     condition     = length(aws_vpc_endpoint.interface) == 2
     error_message = "Deben crearse los endpoints de interfaz solicitados."
   }
+}
+
+run "plan_de_prueba_y_retry_after_configurables" {
+  command = plan
+
+  variables {
+    partner_tiers = {
+      basico = { rate = 5, burst = 10, quota_limit = 1000, quota_period = "DAY" }
+      prueba = { rate = 1, burst = 2, quota_limit = 5, quota_period = "DAY" }
+    }
+    partners = {
+      socio-a = { tier = "prueba", scopes = ["cotizar"] }
+      socio-b = { tier = "prueba", scopes = ["cotizar"] }
+    }
+    partner_throttle_retry_after_seconds = 2
+    partner_quota_retry_after_seconds    = 86400
+  }
+
+  assert {
+    condition = alltrue([
+      aws_api_gateway_usage_plan.partner["prueba"].quota_settings[0].limit == 5,
+      aws_api_gateway_usage_plan.partner["prueba"].quota_settings[0].period == "DAY",
+      aws_api_gateway_usage_plan.partner["prueba"].throttle_settings[0].rate_limit == 1,
+      aws_api_gateway_usage_plan.partner["prueba"].throttle_settings[0].burst_limit == 2,
+    ])
+    error_message = "El plan prueba debe ser determinista: 1 solicitud/s, ráfaga 2 y 5 al día."
+  }
+  assert {
+    condition     = length(aws_api_gateway_usage_plan_key.partner) == 2 && length(aws_api_gateway_api_key.partner) == 2
+    error_message = "Cada socio tiene su propia API key en el plan: la cuota no es un límite global compartido."
+  }
+  assert {
+    condition = alltrue([
+      aws_api_gateway_gateway_response.main["socios-THROTTLED"].response_parameters["gatewayresponse.header.Retry-After"] == "'2'",
+      aws_api_gateway_gateway_response.main["socios-QUOTA_EXCEEDED"].response_parameters["gatewayresponse.header.Retry-After"] == "'86400'",
+    ])
+    error_message = "Retry-After debe salir de las variables."
+  }
+}
+
+run "retry_after_fuera_de_rango" {
+  command = plan
+
+  variables {
+    partner_throttle_retry_after_seconds = 0
+    partner_quota_retry_after_seconds    = 30
+  }
+
+  expect_failures = [var.partner_throttle_retry_after_seconds, var.partner_quota_retry_after_seconds]
 }
 
 run "socio_con_plan_inexistente" {

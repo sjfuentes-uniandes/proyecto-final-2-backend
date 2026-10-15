@@ -13,7 +13,7 @@ _TODOS = _SELECT + " ORDER BY id"
 _GUARDAR = (
     "INSERT INTO socio (id, nombre, canal, plan, permisos, estado, client_id, api_key_id, creado, desactivado) "
     "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
-    "ON CONFLICT (id) DO UPDATE SET estado = EXCLUDED.estado, desactivado = EXCLUDED.desactivado"
+    "ON CONFLICT (id) DO UPDATE SET plan = EXCLUDED.plan, estado = EXCLUDED.estado, desactivado = EXCLUDED.desactivado"
 )
 
 
