@@ -20,6 +20,7 @@ docker = pytest.importorskip("docker")
 moto = pytest.importorskip("moto")
 REGION = "us-east-1"
 ALTA = {"nombre": "Fintech Caribe S.A.S.", "canal": "plataforma_digital", "plan": "basico"}
+TIERS = {Plan.BASICO: (5, 10, 1000), Plan.ESTANDAR: (50, 100, 50000), Plan.PRUEBA: (1, 2, 5)}
 
 
 @pytest.fixture(scope="module")
@@ -66,8 +67,12 @@ def aws(monkeypatch: pytest.MonkeyPatch) -> Iterator[Aws]:
         )
         apigateway = boto3.client("apigateway", region_name=REGION)
         planes = {
-            p.value: apigateway.create_usage_plan(name=f"solventa-pruebas-socios-{p.value}")["id"]
-            for p in Plan
+            p.value: apigateway.create_usage_plan(
+                name=f"solventa-pruebas-socios-{p.value}",
+                throttle={"rateLimit": rate, "burstLimit": burst},
+                quota={"limit": cuota, "period": "DAY"},
+            )["id"]
+            for p, (rate, burst, cuota) in TIERS.items()
         }
         yield Aws(cognito, apigateway, pool_id, planes)
 
@@ -207,14 +212,47 @@ def test_identificadores_unicos_en_altas_concurrentes(api: TestClient, aws: Aws)
     )
 
 
-def test_compensacion_real_si_falla_el_plan(api: TestClient, aws: Aws) -> None:
-    # moto no valida el usagePlanId: se simula un plan ausente de PARTNERS_USAGE_PLANS.
+def test_plan_ausente_del_ambiente_no_crea_nada(api: TestClient, aws: Aws) -> None:
     app.dependency_overrides[administrar_socios]().api_keys.planes.pop("basico")
-    with pytest.raises(LookupError):
-        api.post("/admin/socios", json=ALTA | {"permisos": ["cotizar"]})
+    respuesta = api.post("/admin/socios", json=ALTA | {"permisos": ["cotizar"]})
+    assert respuesta.status_code == 422 and respuesta.json()["codigo"] == "PLAN_NO_DISPONIBLE"
     assert (
         aws.cognito.list_user_pool_clients(UserPoolId=aws.pool_id, MaxResults=60)["UserPoolClients"]
         == []
     )
     assert aws.apigateway.get_api_keys()["items"] == []
     assert api.get("/admin/socios").json() == []
+
+
+def _keys_en(aws: Aws, plan: str) -> list[str]:
+    return [
+        k["id"] for k in aws.apigateway.get_usage_plan_keys(usagePlanId=aws.planes[plan])["items"]
+    ]
+
+
+def test_cambio_de_plan_real_mueve_solo_la_api_key_del_socio(
+    api: TestClient, aws: Aws, base: str
+) -> None:
+    a = api.post("/admin/socios", json=ALTA | {"permisos": ["cotizar"]}).json()
+    b = api.post(
+        "/admin/socios", json=ALTA | {"nombre": "Viajes del Norte", "permisos": ["cotizar"]}
+    ).json()
+    key_a, key_b = borde(aws, a)["X-Partner-Key-Id"], borde(aws, b)["X-Partner-Key-Id"]
+
+    cambio = api.put(f"/admin/socios/{a['id']}/plan", json={"plan": "prueba"})
+    assert cambio.status_code == 200 and cambio.json()["plan"] == "prueba"
+    assert _keys_en(aws, "prueba") == [key_a]
+    assert _keys_en(aws, "basico") == [key_b]
+    with psycopg.connect(base) as conexion:
+        planes = dict(conexion.execute("SELECT id, plan FROM socio").fetchall())
+    assert planes == {a["id"]: "prueba", b["id"]: "basico"}
+
+    disponibles = {p["plan"]: p for p in api.get("/admin/socios/planes").json()}
+    assert disponibles["prueba"] == {
+        "plan": "prueba",
+        "limitePorSegundo": 1.0,
+        "rafaga": 2,
+        "cuota": 5,
+        "periodo": "DAY",
+    }
+    assert api.get("/socio/me", headers=borde(aws, a)).json()["plan"] == "prueba"

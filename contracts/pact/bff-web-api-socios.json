@@ -4,6 +4,196 @@
   },
   "interactions": [
     {
+      "description": "un cambio de plan de un socio",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "existe el socio SOC-000001"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "plan": "estandar"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "X-Authenticated-Sub": [
+            "sub-paula"
+          ]
+        },
+        "method": "PUT",
+        "path": "/admin/socios/SOC-000001/plan"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "canal": "plataforma_digital",
+            "clientId": "3n2kq4v0example",
+            "creado": "2026-10-12T10:00:00Z",
+            "estado": "activo",
+            "id": "SOC-000001",
+            "nombre": "Fintech Caribe S.A.S.",
+            "permisos": [
+              "cotizar"
+            ],
+            "plan": "estandar"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.canal": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.clientId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.creado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T.+$"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^SOC-\\d{6}$"
+                }
+              ]
+            },
+            "$.nombre": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.permisos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una consulta de los planes de uso disponibles",
+      "pending": false,
+      "request": {
+        "method": "GET",
+        "path": "/admin/socios/planes"
+      },
+      "response": {
+        "body": {
+          "content": [
+            {
+              "cuota": 5,
+              "limitePorSegundo": 1.0,
+              "periodo": "DAY",
+              "plan": "prueba",
+              "rafaga": 2
+            }
+          ],
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[*].cuota": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[*].limitePorSegundo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[*].periodo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(DAY|WEEK|MONTH)$"
+                }
+              ]
+            },
+            "$[*].plan": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[*].rafaga": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
       "description": "una consulta de un socio inexistente",
       "pending": false,
       "request": {
@@ -47,6 +237,165 @@
           }
         },
         "status": 404
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una consulta del consumo de un socio",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "existe el socio SOC-000001"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/admin/socios/SOC-000001/consumo"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "estado": "normal",
+            "limites": {
+              "cuota": 5,
+              "limitePorSegundo": 1.0,
+              "periodo": "DAY",
+              "plan": "prueba",
+              "rafaga": 2
+            },
+            "porcentaje": 0,
+            "restante": 1000,
+            "socioId": "SOC-000001",
+            "usado": 0,
+            "ventana": {
+              "fin": "2026-10-13",
+              "inicio": "2026-10-13",
+              "reinicio": "2026-10-12T10:00:00Z"
+            }
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(normal|cerca_del_limite|agotada)$"
+                }
+              ]
+            },
+            "$.limites.cuota": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.limites.limitePorSegundo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.limites.periodo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(DAY|WEEK|MONTH)$"
+                }
+              ]
+            },
+            "$.limites.plan": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.limites.rafaga": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.porcentaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.restante": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.socioId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^SOC-\\d{6}$"
+                }
+              ]
+            },
+            "$.usado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.ventana.fin": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}$"
+                }
+              ]
+            },
+            "$.ventana.inicio": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}$"
+                }
+              ]
+            },
+            "$.ventana.reinicio": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T.+$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
       },
       "type": "Synchronous/HTTP"
     },

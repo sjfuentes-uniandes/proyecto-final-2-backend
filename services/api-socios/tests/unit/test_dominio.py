@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 import pytest
+from api_socios.adapters.inbound.admin import SocioSolicitud
 from api_socios.domain.operaciones import PERMISO_POR_OPERACION, permiso_requerido
 from api_socios.domain.socios import (
     CanalVenta,
@@ -15,6 +16,9 @@ from api_socios.domain.socios import (
     permisos_de_alcances,
 )
 from api_socios.main import app
+from hypothesis import given
+from hypothesis import strategies as st
+from pydantic import ValidationError
 
 
 def socio(**cambios: object) -> Socio:
@@ -49,6 +53,8 @@ def test_identificador_con_formato_del_mockup() -> None:
         ("A", {Permiso.COTIZAR}),
         ("x" * 121, {Permiso.COTIZAR}),
         ("   ", {Permiso.COTIZAR}),
+        ("\x1e\x17 ", {Permiso.COTIZAR}),
+        ("Fintech\x00Caribe", {Permiso.COTIZAR}),
         ("Fintech Caribe", set()),
     ],
 )
@@ -117,3 +123,19 @@ def test_cada_operacion_de_socio_tiene_permiso() -> None:
     assert permiso_requerido("get", "/polizas/{poliza_id}") is Permiso.CONSULTAR
     with pytest.raises(LookupError):
         permiso_requerido("DELETE", "/polizas/{poliza_id}")
+
+
+@given(st.text(max_size=130))
+def test_el_contrato_y_el_dominio_aceptan_la_misma_razon_social(nombre: str) -> None:
+    datos = {"nombre": nombre, "canal": "otro", "plan": "basico", "permisos": ["cotizar"]}
+    try:
+        SocioSolicitud.model_validate(datos)
+        contrato = True
+    except ValidationError:
+        contrato = False
+    try:
+        NuevoSocio(nombre, CanalVenta.OTRO, Plan.BASICO, frozenset({Permiso.COTIZAR}))
+        dominio = True
+    except ValueError:
+        dominio = False
+    assert contrato == dominio

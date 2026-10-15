@@ -95,3 +95,47 @@ async def test_desactivar_socio(pacto: Pact) -> None:
     with pacto.serve() as servidor:
         desactivado = await ApiSocios(str(servidor.url)).desactivar("SOC-000001", None)
     assert desactivado["estado"] == "desactivado"
+
+
+LIMITES = {"plan": match.like("prueba"), "limitePorSegundo": match.like(1.0), "rafaga": match.like(2),
+           "cuota": match.like(5), "periodo": match.regex("DAY", regex=r"^(DAY|WEEK|MONTH)$")}
+DIA = match.regex("2026-10-13", regex=r"^\d{4}-\d{2}-\d{2}$")
+
+
+async def test_listar_planes(pacto: Pact) -> None:
+    (pacto.upon_receiving("una consulta de los planes de uso disponibles")
+        .with_request("GET", "/admin/socios/planes")
+        .will_respond_with(200)
+        .with_body(match.each_like(LIMITES), content_type="application/json"))
+    with pacto.serve() as servidor:
+        planes = await ApiSocios(str(servidor.url)).planes(None)
+    assert planes[0]["cuota"] > 0
+
+
+async def test_cambiar_plan(pacto: Pact) -> None:
+    (pacto.upon_receiving("un cambio de plan de un socio")
+        .given("existe el socio SOC-000001")
+        .with_request("PUT", "/admin/socios/SOC-000001/plan")
+        .with_header("X-Authenticated-Sub", "sub-paula")
+        .with_body({"plan": "estandar"}, content_type="application/json")
+        .will_respond_with(200)
+        .with_body(socio() | {"plan": "estandar"}, content_type="application/json"))
+    with pacto.serve() as servidor:
+        cambiado = await ApiSocios(str(servidor.url)).cambiar_plan("SOC-000001", "estandar", "sub-paula")
+    assert cambiado["plan"] == "estandar"
+
+
+async def test_consultar_consumo(pacto: Pact) -> None:
+    (pacto.upon_receiving("una consulta del consumo de un socio")
+        .given("existe el socio SOC-000001")
+        .with_request("GET", "/admin/socios/SOC-000001/consumo")
+        .will_respond_with(200)
+        .with_body({
+            "socioId": ID, "limites": LIMITES,
+            "ventana": {"inicio": DIA, "fin": DIA, "reinicio": FECHA},
+            "usado": match.like(0), "restante": match.like(1000), "porcentaje": match.like(0),
+            "estado": match.regex("normal", regex=r"^(normal|cerca_del_limite|agotada)$"),
+        }, content_type="application/json"))
+    with pacto.serve() as servidor:
+        consumo = await ApiSocios(str(servidor.url)).consumo("SOC-000001", None)
+    assert consumo["socioId"] == "SOC-000001" and "apiKeyId" not in consumo

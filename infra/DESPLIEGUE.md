@@ -141,7 +141,7 @@ make infra-probar ENV=int                                           # SMOKE_ALER
 | Socio con token y API key | 200 desde `api-socios` | Recorrido completo: WAF → API Gateway → VPC Link v2 → ALB → ECS |
 | `SMOKE_ALERTA=1` | Llega el correo de prueba | Tópico de alertas y suscripción confirmada (HU-W28) |
 
-- **Socios de prueba:** la prueba usa `socio-a`, definido en `infra/envs/int/platform.tfvars`.
+- **Socios de prueba:** la prueba usa `socio-a`, definido en `infra/envs/int/platform.tfvars`. En `int`, `socio-a` y `socio-b` usan el plan `prueba` (5 solicitudes al día): si las pruebas de HU-W02 agotaron su cuota, el paso 4 responde 429 hasta las 00:00 UTC o hasta reponerla con `aws apigateway update-usage --usage-plan-id <prueba> --key-id <api_key_id> --patch-operations op=replace,path=/remaining,value=5` (`terraform -chdir=infra/platform output -json partners` muestra `api_key_id`).
 - **Dominio de Cognito:** puede tardar unos minutos en responder después del primer `infra-plataforma`. Si falla solo el token, repetir.
 - **Más servicios:** para cubrir los demás, agregarlos a `SERVICES`. Sin `SERVICES`, se construyen los 10 del catálogo.
 
@@ -198,8 +198,8 @@ make desplegar ENV=int
 POOL=$(terraform -chdir=infra/platform output -json cognito | jq -r .backoffice.pool_id)
 echo "$POOL"
 
-aws cognito-idp admin-set-user-password --user-pool-id "$POOL" \         ─╯
-  --username sj.fuentes@uniandes.edu.co --password 'Temporal#2026abc'
+aws cognito-idp admin-set-user-password --user-pool-id "$POOL" \
+--username sj.fuentes@uniandes.edu.co --password 'Temporal#2026abc'
 
 # 4. URL del portal (cambia con cada CloudFront nuevo)
 make infra-salidas ENV=int
@@ -247,7 +247,18 @@ El usuario administrador de la prueba (HU-W01: crear y desactivar un socio) es d
 2. Hacer su primer ingreso en el portal. Al registrar la aplicación de autenticación, copiar la **clave de configuración** (texto base32 bajo el código QR): es la semilla.
 3. En **Settings → Secrets and variables → Actions → Secrets**, crear `E2E_ADMIN_USUARIO`, `E2E_ADMIN_CLAVE` y `E2E_ADMIN_TOTP`.
 
+`E2E_ADMIN_TOTP` es la semilla (letras A-Z y dígitos 2-7, p. ej. `JBSWY3DPEHPK3PXP`), no el código de 6 dígitos que cambia cada 30 s; también se acepta con espacios o como la URI `otpauth://` del QR. Cognito no permite recuperar una semilla ya registrada: si no se guardó, desactivar el TOTP del usuario (`aws cognito-idp admin-set-user-mfa-preference --user-pool-id <pool backoffice> --username <usuario> --software-token-mfa-settings Enabled=false,PreferredMfa=false`) y volver a ingresar al portal para registrar una nueva y copiarla.
+
 En local se puede usar `E2E_ADMIN_TOKEN` (ID token copiado del portal) en vez de las tres variables: `E2E_ADMIN_TOKEN=... make test-e2e`. La prueba de HU-W01 deja el socio que crea desactivado; `make infra-destruir` borra su API key (paso 4/5).
+
+**HU-W02 (`tests/e2e/test_hu_w02_cuotas.py`)** necesita, además, credenciales de AWS (las del workflow bastan) y el plan `prueba` en `partner_tiers`, asignado a `socio-a` y `socio-b`:
+
+| Prueba | Qué comprueba |
+| --- | --- |
+| `test_hu_w02_n2_cuota_por_credencial_en_el_borde` | Una ráfaga de `socio-a` recibe 429 `THROTTLED` con `Retry-After: 1`. Las solicitudes espaciadas terminan en 429 `QUOTA_EXCEEDED` antes de 15 procesadas, con `Retry-After: 3600` y `X-Correlation-Id`. `socio-b` sigue en 200. El registro de acceso de esa solicitud tiene `integrationStatus = "-"` y no aparece en los logs de `api-socios` (no se invocó el dominio). `PartnerThrottled` suma al menos 1 con el `ApiKeyId` de `socio-a` y 0 con el de `socio-b`. |
+| `test_hu_w02_n3_cambio_de_plan_desde_la_administracion` | Da de alta un socio en `basico`, lo pasa a `prueba` por `PUT /web/socios/{id}/plan`, comprueba que `GET /web/socios/{id}/consumo` informe cuota 5 y que la API key quede solo en el plan `prueba` (`GetUsagePlanKey`). Sin llamar al borde antes del cambio (API Gateway guarda en caché el plan de cada key), agota la cuota con `GET /socio/me` hasta recibir 429 `QUOTA_EXCEEDED`. Luego espera a que el consumo quede `agotada` con al menos una limitación, verifica que `socio-b` siga en 200 y desactiva el socio. |
+
+Las dos pruebas reponen la cuota de `socio-a` y `socio-b` al empezar y al terminar (`apigateway:UpdateUsage`), así que se pueden repetir el mismo día. API Gateway aplica la cuota en modo *best-effort* y contabiliza el uso con unos segundos de retraso, así que la prueba no exige el corte exacto en la sexta solicitud (el límite de 5 del plan lo verifica `infra/platform/tests`): exige que el borde rechace con `QUOTA_EXCEEDED` antes de tres veces la cuota. Variables opcionales: `E2E_RETRY_AFTER_LIMITE` y `E2E_RETRY_AFTER_CUOTA` (si se cambian `partner_throttle_retry_after_seconds` o `partner_quota_retry_after_seconds`), `E2E_ESPERA_PLAN_S` (60 s; propagación del plan nuevo en API Gateway) y `E2E_ESPERA_LOGS_S` (240 s; logs y métricas). Filtro: `-k hu_w02`.
 
 ### Portal web (repo proyecto-final-2-frontend)
 

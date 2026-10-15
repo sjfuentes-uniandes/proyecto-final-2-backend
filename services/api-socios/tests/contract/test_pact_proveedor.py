@@ -35,6 +35,7 @@ def test_api_socios_cumple_el_pacto_de_bff_web(entorno, proveedor: str) -> None:
 
     def estado(state: str, action: str) -> None:
         entorno.repositorio.socios.clear()
+        entorno.api_keys.planes.clear()
         if action == "setup" and state == "existe el socio SOC-000001":
             entorno.repositorio.guardar(
                 Socio(

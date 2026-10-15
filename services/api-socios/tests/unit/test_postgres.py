@@ -88,7 +88,7 @@ def test_sin_filas(conexion: ConexionFalsa) -> None:
         repositorio.siguiente_identificador()
 
 
-def test_guardar_usa_parametros_y_actualiza_solo_el_estado(conexion: ConexionFalsa) -> None:
+def test_guardar_usa_parametros_y_actualiza_plan_y_estado(conexion: ConexionFalsa) -> None:
     socio = Socio(
         id="SOC-000007",
         nombre="Fintech",
@@ -102,7 +102,10 @@ def test_guardar_usa_parametros_y_actualiza_solo_el_estado(conexion: ConexionFal
     RepositorioPostgres("postgresql://").guardar(socio)
     sql, parametros = conexion.sentencias[-1]
     assert sql == postgres._GUARDAR and "%s" in sql
-    assert "DO UPDATE SET estado = EXCLUDED.estado, desactivado = EXCLUDED.desactivado" in sql
+    assert (
+        "DO UPDATE SET plan = EXCLUDED.plan, estado = EXCLUDED.estado, desactivado = EXCLUDED.desactivado"
+        in sql
+    )
     assert parametros == (
         "SOC-000007", "Fintech", "otro", "basico", ["cotizar", "emitir"], "activo", "c", "k", CREADO, None,
     )  # fmt: skip

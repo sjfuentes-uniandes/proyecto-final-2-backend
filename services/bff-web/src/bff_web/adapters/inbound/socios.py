@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from functools import lru_cache
 from typing import Annotated, Any
@@ -55,6 +55,19 @@ class CanalVenta(StrEnum):
 class Plan(StrEnum):
     BASICO = "basico"
     ESTANDAR = "estandar"
+    PRUEBA = "prueba"
+
+
+class Periodo(StrEnum):
+    DAY = "DAY"
+    WEEK = "WEEK"
+    MONTH = "MONTH"
+
+
+class EstadoCuota(StrEnum):
+    NORMAL = "normal"
+    CERCA_DEL_LIMITE = "cerca_del_limite"
+    AGOTADA = "agotada"
 
 
 class Estado(StrEnum):
@@ -62,10 +75,14 @@ class Estado(StrEnum):
     DESACTIVADO = "desactivado"
 
 
+_CONTROL = r"\x00-\x1f\x7f-\x9f"
+RAZON_SOCIAL = rf"^[^\S{_CONTROL}]*[^\s{_CONTROL}][^{_CONTROL}]*[^\s{_CONTROL}][^\S{_CONTROL}]*$"
+
+
 class NuevoSocioSolicitud(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    nombre: str = Field(min_length=2, max_length=120, description="Razón social")
+    nombre: str = Field(min_length=2, max_length=120, pattern=RAZON_SOCIAL, description="Razón social")
     canal: CanalVenta
     plan: Plan
     permisos: list[Permiso] = Field(min_length=1, max_length=len(Permiso))
@@ -90,6 +107,43 @@ class SocioCreado(SocioRespuesta):
 
     client_secret: str = Field(alias="clientSecret")
     api_key: str = Field(alias="apiKey")
+
+
+class CambioPlanSolicitud(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    plan: Plan
+
+
+class LimitesPlan(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    plan: Plan
+    limite_por_segundo: float = Field(alias="limitePorSegundo")
+    rafaga: int
+    cuota: int
+    periodo: Periodo
+
+
+class VentanaCuota(BaseModel):
+    inicio: date
+    fin: date
+    reinicio: datetime
+
+
+class ConsumoSocio(BaseModel):
+    """Solo datos del socio consultado: el administrador nunca ve la API key."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    socio_id: str = Field(alias="socioId")
+    limites: LimitesPlan
+    ventana: VentanaCuota
+    usado: int
+    restante: int
+    porcentaje: int
+    estado: EstadoCuota
+    limitadas: int | None = Field(None, description="Respuestas 429 en la ventana; null si no hay métricas")
 
 
 @lru_cache
@@ -126,6 +180,11 @@ async def habilitar_socio(solicitud: NuevoSocioSolicitud, cliente: Cliente, http
     return creado
 
 
+@router.get("/planes", response_model=list[LimitesPlan], response_model_by_alias=True)
+async def listar_planes(cliente: Cliente, administrador: Administrador = None) -> list[dict[str, Any]]:
+    return await _proteger(cliente.planes(administrador))
+
+
 @router.get("/{socio_id}", response_model=SocioRespuesta, response_model_by_alias=True)
 async def consultar_socio(socio_id: IdSocio, cliente: Cliente, administrador: Administrador = None) -> dict[str, Any]:
     return await _proteger(cliente.obtener(socio_id, administrador))
@@ -134,3 +193,16 @@ async def consultar_socio(socio_id: IdSocio, cliente: Cliente, administrador: Ad
 @router.post("/{socio_id}/desactivar", response_model=SocioRespuesta, response_model_by_alias=True)
 async def desactivar_socio(socio_id: IdSocio, cliente: Cliente, administrador: Administrador = None) -> dict[str, Any]:
     return await _proteger(cliente.desactivar(socio_id, administrador))
+
+
+@router.put("/{socio_id}/plan", response_model=SocioRespuesta, response_model_by_alias=True,
+            responses={409: _error("SOCIO_DESACTIVADO"),
+                       422: _error("SOLICITUD_INVALIDA o PLAN_NO_DISPONIBLE (detalles.plan)")})
+async def cambiar_plan(socio_id: IdSocio, solicitud: CambioPlanSolicitud, cliente: Cliente,
+                       administrador: Administrador = None) -> dict[str, Any]:
+    return await _proteger(cliente.cambiar_plan(socio_id, solicitud.plan.value, administrador))
+
+
+@router.get("/{socio_id}/consumo", response_model=ConsumoSocio, response_model_by_alias=True)
+async def consultar_consumo(socio_id: IdSocio, cliente: Cliente, administrador: Administrador = None) -> dict[str, Any]:
+    return await _proteger(cliente.consumo(socio_id, administrador))

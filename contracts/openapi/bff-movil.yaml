@@ -1,0 +1,177 @@
+openapi: 3.1.0
+info:
+  title: bff-movil
+  version: 0.1.0
+paths:
+  /v1/sesion:
+    get:
+      tags:
+      - sesion
+      summary: Sesión del cliente autenticado
+      description: Revalida el token y devuelve los servicios que el cliente puede
+        usar según su identidad.
+      operationId: consultar_sesion_v1_sesion_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SesionDto'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '401':
+          description: 'NO_AUTENTICADO: falta el token, venció, tiene una firma inválida
+            o no corresponde al titular autenticado. La app debe pedir autenticación
+            completa'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: el token no es del pool de clientes'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: CLIENTE_NO_ENCONTRADO
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: 'SOLICITUD_INVALIDA: un encabezado no cumple su formato'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: no se pudo verificar la identidad
+            del cliente'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Health Get
+components:
+  schemas:
+    ErrorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        mensaje:
+          type: string
+          title: Mensaje
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          type: object
+          title: Detalles
+      type: object
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
+    ServicioAutorizado:
+      type: string
+      enum:
+      - POLIZAS
+      - SINIESTROS
+      - PRIVACIDAD
+      - VERIFICACION_IDENTIDAD
+      title: ServicioAutorizado
+    SesionDto:
+      properties:
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        serviciosAutorizados:
+          items:
+            $ref: '#/components/schemas/ServicioAutorizado'
+          type: array
+          title: Serviciosautorizados
+        expiraEn:
+          type: string
+          format: date-time
+          title: Expiraen
+      type: object
+      required:
+      - clienteId
+      - serviciosAutorizados
+      - expiraEn
+      title: SesionDto
+  securitySchemes:
+    bearerAuth:
+      type: http
+      description: Access token de Cognito del pool de clientes
+      scheme: bearer
+

@@ -43,6 +43,26 @@ locals {
   response_security_policy = "67f7725c-6f97-4210-82d7-5512b31e9d03"
 }
 
+# Enrutamiento del SPA: solo las rutas del cliente (sin extensión) se reescriben a
+# index.html. Un archivo inexistente (p. ej. un chunk de un despliegue anterior)
+# responde 403/404 en vez de index.html con 200, que el navegador rechaza como
+# "'text/html' is not a valid JavaScript MIME type".
+resource "aws_cloudfront_function" "web_spa" {
+  name    = "${local.prefix}-web-spa"
+  runtime = "cloudfront-js-2.0"
+  comment = "Rutas del SPA a index.html"
+  publish = true
+  code    = <<-EOT
+    function handler(event) {
+      var request = event.request;
+      if (!/\.[a-zA-Z0-9]+$/.test(request.uri)) {
+        request.uri = '/index.html';
+      }
+      return request;
+    }
+  EOT
+}
+
 resource "aws_cloudfront_distribution" "web" {
   enabled             = true
   comment             = "${local.prefix} portal web"
@@ -64,16 +84,10 @@ resource "aws_cloudfront_distribution" "web" {
     compress                   = true
     cache_policy_id            = local.cache_policy_optimized
     response_headers_policy_id = local.response_security_policy
-  }
 
-  # Enrutamiento del SPA: las rutas del cliente devuelven index.html.
-  dynamic "custom_error_response" {
-    for_each = [403, 404]
-    content {
-      error_code            = custom_error_response.value
-      response_code         = 200
-      response_page_path    = "/index.html"
-      error_caching_min_ttl = 10
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.web_spa.arn
     }
   }
 

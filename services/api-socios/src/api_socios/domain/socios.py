@@ -1,4 +1,5 @@
 import re
+import unicodedata
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -26,16 +27,24 @@ class CanalVenta(StrEnum):
 
 
 class Plan(StrEnum):
-    """Límite de solicitudes: plan de uso de API Gateway (infra: partner_tiers)."""
+    """Límite de solicitudes: plan de uso de API Gateway (infra: partner_tiers).
+
+    Un plan solo se puede asignar si el ambiente lo configura en PARTNERS_USAGE_PLANS.
+    """
 
     BASICO = "basico"
     ESTANDAR = "estandar"
+    PRUEBA = "prueba"
 
 
 _PATRON_ID = re.compile(r"SOC-\d{6}")
 
 
 class SocioNoEncontrado(Exception):
+    pass
+
+
+class SocioDesactivado(Exception):
     pass
 
 
@@ -57,6 +66,8 @@ class NuevoSocio:
     permisos: frozenset[Permiso]
 
     def __post_init__(self) -> None:
+        if any(unicodedata.category(c) == "Cc" for c in self.nombre):
+            raise ValueError("La razón social no admite caracteres de control")
         if not 2 <= len(self.nombre.strip()) <= 120:
             raise ValueError("La razón social debe tener entre 2 y 120 caracteres")
         if not self.permisos:
@@ -94,6 +105,11 @@ class Socio:
         if not self.activo:
             return self
         return replace(self, estado=Estado.DESACTIVADO, desactivado=ahora or datetime.now(UTC))
+
+    def con_plan(self, plan: Plan) -> "Socio":
+        if not self.activo:
+            raise SocioDesactivado(self.id)
+        return replace(self, plan=plan)
 
     def autentica(self, client_id: str, api_key_id: str | None) -> bool:
         return self.activo and client_id == self.client_id and api_key_id == self.api_key_id
