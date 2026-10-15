@@ -203,6 +203,9 @@ def adaptador_url(wiremock: WireMock) -> Iterator[str]:
     settings = SettingsAdaptador(
         ALLY_OPEN_FINANCE_URL=f"{wiremock.url}/open-finance",
         ALLY_DATOS_ABIERTOS_URL=f"{wiremock.url}/datos-abiertos",
+        # Equivale a SOLVENTA_CB_FALLOS_CONSECUTIVOS=1000: el adaptador es de sesión y el
+        # circuito no debe abrirse entre pruebas (W12-P08).
+        cb_fallos_consecutivos=1000,
     )
     with servir(crear_adaptador(settings)) as url:
         yield url

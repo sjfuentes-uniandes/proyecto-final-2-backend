@@ -7,7 +7,7 @@ from opentelemetry.sdk.metrics.export import MetricReader
 from opentelemetry.sdk.trace.export import SpanExporter
 from solventa_common import correlation
 from solventa_common.errors import registrar_manejadores
-from solventa_common.resiliencia import SinProteccion
+from solventa_common.resiliencia import ProteccionDependencia
 from solventa_common.telemetry import instrumentar
 
 from adaptador_datos.adapters.inbound.http import consultas
@@ -51,8 +51,10 @@ def crear_app(
                         settings.ally_datos_abiertos_credentials.client_secret,
                     ),
                 },
-                # Solo timeout; la protección completa reemplaza a SinProteccion en la historia de W12.
-                proteccion=SinProteccion(),
+                # Una sola protección por app: circuito por fuente y bulkhead por aliado (DT-21).
+                proteccion=ProteccionDependencia(
+                    settings.cb_fallos_consecutivos, settings.cb_apertura_s, settings.bulkhead_max
+                ),
                 timeouts_ms={
                     Aliado.OPEN_FINANCE: settings.ally_open_finance_timeout_ms,
                     Aliado.DATOS_ABIERTOS: settings.ally_datos_abiertos_timeout_ms,
