@@ -67,6 +67,18 @@ class ReconstruirFalso:
         return self.respuesta
 
 
+class RecalcularFalso:
+    def __init__(self, perfil: Any) -> None:
+        self.respuesta: Any = (perfil, True)
+        self.llamadas: list[tuple[Any, ...]] = []
+
+    async def ejecutar(self, *argumentos: Any) -> Any:
+        self.llamadas.append(argumentos)
+        if isinstance(self.respuesta, BaseException):
+            raise self.respuesta
+        return self.respuesta
+
+
 @pytest.fixture
 def app(perfil_c01: Any, escenario: Any) -> FastAPI:
     aplicacion = instrumentar(FastAPI(), ServiceSettings(service_name="cotizacion"))
@@ -74,6 +86,9 @@ def app(perfil_c01: Any, escenario: Any) -> FastAPI:
     aplicacion.include_router(perfilamiento.router)
     aplicacion.state.crear_perfil = CrearPerfilFalso(perfil_c01)
     aplicacion.state.reconstruir_perfil = ReconstruirFalso()
+    aplicacion.state.recalcular_perfil = RecalcularFalso(
+        replace(perfil_c01, perfil_anterior_id=UUID(int=7))
+    )
     escenario.repo.perfiles[perfil_c01.id] = perfil_c01
     aplicacion.state.perfiles = escenario.repo
     return aplicacion
@@ -355,3 +370,62 @@ def test_perfil_insuficiente_sin_consentimiento(
         None,
     )
     assert cuerpo["confianza"] == 0.0
+
+
+# --- Recálculo (W12-P06) -----------------------------------------------------------------
+
+RECALCULO = f"/v1/perfiles/{UUID(int=7)}/recalculos"
+
+
+def test_recalculo_responde_201_con_el_perfil_nuevo(api: TestClient, app: FastAPI) -> None:
+    respuesta = api.post(RECALCULO, headers=ASESOR)
+    assert respuesta.status_code == 201
+    assert respuesta.json()["perfilAnteriorId"] == str(UUID(int=7))
+    assert respuesta.headers["X-Correlation-Id"] == "corr-api"
+    assert app.state.recalcular_perfil.llamadas == [
+        (UUID(int=7), UUID(ASESOR["Idempotency-Key"]), "asesor-sintetico", "corr-api")
+    ]
+
+
+def test_recalculo_con_la_misma_clave_responde_200(api: TestClient, app: FastAPI) -> None:
+    perfil, _ = app.state.recalcular_perfil.respuesta
+    app.state.recalcular_perfil.respuesta = (perfil, False)
+    respuesta = api.post(RECALCULO, headers=ASESOR)
+    assert respuesta.status_code == 200
+    assert respuesta.json()["id"] == str(perfil.id)
+
+
+@pytest.mark.parametrize(
+    ("error", "estado", "codigo"),
+    [
+        (PerfilNoEncontrado(), 404, "PERFIL_NO_ENCONTRADO"),
+        (ConflictoIdempotencia(), 422, "IDEMPOTENCIA_CONFLICTO"),
+        (IdentidadNoVerificada(), 403, "IDENTIDAD_NO_VERIFICADA"),
+        (DependenciaNoDisponible("clientes.identidad"), 503, "DEPENDENCIA_NO_DISPONIBLE"),
+    ],
+)
+def test_recalculo_errores(
+    api: TestClient, app: FastAPI, error: Exception, estado: int, codigo: str
+) -> None:
+    app.state.recalcular_perfil.respuesta = error
+    respuesta = api.post(RECALCULO, headers=ASESOR)
+    assert respuesta.status_code == estado
+    assert respuesta.json()["codigo"] == codigo
+
+
+@pytest.mark.parametrize(
+    ("ruta", "cambios", "estado"),
+    [
+        (RECALCULO, {"Idempotency-Key": None}, 422),
+        (RECALCULO, {"Idempotency-Key": "no-es-uuid"}, 422),
+        ("/v1/perfiles/no-es-uuid/recalculos", {}, 422),
+        (RECALCULO, {"X-Actor-Rol": "SOCIO"}, 403),
+        (RECALCULO, {"X-Actor-Id": None}, 401),
+    ],
+)
+def test_recalculo_valida_encabezados_y_ruta(
+    api: TestClient, app: FastAPI, ruta: str, cambios: dict[str, Any], estado: int
+) -> None:
+    encabezados = {k: v for k, v in {**ASESOR, **cambios}.items() if v is not None}
+    assert api.post(ruta, headers=encabezados).status_code == estado
+    assert app.state.recalcular_perfil.llamadas == []

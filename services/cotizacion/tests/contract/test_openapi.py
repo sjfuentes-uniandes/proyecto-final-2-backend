@@ -26,6 +26,11 @@ def test_contrato_de_perfiles() -> None:
     assert set(rutas["/v1/perfiles"]["get"]["responses"]) == {"200", "401", "403", "422"}
     for ruta in ("/v1/perfiles/{perfilId}", "/v1/perfiles/{perfilId}/reconstruccion"):
         assert set(rutas[ruta]["get"]["responses"]) == {"200", "401", "403", "404", "422"}
+    recalculo = rutas["/v1/perfiles/{perfilId}/recalculos"]["post"]
+    assert set(recalculo["responses"]) == {"200", "201", "401", "403", "404", "409", "422", "503"}
+    assert "requestBody" not in recalculo
+    encabezados = {p["name"]: p["required"] for p in recalculo["parameters"] if p["in"] == "header"}
+    assert encabezados == {"X-Actor-Id": False, "X-Actor-Rol": False, "Idempotency-Key": True}
     esquemas = app.openapi()["components"]["schemas"]
     respuesta = set(esquemas["PerfilRespuesta"]["properties"])
     assert not {"insumos", "datosDeclarados", "hashModelo"} & respuesta

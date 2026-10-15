@@ -187,6 +187,12 @@ def servir(app: FastAPI) -> Iterator[str]:
 
 
 @pytest.fixture(scope="session")
+def servir_app() -> Callable[[FastAPI], Any]:
+    """`servir` para las pruebas que necesitan una app propia que se detiene (MT-W12-12)."""
+    return servir
+
+
+@pytest.fixture(scope="session")
 def catalogo_url(bases: Bases) -> Iterator[str]:
     from catalogo.config import Settings as SettingsCatalogo
     from catalogo.main import crear_app as crear_catalogo
@@ -203,6 +209,9 @@ def adaptador_url(wiremock: WireMock) -> Iterator[str]:
     settings = SettingsAdaptador(
         ALLY_OPEN_FINANCE_URL=f"{wiremock.url}/open-finance",
         ALLY_DATOS_ABIERTOS_URL=f"{wiremock.url}/datos-abiertos",
+        # Equivale a SOLVENTA_CB_FALLOS_CONSECUTIVOS=1000: el adaptador es de sesión y el
+        # circuito no debe abrirse entre pruebas (W12-P08).
+        cb_fallos_consecutivos=1000,
     )
     with servir(crear_adaptador(settings)) as url:
         yield url
@@ -244,6 +253,7 @@ class Cotizacion:
     spans: InMemorySpanExporter
     bases: Bases
     wiremock: WireMock
+    lector: InMemoryMetricReader
 
     def enviar(
         self,
@@ -301,9 +311,8 @@ def cotizacion(
             **cambios,
         }
         spans = InMemorySpanExporter()
-        app = crear_app(
-            Settings(**valores), span_exporter=spans, metric_readers=[InMemoryMetricReader()]
-        )
+        lector = InMemoryMetricReader()
+        app = crear_app(Settings(**valores), span_exporter=spans, metric_readers=[lector])
         # instrumentar reconfigura el logger raíz: la captura se instala después.
         salida = io.StringIO()
         handler = logging.StreamHandler(salida)
@@ -315,7 +324,7 @@ def cotizacion(
         abiertos.append(cliente)
         registro.logs.append(salida)
         registro.spans.append(spans)
-        return Cotizacion(cliente, salida, spans, bases, wiremock)
+        return Cotizacion(cliente, salida, spans, bases, wiremock, lector)
 
     yield crear
     for cliente in abiertos:

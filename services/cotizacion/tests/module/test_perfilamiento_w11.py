@@ -14,6 +14,7 @@ from uuid import uuid4
 import httpx
 import psycopg
 import pytest
+from cotizacion.domain.perfilamiento.modelos import Fuente
 from jsonschema import Draft202012Validator
 
 EVENTOS = Path(__file__).resolve().parents[4] / "contracts" / "events"
@@ -232,6 +233,8 @@ def test_mt_w11_16_traza_con_hijos_por_dependencia(cotizacion: Any) -> None:
         "perfilamiento.dependencia.clientes.identidad",
         "perfilamiento.dependencia.clientes.consentimiento",
         "perfilamiento.dependencia.catalogo.modelo",
+        # Fase B (HU-W12): una rama por fuente con EjecutorParalelo.
+        *(f"perfilamiento.dependencia.fuente.{f.value}" for f in Fuente),
     }
     for hijo in hijos.values():
         assert hijo.parent is not None and hijo.parent.span_id == padre.context.span_id

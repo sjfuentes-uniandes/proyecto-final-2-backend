@@ -52,3 +52,11 @@ def test_contrato_de_perfiles() -> None:
     assert set(rutas["/v1/perfiles/{perfilId}"]["get"]["responses"]) == {"200", "401", "403", "404", "422", "503"}
     consulta = {p["name"] for p in rutas["/v1/perfiles"]["get"]["parameters"] if p["in"] == "query"}
     assert consulta == {"clienteId", "limite"}
+    # HU-W12: recálculo y comparación (05 §B.4.2).
+    recalculo = rutas["/v1/perfiles/{perfilId}/recalculos"]["post"]
+    assert set(recalculo["responses"]) == {"200", "201", "401", "403", "404", "409", "422", "503"}
+    assert {p["name"] for p in recalculo["parameters"] if p["required"]} == {"perfilId", "Idempotency-Key"}
+    assert "requestBody" not in recalculo
+    comparacion = rutas["/v1/perfiles/{perfilId}/comparacion"]["get"]
+    assert set(comparacion["responses"]) == {"200", "401", "403", "404", "422", "503"}
+    assert app.openapi()["components"]["schemas"]["ComparacionPerfiles"]["required"] == ["anterior", "actual"]

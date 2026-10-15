@@ -96,7 +96,8 @@ def test_200_respuesta_canonica(cliente_con: Any) -> None:
     assert request.url.path == f"/open-finance/v3/customers/{CLIENTE}/payment-history"
     assert request.headers["X-Api-Key"] == "local-sintetico"
     assert request.headers["X-Correlation-Id"] == CORRELACION
-    assert request.extensions["timeout"]["read"] == 0.27
+    # Timeout efectivo de 270 ms; ProteccionDependencia pasa lo que resta de él (reloj real).
+    assert 0.25 < request.extensions["timeout"]["read"] <= 0.27
 
 
 def test_200_valores_decimales_en_texto_y_no_disponible(cliente_con: Any) -> None:

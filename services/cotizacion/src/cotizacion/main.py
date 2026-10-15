@@ -18,7 +18,7 @@ from cotizacion.adapters.outbound.catalogo_http import CatalogoHttp
 from cotizacion.adapters.outbound.clientes_http import ClientesHttp
 from cotizacion.adapters.outbound.reloj import RelojSistema
 from cotizacion.application.perfilamiento.crear_perfil import ConfigPerfilamiento, CrearPerfil
-from cotizacion.application.perfilamiento.ejecutor_fuentes import EjecutorSecuencial
+from cotizacion.application.perfilamiento.ejecutor_fuentes import EjecutorParalelo
 from cotizacion.application.perfilamiento.puertos import (
     EjecutorFuentes,
     PuertoConsentimiento,
@@ -27,6 +27,7 @@ from cotizacion.application.perfilamiento.puertos import (
     Reloj,
     RepositorioPerfiles,
 )
+from cotizacion.application.perfilamiento.recalcular_perfil import RecalcularPerfil
 from cotizacion.application.perfilamiento.reconstruir_perfil import ReconstruirPerfil
 from cotizacion.config import Settings
 from cotizacion.domain.perfilamiento.plan_fuentes import plan_fuentes
@@ -61,6 +62,7 @@ def _configurar_casos(app: FastAPI, puertos: Puertos, settings: Settings) -> Non
         config=config,
     )
     app.state.reconstruir_perfil = ReconstruirPerfil(puertos.perfiles, puertos.modelos)
+    app.state.recalcular_perfil = RecalcularPerfil(app.state.crear_perfil, puertos.perfiles)
     app.state.perfiles = puertos.perfiles
 
 
@@ -116,8 +118,9 @@ def crear_app(
                             settings.dependencia_timeout_ms,
                             reloj,
                         ),
-                        ejecutor=EjecutorSecuencial(
-                            AdaptadorDatosHttp(cliente, settings.adaptador_datos_url, reloj)
+                        ejecutor=EjecutorParalelo(
+                            AdaptadorDatosHttp(cliente, settings.adaptador_datos_url, reloj),
+                            settings.fuente_timeout_ms,
                         ),
                         perfiles=PerfilesPg(pool),
                         reloj=reloj,

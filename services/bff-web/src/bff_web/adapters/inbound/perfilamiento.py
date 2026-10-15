@@ -1,4 +1,5 @@
-"""HU-W11: perfilamiento de riesgo desde el portal (04 §B.4.3). Solo el grupo asesores.
+"""HU-W11 y HU-W12: perfilamiento de riesgo desde el portal (04 §B.4.3 y 05 §B.4.2). Solo el
+grupo asesores.
 
 Los DTO son copia de los de cotizacion (contracts/openapi/cotizacion.yaml) con los mismos
 nombres: tests/contract/test_openapi.py verifica que sus esquemas sean iguales.
@@ -197,6 +198,13 @@ class ListaPerfiles(_Dto):
     items: list[ResumenPerfil]
 
 
+class ComparacionPerfiles(_Dto):
+    """Perfil anterior y perfil recalculado desde él (HU-W12, D05)."""
+
+    anterior: PerfilRespuesta
+    actual: PerfilRespuesta
+
+
 # --- Dependencias --------------------------------------------------------------------------
 
 
@@ -256,3 +264,35 @@ async def listar_perfiles(
 async def consultar_perfil(perfil_id: IdPerfil, servicio: Servicio, asesor: Actor) -> dict[str, Any]:
     """Un perfil calculado (D02)."""
     return await servicio.obtener(perfil_id, asesor)
+
+
+@router.post(
+    "/{perfilId}/recalculos", response_model=PerfilRespuesta, status_code=201,
+    responses={
+        200: {"model": PerfilRespuesta, "description": "Misma Idempotency-Key"},
+        403: _error("ROL_NO_AUTORIZADO o IDENTIDAD_NO_VERIFICADA"),
+        404: _error("PERFIL_NO_ENCONTRADO o CLIENTE_NO_ENCONTRADO"),
+        409: _error("IDENTIDAD_PENDIENTE"),
+        422: _error("SOLICITUD_INVALIDA, IDEMPOTENCIA_CONFLICTO o PRODUCTO_NO_DISPONIBLE"),
+    },
+)
+async def recalcular_perfil(
+    perfil_id: IdPerfil, http: Response, servicio: Servicio, asesor: Actor,
+    idempotency_key: Annotated[UUID, Header(alias="Idempotency-Key")],
+) -> dict[str, Any]:
+    """Recalcula el perfil con el modelo vigente: crea uno nuevo y el anterior no cambia."""
+    estado, perfil = await servicio.recalcular(perfil_id, asesor, idempotency_key)
+    http.status_code = estado
+    return perfil
+
+
+@router.get(
+    "/{perfilId}/comparacion", response_model=ComparacionPerfiles,
+    responses={
+        404: _error("PERFIL_NO_ENCONTRADO"),
+        422: _error("SOLICITUD_INVALIDA o SIN_PERFIL_ANTERIOR"),
+    },
+)
+async def comparar_perfil(perfil_id: IdPerfil, servicio: Servicio, asesor: Actor) -> dict[str, Any]:
+    """El perfil recalculado y el perfil del que proviene (D05)."""
+    return await servicio.comparacion(perfil_id, asesor)
