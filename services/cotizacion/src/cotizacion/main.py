@@ -18,7 +18,7 @@ from cotizacion.adapters.outbound.catalogo_http import CatalogoHttp
 from cotizacion.adapters.outbound.clientes_http import ClientesHttp
 from cotizacion.adapters.outbound.reloj import RelojSistema
 from cotizacion.application.perfilamiento.crear_perfil import ConfigPerfilamiento, CrearPerfil
-from cotizacion.application.perfilamiento.ejecutor_fuentes import EjecutorSecuencial
+from cotizacion.application.perfilamiento.ejecutor_fuentes import EjecutorParalelo
 from cotizacion.application.perfilamiento.puertos import (
     EjecutorFuentes,
     PuertoConsentimiento,
@@ -116,8 +116,9 @@ def crear_app(
                             settings.dependencia_timeout_ms,
                             reloj,
                         ),
-                        ejecutor=EjecutorSecuencial(
-                            AdaptadorDatosHttp(cliente, settings.adaptador_datos_url, reloj)
+                        ejecutor=EjecutorParalelo(
+                            AdaptadorDatosHttp(cliente, settings.adaptador_datos_url, reloj),
+                            settings.fuente_timeout_ms,
                         ),
                         perfiles=PerfilesPg(pool),
                         reloj=reloj,

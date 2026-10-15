@@ -8,7 +8,7 @@ from cotizacion.adapters.outbound.catalogo_http import CatalogoHttp
 from cotizacion.adapters.outbound.clientes_http import ClientesHttp
 from cotizacion.adapters.outbound.perfiles_pg import PerfilesPg
 from cotizacion.application.perfilamiento.crear_perfil import CrearPerfil
-from cotizacion.application.perfilamiento.ejecutor_fuentes import EjecutorSecuencial
+from cotizacion.application.perfilamiento.ejecutor_fuentes import EjecutorParalelo
 from cotizacion.config import Settings
 from cotizacion.main import crear_app
 from fastapi.testclient import TestClient
@@ -59,7 +59,8 @@ def test_cableado_con_base_configurada(entorno_limpio: pytest.MonkeyPatch) -> No
         pool = estado.pool
         assert isinstance(caso._identidad, ClientesHttp) and caso._identidad is caso._consentimiento
         assert isinstance(caso._modelos, CatalogoHttp)
-        assert isinstance(caso._ejecutor, EjecutorSecuencial)
+        assert isinstance(caso._ejecutor, EjecutorParalelo)
+        assert caso._ejecutor._timeout_s == 0.25
         assert isinstance(caso._ejecutor._puerto, AdaptadorDatosHttp)
         assert isinstance(caso._repo, PerfilesPg) and estado.perfiles is caso._repo
         assert (caso.config.dependencia_timeout_ms, caso.config.fuente_timeout_ms) == (120, 250)
