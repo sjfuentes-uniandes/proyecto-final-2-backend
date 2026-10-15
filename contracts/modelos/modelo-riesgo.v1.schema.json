@@ -1,0 +1,337 @@
+{
+  "$defs": {
+    "Ajuste": {
+      "additionalProperties": false,
+      "properties": {
+        "codigo": {
+          "title": "Codigo",
+          "type": "string"
+        },
+        "efecto": {
+          "const": "FORZAR_NIVEL",
+          "title": "Efecto",
+          "type": "string"
+        },
+        "nivel": {
+          "enum": [
+            "BAJO",
+            "MEDIO",
+            "ALTO"
+          ],
+          "title": "Nivel",
+          "type": "string"
+        },
+        "si": {
+          "items": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "==",
+                  "!=",
+                  "<",
+                  "<=",
+                  ">",
+                  ">="
+                ],
+                "type": "string"
+              },
+              {
+                "pattern": "^-?\\d+(\\.\\d+)?$",
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Si",
+          "type": "array"
+        }
+      },
+      "required": [
+        "codigo",
+        "si",
+        "efecto",
+        "nivel"
+      ],
+      "title": "Ajuste",
+      "type": "object"
+    },
+    "Confianza": {
+      "additionalProperties": false,
+      "properties": {
+        "penalizacionNoAutorizada": {
+          "pattern": "^-?\\d+(\\.\\d+)?$",
+          "title": "Penalizacionnoautorizada",
+          "type": "string"
+        },
+        "penalizacionNoObtenida": {
+          "pattern": "^-?\\d+(\\.\\d+)?$",
+          "title": "Penalizacionnoobtenida",
+          "type": "string"
+        }
+      },
+      "required": [
+        "penalizacionNoAutorizada",
+        "penalizacionNoObtenida"
+      ],
+      "title": "Confianza",
+      "type": "object"
+    },
+    "DefFuente": {
+      "additionalProperties": false,
+      "properties": {
+        "campos": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Campos",
+          "type": "array"
+        },
+        "tipo": {
+          "enum": [
+            "FINANZAS_ABIERTAS",
+            "DATOS_ABIERTOS"
+          ],
+          "title": "Tipo",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tipo",
+        "campos"
+      ],
+      "title": "DefFuente",
+      "type": "object"
+    },
+    "Expresion": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/Expresion"
+              }
+            ]
+          },
+          "title": "Args",
+          "type": "array"
+        },
+        "op": {
+          "enum": [
+            "add",
+            "sub",
+            "mul",
+            "div"
+          ],
+          "title": "Op",
+          "type": "string"
+        }
+      },
+      "required": [
+        "op",
+        "args"
+      ],
+      "title": "Expresion",
+      "type": "object"
+    },
+    "Factor": {
+      "additionalProperties": false,
+      "properties": {
+        "codigo": {
+          "title": "Codigo",
+          "type": "string"
+        },
+        "fuente": {
+          "title": "Fuente",
+          "type": "string"
+        },
+        "peso": {
+          "pattern": "^-?\\d+(\\.\\d+)?$",
+          "title": "Peso",
+          "type": "string"
+        },
+        "reglas": {
+          "items": {
+            "$ref": "#/$defs/Regla"
+          },
+          "title": "Reglas",
+          "type": "array"
+        }
+      },
+      "required": [
+        "codigo",
+        "fuente",
+        "peso",
+        "reglas"
+      ],
+      "title": "Factor",
+      "type": "object"
+    },
+    "Regla": {
+      "additionalProperties": false,
+      "properties": {
+        "contribucion": {
+          "pattern": "^-?\\d+(\\.\\d+)?$",
+          "title": "Contribucion",
+          "type": "string"
+        },
+        "direccion": {
+          "enum": [
+            "REDUCE_RIESGO",
+            "NEUTRO",
+            "AUMENTA_LEVEMENTE",
+            "AUMENTA_RIESGO"
+          ],
+          "title": "Direccion",
+          "type": "string"
+        },
+        "si": {
+          "items": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "==",
+                  "!=",
+                  "<",
+                  "<=",
+                  ">",
+                  ">="
+                ],
+                "type": "string"
+              },
+              {
+                "pattern": "^-?\\d+(\\.\\d+)?$",
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Si",
+          "type": "array"
+        }
+      },
+      "required": [
+        "si",
+        "contribucion",
+        "direccion"
+      ],
+      "title": "Regla",
+      "type": "object"
+    },
+    "UmbralNivel": {
+      "additionalProperties": false,
+      "properties": {
+        "desde": {
+          "pattern": "^-?\\d+(\\.\\d+)?$",
+          "title": "Desde",
+          "type": "string"
+        },
+        "nivel": {
+          "enum": [
+            "BAJO",
+            "MEDIO",
+            "ALTO"
+          ],
+          "title": "Nivel",
+          "type": "string"
+        }
+      },
+      "required": [
+        "desde",
+        "nivel"
+      ],
+      "title": "UmbralNivel",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "ajustes": {
+      "items": {
+        "$ref": "#/$defs/Ajuste"
+      },
+      "title": "Ajustes",
+      "type": "array"
+    },
+    "confianza": {
+      "$ref": "#/$defs/Confianza"
+    },
+    "declarados": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Declarados",
+      "type": "array"
+    },
+    "derivados": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Expresion"
+      },
+      "title": "Derivados",
+      "type": "object"
+    },
+    "factores": {
+      "items": {
+        "$ref": "#/$defs/Factor"
+      },
+      "title": "Factores",
+      "type": "array"
+    },
+    "fuentes": {
+      "additionalProperties": {
+        "$ref": "#/$defs/DefFuente"
+      },
+      "title": "Fuentes",
+      "type": "object"
+    },
+    "niveles": {
+      "items": {
+        "$ref": "#/$defs/UmbralNivel"
+      },
+      "title": "Niveles",
+      "type": "array"
+    },
+    "obligatorios": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Obligatorios",
+      "type": "array"
+    },
+    "productoId": {
+      "title": "Productoid",
+      "type": "string"
+    },
+    "proposito": {
+      "title": "Proposito",
+      "type": "string"
+    }
+  },
+  "required": [
+    "productoId",
+    "proposito",
+    "fuentes",
+    "declarados",
+    "obligatorios",
+    "derivados",
+    "factores",
+    "ajustes",
+    "niveles",
+    "confianza"
+  ],
+  "title": "DefinicionModelo",
+  "type": "object"
+}

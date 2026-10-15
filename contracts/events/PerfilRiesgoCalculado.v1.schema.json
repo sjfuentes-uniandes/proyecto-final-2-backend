@@ -1,0 +1,251 @@
+{
+  "$defs": {
+    "DatoRequeridoEvento": {
+      "properties": {
+        "campo": {
+          "title": "Campo",
+          "type": "string"
+        },
+        "fuente": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Fuente"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "motivo": {
+          "$ref": "#/$defs/MotivoDato"
+        }
+      },
+      "required": [
+        "campo",
+        "fuente",
+        "motivo"
+      ],
+      "title": "DatoRequeridoEvento",
+      "type": "object"
+    },
+    "Direccion": {
+      "enum": [
+        "REDUCE_RIESGO",
+        "NEUTRO",
+        "AUMENTA_LEVEMENTE",
+        "AUMENTA_RIESGO"
+      ],
+      "title": "Direccion",
+      "type": "string"
+    },
+    "EstadoFactor": {
+      "enum": [
+        "EVALUADO",
+        "NO_EVALUADO"
+      ],
+      "title": "EstadoFactor",
+      "type": "string"
+    },
+    "EstadoPerfil": {
+      "enum": [
+        "CALCULADO",
+        "DEGRADADO",
+        "INFORMACION_INSUFICIENTE"
+      ],
+      "title": "EstadoPerfil",
+      "type": "string"
+    },
+    "FactorEvento": {
+      "properties": {
+        "codigo": {
+          "title": "Codigo",
+          "type": "string"
+        },
+        "direccion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Direccion"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "estado": {
+          "$ref": "#/$defs/EstadoFactor"
+        }
+      },
+      "required": [
+        "codigo",
+        "direccion",
+        "estado"
+      ],
+      "title": "FactorEvento",
+      "type": "object"
+    },
+    "Fuente": {
+      "enum": [
+        "FA_PRODUCTOS_VIGENTES",
+        "FA_HISTORIAL_PAGOS_12M",
+        "FA_INGRESOS_AGREGADOS",
+        "DA_REGISTROS_PUBLICOS"
+      ],
+      "title": "Fuente",
+      "type": "string"
+    },
+    "MotivoDato": {
+      "enum": [
+        "NO_AUTORIZADO",
+        "NO_DISPONIBLE_EN_FUENTE",
+        "TIEMPO_AGOTADO",
+        "FUENTE_NO_DISPONIBLE",
+        "RESPUESTA_INVALIDA"
+      ],
+      "title": "MotivoDato",
+      "type": "string"
+    },
+    "NivelRiesgo": {
+      "enum": [
+        "BAJO",
+        "MEDIO",
+        "ALTO"
+      ],
+      "title": "NivelRiesgo",
+      "type": "string"
+    },
+    "PerfilRiesgoCalculadoV1": {
+      "properties": {
+        "actorId": {
+          "title": "Actorid",
+          "type": "string"
+        },
+        "calculadoEn": {
+          "format": "date-time",
+          "title": "Calculadoen",
+          "type": "string"
+        },
+        "clienteId": {
+          "format": "uuid",
+          "title": "Clienteid",
+          "type": "string"
+        },
+        "datosRequeridos": {
+          "items": {
+            "$ref": "#/$defs/DatoRequeridoEvento"
+          },
+          "title": "Datosrequeridos",
+          "type": "array"
+        },
+        "estado": {
+          "$ref": "#/$defs/EstadoPerfil"
+        },
+        "factores": {
+          "items": {
+            "$ref": "#/$defs/FactorEvento"
+          },
+          "title": "Factores",
+          "type": "array"
+        },
+        "hashModelo": {
+          "title": "Hashmodelo",
+          "type": "string"
+        },
+        "nivelRiesgo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NivelRiesgo"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "perfilAnteriorId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Perfilanteriorid"
+        },
+        "perfilId": {
+          "format": "uuid",
+          "title": "Perfilid",
+          "type": "string"
+        },
+        "productoId": {
+          "title": "Productoid",
+          "type": "string"
+        },
+        "versionModelo": {
+          "title": "Versionmodelo",
+          "type": "string"
+        }
+      },
+      "required": [
+        "perfilId",
+        "clienteId",
+        "productoId",
+        "estado",
+        "nivelRiesgo",
+        "versionModelo",
+        "hashModelo",
+        "factores",
+        "datosRequeridos",
+        "perfilAnteriorId",
+        "actorId",
+        "calculadoEn"
+      ],
+      "title": "PerfilRiesgoCalculadoV1",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/PerfilRiesgoCalculadoV1"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreEvento[PerfilRiesgoCalculadoV1]",
+  "type": "object"
+}

@@ -1,0 +1,173 @@
+{
+  "$defs": {
+    "DatosConsentidosConsultadosV1": {
+      "properties": {
+        "clienteId": {
+          "format": "uuid",
+          "title": "Clienteid",
+          "type": "string"
+        },
+        "consentimientoId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Consentimientoid"
+        },
+        "fuentes": {
+          "items": {
+            "$ref": "#/$defs/FuenteConsultadaEvento"
+          },
+          "title": "Fuentes",
+          "type": "array"
+        },
+        "perfilId": {
+          "format": "uuid",
+          "title": "Perfilid",
+          "type": "string"
+        },
+        "proposito": {
+          "title": "Proposito",
+          "type": "string"
+        }
+      },
+      "required": [
+        "perfilId",
+        "clienteId",
+        "consentimientoId",
+        "proposito",
+        "fuentes"
+      ],
+      "title": "DatosConsentidosConsultadosV1",
+      "type": "object"
+    },
+    "EstadoFuente": {
+      "enum": [
+        "CONSULTADA",
+        "NO_AUTORIZADA",
+        "NO_CONSULTADA",
+        "TIEMPO_AGOTADO",
+        "NO_DISPONIBLE",
+        "RESPUESTA_INVALIDA"
+      ],
+      "title": "EstadoFuente",
+      "type": "string"
+    },
+    "Fuente": {
+      "enum": [
+        "FA_PRODUCTOS_VIGENTES",
+        "FA_HISTORIAL_PAGOS_12M",
+        "FA_INGRESOS_AGREGADOS",
+        "DA_REGISTROS_PUBLICOS"
+      ],
+      "title": "Fuente",
+      "type": "string"
+    },
+    "FuenteConsultadaEvento": {
+      "properties": {
+        "camposDisponibles": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Camposdisponibles",
+          "type": "array"
+        },
+        "camposSolicitados": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Campossolicitados",
+          "type": "array"
+        },
+        "consultadaEn": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Consultadaen"
+        },
+        "estado": {
+          "$ref": "#/$defs/EstadoFuente"
+        },
+        "fuente": {
+          "$ref": "#/$defs/Fuente"
+        },
+        "versionFuente": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Versionfuente"
+        }
+      },
+      "required": [
+        "fuente",
+        "estado",
+        "camposSolicitados",
+        "camposDisponibles",
+        "versionFuente",
+        "consultadaEn"
+      ],
+      "title": "FuenteConsultadaEvento",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/DatosConsentidosConsultadosV1"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreEvento[DatosConsentidosConsultadosV1]",
+  "type": "object"
+}
