@@ -14,6 +14,8 @@ locals {
   partner_admins = ["api-socios"]
   # HU-W27: pantalla Operación › Trazas del portal (consulta X-Ray por correlationId).
   trace_readers = ["bff-web"]
+  # HU-W28: pantalla Operación › Alertas (alarmas del ambiente y su historial).
+  alert_readers = ["bff-web"]
   # Administración › Usuarios del portal: alta de usuarios del back-office y sus grupos.
   backoffice_user_admins = ["bff-web"]
   cors_services          = ["bff-web"]
@@ -90,6 +92,11 @@ locals {
       contains(local.trace_readers, name) ? [
         { Effect = "Allow", Action = ["xray:GetTraceSummaries", "xray:BatchGetTraces"], Resource = ["*"] },
       ] : [],
+      # Solo lectura. DescribeAlarmHistory sin AlarmName y GetMetricData no admiten ARN
+      # de recurso; bff-web filtra por el prefijo del ambiente (ALERTAS_PREFIJO).
+      contains(local.alert_readers, name) ? [
+        { Effect = "Allow", Action = ["cloudwatch:DescribeAlarms", "cloudwatch:DescribeAlarmHistory", "cloudwatch:GetMetricData"], Resource = ["*"] },
+      ] : [],
       contains(local.backoffice_user_admins, name) ? [
         {
           Effect   = "Allow"
@@ -145,6 +152,15 @@ locals {
         },
         # 429 por socio (Solventa/Socios PartnerThrottled); GetMetricStatistics no admite ARN de recurso.
         { Effect = "Allow", Action = ["cloudwatch:GetMetricStatistics"], Resource = ["*"] },
+      ] : [],
+      # HU-W28: PartnerQuotaUsage, solo en su espacio de nombres.
+      contains(local.partner_admins, name) ? [
+        {
+          Effect    = "Allow"
+          Action    = ["cloudwatch:PutMetricData"]
+          Resource  = ["*"]
+          Condition = { StringEquals = { "cloudwatch:namespace" = "Solventa/Socios" } }
+        },
       ] : [],
       # Clave de la plataforma para mensajería y auditoría cifradas.
       local.p.kms_key_arn != null && (service.publishes || length(service.consumes) > 0 || contains(local.audit_writers, name)) ? [
