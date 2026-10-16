@@ -73,6 +73,57 @@ services:
     <<: *servicio
     build: { context: ., dockerfile: services/bff-movil/Dockerfile }
     ports: ["8081:8080"]
+    # Espera a que `clientes` esté sano: así el primer request no cae en un arranque en frío.
+    depends_on:
+      postgres: { condition: service_started }
+      localstack: { condition: service_started }
+      otel-collector: { condition: service_started }
+      clientes: { condition: service_healthy }
+    # El ancla define environment: se repiten sus variables junto con las propias.
+    environment:
+      SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_PROPAGATORS: tracecontext,baggage,xray
+      OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
+      CLIENTES_URL: http://clientes:8080
+
+  clientes:
+    <<: *servicio
+    build: { context: ., dockerfile: services/clientes/Dockerfile }
+    ports: ["8083:8080"]
+    depends_on:
+      postgres: { condition: service_started }
+      localstack: { condition: service_started }
+      otel-collector: { condition: service_started }
+      adaptador-identidad: { condition: service_healthy }
+    # El ancla define environment: se repiten sus variables junto con las propias.
+    environment:
+      SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_PROPAGATORS: tracecontext,baggage,xray
+      OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
+      DB_HOST: postgres
+      ADAPTADOR_IDENTIDAD_URL: http://adaptador-identidad:8080
+
+  adaptador-identidad:
+    <<: *servicio
+    build: { context: ., dockerfile: services/adaptador-identidad/Dockerfile }
+    ports: ["8087:8080"]
+    depends_on:
+      postgres: { condition: service_started }
+      localstack: { condition: service_started }
+      otel-collector: { condition: service_started }
+      simulador-aliados: { condition: service_healthy }
+    # El ancla define environment: se repiten sus variables junto con las propias.
+    environment:
+      SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_PROPAGATORS: tracecontext,baggage,xray
+      OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
+      ALLY_KYC_URL: http://simulador-aliados:8080/kyc
+      ALLY_KYC_TIMEOUT_MS: "3000"
+      # Credenciales sintéticas solo para el ambiente local (en AWS vienen de Secrets Manager).
+      ALLY_KYC_CREDENTIALS: '{"client_id":"local-sintetico","client_secret":"local-sintetico"}'
 
   api-socios:
     <<: *servicio

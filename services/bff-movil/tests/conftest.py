@@ -17,8 +17,8 @@ import httpx
 import jwt
 import pytest
 import respx
-from bff_movil.adapters.outbound.resolutor_cliente_memoria import ResolutorClienteEnMemoria
 from bff_movil.config import Settings
+from bff_movil.domain.sesion.errores import ClienteNoEncontrado
 from bff_movil.main import crear_app
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
@@ -33,12 +33,30 @@ KID = "kid-prueba"
 SUB = "11111111-1111-4111-8111-111111111111"
 # C01 de contracts/datos-sinteticos/clientes-perfilamiento.json.
 CLIENTE_ID = UUID("00000000-0000-4000-8000-000000000001")
+CUERPO_VERIFICACION = {"selfie": "selfie-sintetica-aprobada", "pruebaDeVida": {"completado": True}}
+REGISTRO_ID = UUID("00000000-0000-4000-8000-0000000000aa")
+CORREO = "persona@ejemplo.co"
+CUERPO_REGISTRO = {"registroId": str(REGISTRO_ID), "correo": CORREO, **CUERPO_VERIFICACION}
+TOKEN_REGISTRO = "v1.token-sintetico.firma-sintetica"
 
 
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers", "hu(historia, criterio): criterio de aceptación que cubre la prueba (Q2)"
     )
+
+
+class ResolutorFalso:
+    """ResolutorCliente con una relación fija sub -> clienteId."""
+
+    def __init__(self, relaciones: dict[str, UUID]) -> None:
+        self._relaciones = relaciones
+
+    async def resolver(self, sub: str) -> UUID:
+        try:
+            return self._relaciones[sub]
+        except KeyError as error:
+            raise ClienteNoEncontrado() from error
 
 
 @pytest.fixture
@@ -100,6 +118,9 @@ class Entorno:
     jwks: respx.Route
     jwks_backoffice: respx.Route
     identidad: respx.Route
+    verificacion: respx.Route
+    registro_verificacion: respx.Route
+    registro_vinculacion: respx.Route
     telemetria: Telemetria
     llave: rsa.RSAPrivateKey
     sub: str = SUB
@@ -155,6 +176,98 @@ class Entorno:
             )
         )
 
+    def verificar(
+        self,
+        token: str | None = None,
+        *,
+        sub: str | None = SUB,
+        cuerpo: dict[str, Any] | None = None,
+        encabezados: dict[str, str] | None = None,
+    ) -> httpx.Response:
+        cabeceras = dict(encabezados or {})
+        if token is not None:
+            cabeceras["Authorization"] = f"Bearer {token}"
+        if sub is not None:
+            cabeceras["X-Authenticated-Sub"] = sub
+        return self.cliente.post(
+            "/v1/identidad/verificaciones",
+            json=cuerpo if cuerpo is not None else CUERPO_VERIFICACION,
+            headers=cabeceras,
+        )
+
+    def cuerpo_registro(self, **cambios: Any) -> dict[str, Any]:
+        return {**CUERPO_REGISTRO, **cambios}
+
+    def registrar(
+        self,
+        *,
+        cuerpo: dict[str, Any] | None = None,
+        encabezados: dict[str, str] | None = None,
+    ) -> httpx.Response:
+        """Verificación previa a la cuenta: pública, sin token."""
+        return self.cliente.post(
+            "/v1/registro/verificaciones",
+            json=cuerpo if cuerpo is not None else CUERPO_REGISTRO,
+            headers=encabezados or {},
+        )
+
+    def registro_responde(
+        self,
+        resultado: str,
+        estado: str,
+        motivo: str | None = None,
+        token: str | None = TOKEN_REGISTRO,
+    ) -> None:
+        self.registro_verificacion.mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "clienteId": str(CLIENTE_ID),
+                    "estado": estado,
+                    "resultado": resultado,
+                    "motivo": motivo,
+                    "verificadoEn": "2026-10-01T00:00:00Z" if estado == "VERIFICADO" else None,
+                    "tokenRegistro": token if estado == "VERIFICADO" else None,
+                    "expiraEn": "2026-10-01T00:30:00Z" if estado == "VERIFICADO" else None,
+                },
+            )
+        )
+
+    def vincular(
+        self,
+        token: str | None = None,
+        *,
+        sub: str | None = SUB,
+        cuerpo: dict[str, Any] | None = None,
+    ) -> httpx.Response:
+        """Primer ingreso: vincula la cuenta recién creada con su identidad verificada."""
+        cabeceras: dict[str, str] = {}
+        if token is not None:
+            cabeceras["Authorization"] = f"Bearer {token}"
+        if sub is not None:
+            cabeceras["X-Authenticated-Sub"] = sub
+        return self.cliente.post(
+            "/v1/registro/vinculacion",
+            json=cuerpo
+            if cuerpo is not None
+            else {"registroId": str(REGISTRO_ID), "tokenRegistro": TOKEN_REGISTRO},
+            headers=cabeceras,
+        )
+
+    def verificacion_responde(self, resultado: str, estado: str, motivo: str | None = None) -> None:
+        self.verificacion.mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "clienteId": str(CLIENTE_ID),
+                    "estado": estado,
+                    "resultado": resultado,
+                    "motivo": motivo,
+                    "verificadoEn": "2026-10-01T00:00:00Z" if estado == "VERIFICADO" else None,
+                },
+            )
+        )
+
 
 @pytest.fixture
 def capturar_logs() -> Iterator[Callable[[], io.StringIO]]:
@@ -193,6 +306,11 @@ def crear_entorno(
             200, json={"keys": [_jwk(llave_privada, KID)]}
         )
         identidad = router.get(f"{CLIENTES_URL}/v1/clientes/{CLIENTE_ID}/identidad")
+        verificacion = router.post(f"{CLIENTES_URL}/v1/clientes/actual/identidad/verificaciones")
+        registro_verificacion = router.post(
+            f"{CLIENTES_URL}/v1/registros/{REGISTRO_ID}/verificaciones"
+        )
+        registro_vinculacion = router.post(f"{CLIENTES_URL}/v1/registros/{REGISTRO_ID}/vinculacion")
         spans, lector = InMemorySpanExporter(), InMemoryMetricReader()
         settings = Settings(
             ENVIRONMENT=environment,
@@ -202,7 +320,7 @@ def crear_entorno(
         )
         app = crear_app(
             settings,
-            resolutor=ResolutorClienteEnMemoria({SUB: CLIENTE_ID} if con_cliente else {}),
+            resolutor=ResolutorFalso({SUB: CLIENTE_ID} if con_cliente else {}),
             span_exporter=spans,
             metric_readers=[lector],
         )
@@ -214,10 +332,25 @@ def crear_entorno(
             jwks=jwks,
             jwks_backoffice=jwks_backoffice,
             identidad=identidad,
+            verificacion=verificacion,
+            registro_verificacion=registro_verificacion,
+            registro_vinculacion=registro_vinculacion,
             telemetria=Telemetria(spans=spans, lector=lector, salida=salida),
             llave=llave_privada,
         )
         entorno.identidad_responde("VERIFICADO")
+        entorno.verificacion_responde("APROBADO", "VERIFICADO")
+        entorno.registro_responde("APROBADO", "VERIFICADO")
+        registro_vinculacion.mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "clienteId": str(CLIENTE_ID),
+                    "estado": "VERIFICADO",
+                    "verificadoEn": "2026-10-01T00:00:00Z",
+                },
+            )
+        )
         return entorno
 
     yield crear

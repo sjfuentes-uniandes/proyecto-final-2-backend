@@ -1,0 +1,30 @@
+{
+  "name": "kyc proveedor caído (AC3: error recuperable)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/kyc/v1/verificaciones",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.selfie",
+          "equalTo": "selfie-sintetica-caida"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "error": "unavailable"
+    },
+    "fixedDelayMilliseconds": 50
+  }
+}

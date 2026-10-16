@@ -250,6 +250,52 @@ resource "aws_api_gateway_integration" "preflight" {
   }
 }
 
+# --- Verificación del registro móvil (HU-M06): única ruta pública de /movil --------
+# La persona aún no tiene cuenta, así que no hay token que validar (authorization = NONE). Cada
+# solicitud consulta al proveedor KYC, por eso tiene un tope propio en el stage y el WAF la limita
+# además por IP. No lleva X-Authenticated-*: el BFF no confía en ellos en esta ruta.
+resource "aws_api_gateway_resource" "registro_v1" {
+  rest_api_id = aws_api_gateway_rest_api.main["canales"].id
+  parent_id   = aws_api_gateway_resource.prefix["movil"].id
+  path_part   = "v1"
+}
+
+resource "aws_api_gateway_resource" "registro" {
+  rest_api_id = aws_api_gateway_rest_api.main["canales"].id
+  parent_id   = aws_api_gateway_resource.registro_v1.id
+  path_part   = "registro"
+}
+
+resource "aws_api_gateway_resource" "registro_verificaciones" {
+  rest_api_id = aws_api_gateway_rest_api.main["canales"].id
+  parent_id   = aws_api_gateway_resource.registro.id
+  path_part   = "verificaciones"
+}
+
+resource "aws_api_gateway_method" "registro_verificaciones" {
+  rest_api_id   = aws_api_gateway_rest_api.main["canales"].id
+  resource_id   = aws_api_gateway_resource.registro_verificaciones.id
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "registro_verificaciones" {
+  rest_api_id             = aws_api_gateway_rest_api.main["canales"].id
+  resource_id             = aws_api_gateway_resource.registro_verificaciones.id
+  http_method             = aws_api_gateway_method.registro_verificaciones.http_method
+  type                    = "HTTP_PROXY"
+  integration_http_method = "POST"
+  connection_type         = "VPC_LINK"
+  connection_id           = aws_apigatewayv2_vpc_link.access.id
+  integration_target      = aws_lb.access.arn
+  uri                     = "http://${aws_lb.access.dns_name}:${local.catalog["bff-movil"].listener_port}/v1/registro/verificaciones"
+  # La verificación incluye al proveedor KYC (hasta 3 s) y los saltos intermedios.
+  timeout_milliseconds = 10000
+  request_parameters = {
+    "integration.request.header.X-Request-Id" = "context.requestId"
+  }
+}
+
 # Respuestas del borde: 401 para credenciales inválidas (HU-W01 AC2) y 429 con
 # Retry-After cuando un socio agota su cuota o límite (HU-W02 AC2).
 locals {
@@ -304,12 +350,17 @@ resource "aws_api_gateway_deployment" "main" {
       ] if route.api == each.key],
       [for name, response in aws_api_gateway_gateway_response.main : response if local.gateway_responses[name].api == each.key],
       [for name, authorizer in aws_api_gateway_authorizer.main : authorizer if local.authorizers[name].api == each.key],
+      [for _ in range(each.key == "canales" ? 1 : 0) : [
+        aws_api_gateway_resource.registro_verificaciones.id,
+        aws_api_gateway_method.registro_verificaciones,
+        aws_api_gateway_integration.registro_verificaciones,
+      ]],
     ]))
   }
   lifecycle {
     create_before_destroy = true
   }
-  depends_on = [aws_api_gateway_integration.proxy, aws_api_gateway_integration.preflight]
+  depends_on = [aws_api_gateway_integration.proxy, aws_api_gateway_integration.preflight, aws_api_gateway_integration.registro_verificaciones]
 }
 
 resource "aws_cloudwatch_log_group" "api" {
@@ -359,6 +410,21 @@ resource "aws_api_gateway_method_settings" "main" {
     throttling_rate_limit  = var.api_throttle.rate
     throttling_burst_limit = var.api_throttle.burst
   }
+}
+
+# Tope propio de la ruta pública de verificación del registro (HU-M06).
+resource "aws_api_gateway_method_settings" "registro_verificaciones" {
+  rest_api_id = aws_api_gateway_rest_api.main["canales"].id
+  stage_name  = aws_api_gateway_stage.main["canales"].stage_name
+  method_path = "${aws_api_gateway_resource.prefix["movil"].path_part}/v1/registro/verificaciones/POST"
+  settings {
+    metrics_enabled        = true
+    logging_level          = "ERROR"
+    data_trace_enabled     = false
+    throttling_rate_limit  = var.registro_verificaciones_throttle.rate
+    throttling_burst_limit = var.registro_verificaciones_throttle.burst
+  }
+  depends_on = [aws_api_gateway_method_settings.main]
 }
 
 # --- Planes de uso y socios ----------------------------------------------------

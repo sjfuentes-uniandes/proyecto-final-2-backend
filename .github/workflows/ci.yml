@@ -39,7 +39,7 @@ jobs:
         servicio: ${{ fromJson(needs.cambios.outputs.servicios) }}
     env:
       # Imágenes de Docker Hub que usan las pruebas de módulo y el build del simulador.
-      IMAGENES_DOCKER: ${{ contains(fromJson('["adaptador-datos","simulador-aliados"]'), matrix.servicio) && 'wiremock/wiremock:3.9.2' || (matrix.servicio == 'cotizacion' && 'postgres:16 wiremock/wiremock:3.9.2' || (contains(fromJson('["api-socios","catalogo"]'), matrix.servicio) && 'postgres:16' || '')) }}
+      IMAGENES_DOCKER: ${{ contains(fromJson('["adaptador-datos","simulador-aliados","adaptador-identidad"]'), matrix.servicio) && 'wiremock/wiremock:3.9.2' || (matrix.servicio == 'cotizacion' && 'postgres:16 wiremock/wiremock:3.9.2' || (contains(fromJson('["api-socios","catalogo","clientes"]'), matrix.servicio) && 'postgres:16' || '')) }}
       # El runner es efímero y las fixtures detienen sus contenedores: Ryuk (otra imagen de
       # Docker Hub) no hace falta en la CI.
       TESTCONTAINERS_RYUK_DISABLED: "true"
@@ -68,7 +68,7 @@ jobs:
         uses: ./.github/actions/preparar-python
       # lint solo en los servicios que ya cumplen ruff; el resto tiene código previo sin
       # formatear. Agregar cada servicio aquí cuando su historia lo deje limpio.
-      - if: contains(fromJson('["catalogo","cotizacion","adaptador-datos","api-socios"]'), matrix.servicio)
+      - if: contains(fromJson('["catalogo","cotizacion","adaptador-datos","api-socios","clientes","adaptador-identidad","bff-movil"]'), matrix.servicio)
         run: make lint SERVICE=${{ matrix.servicio }}
       - if: matrix.servicio != 'simulador-aliados'
         run: make test-cov SERVICE=${{ matrix.servicio }}

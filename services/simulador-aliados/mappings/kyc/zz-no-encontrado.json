@@ -1,0 +1,17 @@
+{
+  "name": "kyc ruta no cubierta",
+  "priority": 10,
+  "request": {
+    "method": "ANY",
+    "urlPathPattern": "/kyc/.*"
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "error": "selfie_no_reconocida"
+    }
+  }
+}

@@ -78,6 +78,7 @@ override_data {
           datos-abiertos = { secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/aliados/datos-abiertos" }
           kyc            = { secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/aliados/kyc" }
         }
+        registro = { token_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/registro/token" }
         cognito = {
           partners_pool_id    = "us-east-1_p"
           partners_pool_arn   = "arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_p"
@@ -144,6 +145,10 @@ run "todos_los_servicios" {
   assert {
     condition     = local.environment["adaptador-identidad"]["ALLY_KYC_URL"] == "http://simulador-aliados:8080/kyc"
     error_message = "Sin endpoint real, el adaptador debe apuntar al simulador."
+  }
+  assert {
+    condition     = contains([for s in local.secrets["clientes"] : s.name], "REGISTRO_TOKEN_SECRET") && !contains([for s in local.secrets["bff-movil"] : s.name], "REGISTRO_TOKEN_SECRET") && one([for s in local.secrets["clientes"] : s.valueFrom if s.name == "REGISTRO_TOKEN_SECRET"]) == "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/registro/token:secret::"
+    error_message = "Solo clientes recibe el secreto de firma del token de registro (clave secret del JSON)."
   }
   assert {
     condition     = local.environment["cotizacion"]["SQS_CONSENTIMIENTOS_COTIZACION_URL"] != "" && local.environment["cotizacion"]["CATALOGO_URL"] == "http://catalogo:8080"

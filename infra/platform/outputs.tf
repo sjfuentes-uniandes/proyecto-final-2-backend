@@ -43,6 +43,8 @@ output "platform" {
     alerts_topic_arn = aws_sns_topic.alerts.arn
     audit_bucket     = { name = aws_s3_bucket.audit.id, arn = aws_s3_bucket.audit.arn }
     allies           = { for name, secret in aws_secretsmanager_secret.ally : name => { secret_arn = secret.arn } }
+    # Secreto con el que `clientes` firma el token de registro y valida el Lambda pre sign-up (HU-M06).
+    registro = { token_secret_arn = aws_secretsmanager_secret.registro_token.arn }
     cognito = {
       partners_pool_id    = aws_cognito_user_pool.partners.id
       partners_pool_arn   = aws_cognito_user_pool.partners.arn

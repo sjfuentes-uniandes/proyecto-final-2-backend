@@ -1,0 +1,526 @@
+openapi: 3.1.0
+info:
+  title: clientes
+  version: 0.1.0
+paths:
+  /v1/clientes/actual:
+    get:
+      tags:
+      - identidad
+      summary: Cliente del titular autenticado
+      description: Resuelve el cliente del `sub` del titular, sin crearlo.
+      operationId: cliente_actual_v1_clientes_actual_get
+      parameters:
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentidadDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de CLIENTE'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'CLIENTE_NO_ENCONTRADO: el titular aún no inició su verificación'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/clientes/{cliente_id}/identidad:
+    get:
+      tags:
+      - identidad
+      summary: Estado de la verificación de identidad del cliente
+      operationId: identidad_v1_clientes__cliente_id__identidad_get
+      parameters:
+      - name: cliente_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cliente Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentidadDto'
+        '404':
+          description: CLIENTE_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/clientes/actual/identidad/verificaciones:
+    post:
+      tags:
+      - identidad
+      summary: Verifica la identidad con selfie y prueba de vida
+      description: 'Un `CAPTURA_INVALIDA` responde 200 con el cliente aún pendiente:
+        no es un rechazo.'
+      operationId: verificar_v1_clientes_actual_identidad_verificaciones_post
+      parameters:
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudVerificacion'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificacionDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de CLIENTE'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'DEPENDENCIA_NO_DISPONIBLE: la verificación no terminó; es
+            recuperable y se puede reintentar sin crear otro cliente (detalles.motivo)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/registros/{registro_id}/verificaciones:
+    post:
+      tags:
+      - registro
+      summary: Verifica la identidad antes de crear la cuenta
+      description: 'Una captura inválida es 200 con `PENDIENTE` y sin token: se repite
+        la captura.'
+      operationId: verificar_v1_registros__registro_id__verificaciones_post
+      parameters:
+      - name: registro_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Registro Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudVerificacionRegistro'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificacionRegistroDto'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: REGISTRO_CORREO_DISTINTO (la verificación va ligada a un correo)
+            o REGISTRO_YA_VINCULADO (la cuenta de este registro ya existe)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'DEPENDENCIA_NO_DISPONIBLE: la verificación no terminó; es
+            recuperable y se puede reintentar sin crear otro cliente (detalles.motivo)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/registros/{registro_id}/vinculacion:
+    post:
+      tags:
+      - registro
+      summary: Asocia la cuenta recién creada con su identidad verificada
+      description: 'Idempotente: repetir el vínculo del mismo `sub` devuelve el mismo
+        cliente.'
+      operationId: vincular_v1_registros__registro_id__vinculacion_post
+      parameters:
+      - name: registro_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Registro Id
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudVinculacion'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentidadDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: ROL_NO_AUTORIZADO (X-Actor-Rol distinto de CLIENTE) o TOKEN_REGISTRO_INVALIDO
+            (el token no sirve; detalles.motivo)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: 'REGISTRO_YA_VINCULADO: ese registro o esa cuenta ya pertenecen
+            a otro cliente'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Health Get
+components:
+  schemas:
+    ErrorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        mensaje:
+          type: string
+          title: Mensaje
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          type: object
+          title: Detalles
+      type: object
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
+    EstadoIdentidad:
+      type: string
+      enum:
+      - VERIFICADO
+      - PENDIENTE
+      - RECHAZADO
+      title: EstadoIdentidad
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    IdentidadDto:
+      properties:
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        estado:
+          $ref: '#/components/schemas/EstadoIdentidad'
+        verificadoEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Verificadoen
+      type: object
+      required:
+      - clienteId
+      - estado
+      - verificadoEn
+      title: IdentidadDto
+    ResultadoKyc:
+      type: string
+      enum:
+      - APROBADO
+      - CAPTURA_INVALIDA
+      - RECHAZADO
+      title: ResultadoKyc
+      description: Veredicto del proveedor de identidad, tal como lo entrega `adaptador-identidad`.
+    SolicitudVerificacion:
+      properties:
+        selfie:
+          type: string
+          maxLength: 5000000
+          minLength: 1
+          title: Selfie
+        pruebaDeVida:
+          additionalProperties: true
+          type: object
+          title: Pruebadevida
+      type: object
+      required:
+      - selfie
+      - pruebaDeVida
+      title: SolicitudVerificacion
+    SolicitudVerificacionRegistro:
+      properties:
+        correo:
+          type: string
+          maxLength: 254
+          minLength: 3
+          pattern: ^[^@ ]+@[^@ ]+\.[^@ ]+$
+          title: Correo
+        selfie:
+          type: string
+          maxLength: 5000000
+          minLength: 1
+          title: Selfie
+        pruebaDeVida:
+          additionalProperties: true
+          type: object
+          title: Pruebadevida
+      type: object
+      required:
+      - correo
+      - selfie
+      - pruebaDeVida
+      title: SolicitudVerificacionRegistro
+    SolicitudVinculacion:
+      properties:
+        tokenRegistro:
+          type: string
+          maxLength: 2048
+          minLength: 1
+          title: Tokenregistro
+      type: object
+      required:
+      - tokenRegistro
+      title: SolicitudVinculacion
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    VerificacionDto:
+      properties:
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        estado:
+          $ref: '#/components/schemas/EstadoIdentidad'
+        resultado:
+          $ref: '#/components/schemas/ResultadoKyc'
+        motivo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Motivo
+        verificadoEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Verificadoen
+      type: object
+      required:
+      - clienteId
+      - estado
+      - resultado
+      - motivo
+      - verificadoEn
+      title: VerificacionDto
+    VerificacionRegistroDto:
+      properties:
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        estado:
+          $ref: '#/components/schemas/EstadoIdentidad'
+        resultado:
+          $ref: '#/components/schemas/ResultadoKyc'
+        motivo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Motivo
+        verificadoEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Verificadoen
+        tokenRegistro:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tokenregistro
+          description: Solo con una verificación exitosa; lo exige el SignUp de Cognito
+        expiraEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expiraen
+      type: object
+      required:
+      - clienteId
+      - estado
+      - resultado
+      - motivo
+      - verificadoEn
+      - tokenRegistro
+      - expiraEn
+      title: VerificacionRegistroDto
