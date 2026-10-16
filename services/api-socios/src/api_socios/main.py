@@ -1,5 +1,6 @@
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from solventa_common.errors import registrar_manejadores
@@ -16,7 +17,23 @@ async def ciclo(_: FastAPI) -> AsyncIterator[None]:
         from api_socios.adapters.outbound.postgres import migrar
 
         migrar(settings.database_url)
+    tarea = None
+    if (
+        settings.quota_metric_interval_s > 0
+        and settings.partners_user_pool_id
+        and settings.partners_usage_plans
+    ):
+        from api_socios.adapters.inbound.cuotas_periodicas import publicar_periodicamente
+        from api_socios.adapters.inbound.dependencias import publicar_cuotas
+
+        tarea = asyncio.create_task(
+            publicar_periodicamente(publicar_cuotas, settings.quota_metric_interval_s)
+        )
     yield
+    if tarea is not None:
+        tarea.cancel()
+        with suppress(asyncio.CancelledError):
+            await tarea
 
 
 app = instrumentar(FastAPI(title=settings.service_name, lifespan=ciclo), settings)

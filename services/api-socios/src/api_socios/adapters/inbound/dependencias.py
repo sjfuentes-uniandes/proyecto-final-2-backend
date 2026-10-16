@@ -22,7 +22,6 @@ def administrar_socios() -> AdministrarSocios:
 @lru_cache
 def _administrar() -> AdministrarSocios:
     from api_socios.adapters.outbound.apigateway import crear_api_keys
-    from api_socios.adapters.outbound.cloudwatch import crear_metricas
     from api_socios.adapters.outbound.cognito import crear_clientes
 
     return AdministrarSocios(
@@ -33,8 +32,21 @@ def _administrar() -> AdministrarSocios:
             settings.partners_resource_server,
         ),
         crear_api_keys(settings.aws_region, settings.environment, settings.partners_usage_plans),
-        crear_metricas(settings.aws_region),
+        metricas(),
     )
+
+
+@lru_cache
+def metricas():  # type: ignore[no-untyped-def]
+    from api_socios.adapters.outbound.cloudwatch import crear_metricas
+
+    return crear_metricas(settings.aws_region, settings.environment)
+
+
+def publicar_cuotas() -> int:
+    porcentajes = _administrar().porcentajes_de_cuota()
+    metricas().publicar_cuotas(porcentajes)
+    return len(porcentajes)
 
 
 @lru_cache
