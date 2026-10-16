@@ -91,11 +91,20 @@ locals {
         PARTNERS_RESOURCE_SERVER = local.p.cognito.partners_resource
         PARTNERS_API_ID          = local.p.apis.socios.id
         PARTNERS_USAGE_PLANS     = jsonencode(local.p.usage_plans)
+        QUOTA_METRIC_INTERVAL_S  = tostring(var.partner_quota_interval_seconds)
       } : {},
       service.tier == "acceso" ? { JWT_ISSUERS = jsonencode(local.p.cognito.issuers) } : {},
       # Orígenes del portal para CORS: API Gateway reenvía el preflight al BFF.
       contains(local.cors_services, name) ? { CORS_ORIGINS = jsonencode(local.web_origins) } : {},
       contains(local.backoffice_user_admins, name) ? { BACKOFFICE_USER_POOL_ID = local.p.cognito.backoffice_pool_id } : {},
+      contains(local.alert_readers, name) ? {
+        ALERTAS_PREFIJO            = "${local.prefix}-"
+        ALERTAS_CATALOGO           = jsonencode(local.alert_catalog)
+        ALERTAS_UMBRALES           = jsonencode(local.alert_thresholds)
+        ALERTAS_ADVERTENCIA_PCT    = tostring(var.warning_ratio * 100)
+        ALERTAS_ATENCION_MIN       = tostring(var.alert_attention_minutes)
+        ALERTAS_FALSO_POSITIVO_MIN = tostring(var.false_positive_minutes)
+      } : {},
     )
   }
 

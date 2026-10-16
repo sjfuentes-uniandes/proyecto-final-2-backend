@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import AliasChoices, Field
 from solventa_common.settings import ServiceSettings
 
@@ -24,6 +26,21 @@ class Settings(ServiceSettings):
     cors_origins: list[str] = Field(["http://localhost:4200"], validation_alias=AliasChoices("CORS_ORIGINS", "SOLVENTA_CORS_ORIGINS"))
     # HU-W27: límite del recorrido que usa la interpretación de la traza (mockup: 1,5 s).
     umbral_recorrido_ms: int = 1500
+    # HU-W28: alarmas del ambiente, generadas por Terraform (infra/apps/alarms.tf).
+    alertas_prefijo: str = Field("solventa-local-", validation_alias=AliasChoices("ALERTAS_PREFIJO", "SOLVENTA_ALERTAS_PREFIJO"))
+    alertas_catalogo: dict[str, dict[str, Any]] = Field(
+        default_factory=dict, validation_alias=AliasChoices("ALERTAS_CATALOGO", "SOLVENTA_ALERTAS_CATALOGO")
+    )
+    alertas_umbrales: list[dict[str, Any]] = Field(
+        default_factory=list, validation_alias=AliasChoices("ALERTAS_UMBRALES", "SOLVENTA_ALERTAS_UMBRALES")
+    )
+    alertas_advertencia_pct: float = Field(
+        90, validation_alias=AliasChoices("ALERTAS_ADVERTENCIA_PCT", "SOLVENTA_ALERTAS_ADVERTENCIA_PCT")
+    )
+    alertas_atencion_min: float = Field(30, validation_alias=AliasChoices("ALERTAS_ATENCION_MIN", "SOLVENTA_ALERTAS_ATENCION_MIN"))
+    alertas_falso_positivo_min: float = Field(
+        5, validation_alias=AliasChoices("ALERTAS_FALSO_POSITIVO_MIN", "SOLVENTA_ALERTAS_FALSO_POSITIVO_MIN")
+    )
 
 
 settings = Settings()

@@ -33,8 +33,27 @@ ally_timeouts_ms = {
   kyc            = 3000
 }
 
-# Umbrales de alertas (HU-W28).
+# Umbrales de alertas (HU-W28). Cada meta abre una advertencia en warning_ratio
+# de la meta y una alerta crítica en la meta. Guía: docs/hu-w28-alertas.md
 profiling_p95_ms          = 400
+warning_ratio             = 0.9
 api_5xx_rate              = 0.05
 alarm_evaluation_periods  = 5
 alarm_datapoints_to_alarm = 3
+
+# Operaciones de otras historias: sin datos, sus alarmas quedan en OK.
+latency_targets = [
+  { id = "cotizacion", label = "Cotización p95", service = "cotizacion", operation = "cotizacion", target_ms = 250 },
+  { id = "emision", label = "Emisión p95", service = "cotizacion", operation = "emision", target_ms = 1500 },
+  { id = "consulta", label = "Consulta p95", service = "cotizacion", operation = "consulta", target_ms = 150 },
+]
+
+error_rate_percent           = 1
+error_rate_warning_percent   = 0.7
+partner_quota_percent        = 100
+availability_percent         = 99.9
+availability_warning_percent = 99.93
+
+# Resumen del mes en Operación › Alertas.
+alert_attention_minutes = 30
+false_positive_minutes  = 5

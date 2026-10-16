@@ -1,5 +1,6 @@
-# Canal de alertas del equipo (HU-W28). Las alarmas de apps envían ALARM y OK a
-# este tópico, de modo que también se notifica la recuperación.
+# Canal de alertas del equipo (HU-W28). Las reglas de EventBridge de apps
+# (infra/apps/notifications.tf) publican aquí el cambio a ALARM y la recuperación
+# a OK. Solo las reglas de alertas del ambiente pueden publicar.
 resource "aws_sns_topic" "alerts" {
   name              = "${local.prefix}-alertas"
   kms_master_key_id = local.kms_key_arn # null: las alarmas no pueden usar aws/sns
@@ -10,12 +11,12 @@ resource "aws_sns_topic_policy" "alerts" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Sid       = "CloudWatchAlarms"
+      Sid       = "EventBridgeAlertas"
       Effect    = "Allow"
-      Principal = { Service = "cloudwatch.amazonaws.com" }
+      Principal = { Service = "events.amazonaws.com" }
       Action    = "sns:Publish"
       Resource  = aws_sns_topic.alerts.arn
-      Condition = { StringEquals = { "aws:SourceAccount" = local.account_id } }
+      Condition = { ArnLike = { "aws:SourceArn" = "arn:${local.partition}:events:${var.aws_region}:${local.account_id}:rule/${local.prefix}-alertas-*" } }
     }]
   })
 }

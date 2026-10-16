@@ -78,6 +78,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /operacion/alertas:
+    get:
+      tags:
+      - operacion
+      summary: Obtener Alertas
+      operationId: obtener_alertas_operacion_alertas_get
+      parameters:
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertasRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /backoffice/grupos:
     get:
       tags:
@@ -1053,6 +1089,85 @@ components:
       - efecto
       - nivel
       title: AjusteDto
+    AlertaRespuesta:
+      properties:
+        alarma:
+          type: string
+          title: Alarma
+        severidad:
+          type: string
+          enum:
+          - critica
+          - advertencia
+          - informativa
+          title: Severidad
+        titulo:
+          type: string
+          title: Titulo
+        valor_actual:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Valor Actual
+        umbral:
+          type: number
+          title: Umbral
+        unidad:
+          type: string
+          title: Unidad
+        abierta_desde:
+          type: string
+          format: date-time
+          title: Abierta Desde
+        enlace:
+          $ref: '#/components/schemas/EnlaceRespuesta'
+      type: object
+      required:
+      - alarma
+      - severidad
+      - titulo
+      - valor_actual
+      - umbral
+      - unidad
+      - abierta_desde
+      - enlace
+      title: AlertaRespuesta
+    AlertasRespuesta:
+      properties:
+        ambiente:
+          type: string
+          title: Ambiente
+        porcentaje_advertencia:
+          type: number
+          title: Porcentaje Advertencia
+        falso_positivo_min:
+          type: number
+          title: Falso Positivo Min
+        atencion_min:
+          type: number
+          title: Atencion Min
+        abiertas:
+          items:
+            $ref: '#/components/schemas/AlertaRespuesta'
+          type: array
+          title: Abiertas
+        umbrales:
+          items:
+            $ref: '#/components/schemas/UmbralRespuesta'
+          type: array
+          title: Umbrales
+        resumen:
+          $ref: '#/components/schemas/ResumenRespuesta'
+      type: object
+      required:
+      - ambiente
+      - porcentaje_advertencia
+      - falso_positivo_min
+      - atencion_min
+      - abiertas
+      - umbrales
+      - resumen
+      title: AlertasRespuesta
     CambioPlanSolicitud:
       properties:
         plan:
@@ -1220,6 +1335,35 @@ components:
       - AUMENTA_LEVEMENTE
       - AUMENTA_RIESGO
       title: Direccion
+    EnlaceRespuesta:
+      properties:
+        tipo:
+          type: string
+          enum:
+          - traza
+          - socio
+          - cola
+          - tablero
+          title: Tipo
+        url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Url
+        socio_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Socio Id
+        min_ms:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Min Ms
+      type: object
+      required:
+      - tipo
+      title: EnlaceRespuesta
     ErrorDto:
       properties:
         codigo:
@@ -1651,6 +1795,38 @@ components:
       - calculadoEn
       - perfilAnteriorId
       title: ResumenPerfil
+    ResumenRespuesta:
+      properties:
+        desde:
+          type: string
+          format: date-time
+          title: Desde
+        generadas:
+          type: integer
+          title: Generadas
+        criticas:
+          type: integer
+          title: Criticas
+        falsos_positivos:
+          type: integer
+          title: Falsos Positivos
+        tiempo_medio_atencion_min:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Tiempo Medio Atencion Min
+        metas_incumplidas:
+          type: integer
+          title: Metas Incumplidas
+      type: object
+      required:
+      - desde
+      - generadas
+      - criticas
+      - falsos_positivos
+      - tiempo_medio_atencion_min
+      - metas_incumplidas
+      title: ResumenRespuesta
     SocioCreado:
       properties:
         id:
@@ -1860,6 +2036,31 @@ components:
       - interpretacion
       - contexto
       title: TrazaRespuesta
+    UmbralRespuesta:
+      properties:
+        metrica:
+          type: string
+          title: Metrica
+        unidad:
+          type: string
+          title: Unidad
+        meta:
+          type: number
+          title: Meta
+        advertencia:
+          type: number
+          title: Advertencia
+        critica:
+          type: number
+          title: Critica
+      type: object
+      required:
+      - metrica
+      - unidad
+      - meta
+      - advertencia
+      - critica
+      title: UmbralRespuesta
     UsuarioRespuesta:
       properties:
         email:

@@ -184,15 +184,39 @@ class AdministrarSocios:
     @operacion("consultar_consumo_socio")
     def consumo(self, socio_id: str, ahora: datetime | None = None) -> Consumo:
         socio = self.obtener(socio_id)
+        return self._consumo(socio, (ahora or datetime.now(UTC)).astimezone(UTC), limitadas=True)
+
+    @operacion("medir_cuota_socios")
+    def porcentajes_de_cuota(self, ahora: datetime | None = None) -> dict[str, int]:
+        """HU-W28: porcentaje de la cuota consumido por cada socio activo (PartnerQuotaUsage)."""
         momento = (ahora or datetime.now(UTC)).astimezone(UTC)
+        porcentajes: dict[str, int] = {}
+        for socio in self.repositorio.listar():
+            if not socio.activo:
+                continue
+            try:
+                porcentajes[socio.id] = self._consumo(socio, momento, limitadas=False).porcentaje
+            except Exception as error:  # noqa: BLE001 - un socio sin uso legible no detiene a los demás
+                logger.warning(
+                    "no se pudo medir la cuota del socio",
+                    extra={"socio_id": socio.id, "error_type": type(error).__name__},
+                )
+        return porcentajes
+
+    def _consumo(self, socio: Socio, momento: datetime, limitadas: bool) -> Consumo:
         limites = self.api_keys.limites(socio.plan)
         vigente = ventana(limites.periodo, momento.date(), limites.desplazamiento)
         registros = self.api_keys.uso(
             socio.api_key_id, socio.plan, vigente.inicio, min(vigente.fin, momento.date())
         )
         inicio = datetime.combine(vigente.inicio, time(), UTC)
-        limitadas = self._limitadas(socio, inicio, momento)
-        return calcular_consumo(limites, vigente, registros, socio.api_key_id, limitadas)
+        return calcular_consumo(
+            limites,
+            vigente,
+            registros,
+            socio.api_key_id,
+            self._limitadas(socio, inicio, momento) if limitadas else None,
+        )
 
     def _limitadas(self, socio: Socio, desde: datetime, hasta: datetime) -> int | None:
         if self.metricas is None:

@@ -138,9 +138,94 @@ variable "log_retention_days" {
 
 # --- Umbrales de alarmas (HU-W28): configurados aquí, no en los servicios -----
 variable "profiling_p95_ms" {
-  description = "Latencia p95 del perfilamiento que dispara la alerta (HU-W28 AC1)."
+  description = "Meta p95 del perfilamiento: alerta crítica (HU-W28 AC1). La advertencia es warning_ratio de la meta."
   type        = number
   default     = 400
+}
+
+variable "warning_ratio" {
+  description = "Fracción de la meta que abre la alerta de advertencia (0.9 = 90 %)."
+  type        = number
+  default     = 0.9
+  validation {
+    condition     = var.warning_ratio > 0 && var.warning_ratio < 1
+    error_message = "warning_ratio debe estar entre 0 y 1."
+  }
+}
+
+variable "latency_targets" {
+  description = "Metas p95 (ms) de otras operaciones prioritarias. Sin datos de la operación, sus alarmas quedan en OK."
+  type = list(object({
+    id         = string
+    label      = string
+    service    = string
+    operation  = string
+    target_ms  = number
+    warning_ms = optional(number)
+  }))
+  default = []
+  validation {
+    condition     = alltrue([for t in var.latency_targets : can(regex("^[a-z][a-z0-9-]*$", t.id)) && t.id != "perfilamiento"])
+    error_message = "Cada id es único, en minúsculas con guiones, y distinto de perfilamiento (definido por profiling_p95_ms)."
+  }
+}
+
+variable "error_rate_percent" {
+  description = "Meta de la tasa de error técnico por servicio: OperationErrors / SampleCount(OperationDuration), en %."
+  type        = number
+  default     = 1
+}
+
+variable "error_rate_warning_percent" {
+  description = "Advertencia de la tasa de error (%). Sin valor: warning_ratio de la meta."
+  type        = number
+  default     = null
+}
+
+variable "availability_percent" {
+  description = "Meta de disponibilidad por API (1 - 5XX/solicitudes), en %."
+  type        = number
+  default     = 99.9
+}
+
+variable "availability_warning_percent" {
+  description = "Advertencia de disponibilidad (%). Sin valor: se consume warning_ratio del margen de error."
+  type        = number
+  default     = null
+}
+
+variable "availability_period_seconds" {
+  description = "Ventana en la que se calcula la disponibilidad."
+  type        = number
+  default     = 3600
+}
+
+variable "partner_quota_percent" {
+  description = "Consumo de la cuota de un socio (PartnerQuotaUsage) que abre la alerta crítica, en %."
+  type        = number
+  default     = 100
+}
+
+variable "partner_quota_interval_seconds" {
+  description = "Cada cuánto api-socios publica PartnerQuotaUsage (0 = no publica)."
+  type        = number
+  default     = 300
+  validation {
+    condition     = var.partner_quota_interval_seconds >= 0 && var.partner_quota_interval_seconds % 60 == 0
+    error_message = "partner_quota_interval_seconds debe ser 0 o múltiplo de 60 (periodo de Metrics Insights)."
+  }
+}
+
+variable "alert_attention_minutes" {
+  description = "Una alerta crítica que dura más que esto cuenta como meta incumplida en el resumen del mes."
+  type        = number
+  default     = 30
+}
+
+variable "false_positive_minutes" {
+  description = "Una alerta que se recupera antes de esto cuenta como falso positivo en el resumen del mes."
+  type        = number
+  default     = 5
 }
 
 variable "api_5xx_rate" {

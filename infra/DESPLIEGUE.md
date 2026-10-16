@@ -118,6 +118,7 @@ Ejecuta en orden los cuatro pasos de la sección 1:
 | `make infra-pausar` / `make infra-reanudar` | Llevar todos los servicios a 0 tareas o volver a las réplicas configuradas |
 | `make infra-salidas` | URLs de los APIs, portal, Cognito y tablero |
 | `make infra-probar` | Prueba rápida del ambiente desplegado (sección 5.1) |
+| `make infra-probar-alerta` | Activa y recupera la alarma del perfilamiento con una métrica sintética (sección 5.2) |
 
 ### 5.1 Prueba rápida del ambiente
 
@@ -139,11 +140,52 @@ make infra-probar ENV=int                                           # SMOKE_ALER
 | Socio de prueba: token `client_credentials` | Cognito entrega el token | Pool de socios, dominio y servidor de recursos |
 | Socio con token, sin API key | 401/403 | Plan de uso por API key (HU-W02) |
 | Socio con token y API key | 200 desde `api-socios` | Recorrido completo: WAF → API Gateway → VPC Link v2 → ALB → ECS |
-| `SMOKE_ALERTA=1` | Llega el correo de prueba | Tópico de alertas y suscripción confirmada (HU-W28) |
+| `SMOKE_ALERTA=1` | Llega el correo de prueba | Tópico de alertas y suscripción confirmada (HU-W28). La prueba de las alarmas es la sección 5.2 |
 
 - **Socios de prueba:** la prueba usa `socio-a`, definido en `infra/envs/int/platform.tfvars`. En `int`, `socio-a` y `socio-b` usan el plan `prueba` (5 solicitudes al día): si las pruebas de HU-W02 agotaron su cuota, el paso 4 responde 429 hasta las 00:00 UTC o hasta reponerla con `aws apigateway update-usage --usage-plan-id <prueba> --key-id <api_key_id> --patch-operations op=replace,path=/remaining,value=5` (`terraform -chdir=infra/platform output -json partners` muestra `api_key_id`).
 - **Dominio de Cognito:** puede tardar unos minutos en responder después del primer `infra-plataforma`. Si falla solo el token, repetir.
 - **Más servicios:** para cubrir los demás, agregarlos a `SERVICES`. Sin `SERVICES`, se construyen los 10 del catálogo.
+
+### 5.2 Probar las alertas (HU-W28)
+
+Activa y recupera la alarma de p95 del perfilamiento publicando una métrica sintética, sin carga ni servicios (AC4). Requiere la plataforma y las aplicaciones aplicadas después de esta historia (`make infra-plataforma` y luego `make infra-aplicaciones`: la política del tópico solo acepta las reglas de EventBridge) y la suscripción de `alert_emails` confirmada.
+
+```bash
+make infra-probar-alerta ENV=int                    # NIVEL=critica (por defecto)
+NIVEL=advertencia make infra-probar-alerta ENV=int  # solo la advertencia
+```
+
+| Paso | Qué hace | Tiempo |
+| --- | --- | --- |
+| 0 | Muestra el estado y el umbral de `solventa-<env>-perfilamiento-p95-advertencia` y `-critica`. Si una quedó en ALARM por una ejecución anterior, espera a que vuelva a OK | — |
+| 1 | Publica `OperationDuration` cada minuto (hasta `PUBLICAR_MIN=5`) con `Environment=<env>`, `Service=cotizacion`, `Operation=perfilamiento`: 900, 950 y 1000 ms con `NIVEL=critica`, o el punto medio entre la advertencia y la meta con `NIVEL=advertencia`. Se detiene al ver ALARM | 3–5 min (3 de 5 periodos de 60 s) |
+| 2 | Deja de publicar y espera OK en las dos alarmas (`treat_missing_data = notBreaching`) | 3–5 min |
+| 3 | Imprime los tiempos y sale con 0, o con 1 si no hubo ALARM en `ESPERA_ALARMA_S` (600) o OK en `ESPERA_OK_S` (900) | — |
+
+No cambia la configuración ni el estado de ninguna alarma, y solo publica en la serie del perfilamiento: se puede repetir.
+
+**Correos esperados** (remitente `AWS Notifications`, asunto `AWS Notification Message`; EventBridge no permite cambiar el asunto). Un correo por cada cambio de estado de cada alarma, nunca uno por medición:
+
+| `NIVEL` | Correos |
+| --- | --- |
+| `advertencia` | 1 de ALARMA y 1 de RECUPERADA (advertencia) |
+| `critica` | 2 de ALARMA y 2 de RECUPERADA (advertencia y crítica, porque 900 ms supera ambos umbrales) |
+
+```text
+ALARMA - Solventa int
+
+Estado: ALARMA
+Ambiente: int
+Alarma: solventa-int-perfilamiento-p95-critica
+Detalle (severidad, operación y umbral): [int] CRÍTICA - Operación perfilamiento (cotizacion): p95 > 400 ms (meta 400 ms). Tablero: https://...
+Valor observado: {"version":"1.0","queryDate":"...","recentDatapoints":[1000.0,1000.0,1000.0],"threshold":400.0,...}
+Motivo: Threshold Crossed: 3 out of the last 5 datapoints [...] were greater than the threshold (400.0) ...
+Hora (UTC): 2026-10-14T15:04:00Z
+Tablero: https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards/dashboard/solventa-int
+Alertas abiertas: https://<portal>/operacion/alertas
+```
+
+El de recuperación es igual con `RECUPERADA` en lugar de `ALARMA`. Mientras la alarma está abierta aparece en el portal, en **Operación › Alertas**.
 
 ### Imágenes de los microservicios
 
@@ -170,7 +212,7 @@ AUTO_APPROVE=1 make infra-destruir ENV=int  # sin pregunta (CI)
 
 | Orden | Qué pasa |
 | --- | --- |
-| 1 | Destruye `apps` (servicios, IAM, alarmas, tablero). |
+| 1 | Destruye `apps` (servicios, IAM, alarmas, reglas de alertas de EventBridge, tablero). |
 | 2 | Vacía el bucket de auditoría saltando la retención GOVERNANCE de Object Lock. Con `audit_lock_mode = "COMPLIANCE"`, AWS no permite borrar antes del vencimiento y la destrucción de ese bucket falla. |
 | 3 | Borra todas las imágenes de los repositorios ECR del ambiente, así la destrucción no depende de que el estado tenga `force_delete = true`. |
 | 4 | Destruye `platform`: RDS sin snapshot final, repositorios ECR, Cognito, colas, NAT, ALB, API Gateway, WAF y VPC. |
@@ -259,6 +301,8 @@ En local se puede usar `E2E_ADMIN_TOKEN` (ID token copiado del portal) en vez de
 | `test_hu_w02_n3_cambio_de_plan_desde_la_administracion` | Da de alta un socio en `basico`, lo pasa a `prueba` por `PUT /web/socios/{id}/plan`, comprueba que `GET /web/socios/{id}/consumo` informe cuota 5 y que la API key quede solo en el plan `prueba` (`GetUsagePlanKey`). Sin llamar al borde antes del cambio (API Gateway guarda en caché el plan de cada key), agota la cuota con `GET /socio/me` hasta recibir 429 `QUOTA_EXCEEDED`. Luego espera a que el consumo quede `agotada` con al menos una limitación, verifica que `socio-b` siga en 200 y desactiva el socio. |
 
 Las dos pruebas reponen la cuota de `socio-a` y `socio-b` al empezar y al terminar (`apigateway:UpdateUsage`), así que se pueden repetir el mismo día. API Gateway aplica la cuota en modo *best-effort* y contabiliza el uso con unos segundos de retraso, así que la prueba no exige el corte exacto en la sexta solicitud (el límite de 5 del plan lo verifica `infra/platform/tests`): exige que el borde rechace con `QUOTA_EXCEEDED` antes de tres veces la cuota. Variables opcionales: `E2E_RETRY_AFTER_LIMITE` y `E2E_RETRY_AFTER_CUOTA` (si se cambian `partner_throttle_retry_after_seconds` o `partner_quota_retry_after_seconds`), `E2E_ESPERA_PLAN_S` (60 s; propagación del plan nuevo en API Gateway) y `E2E_ESPERA_LOGS_S` (240 s; logs y métricas). Filtro: `-k hu_w02`.
+
+**HU-W28 (`tests/e2e/test_hu_w28_alertas.py`)** consulta `GET /web/operacion/alertas` con el mismo usuario, que además debe estar en el grupo `operacion` (`aws cognito-idp admin-add-user-to-group --user-pool-id <pool backoffice> --username <usuario> --group-name operacion`). Comprueba 401 sin token, la tabla de umbrales de `apps.tfvars` (perfilamiento 400 ms y advertencia en `warning_ratio`), que las alertas abiertas sean del ambiente con severidad y enlace válidos, y la coherencia del resumen del mes. La activación de la alarma (N2) es `make infra-probar-alerta` (sección 5.2). Filtro: `-k hu_w28`.
 
 ### Portal web (repo proyecto-final-2-frontend)
 

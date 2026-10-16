@@ -37,9 +37,15 @@ output "log_groups" {
 output "metric_contract" {
   description = "Contrato de métricas de aplicación usado por alarmas y tablero."
   value = {
-    namespace  = var.metrics_namespace
-    dimensions = ["Environment", "Service", "Operation"]
-    metrics    = { OperationDuration = "Milliseconds (histograma exponencial)", OperationErrors = "Count" }
-    profiling  = { service = "cotizacion", operation = "perfilamiento", p95_threshold_ms = var.profiling_p95_ms }
+    namespace     = var.metrics_namespace
+    dimensions    = ["Environment", "Service", "Operation"]
+    metrics       = { OperationDuration = "Milliseconds (histograma exponencial)", OperationErrors = "Count" }
+    profiling     = { service = "cotizacion", operation = "perfilamiento", p95_threshold_ms = var.profiling_p95_ms }
+    partner_quota = { namespace = "Solventa/Socios", metric = "PartnerQuotaUsage", dimensions = ["Environment", "Partner"], unit = "Percent" }
   }
+}
+
+output "alarms" {
+  description = "Alarmas del ambiente (HU-W28) con su severidad."
+  value       = { for alarm in local.all_alarms : alarm.alarm_name => local.alert_catalog[trimprefix(alarm.alarm_name, "${local.prefix}-")].severidad }
 }

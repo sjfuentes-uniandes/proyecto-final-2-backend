@@ -26,6 +26,17 @@ def test_contrato_de_trazas() -> None:
     assert set(operacion["responses"]) >= {"200", "422"}
 
 
+def test_contrato_de_alertas() -> None:
+    operacion = app.openapi()["paths"]["/operacion/alertas"]["get"]
+    esquemas = app.openapi()["components"]["schemas"]
+    assert set(operacion["responses"]) >= {"200"}
+    assert set(esquemas["AlertasRespuesta"]["properties"]) == {
+        "ambiente", "porcentaje_advertencia", "falso_positivo_min", "atencion_min", "abiertas", "umbrales", "resumen",
+    }
+    assert esquemas["AlertaRespuesta"]["properties"]["severidad"]["enum"] == ["critica", "advertencia", "informativa"]
+    assert esquemas["EnlaceRespuesta"]["properties"]["tipo"]["enum"] == ["traza", "socio", "cola", "tablero"]
+
+
 COTIZACION = CONTRATO.parent / "cotizacion.yaml"
 # HU-W11: el BFF publica los mismos esquemas que cotizacion para /v1/perfiles (04 W11-P15).
 ESQUEMAS_PERFILAMIENTO = (

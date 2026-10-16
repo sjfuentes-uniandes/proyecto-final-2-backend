@@ -40,7 +40,7 @@ Socio ──HTTPS (+mTLS opc.)──► WAF ─► API Gateway "socios" ──�
 | **HU-W11** Cálculo perfil de riesgo | Servicios `cotizacion` y `catalogo`, cada uno con su base (versiones de reglas y perfiles). |
 | **HU-W12** Consulta fuentes en paralelo | Un adaptador por grupo de aliados (*bulkhead*). `ALLY_*_TIMEOUT_MS` por dependencia. Trazas padre/hijas en X-Ray a través de ADOT. |
 | **HU-W27** Correlación de métricas y trazas | API Gateway con X-Ray y logs de acceso JSON (`requestId`, `xrayTraceId`). Encabezado `X-Request-Id` inyectado en cada solicitud. Colector ADOT por tarea (OTLP → X-Ray + EMF). Tablero por ambiente. |
-| **HU-W28** Generación de alertas | Tópico SNS `alertas` con correo. Las alarmas envían tanto `ALARM` como `OK`: p95 del perfilamiento > 400 ms, 5XX, p95 del API, destinos saludables, CPU/memoria, atraso de colas, DLQ y RDS. Los umbrales se configuran en variables. |
+| **HU-W28** Generación de alertas | Tópico SNS `alertas` con correo (`alert_emails`). Cada meta tiene una alarma de advertencia (`warning_ratio`, 90 %) y una crítica: p95 del perfilamiento (400 ms) y de otras operaciones (`latency_targets`), tasa de error técnico por servicio (`OperationErrors / SampleCount(OperationDuration)`), disponibilidad por API y cuota de socio (`PartnerQuotaUsage`). Además: 5XX y p95 del API, destinos saludables, CPU/memoria, atraso de colas, DLQ (informativa) y RDS. Las alarmas no tienen acciones: dos reglas de EventBridge envían un correo en español al pasar a `ALARM` y al volver a `OK` desde `ALARM`. `bff-web` expone las alertas abiertas, los umbrales y el resumen del mes. Los umbrales se configuran en `apps.tfvars`. Guía: [docs/hu-w28-alertas.md](../docs/hu-w28-alertas.md). |
 | **HU-W30** Verificación de identidad | Servicios `clientes` (base propia) y `adaptador-identidad` (secreto `kyc`, timeout propio para distinguir PENDIENTE de RECHAZADO). |
 | **HU-W31** Verificación de consentimiento | `clientes` guarda los consentimientos y `cotizacion` los consulta antes de llamar al adaptador. La cola `consentimientos-cotizacion` invalida cachés cuando se revoca un consentimiento. Las decisiones quedan en la auditoría inmutable. |
 | **HU-M06** Validación de cliente | Ruta `/movil/*` → `bff-movil` → `clientes` → `adaptador-identidad`. La regla WAF de tamaño de cuerpo queda en modo conteo para permitir la selfie. No se guarda biometría en AWS. |
@@ -63,7 +63,7 @@ Ninguna configuración con ECS Fargate es 100 % gratuita, porque **Fargate no ti
 | Cifrado | Claves administradas por AWS (`use_customer_managed_key = false`) | 0 USD | 0 USD (1 USD/mes con clave propia) |
 | WAF | Web ACL mínimo: límite por IP + reglas comunes de AWS | Sin capa gratuita | ~7 USD/mes |
 | Secrets Manager | 8 secretos (bases, aliados y maestro de RDS) | 30 días de prueba | ~3,2 USD/mes |
-| Alarmas CloudWatch | ~34 con los 10 servicios | 10 gratis | ~2,4 USD/mes |
+| Alarmas CloudWatch | ~67 con los 10 servicios (~93 métricas: metric math cobra cada métrica) | 10 métricas gratis | ~8 USD/mes |
 | API Gateway, Cognito (usuarios), CloudFront, S3, SNS, SQS, ECR, X-Ray | Volumen de pruebas | Dentro de la capa gratuita | Centavos |
 
 Estimado con los 10 servicios encendidos 24/7:
@@ -128,6 +128,8 @@ make infra-destruir ENV=int       # todo el ambiente
 | `AUDIT_BUCKET` | auditoria | Bucket con Object Lock |
 | `PARTNERS_USER_POOL_ID`, `PARTNERS_API_ID`, `PARTNERS_USAGE_PLANS`, `PARTNERS_TOKEN_URL` | api-socios | Alta de socios, cambio de plan y consumo. `PARTNERS_USAGE_PLANS` (JSON plan → id del plan de uso) define qué planes se pueden asignar en el ambiente |
 | `JWT_ISSUERS` | Acceso | Emisores válidos para revalidar el token (defensa en profundidad) |
+| `QUOTA_METRIC_INTERVAL_S` | api-socios | Cada cuánto publica `PartnerQuotaUsage` (`partner_quota_interval_seconds`, 300; 0 = no publica) |
+| `ALERTAS_PREFIJO`, `ALERTAS_CATALOGO`, `ALERTAS_UMBRALES`, `ALERTAS_ADVERTENCIA_PCT`, `ALERTAS_ATENCION_MIN`, `ALERTAS_FALSO_POSITIVO_MIN` | bff-web | Pantalla Operación › Alertas: prefijo de las alarmas del ambiente, severidad/título/unidad/enlace por alarma, tabla de umbrales y parámetros del resumen del mes. Los genera `infra/apps/alarms.tf` |
 | `OTEL_*` | Todos | Exportación OTLP a `localhost:4317` (colector ADOT) |
 
 **Encabezados que agrega API Gateway** a partir del token validado (sobrescriben lo que envíe el cliente): `X-Authenticated-Sub` (canales), `X-Authenticated-Issuer` y `X-Authenticated-Groups` (portal web, grupos de Cognito), `X-Partner-Client-Id`, `X-Partner-Scopes` y `X-Partner-Key-Id` (socios). `api-socios` responde 403 cuando el permiso requerido no está en `X-Partner-Scopes` (HU-W01 AC4).
@@ -138,7 +140,9 @@ make infra-destruir ENV=int       # todo el ambiente
 - `OperationDuration`: histograma en ms. `OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION` ya lo configura como exponencial, lo que permite calcular p95.
 - `OperationErrors`: contador.
 
-El perfilamiento debe usar `Service=cotizacion` y `Operation=perfilamiento`.
+El perfilamiento debe usar `Service=cotizacion` y `Operation=perfilamiento`. Las operaciones de `latency_targets` (en `int`: `cotizacion`, `emision` y `consulta` de `cotizacion`) deben publicarse con esos nombres para que sus alarmas evalúen datos; mientras no existan, quedan en OK.
+
+**Cuota de socio (HU-W28):** `api-socios` publica cada `QUOTA_METRIC_INTERVAL_S` el porcentaje de la cuota consumido por cada socio activo en `Solventa/Socios PartnerQuotaUsage` (unidad `Percent`, dimensiones `Environment` y `Partner` = id del socio), con `cloudwatch:PutMetricData` limitado a ese espacio de nombres. La alarma usa Metrics Insights (`MAX` entre socios); `bff-web` identifica al socio con el mayor consumo.
 
 **Logs:** JSON por línea con `service`, `operation`, `result`, `duration_ms` y `correlation_id`. Nunca incluir secretos, tokens, biometría ni payloads financieros completos (HU-W27 AC4).
 
@@ -151,15 +155,16 @@ El perfilamiento debe usar `Service=cotizacion` y `Operation=perfilamiento`.
 
 **Trazas en el portal:** `bff-web` expone `GET /web/operacion/trazas?correlation_id=&recorrido=&duracion_min_ms=&horas=` solo para el grupo `operacion` del back-office; consulta X-Ray (`xray:GetTraceSummaries`, `xray:BatchGetTraces`, solo en su rol de tarea). `CORS_ORIGINS` (JSON) lleva la URL de CloudFront y `cors_extra_origins`.
 
+**Alertas en el portal (HU-W28):** `GET /web/operacion/alertas` (grupo `operacion`) devuelve las alertas abiertas, los umbrales configurados y el resumen de los últimos 30 días. `bff-web` tiene `cloudwatch:DescribeAlarms`, `DescribeAlarmHistory` y `GetMetricData` (solo lectura, `Resource = "*"` porque el historial sin nombre de alarma y Metrics Insights no admiten ARN) y filtra por `ALERTAS_PREFIJO`.
+
 ## Probar la alerta sin carga (HU-W28 AC4)
 
 ```bash
-aws cloudwatch put-metric-data --namespace Solventa --metric-name OperationDuration --unit Milliseconds \
-  --dimensions Environment=int,Service=cotizacion,Operation=perfilamiento \
-  --values 900 950 1000 --counts 20 20 20
-# Repetir cada minuto durante 3-5 minutos: la alarma pasa a ALARM y notifica.
-# Al dejar de publicar (treat_missing_data = notBreaching) vuelve a OK y notifica la recuperación.
+make infra-probar-alerta ENV=int                    # NIVEL=critica: 900-1000 ms
+NIVEL=advertencia make infra-probar-alerta ENV=int  # entre la advertencia y la meta
 ```
+
+El script publica `OperationDuration` sintético con las dimensiones de la alarma (`Environment`, `Service=cotizacion`, `Operation=perfilamiento`) cada minuto, espera `ALARM`, deja de publicar y espera `OK` (`treat_missing_data = notBreaching`). Imprime los tiempos y sale con 0 o 1. Las alarmas del perfilamiento existen aunque `cotizacion` no esté desplegado. Detalle y correos esperados: [DESPLIEGUE.md](DESPLIEGUE.md#52-probar-las-alertas-hu-w28).
 
 ## Validación sin desplegar
 
