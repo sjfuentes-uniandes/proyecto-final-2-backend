@@ -7,7 +7,7 @@ WireMock 3.9.2 con los simuladores de terceros (nunca se usan proveedores reales
 | `mappings/clientes-stub/` | Stub **temporal** de `clientes` (identidad y consentimiento) según la propuesta `contracts/openapi/clientes.propuesta-cotizacion.yaml` . Se retira cuando exista el servicio `clientes` | Generado |
 | `mappings/open-finance/`, `__files/open-finance/` | Aliado Open Finance: productos vigentes, historial de pagos de 12 meses e ingresos agregados | Generado |
 | `mappings/datos-abiertos/`, `__files/datos-abiertos/` | Aliado Datos Abiertos: registros públicos (listas restrictivas) | Generado |
-| `mappings/kyc/` | Proveedor de identidad | — |
+| `mappings/kyc/` | Proveedor de identidad (selfie + prueba de vida), HU-M06 | A mano |
 | `mappings/health.json` | `GET /health` para el *healthcheck* | A mano |
 
 ## Generación
@@ -43,6 +43,22 @@ uv run --with pytest pytest services/simulador-aliados/tests
 | C17 | `…11` | VERIFICADO | PERMITIDO_PARCIAL, solo `DA_REGISTROS_PUBLICOS` |
 
 `clienteId` completo: `00000000-0000-4000-8000-0000000000NN`.
+
+## Proveedor KYC (`/kyc`), HU-M06
+
+El proveedor real de selfie + prueba de vida no existe: el valor sintético que manda `adaptador-identidad`
+en el campo `selfie` selecciona el caso (nunca una imagen real). Cualquier otro valor cae en el
+respaldo de prioridad 10: 404 `{"error": "selfie_no_reconocida"}`.
+
+| Solicitud (`POST /kyc/v1/verificaciones`) | `selfie` | Respuesta |
+| --- | --- | --- |
+| Aprobada | `selfie-sintetica-aprobada` | 200 `{"resultado": "APROBADO", "motivo": null}` |
+| Captura inválida (AC2) | `selfie-sintetica-captura-invalida` | 200 `{"resultado": "CAPTURA_INVALIDA", "motivo": "ILUMINACION_INSUFICIENTE"}` |
+| Rostro no coincide | `selfie-sintetica-rechazada` | 200 `{"resultado": "RECHAZADO", "motivo": "ROSTRO_NO_COINCIDE"}` |
+| Proveedor caído (AC3) | `selfie-sintetica-caida` | 503 `{"error": "unavailable"}` |
+| Proveedor lento (AC3, supera el timeout de 3 s del proveedor) | `selfie-sintetica-lenta` | 200 con `fixedDelayMilliseconds: 5000` |
+
+Exige `X-Api-Key` (cualquier valor), igual que los demás aliados.
 
 ## Aliados (`/open-finance` y `/datos-abiertos`)
 

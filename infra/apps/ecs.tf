@@ -115,6 +115,7 @@ locals {
         { name = "DB_PASSWORD", valueFrom = "${local.p.database.secrets[name]}:password::" },
       ] : [],
       [for ally in service.allies : { name = "ALLY_${upper(replace(ally, "-", "_"))}_CREDENTIALS", valueFrom = local.p.allies[ally].secret_arn }],
+      contains(local.registro_token_issuers, name) ? [{ name = "REGISTRO_TOKEN_SECRET", valueFrom = "${local.p.registro.token_secret_arn}:secret::" }] : [],
     )
   }
 

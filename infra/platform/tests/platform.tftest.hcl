@@ -173,6 +173,37 @@ run "minimo_costo" {
     condition     = contains(local.discoverable, "simulador-aliados") && !contains(local.discoverable, "bff-web")
     error_message = "Solo los servicios invocados se anuncian en Service Connect."
   }
+  assert {
+    condition = alltrue([
+      aws_lambda_function.pre_sign_up.runtime == "python3.12",
+      aws_lambda_function.pre_sign_up.handler == "handler.handler",
+      aws_lambda_function.pre_sign_up.timeout == 5,
+      aws_lambda_permission.pre_sign_up.principal == "cognito-idp.amazonaws.com",
+      aws_lambda_permission.pre_sign_up.action == "lambda:InvokeFunction",
+      length(aws_cognito_user_pool.customers.lambda_config) == 1,
+    ])
+    error_message = "El pool clientes debe invocar al Lambda pre sign-up (HU-M06)."
+  }
+  assert {
+    condition     = toset(aws_cognito_user_pool_client.mobile.write_attributes) == toset(["email", "name"]) && !contains(aws_cognito_user_pool_client.mobile.write_attributes, "custom:customer_id")
+    error_message = "La app no puede escribir custom:customer_id en el SignUp (suplantación de identidad)."
+  }
+  assert {
+    condition = alltrue([
+      aws_api_gateway_method.registro_verificaciones.http_method == "POST",
+      aws_api_gateway_method.registro_verificaciones.authorization == "NONE",
+      aws_api_gateway_integration.registro_verificaciones.uri == "http://access.elb.amazonaws.com:8082/v1/registro/verificaciones",
+      aws_api_gateway_integration.registro_verificaciones.connection_type == "VPC_LINK",
+      aws_api_gateway_method_settings.registro_verificaciones.method_path == "movil/v1/registro/verificaciones/POST",
+      aws_api_gateway_method_settings.registro_verificaciones.settings[0].throttling_rate_limit == 5,
+      aws_api_gateway_method_settings.registro_verificaciones.settings[0].throttling_burst_limit == 10,
+    ])
+    error_message = "La verificación del registro es la única ruta pública de /movil y tiene su propio tope."
+  }
+  assert {
+    condition     = aws_api_gateway_method.proxy["movil"].authorization == "COGNITO_USER_POOLS"
+    error_message = "El resto de /movil sigue exigiendo token de Cognito."
+  }
 }
 
 run "alta_disponibilidad_con_socios_y_mtls" {

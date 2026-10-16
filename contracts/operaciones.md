@@ -11,7 +11,12 @@ Nombres de `Operation` en `OperationDuration` y `OperationErrors` (`solventa_com
 | `perfilamiento.dependencia.catalogo.modelo` | `cotizacion` | Consulta del modelo de riesgo | `ok`, `timeout`, `error` |
 | `perfilamiento.dependencia.fuente.<FUENTE>` | `cotizacion` | Rama de cada fuente | `ok`, `timeout`, `error` |
 | `consulta.<FUENTE>` | `adaptador-datos` | Caso de uso `consultar_fuente` | `ok`, `timeout`, `error`, `rechazado` |
+| `verificacion.kyc` | `adaptador-identidad` | Caso de uso `VerificarIdentidad` (llamada al proveedor KYC, HU-M06) | `ok`, `timeout`, `error` |
+| `identidad.verificar` | `clientes` | Caso de uso `VerificarIdentidad` (llamada a `adaptador-identidad`, HU-M06) | `ok`, `timeout`, `error`, `rechazado` (captura inválida o rechazo del proveedor) |
 | `sesion.consultar_identidad` | `bff-movil` | Caso de uso `ConsultarSesion` (llamada a `clientes`) | `ok`, `timeout`, `error`, `rechazado` (cliente no encontrado) |
+| `verificacion.enviar` | `bff-movil` | Caso de uso `VerificarIdentidad` (llamada a `clientes`, HU-M06) | `ok`, `timeout`, `error`, `rechazado` (captura inválida o rechazo) |
+| `registro.verificar` | `bff-movil` | Caso de uso `VerificarRegistro` (verificación previa a la cuenta, HU-M06) | `ok`, `timeout`, `error`, `rechazado` (captura inválida, rechazo o conflicto del registro) |
+| `registro.vincular` | `bff-movil`, `clientes` | Caso de uso `VincularRegistro` (primer ingreso, HU-M06) | `ok`, `timeout`, `error` (solo `bff-movil`), `rechazado` (token inválido o registro ya vinculado) |
 | `modelo_riesgo.publicar`, `modelo_riesgo.consultar` | `catalogo` | Casos de uso del modelo | — |
 | `habilitar_socio`, `listar_socios`, `consultar_socio`, `desactivar_socio` | `api-socios` | Administración de socios (HU-W01) | `ok`, `error` |
 | `autenticar_socio` | `api-socios` | Verificación del socio tras el borde (HU-W01 AC2) | `ok`, `rechazado` |

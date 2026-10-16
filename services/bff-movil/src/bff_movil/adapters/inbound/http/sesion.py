@@ -1,35 +1,23 @@
 """API GET /v1/sesion: sesión del cliente autenticado y los servicios que puede usar."""
 
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, ConfigDict
-from pydantic.alias_generators import to_camel
 from solventa_common.errors import ErrorNegocio
 
 from bff_movil.adapters.inbound.http.auth import IdentidadAutenticada, autenticar
 from bff_movil.adapters.inbound.http.codigos import CLIENTE_NO_ENCONTRADO, SERVICIO_NO_DISPONIBLE
+from bff_movil.adapters.inbound.http.comun import CABECERAS, Dto, error
 from bff_movil.application.sesion.consultar_sesion import ConsultarSesion
 from bff_movil.domain.sesion.errores import ClienteNoEncontrado, ServicioNoDisponible
 from bff_movil.domain.sesion.modelos import ServicioAutorizado, Sesion
 
 router = APIRouter(prefix="/v1/sesion", tags=["sesion"])
 
-_CABECERAS = {
-    "X-Correlation-Id": {
-        "description": "Identificador de correlación de la solicitud",
-        "schema": {"type": "string"},
-    }
-}
 
-
-class _Dto(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-
-class SesionDto(_Dto):
+class SesionDto(Dto):
     cliente_id: UUID
     servicios_autorizados: list[ServicioAutorizado]
     expira_en: datetime
@@ -43,32 +31,21 @@ class SesionDto(_Dto):
         )
 
 
-class ErrorDto(BaseModel):
-    codigo: str
-    mensaje: str
-    correlationId: str | None
-    detalles: dict[str, Any]
-
-
-def _error(descripcion: str) -> dict[str, Any]:
-    return {"model": ErrorDto, "description": descripcion, "headers": _CABECERAS}
-
-
 @router.get(
     "",
     response_model=SesionDto,
     response_model_by_alias=True,
     summary="Sesión del cliente autenticado",
     responses={
-        200: {"headers": _CABECERAS},
-        401: _error(
+        200: {"headers": CABECERAS},
+        401: error(
             "NO_AUTENTICADO: falta el token, venció, tiene una firma inválida o no corresponde "
             "al titular autenticado. La app debe pedir autenticación completa"
         ),
-        403: _error("ROL_NO_AUTORIZADO: el token no es del pool de clientes"),
-        404: _error("CLIENTE_NO_ENCONTRADO"),
-        422: _error("SOLICITUD_INVALIDA: un encabezado no cumple su formato"),
-        503: _error("SERVICIO_NO_DISPONIBLE: no se pudo verificar la identidad del cliente"),
+        403: error("ROL_NO_AUTORIZADO: el token no es del pool de clientes"),
+        404: error("CLIENTE_NO_ENCONTRADO"),
+        422: error("SOLICITUD_INVALIDA: un encabezado no cumple su formato"),
+        503: error("SERVICIO_NO_DISPONIBLE: no se pudo verificar la identidad del cliente"),
     },
 )
 async def consultar_sesion(

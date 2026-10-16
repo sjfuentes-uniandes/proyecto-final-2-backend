@@ -42,6 +42,24 @@ async def test_timeout_efectivo_con_margen_propio() -> None:
     assert timeout_efectivo_ms(700, 300, margen_ms=50) == 250
 
 
+async def test_timeout_efectivo_con_corte_duro_propio() -> None:
+    assert timeout_efectivo_ms(3000, None, corte_duro_ms=5000) == 3000
+    assert timeout_efectivo_ms(9000, None, corte_duro_ms=5000) == 5000
+    assert timeout_efectivo_ms(9000, 1000, corte_duro_ms=5000) == 980
+
+
+async def test_sin_proteccion_usa_el_corte_duro_declarado() -> None:
+    recibidos: list[float] = []
+
+    async def llamada(timeout_s: float) -> str:
+        recibidos.append(timeout_s)
+        return "ok"
+
+    assert await SinProteccion(corte_duro_ms=5000).ejecutar("F", "G", llamada, 3000, None) == "ok"
+    assert await SinProteccion().ejecutar("F", "G", llamada, 3000, None) == "ok"
+    assert recibidos == [3.0, 0.7]
+
+
 async def test_exito_pasa_el_timeout_en_segundos() -> None:
     recibidos: list[float] = []
 

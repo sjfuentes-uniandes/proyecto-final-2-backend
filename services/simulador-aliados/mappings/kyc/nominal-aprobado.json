@@ -1,0 +1,31 @@
+{
+  "name": "kyc verificación aprobada (nominal)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/kyc/v1/verificaciones",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.selfie",
+          "equalTo": "selfie-sintetica-aprobada"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "resultado": "APROBADO",
+      "motivo": null
+    },
+    "fixedDelayMilliseconds": 50
+  }
+}

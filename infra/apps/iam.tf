@@ -12,6 +12,8 @@ locals {
   # Capacidades que no se derivan del catálogo.
   audit_writers  = ["auditoria"]
   partner_admins = ["api-socios"]
+  # HU-M06: firma el token de registro con el secreto de la plataforma.
+  registro_token_issuers = ["clientes"]
   # HU-W27: pantalla Operación › Trazas del portal (consulta X-Ray por correlationId).
   trace_readers = ["bff-web"]
   # HU-W28: pantalla Operación › Alertas (alarmas del ambiente y su historial).
@@ -58,7 +60,10 @@ resource "aws_iam_role_policy" "execution" {
           )
         },
       ] : [],
-      (each.value.database || length(each.value.allies) > 0) && local.p.kms_key_arn != null ? [
+      contains(local.registro_token_issuers, each.key) ? [
+        { Effect = "Allow", Action = ["secretsmanager:GetSecretValue"], Resource = [local.p.registro.token_secret_arn] },
+      ] : [],
+      (each.value.database || length(each.value.allies) > 0 || contains(local.registro_token_issuers, each.key)) && local.p.kms_key_arn != null ? [
         { Effect = "Allow", Action = ["kms:Decrypt"], Resource = [local.p.kms_key_arn] },
       ] : []
     )

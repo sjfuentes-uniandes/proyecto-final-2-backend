@@ -1,0 +1,146 @@
+openapi: 3.1.0
+info:
+  title: adaptador-identidad
+  version: 0.1.0
+paths:
+  /v1/verificaciones:
+    post:
+      tags:
+      - verificaciones
+      summary: Verificar
+      description: Envía la selfie y la prueba de vida al proveedor KYC y devuelve
+        el resultado.
+      operationId: verificar_v1_verificaciones_post
+      parameters:
+      - name: X-Deadline-Ms
+        in: header
+        required: false
+        schema:
+          type: integer
+          maximum: 700
+          minimum: 1
+          title: X-Deadline-Ms
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudVerificacion'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificacionDto'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '502':
+          description: RESPUESTA_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: FUENTE_NO_DISPONIBLE (detalles.motivo y detalles.circuito)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '504':
+          description: TIEMPO_AGOTADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Health Get
+components:
+  schemas:
+    ErrorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        mensaje:
+          type: string
+          title: Mensaje
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          type: object
+          title: Detalles
+      type: object
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
+    ResultadoVerificacion:
+      type: string
+      enum:
+      - APROBADO
+      - CAPTURA_INVALIDA
+      - RECHAZADO
+      title: ResultadoVerificacion
+    SolicitudVerificacion:
+      properties:
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        selfie:
+          type: string
+          minLength: 1
+          title: Selfie
+        pruebaDeVida:
+          additionalProperties: true
+          type: object
+          title: Pruebadevida
+      type: object
+      required:
+      - clienteId
+      - selfie
+      - pruebaDeVida
+      title: SolicitudVerificacion
+    VerificacionDto:
+      properties:
+        resultado:
+          $ref: '#/components/schemas/ResultadoVerificacion'
+        motivo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Motivo
+      type: object
+      required:
+      - resultado
+      - motivo
+      title: VerificacionDto

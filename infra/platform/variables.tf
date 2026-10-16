@@ -133,6 +133,16 @@ variable "api_throttle" {
   default     = { rate = 100, burst = 200 }
 }
 
+variable "registro_verificaciones_throttle" {
+  description = "Tope de la ruta pública de verificación del registro móvil (HU-M06). Cada solicitud consulta al proveedor KYC, así que es menor que el de canales; el WAF limita además por IP."
+  type        = object({ rate = number, burst = number })
+  default     = { rate = 5, burst = 10 }
+  validation {
+    condition     = var.registro_verificaciones_throttle.rate >= 1 && var.registro_verificaciones_throttle.burst >= var.registro_verificaciones_throttle.rate
+    error_message = "registro_verificaciones_throttle: rate debe ser >= 1 y burst >= rate."
+  }
+}
+
 variable "partner_tiers" {
   description = "Planes de uso para socios. La cuota y el límite se aplican a cada API key por separado (HU-W02)."
   type = map(object({

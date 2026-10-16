@@ -37,9 +37,14 @@ class DependenciaNoDisponible(Exception):
         self.circuito: EstadoCircuito = circuito
 
 
-def timeout_efectivo_ms(configurado_ms: int, deadline_ms: int | None, margen_ms: int = 20) -> int:
+def timeout_efectivo_ms(
+    configurado_ms: int,
+    deadline_ms: int | None,
+    margen_ms: int = 20,
+    corte_duro_ms: int = CORTE_DURO_MS,
+) -> int:
     """min(configurado, corte duro, deadline - margen), nunca menor que 1."""
-    limites = [configurado_ms, CORTE_DURO_MS]
+    limites = [configurado_ms, corte_duro_ms]
     if deadline_ms is not None:
         limites.append(deadline_ms - margen_ms)
     return max(1, min(limites))
@@ -59,7 +64,14 @@ class Proteccion(Protocol):
 
 
 class SinProteccion:
-    """Solo aplica el timeout efectivo y traduce los errores de HTTPX."""
+    """Solo aplica el timeout efectivo y traduce los errores de HTTPX.
+
+    El corte duro es de 700 ms (regla 7). Una operación que por naturaleza tarda más, como la
+    verificación biométrica con el proveedor KYC, declara el suyo con `corte_duro_ms`.
+    """
+
+    def __init__(self, corte_duro_ms: int = CORTE_DURO_MS) -> None:
+        self._corte_duro_ms = corte_duro_ms
 
     async def ejecutar(
         self,
@@ -69,7 +81,10 @@ class SinProteccion:
         configurado_ms: int,
         deadline_ms: int | None,
     ) -> T:
-        timeout_s = timeout_efectivo_ms(configurado_ms, deadline_ms) / 1000
+        timeout_s = (
+            timeout_efectivo_ms(configurado_ms, deadline_ms, corte_duro_ms=self._corte_duro_ms)
+            / 1000
+        )
         try:
             return await asyncio.wait_for(llamada(timeout_s), timeout=timeout_s)
         except (httpx.TimeoutException, TimeoutError) as error:

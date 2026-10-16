@@ -39,6 +39,11 @@ resource "aws_cognito_user_pool" "customers" {
     }
   }
 
+  # HU-M06: el registro desde la app exige el token de verificación biométrica.
+  lambda_config {
+    pre_sign_up = aws_lambda_function.pre_sign_up.arn
+  }
+
   # Enlaza la identidad Cognito con el cliente verificado en el servicio clientes.
   schema {
     name                     = "customer_id"
@@ -95,9 +100,13 @@ resource "aws_cognito_user_pool_client" "mobile" {
   explicit_auth_flows                  = ["ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
   prevent_user_existence_errors        = "ENABLED"
   enable_token_revocation              = true
-  access_token_validity                = 30
-  id_token_validity                    = 30
-  refresh_token_validity               = 30
+  # La app solo puede escribir su correo y nombre al registrarse. Sin esto, cualquier atributo
+  # propio (como custom:customer_id) sería escribible por el cliente en el SignUp y permitiría
+  # suplantar la identidad verificada de otra persona (HU-M06).
+  write_attributes       = ["email", "name"]
+  access_token_validity  = 30
+  id_token_validity      = 30
+  refresh_token_validity = 30
   token_validity_units {
     access_token  = "minutes"
     id_token      = "minutes"

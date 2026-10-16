@@ -1,0 +1,31 @@
+{
+  "name": "kyc verificación rechazada (rostro no coincide)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/kyc/v1/verificaciones",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.selfie",
+          "equalTo": "selfie-sintetica-rechazada"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "resultado": "RECHAZADO",
+      "motivo": "ROSTRO_NO_COINCIDE"
+    },
+    "fixedDelayMilliseconds": 50
+  }
+}

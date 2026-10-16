@@ -9,13 +9,17 @@ from solventa_common import correlation
 from solventa_common.errors import registrar_manejadores
 from solventa_common.telemetry import instrumentar
 
-from bff_movil.adapters.inbound.http import sesion
+from bff_movil.adapters.inbound.http import registro, sesion, verificacion
 from bff_movil.adapters.inbound.http.auth import Autenticador
 from bff_movil.adapters.inbound.http.jwks import ProveedorJwks
 from bff_movil.adapters.outbound.clientes_http import ClientesHttp
-from bff_movil.adapters.outbound.resolutor_cliente_memoria import ResolutorClienteEnMemoria
+from bff_movil.adapters.outbound.registro_http import RegistroHttp
+from bff_movil.adapters.outbound.resolutor_cliente_http import ResolutorClienteHttp
+from bff_movil.adapters.outbound.verificacion_http import VerificacionHttp
+from bff_movil.application.registro.casos import VerificarRegistro, VincularRegistro
 from bff_movil.application.sesion.consultar_sesion import ConsultarSesion
 from bff_movil.application.sesion.puertos import ResolutorCliente
+from bff_movil.application.verificacion.verificar_identidad import VerificarIdentidad
 from bff_movil.config import Settings
 
 
@@ -49,11 +53,26 @@ def crear_app(
                 ),
             )
             app.state.consultar_sesion = ConsultarSesion(
-                # TODO: usar el resolutor real cuando se defina la relación sub -> clienteId
-                # (otra historia).
-                resolutor or ResolutorClienteEnMemoria(),
+                resolutor
+                or ResolutorClienteHttp(
+                    cliente_clientes, settings.clientes_url, settings.clientes_timeout_ms
+                ),
                 ClientesHttp(cliente_clientes, settings.clientes_url, settings.clientes_timeout_ms),
             )
+            app.state.verificar_identidad = VerificarIdentidad(
+                VerificacionHttp(
+                    cliente_clientes, settings.clientes_url, settings.verificacion_timeout_ms
+                )
+            )
+            servicio_registro = RegistroHttp(
+                cliente_clientes,
+                settings.clientes_url,
+                settings.verificacion_timeout_ms,
+                settings.vinculacion_timeout_ms,
+            )
+            app.state.verificar_registro = VerificarRegistro(servicio_registro)
+            app.state.vincular_registro = VincularRegistro(servicio_registro)
+            app.state.secreto_registro = settings.registro_token_secret.get_secret_value()
             yield
 
     app = instrumentar(
@@ -64,6 +83,11 @@ def crear_app(
     )
     registrar_manejadores(app)
     app.include_router(sesion.router)
+    app.include_router(verificacion.router)
+    app.include_router(registro.router)
+    if settings.environment == "local":
+        # Simula el Lambda pre sign-up donde no hay Cognito; nunca existe fuera de local.
+        app.include_router(registro.router_local)
 
     @app.get("/health")
     async def health() -> dict[str, str]:

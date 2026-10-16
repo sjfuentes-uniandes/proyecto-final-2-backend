@@ -100,6 +100,300 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/identidad/verificaciones:
+    post:
+      tags:
+      - verificacion
+      summary: Verifica la identidad con selfie y prueba de vida
+      description: 'Un resultado `CAPTURA_INVALIDA` es 200 con el cliente `PENDIENTE`:
+        se repite la captura.'
+      operationId: verificar_v1_identidad_verificaciones_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudVerificacion'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificacionDto'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '401':
+          description: 'NO_AUTENTICADO: falta el token, venció, tiene una firma inválida
+            o no corresponde al titular autenticado. La app debe pedir autenticación
+            completa'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: el token no es del pool de clientes'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: 'SOLICITUD_INVALIDA: el cuerpo o un encabezado no cumple su
+            formato'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: la verificación no terminó; la app
+            informa y permite reintentar sin crear otro cliente'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/registro/verificaciones:
+    post:
+      tags:
+      - registro
+      summary: Verifica la identidad antes de crear la cuenta (ruta pública)
+      description: 'Pública: no lleva token y no usa `X-Authenticated-Sub`. Una captura
+        inválida es 200 con
+
+        `PENDIENTE` y sin `tokenRegistro`: se repite la captura.'
+      operationId: verificar_v1_registro_verificaciones_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudVerificacionRegistro'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistroVerificadoDto'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: REGISTRO_CORREO_DISTINTO (la verificación va ligada a un correo)
+            o REGISTRO_YA_VINCULADO (la cuenta de este registro ya existe)
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: 'SOLICITUD_INVALIDA: el cuerpo no cumple su formato'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: la verificación no terminó; la app
+            informa y permite reintentar con el mismo registroId, sin crear otro cliente'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/registro/vinculacion:
+    post:
+      tags:
+      - registro
+      summary: Asocia la cuenta recién creada con su identidad verificada
+      description: 'Idempotente: se llama una vez tras el primer ingreso y repetirla
+        es inofensivo.'
+      operationId: vincular_v1_registro_vinculacion_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudVinculacion'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteVinculadoDto'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '401':
+          description: 'NO_AUTENTICADO: falta el token, venció, tiene una firma inválida
+            o no corresponde al titular autenticado. La app debe pedir autenticación
+            completa'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: ROL_NO_AUTORIZADO (el token no es del pool de clientes) o TOKEN_REGISTRO_INVALIDO
+            (el tokenRegistro no sirve; detalles.motivo)
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: 'REGISTRO_YA_VINCULADO: ese registro o esa cuenta ya pertenecen
+            a otro cliente'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: 'SOLICITUD_INVALIDA: el cuerpo o un encabezado no cumple su
+            formato'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: no se pudo vincular; se puede reintentar'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -116,6 +410,26 @@ paths:
                 title: Response Health Health Get
 components:
   schemas:
+    ClienteVinculadoDto:
+      properties:
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        estado:
+          $ref: '#/components/schemas/EstadoIdentidad'
+        verificadoEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Verificadoen
+      type: object
+      required:
+      - clienteId
+      - estado
+      - verificadoEn
+      title: ClienteVinculadoDto
     ErrorDto:
       properties:
         codigo:
@@ -140,6 +454,64 @@ components:
       - correlationId
       - detalles
       title: ErrorDto
+    EstadoIdentidad:
+      type: string
+      enum:
+      - VERIFICADO
+      - PENDIENTE
+      - RECHAZADO
+      title: EstadoIdentidad
+    RegistroVerificadoDto:
+      properties:
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        estado:
+          $ref: '#/components/schemas/EstadoIdentidad'
+        resultado:
+          $ref: '#/components/schemas/ResultadoKyc'
+        motivo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Motivo
+        verificadoEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Verificadoen
+        tokenRegistro:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tokenregistro
+          description: Solo con una verificación exitosa; va en ClientMetadata del
+            SignUp
+        expiraEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expiraen
+      type: object
+      required:
+      - clienteId
+      - estado
+      - resultado
+      - motivo
+      - verificadoEn
+      - tokenRegistro
+      - expiraEn
+      title: RegistroVerificadoDto
+    ResultadoKyc:
+      type: string
+      enum:
+      - APROBADO
+      - CAPTURA_INVALIDA
+      - RECHAZADO
+      title: ResultadoKyc
     ServicioAutorizado:
       type: string
       enum:
@@ -169,9 +541,98 @@ components:
       - serviciosAutorizados
       - expiraEn
       title: SesionDto
+    SolicitudVerificacion:
+      properties:
+        selfie:
+          type: string
+          maxLength: 5000000
+          minLength: 1
+          title: Selfie
+        pruebaDeVida:
+          additionalProperties: true
+          type: object
+          title: Pruebadevida
+      type: object
+      required:
+      - selfie
+      - pruebaDeVida
+      title: SolicitudVerificacion
+    SolicitudVerificacionRegistro:
+      properties:
+        registroId:
+          type: string
+          format: uuid
+          title: Registroid
+          description: UUID que genera la app y reutiliza en cada reintento
+        correo:
+          type: string
+          maxLength: 254
+          minLength: 3
+          pattern: ^[^@ ]+@[^@ ]+\.[^@ ]+$
+          title: Correo
+        selfie:
+          type: string
+          maxLength: 5000000
+          minLength: 1
+          title: Selfie
+        pruebaDeVida:
+          additionalProperties: true
+          type: object
+          title: Pruebadevida
+      type: object
+      required:
+      - registroId
+      - correo
+      - selfie
+      - pruebaDeVida
+      title: SolicitudVerificacionRegistro
+    SolicitudVinculacion:
+      properties:
+        registroId:
+          type: string
+          format: uuid
+          title: Registroid
+        tokenRegistro:
+          type: string
+          maxLength: 2048
+          minLength: 1
+          title: Tokenregistro
+      type: object
+      required:
+      - registroId
+      - tokenRegistro
+      title: SolicitudVinculacion
+    VerificacionDto:
+      properties:
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        estado:
+          $ref: '#/components/schemas/EstadoIdentidad'
+        resultado:
+          $ref: '#/components/schemas/ResultadoKyc'
+        motivo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Motivo
+        verificadoEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Verificadoen
+      type: object
+      required:
+      - clienteId
+      - estado
+      - resultado
+      - motivo
+      - verificadoEn
+      title: VerificacionDto
   securitySchemes:
     bearerAuth:
       type: http
       description: Access token de Cognito del pool de clientes
       scheme: bearer
-
