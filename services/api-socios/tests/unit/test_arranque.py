@@ -20,6 +20,7 @@ def limpiar_caches(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     for funcion in (
         dependencias.repositorio,
         dependencias._administrar,
+        dependencias.metricas,
         dependencias.autenticar_socio,
     ):
         funcion.cache_clear()
@@ -27,6 +28,7 @@ def limpiar_caches(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     for funcion in (
         dependencias.repositorio,
         dependencias._administrar,
+        dependencias.metricas,
         dependencias.autenticar_socio,
     ):
         funcion.cache_clear()
@@ -64,7 +66,11 @@ def test_fabricas_boto3() -> None:
     keys = crear_api_keys("us-east-1", "int", {"basico": "p1"})
     assert clientes.cliente.meta.service_model.service_name == "cognito-idp"
     assert keys.cliente.meta.service_model.service_name == "apigateway" and keys.ambiente == "int"
-    assert crear_metricas("us-east-1").cliente.meta.service_model.service_name == "cloudwatch"
+    metricas = crear_metricas("us-east-1", "int")
+    assert (
+        metricas.cliente.meta.service_model.service_name == "cloudwatch"
+        and metricas.ambiente == "int"
+    )
 
 
 @pytest.mark.parametrize("con_base", [True, False])
