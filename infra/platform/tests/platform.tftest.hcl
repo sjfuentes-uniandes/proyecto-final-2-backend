@@ -192,6 +192,13 @@ run "alta_disponibilidad_con_socios_y_mtls" {
       truststore_pem  = "tests/truststore.pem"
     }
     interface_endpoints = ["ecr.api", "logs"]
+    alert_emails        = ["operacion@solventa.example", "guardia@solventa.example"]
+  }
+
+  override_resource {
+    target          = aws_sns_topic.alerts
+    override_during = plan
+    values          = { arn = "arn:aws:sns:us-east-1:123456789012:solventa-int-alertas" }
   }
 
   assert {
@@ -217,6 +224,23 @@ run "alta_disponibilidad_con_socios_y_mtls" {
   assert {
     condition     = length(aws_vpc_endpoint.interface) == 2
     error_message = "Deben crearse los endpoints de interfaz solicitados."
+  }
+  # HU-W28
+  assert {
+    condition = (
+      jsondecode(aws_sns_topic_policy.alerts.policy).Statement == [{
+        Sid       = "EventBridgeAlertas"
+        Effect    = "Allow"
+        Principal = { Service = "events.amazonaws.com" }
+        Action    = "sns:Publish"
+        Resource  = "arn:aws:sns:us-east-1:123456789012:solventa-int-alertas"
+        Condition = { ArnLike = { "aws:SourceArn" = "arn:aws:events:us-east-1:123456789012:rule/solventa-int-alertas-*" } }
+      }] &&
+      sort([for s in aws_sns_topic_subscription.alert_email : s.endpoint]) == tolist(["guardia@solventa.example", "operacion@solventa.example"]) &&
+      alltrue([for s in aws_sns_topic_subscription.alert_email : s.protocol == "email"]) &&
+      strcontains(aws_kms_key.platform[0].policy, "events.amazonaws.com")
+    )
+    error_message = "Solo las reglas de alertas del ambiente publican en el tópico (también cifrado con KMS propia), y solo para los correos de alert_emails."
   }
 }
 

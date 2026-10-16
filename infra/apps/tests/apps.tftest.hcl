@@ -154,10 +154,6 @@ run "todos_los_servicios" {
     error_message = "Solo los workers escalan por profundidad de cola."
   }
   assert {
-    condition     = length(aws_cloudwatch_metric_alarm.profiling_latency) == 1 && aws_cloudwatch_metric_alarm.profiling_latency[0].threshold == 400
-    error_message = "Debe existir la alarma de p95 del perfilamiento con umbral configurable."
-  }
-  assert {
     condition     = length(aws_vpc_security_group_ingress_rule.database) == 4
     error_message = "Solo los servicios con base llegan a PostgreSQL."
   }
@@ -233,6 +229,135 @@ run "todos_los_servicios" {
     condition     = length(one([for widget in local.widgets : widget.properties.metrics if try(widget.properties.title, "") == "Tareas en ejecución por servicio"])) == length(local.deployed)
     error_message = "El tablero debe mostrar las tareas en ejecución de cada servicio desplegado."
   }
+  # HU-W28
+  assert {
+    condition = alltrue([
+      for alarm in [aws_cloudwatch_metric_alarm.latency["perfilamiento-p95-advertencia"], aws_cloudwatch_metric_alarm.latency["perfilamiento-p95-critica"]] :
+      alarm.period == 60 && alarm.evaluation_periods == 5 && alarm.datapoints_to_alarm == 3 && alarm.extended_statistic == "p95" &&
+      alarm.treat_missing_data == "notBreaching" && alarm.comparison_operator == "GreaterThanThreshold" &&
+      alarm.dimensions == tomap({ Environment = "int", Service = "cotizacion", Operation = "perfilamiento" })
+    ]) && aws_cloudwatch_metric_alarm.latency["perfilamiento-p95-critica"].threshold == 400 && aws_cloudwatch_metric_alarm.latency["perfilamiento-p95-advertencia"].threshold == 360
+    error_message = "AC1: p95 del perfilamiento > 400 ms (advertencia al 90 %) en 3 de 5 periodos de 60 s; sin datos queda en OK."
+  }
+  assert {
+    condition = alltrue([
+      for alarm in local.all_alarms :
+      try(length(alarm.alarm_actions), 0) == 0 && try(length(alarm.ok_actions), 0) == 0 && try(length(alarm.insufficient_data_actions), 0) == 0 &&
+      startswith(alarm.alarm_name, "solventa-int-") && strcontains(alarm.alarm_description, "[int] ") &&
+      strcontains(alarm.alarm_description, "Tablero: https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards/dashboard/solventa-int")
+    ])
+    error_message = "AC2: las alarmas no notifican directamente (un solo correo por EventBridge) y su descripción tiene ambiente y tablero."
+  }
+  assert {
+    condition = (
+      jsondecode(aws_cloudwatch_event_rule.alert["alarma"].event_pattern).detail == { alarmName = [{ prefix = "solventa-int-" }], state = { value = ["ALARM"] } } &&
+      jsondecode(aws_cloudwatch_event_rule.alert["recuperada"].event_pattern).detail == { alarmName = [{ prefix = "solventa-int-" }], state = { value = ["OK"] }, previousState = { value = ["ALARM"] } } &&
+      jsondecode(aws_cloudwatch_event_rule.alert["alarma"].event_pattern)["detail-type"] == ["CloudWatch Alarm State Change"] &&
+      alltrue([for target in aws_cloudwatch_event_target.alert : target.arn == "arn:aws:sns:us-east-1:123456789012:solventa-int-alertas"])
+    )
+    error_message = "AC3: se notifica el paso a ALARM y la recuperación a OK desde ALARM, al tópico de alertas del ambiente."
+  }
+  assert {
+    condition = alltrue([
+      for key, target in aws_cloudwatch_event_target.alert :
+      target.input_transformer[0].input_paths == tomap({
+        alarma = "$.detail.alarmName", descripcion = "$.detail.configuration.description", motivo = "$.detail.state.reason",
+        valor  = "$.detail.state.reasonData", hora = "$.time"
+      }) &&
+      strcontains(target.input_transformer[0].input_template, key == "alarma" ? "Estado: ALARMA" : "Estado: RECUPERADA") &&
+      alltrue([for texto in ["Ambiente: int", "<alarma>", "<descripcion>", "Valor observado: <valor>", "<hora>", "Tablero: https://"] : strcontains(target.input_transformer[0].input_template, texto)]) &&
+      alltrue([for dato in ["123456789012", "arn:", "$.account", "$.resources", "metrics", "Authorization", "token"] : !strcontains(target.input_transformer[0].input_template, dato)])
+    ])
+    error_message = "AC1: el correo transformado tiene estado, ambiente, alarma, umbral, valor observado, hora y tablero, sin cuenta, ARN ni datos sensibles."
+  }
+  assert {
+    condition = (
+      length(aws_cloudwatch_metric_alarm.error_rate) == 2 * length(local.deployed) &&
+      aws_cloudwatch_metric_alarm.error_rate["cotizacion-errores-critica"].threshold == 1 &&
+      aws_cloudwatch_metric_alarm.error_rate["cotizacion-errores-advertencia"].threshold == 0.9 &&
+      alltrue([for alarm in aws_cloudwatch_metric_alarm.error_rate :
+        alarm.datapoints_to_alarm == 3 && alarm.evaluation_periods == 5 && alarm.treat_missing_data == "notBreaching" &&
+        one([for q in alarm.metric_query : q.expression if q.return_data == true]) == "IF(total > 0, 100 * FILL(errores, 0) / total, 0)" &&
+        toset([for q in alarm.metric_query : "${q.metric[0].metric_name}/${q.metric[0].stat}" if length(q.metric) > 0]) == toset(["OperationErrors/Sum", "OperationDuration/SampleCount"])
+      ])
+    )
+    error_message = "AC2: tasa de error por servicio = OperationErrors / SampleCount(OperationDuration) en %, con umbral configurable."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.availability["api-canales-disponibilidad-critica"].threshold == 99.9 &&
+      aws_cloudwatch_metric_alarm.availability["api-canales-disponibilidad-advertencia"].threshold == 99.91 &&
+      aws_cloudwatch_metric_alarm.availability["api-socios-disponibilidad-critica"].comparison_operator == "LessThanThreshold" &&
+      strcontains(one([for q in aws_cloudwatch_metric_alarm.partner_quota["socio-cuota-critica"].metric_query : q.expression]), "MAX(PartnerQuotaUsage)") &&
+      strcontains(one([for q in aws_cloudwatch_metric_alarm.partner_quota["socio-cuota-critica"].metric_query : q.expression]), "Environment = 'int'") &&
+      aws_cloudwatch_metric_alarm.partner_quota["socio-cuota-advertencia"].threshold == 90
+    )
+    error_message = "Disponibilidad por API y cuota de socio con advertencia y crítica configurables."
+  }
+  assert {
+    condition = (
+      toset(keys(local.alert_catalog)) == toset([for alarm in local.all_alarms : trimprefix(alarm.alarm_name, "solventa-int-")]) &&
+      jsondecode(local.environment["bff-web"]["ALERTAS_CATALOGO"])["perfilamiento-p95-critica"] == { severidad = "critica", titulo = "Perfilamiento p95 por encima de la meta", unidad = "ms", enlace = { tipo = "traza", min_ms = 400 } } &&
+      jsondecode(local.environment["bff-web"]["ALERTAS_CATALOGO"])["cola-auditoria-dlq"].severidad == "informativa" &&
+      jsondecode(local.environment["bff-web"]["ALERTAS_UMBRALES"])[0] == { metrica = "Perfilamiento p95", unidad = "ms", meta = 400, advertencia = 360, critica = 400 } &&
+      local.environment["bff-web"]["ALERTAS_PREFIJO"] == "solventa-int-" && local.environment["bff-web"]["ALERTAS_ADVERTENCIA_PCT"] == "90" &&
+      !contains(keys(local.environment["clientes"]), "ALERTAS_CATALOGO")
+    )
+    error_message = "bff-web recibe el catálogo de alertas, que coincide con las alarmas creadas, y los umbrales de la pantalla."
+  }
+  assert {
+    condition = alltrue([
+      for name, statements in local.task_statements :
+      strcontains(jsonencode(statements), "cloudwatch:DescribeAlarms") == (name == "bff-web") &&
+      strcontains(jsonencode(statements), "cloudwatch:PutMetricData") == (name == "api-socios")
+    ]) && !strcontains(jsonencode(local.task_statements["bff-web"]), "cloudwatch:PutMetricAlarm") && !strcontains(jsonencode(local.task_statements["bff-web"]), "cloudwatch:SetAlarmState") && strcontains(jsonencode(local.task_statements["api-socios"]), "\"cloudwatch:namespace\":\"Solventa/Socios\"")
+    error_message = "Solo bff-web lee las alarmas (sin modificarlas) y solo api-socios publica PartnerQuotaUsage en Solventa/Socios."
+  }
+  assert {
+    condition     = local.environment["api-socios"]["QUOTA_METRIC_INTERVAL_S"] == "300"
+    error_message = "api-socios publica el consumo de cuota cada 5 minutos."
+  }
+}
+
+run "umbrales_configurables" {
+  command = plan
+
+  variables {
+    profiling_p95_ms           = 500
+    warning_ratio              = 0.8
+    error_rate_percent         = 2
+    error_rate_warning_percent = 1.5
+    latency_targets = [
+      { id = "emision", label = "Emisión p95", service = "cotizacion", operation = "emision", target_ms = 1500, warning_ms = 1350 },
+    ]
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.latency["perfilamiento-p95-critica"].threshold == 500 &&
+      aws_cloudwatch_metric_alarm.latency["perfilamiento-p95-advertencia"].threshold == 400 &&
+      aws_cloudwatch_metric_alarm.latency["emision-p95-advertencia"].threshold == 1350 &&
+      aws_cloudwatch_metric_alarm.latency["emision-p95-critica"].dimensions.Operation == "emision" &&
+      aws_cloudwatch_metric_alarm.error_rate["clientes-errores-critica"].threshold == 2 &&
+      aws_cloudwatch_metric_alarm.error_rate["clientes-errores-advertencia"].threshold == 1.5 &&
+      length(aws_cloudwatch_metric_alarm.latency) == 4
+    )
+    error_message = "Los umbrales salen de las variables, no del código."
+  }
+  assert {
+    condition     = [for fila in jsondecode(local.environment["bff-web"]["ALERTAS_UMBRALES"]) : fila.metrica] == ["Perfilamiento p95", "Emisión p95", "Tasa de error técnico", "Cuota de socio", "Disponibilidad"]
+    error_message = "La tabla de umbrales sigue el orden de las metas configuradas."
+  }
+}
+
+run "intervalo_de_cuota_invalido" {
+  command = plan
+
+  variables {
+    partner_quota_interval_seconds = 90
+  }
+
+  expect_failures = [var.partner_quota_interval_seconds]
 }
 
 run "despliegue_parcial" {
@@ -254,8 +379,21 @@ run "despliegue_parcial" {
     error_message = "Las capas se recalculan con los servicios desplegados."
   }
   assert {
-    condition     = length(aws_cloudwatch_metric_alarm.profiling_latency) == 0
-    error_message = "Sin cotización no hay alarma de perfilamiento."
+    condition = (
+      aws_cloudwatch_metric_alarm.latency["perfilamiento-p95-critica"].threshold == 400 &&
+      aws_cloudwatch_metric_alarm.latency["perfilamiento-p95-advertencia"].threshold == 360
+    )
+    error_message = "La alarma de perfilamiento existe sin cotización desplegada (AC4 reproducible)."
+  }
+  assert {
+    condition     = toset(keys(aws_cloudwatch_metric_alarm.error_rate)) == toset(["clientes-errores-advertencia", "clientes-errores-critica", "adaptador-identidad-errores-advertencia", "adaptador-identidad-errores-critica"])
+    error_message = "La tasa de error se alarma solo para los servicios desplegados."
+  }
+  assert {
+    condition = (
+      toset(keys(local.alert_catalog)) == toset([for alarm in local.all_alarms : trimprefix(alarm.alarm_name, "solventa-int-")])
+    )
+    error_message = "El catálogo de alertas de bff-web coincide con las alarmas creadas."
   }
 }
 
