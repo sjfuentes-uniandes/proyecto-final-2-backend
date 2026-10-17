@@ -31,6 +31,15 @@ class Settings(ServiceSettings):
     # El primer ingreso ocurre tras confirmar el correo: 24 h, lo que dura el código de Cognito.
     registro_vinculacion_gracia_s: int = Field(86_400, ge=0)
 
+    # Conexiones mínimas del pool de consentimientos; el máximo es `db_pool_size` (DB_POOL_SIZE).
+    db_pool_min_size: int = Field(1, ge=1, validation_alias=_env("DB_POOL_MIN_SIZE"))
+
+    @model_validator(mode="after")
+    def _tamano_del_pool(self) -> "Settings":
+        if self.db_pool_size < self.db_pool_min_size:
+            raise ValueError("DB_POOL_SIZE no puede ser menor que DB_POOL_MIN_SIZE")
+        return self
+
     @model_validator(mode="after")
     def _secreto_de_registro(self) -> "Settings":
         if self.registro_token_secret is None:

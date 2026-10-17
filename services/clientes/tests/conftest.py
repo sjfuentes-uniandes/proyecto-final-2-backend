@@ -194,6 +194,35 @@ def consentimientos(reloj: RelojFalso) -> RepositorioConsentimientosMemoria:
     return RepositorioConsentimientosMemoria(reloj)
 
 
+class PoolFalso:
+    """Sustituye a AsyncConnectionPool: registra cómo se construye, abre y cierra."""
+
+    def __init__(self, conninfo: str, **opciones: Any) -> None:
+        self.conninfo = conninfo
+        self.opciones = opciones
+        self.eventos: list[str] = []
+
+    async def open(self) -> None:
+        self.eventos.append("open")
+
+    async def close(self) -> None:
+        self.eventos.append("close")
+
+
+@pytest.fixture
+def pools(monkeypatch: pytest.MonkeyPatch) -> list[PoolFalso]:
+    """Los pools que crea `crear_app` sin repositorio inyectado, sin conectar a una base."""
+    creados: list[PoolFalso] = []
+
+    def crear(conninfo: str, **opciones: Any) -> PoolFalso:
+        pool = PoolFalso(conninfo, **opciones)
+        creados.append(pool)
+        return pool
+
+    monkeypatch.setattr("psycopg_pool.AsyncConnectionPool", crear)
+    return creados
+
+
 @dataclass
 class Telemetria:
     spans: InMemorySpanExporter

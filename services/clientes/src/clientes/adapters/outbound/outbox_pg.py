@@ -12,9 +12,8 @@ from uuid import UUID, uuid4
 from psycopg import AsyncConnection
 from psycopg.types.json import Jsonb
 
+from clientes.adapters.outbound.eventos import CONSENTIMIENTO_OTORGADO
 from clientes.domain.consentimientos.modelos import Consentimiento
-
-CONSENTIMIENTO_OTORGADO = "ConsentimientoOtorgado"
 
 _INSERTAR = (
     "INSERT INTO outbox (event_id, aggregate_id, event_type, event_version, occurred_at, "

@@ -194,7 +194,9 @@ def test_migrar_aplica_las_migraciones_bajo_un_candado(monkeypatch: pytest.Monke
     assert "pg_advisory_unlock" in sentencias[-1]
 
 
-def test_sin_repositorio_inyectado_migra_y_usa_postgres(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_sin_repositorio_inyectado_migra_y_usa_postgres(
+    monkeypatch: pytest.MonkeyPatch, pools: list[Any]
+) -> None:
     migradas: list[str] = []
     monkeypatch.setattr(postgres, "migrar", migradas.append)
     app = crear_app(Settings(), transport=httpx.MockTransport(lambda _: httpx.Response(200)))
