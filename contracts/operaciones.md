@@ -17,6 +17,9 @@ Nombres de `Operation` en `OperationDuration` y `OperationErrors` (`solventa_com
 | `verificacion.enviar` | `bff-movil` | Caso de uso `VerificarIdentidad` (llamada a `clientes`, HU-M06) | `ok`, `timeout`, `error`, `rechazado` (captura inválida o rechazo) |
 | `registro.verificar` | `bff-movil` | Caso de uso `VerificarRegistro` (verificación previa a la cuenta, HU-M06) | `ok`, `timeout`, `error`, `rechazado` (captura inválida, rechazo o conflicto del registro) |
 | `registro.vincular` | `bff-movil`, `clientes` | Caso de uso `VincularRegistro` (primer ingreso, HU-M06) | `ok`, `timeout`, `error` (solo `bff-movil`), `rechazado` (token inválido o registro ya vinculado) |
+| `consentimientos.otorgar` | `bff-movil` | Caso de uso `OtorgarConsentimiento` (llamada a `clientes`, HU-M08) | `ok`, `timeout`, `error`, `rechazado` (identidad no verificada, cliente no encontrado, ya vigente o solicitud rechazada) |
+| `consentimientos.listar`, `consentimientos.detalle` | `bff-movil` | Caso de uso `ConsultarConsentimientos` (HU-M08) | `ok`, `timeout`, `error`, `rechazado` (solo `detalle`: no encontrado o ajeno) |
+| `consentimientos.texto_vigente` | `bff-movil` | Caso de uso `ConsultarTextoVigente` (HU-M08) | `ok`, `timeout`, `error`, `rechazado` (propósito o idioma no soportados) |
 | `modelo_riesgo.publicar`, `modelo_riesgo.consultar` | `catalogo` | Casos de uso del modelo | — |
 | `habilitar_socio`, `listar_socios`, `consultar_socio`, `desactivar_socio` | `api-socios` | Administración de socios (HU-W01) | `ok`, `error` |
 | `autenticar_socio` | `api-socios` | Verificación del socio tras el borde (HU-W01 AC2) | `ok`, `rechazado` |

@@ -23,10 +23,41 @@ dev = [
     "pact-python>=2.2",
     "pycognito>=2024.5.1",
     "pyotp>=2.10.0",
+    "mypy>=1.13,<2",
 ]
 
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib"
+
+[tool.mypy]
+# ADR 0008: tipado en `clientes` y `bff-movil` (y `solventa-common`, que ambos importan),
+# sin bloquear la CI al inicio. Moderado en general; estricto en el módulo de consentimiento.
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+show_error_codes = true
+# Layout src/ del workspace: los módulos se nombran desde estas raíces.
+mypy_path = ["libs/solventa-common/src", "services/clientes/src", "services/bff-movil/src"]
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+# Código nuevo de HU-M08: toda función con anotaciones completas.
+module = [
+    "clientes.domain.consentimientos.*",
+    "clientes.application.consentimientos.*",
+    "clientes.adapters.outbound.consentimientos_pg",
+    "clientes.adapters.outbound.outbox_pg",
+    "clientes.adapters.outbound.textos_json",
+    "clientes.adapters.outbound.eventos",
+    "clientes.adapters.inbound.http.consentimientos",
+    "bff_movil.domain.consentimientos.*",
+    "bff_movil.application.consentimientos.*",
+    "bff_movil.adapters.outbound.consentimientos_http",
+    "bff_movil.adapters.inbound.http.consentimientos",
+]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
 
 [tool.ruff]
 line-length = 100

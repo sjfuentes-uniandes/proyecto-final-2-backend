@@ -292,6 +292,258 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/clientes/actual/consentimientos:
+    post:
+      tags:
+      - consentimientos
+      summary: Otorga el consentimiento para consultar datos financieros
+      description: Crea el consentimiento `ACTIVO`; el servidor calcula `vigenteHasta`
+        (ADR 0005).
+      operationId: otorgar_v1_clientes_actual_consentimientos_post
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Idempotency-Key
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudOtorgar'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentimientoDto'
+        '200':
+          description: 'Repetición: misma Idempotency-Key y mismo cuerpo. Devuelve
+            la representación actual del consentimiento'
+          headers:
+            Idempotent-Replayed:
+              description: Siempre `true`
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentimientoDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de CLIENTE; o IDENTIDAD_NO_VERIFICADA:
+            la identidad del titular no está VERIFICADA'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'CLIENTE_NO_ENCONTRADO: el titular aún no inició su verificación'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: 'CONSENTIMIENTO_YA_VIGENTE: ya hay uno ACTIVO para el propósito
+            (detalles.consentimientoId)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos), VIGENCIA_INVALIDA, TEXTO_NO_VIGENTE
+            o IDEMPOTENCIA_CONFLICTO (misma Idempotency-Key con otro cuerpo)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+    get:
+      tags:
+      - consentimientos
+      summary: Consentimientos del titular, del más reciente al más antiguo
+      description: 'El estado es el derivado al leer (`VENCIDO` si ya pasó `vigenteHasta`).
+        Quien aún no
+
+        tiene cliente recibe una lista vacía.'
+      operationId: listar_v1_clientes_actual_consentimientos_get
+      parameters:
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConsentimientoDto'
+                title: Response Listar V1 Clientes Actual Consentimientos Get
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de CLIENTE'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/clientes/actual/consentimientos/{consentimientoId}:
+    get:
+      tags:
+      - consentimientos
+      summary: Detalle y comprobante de un consentimiento del titular
+      operationId: detalle_v1_clientes_actual_consentimientos__consentimientoId__get
+      parameters:
+      - name: consentimientoId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Consentimientoid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentimientoDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de CLIENTE'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'CONSENTIMIENTO_NO_ENCONTRADO: no existe o es de otro cliente
+            (no se distingue)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/consentimientos/textos/vigente:
+    get:
+      tags:
+      - consentimientos
+      summary: Texto de ejemplo vigente, su versión y las vigencias permitidas
+      description: Texto ilustrativo, sin validez legal (ADR 0005). No contiene datos
+        del titular.
+      operationId: texto_vigente_v1_consentimientos_textos_vigente_get
+      parameters:
+      - name: proposito
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Proposito
+      - name: idioma
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 16
+          - type: 'null'
+          title: Idioma
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TextoVigenteDto'
+        '422':
+          description: 'SOLICITUD_INVALIDA: proposito o idioma ausentes o no soportados'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -308,6 +560,54 @@ paths:
                 title: Response Health Health Get
 components:
   schemas:
+    ConsentimientoDto:
+      properties:
+        consentimientoId:
+          type: string
+          format: uuid
+          title: Consentimientoid
+        estado:
+          $ref: '#/components/schemas/EstadoConsentimiento'
+        proposito:
+          type: string
+          title: Proposito
+        alcances:
+          items:
+            type: string
+          type: array
+          title: Alcances
+        versionTexto:
+          type: string
+          title: Versiontexto
+        idioma:
+          type: string
+          title: Idioma
+        otorgadoEn:
+          type: string
+          format: date-time
+          title: Otorgadoen
+        vigenteHasta:
+          type: string
+          format: date-time
+          title: Vigentehasta
+        revocadoEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Revocadoen
+      type: object
+      required:
+      - consentimientoId
+      - estado
+      - proposito
+      - alcances
+      - versionTexto
+      - idioma
+      - otorgadoEn
+      - vigenteHasta
+      - revocadoEn
+      title: ConsentimientoDto
     ErrorDto:
       properties:
         codigo:
@@ -332,6 +632,13 @@ components:
       - correlationId
       - detalles
       title: ErrorDto
+    EstadoConsentimiento:
+      type: string
+      enum:
+      - ACTIVO
+      - REVOCADO
+      - VENCIDO
+      title: EstadoConsentimiento
     EstadoIdentidad:
       type: string
       enum:
@@ -376,6 +683,47 @@ components:
       - RECHAZADO
       title: ResultadoKyc
       description: Veredicto del proveedor de identidad, tal como lo entrega `adaptador-identidad`.
+    SolicitudOtorgar:
+      properties:
+        proposito:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Proposito
+        alcances:
+          anyOf:
+          - items:
+              type: string
+              maxLength: 64
+            type: array
+            maxItems: 16
+          - type: 'null'
+          title: Alcances
+        vigenciaMeses:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Vigenciameses
+        versionTexto:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Versiontexto
+        idioma:
+          anyOf:
+          - type: string
+            maxLength: 16
+          - type: 'null'
+          title: Idioma
+      type: object
+      title: SolicitudOtorgar
+      description: 'Todos los campos son opcionales para el esquema: la validación
+        del dominio informa en
+
+        `detalles.campos` todos los que faltan o son inválidos, no solo el primero
+        (AC3).'
     SolicitudVerificacion:
       properties:
         selfie:
@@ -426,6 +774,45 @@ components:
       required:
       - tokenRegistro
       title: SolicitudVinculacion
+    TextoVigenteDto:
+      properties:
+        proposito:
+          type: string
+          title: Proposito
+        idioma:
+          type: string
+          title: Idioma
+        versionTexto:
+          type: string
+          title: Versiontexto
+        titulo:
+          type: string
+          title: Titulo
+        cuerpo:
+          type: string
+          title: Cuerpo
+        aviso:
+          type: string
+          title: Aviso
+        vigenciasMeses:
+          items:
+            type: integer
+          type: array
+          title: Vigenciasmeses
+        vigenciaDefectoMeses:
+          type: integer
+          title: Vigenciadefectomeses
+      type: object
+      required:
+      - proposito
+      - idioma
+      - versionTexto
+      - titulo
+      - cuerpo
+      - aviso
+      - vigenciasMeses
+      - vigenciaDefectoMeses
+      title: TextoVigenteDto
     ValidationError:
       properties:
         loc:

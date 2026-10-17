@@ -19,5 +19,6 @@ def test_ct_w11_02_esquema_publicado_coincide(archivo: str, modelo: type[BaseMod
     assert publicado == modelo.model_json_schema(by_alias=True)
 
 
-def test_ct_w11_02_no_hay_esquemas_sin_codigo() -> None:
-    assert {p.name for p in EVENTOS.glob("*.json")} == set(ESQUEMAS)
+def test_ct_w11_02_los_esquemas_del_codigo_estan_publicados() -> None:
+    """Otros servicios (clientes) publican sus propios esquemas en el mismo directorio."""
+    assert set(ESQUEMAS) <= {p.name for p in EVENTOS.glob("*.json")}

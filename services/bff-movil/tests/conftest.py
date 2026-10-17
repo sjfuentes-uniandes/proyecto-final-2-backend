@@ -38,6 +38,43 @@ REGISTRO_ID = UUID("00000000-0000-4000-8000-0000000000aa")
 CORREO = "persona@ejemplo.co"
 CUERPO_REGISTRO = {"registroId": str(REGISTRO_ID), "correo": CORREO, **CUERPO_VERIFICACION}
 TOKEN_REGISTRO = "v1.token-sintetico.firma-sintetica"
+CONSENTIMIENTO_ID = UUID("00000000-0000-4000-9000-000000000001")
+IDEMPOTENCY_KEY = "6f1c2b9e-3d4a-4e8f-9b7c-1a2b3c4d5e6f"
+CUERPO_OTORGAR = {
+    "proposito": "PERFILAMIENTO_PRECIO",
+    "alcances": ["FA_PRODUCTOS_VIGENTES"],
+    "vigenciaMeses": 12,
+    "versionTexto": "2026-10-17.1",
+    "idioma": "es-CO",
+}
+
+
+def consentimiento_json(**cambios: Any) -> dict[str, Any]:
+    """Consentimiento sintético tal como lo devuelve `clientes`."""
+    return {
+        "consentimientoId": str(CONSENTIMIENTO_ID),
+        "estado": "ACTIVO",
+        "proposito": "PERFILAMIENTO_PRECIO",
+        "alcances": ["FA_PRODUCTOS_VIGENTES"],
+        "versionTexto": "2026-10-17.1",
+        "idioma": "es-CO",
+        "otorgadoEn": "2026-10-17T15:00:00Z",
+        "vigenteHasta": "2027-10-17T23:59:59Z",
+        "revocadoEn": None,
+        **cambios,
+    }
+
+
+TEXTO_VIGENTE = {
+    "proposito": "PERFILAMIENTO_PRECIO",
+    "idioma": "es-CO",
+    "versionTexto": "2026-10-17.1",
+    "titulo": "Autorización de ejemplo",
+    "cuerpo": "Texto ilustrativo.",
+    "aviso": "Sin validez legal",
+    "vigenciasMeses": [6, 12],
+    "vigenciaDefectoMeses": 12,
+}
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -121,6 +158,10 @@ class Entorno:
     verificacion: respx.Route
     registro_verificacion: respx.Route
     registro_vinculacion: respx.Route
+    otorgamiento: respx.Route
+    consentimientos: respx.Route
+    consentimiento: respx.Route
+    texto_vigente: respx.Route
     telemetria: Telemetria
     llave: rsa.RSAPrivateKey
     sub: str = SUB
@@ -254,6 +295,43 @@ class Entorno:
             headers=cabeceras,
         )
 
+    def pedir(
+        self,
+        metodo: str,
+        ruta: str,
+        token: str | None = None,
+        *,
+        sub: str | None = SUB,
+        cuerpo: Any = None,
+        encabezados: dict[str, str] | None = None,
+        params: dict[str, str] | None = None,
+    ) -> httpx.Response:
+        """Llamada autenticada genérica: el token se emite si no se pasa uno."""
+        cabeceras = dict(encabezados or {})
+        cabeceras.setdefault("Authorization", f"Bearer {token or self.emitir()}")
+        if sub is not None:
+            cabeceras["X-Authenticated-Sub"] = sub
+        return self.cliente.request(metodo, ruta, json=cuerpo, headers=cabeceras, params=params)
+
+    def otorgar(
+        self,
+        token: str | None = None,
+        *,
+        cuerpo: Any = None,
+        clave: str | None = IDEMPOTENCY_KEY,
+        encabezados: dict[str, str] | None = None,
+    ) -> httpx.Response:
+        cabeceras = dict(encabezados or {})
+        if clave is not None:
+            cabeceras["Idempotency-Key"] = clave
+        return self.pedir(
+            "POST",
+            "/v1/consentimientos",
+            token,
+            cuerpo=CUERPO_OTORGAR if cuerpo is None else cuerpo,
+            encabezados=cabeceras,
+        )
+
     def verificacion_responde(self, resultado: str, estado: str, motivo: str | None = None) -> None:
         self.verificacion.mock(
             return_value=httpx.Response(
@@ -311,6 +389,15 @@ def crear_entorno(
             f"{CLIENTES_URL}/v1/registros/{REGISTRO_ID}/verificaciones"
         )
         registro_vinculacion = router.post(f"{CLIENTES_URL}/v1/registros/{REGISTRO_ID}/vinculacion")
+        consentimientos_url = f"{CLIENTES_URL}/v1/clientes/actual/consentimientos"
+        otorgamiento = router.post(consentimientos_url).respond(201, json=consentimiento_json())
+        consentimientos = router.get(consentimientos_url).respond(200, json=[consentimiento_json()])
+        consentimiento = router.get(f"{consentimientos_url}/{CONSENTIMIENTO_ID}").respond(
+            200, json=consentimiento_json()
+        )
+        texto_vigente = router.get(f"{CLIENTES_URL}/v1/consentimientos/textos/vigente").respond(
+            200, json=TEXTO_VIGENTE
+        )
         spans, lector = InMemorySpanExporter(), InMemoryMetricReader()
         settings = Settings(
             ENVIRONMENT=environment,
@@ -335,6 +422,10 @@ def crear_entorno(
             verificacion=verificacion,
             registro_verificacion=registro_verificacion,
             registro_vinculacion=registro_vinculacion,
+            otorgamiento=otorgamiento,
+            consentimientos=consentimientos,
+            consentimiento=consentimiento,
+            texto_vigente=texto_vigente,
             telemetria=Telemetria(spans=spans, lector=lector, salida=salida),
             llave=llave_privada,
         )

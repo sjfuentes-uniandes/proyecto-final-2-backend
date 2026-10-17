@@ -1,0 +1,113 @@
+{
+  "$defs": {
+    "ConsentimientoOtorgadoV1": {
+      "properties": {
+        "actorId": {
+          "title": "Actorid",
+          "type": "string"
+        },
+        "alcances": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Alcances",
+          "type": "array"
+        },
+        "clienteId": {
+          "format": "uuid",
+          "title": "Clienteid",
+          "type": "string"
+        },
+        "consentimientoId": {
+          "format": "uuid",
+          "title": "Consentimientoid",
+          "type": "string"
+        },
+        "otorgadoEn": {
+          "format": "date-time",
+          "title": "Otorgadoen",
+          "type": "string"
+        },
+        "proposito": {
+          "title": "Proposito",
+          "type": "string"
+        },
+        "versionTexto": {
+          "title": "Versiontexto",
+          "type": "string"
+        },
+        "vigenteHasta": {
+          "format": "date-time",
+          "title": "Vigentehasta",
+          "type": "string"
+        }
+      },
+      "required": [
+        "consentimientoId",
+        "clienteId",
+        "proposito",
+        "alcances",
+        "versionTexto",
+        "otorgadoEn",
+        "vigenteHasta",
+        "actorId"
+      ],
+      "title": "ConsentimientoOtorgadoV1",
+      "type": "object"
+    }
+  },
+  "description": "Sobre versionado. `aggregateId` es el `consentimientoId`.",
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "aggregateVersion": {
+      "const": 1,
+      "default": 1,
+      "description": "Posici\u00f3n en la cadena del consentimiento: Otorgado es 1",
+      "title": "Aggregateversion",
+      "type": "integer"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/ConsentimientoOtorgadoV1"
+    },
+    "type": {
+      "const": "ConsentimientoOtorgado",
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreConsentimientoOtorgado",
+  "type": "object"
+}

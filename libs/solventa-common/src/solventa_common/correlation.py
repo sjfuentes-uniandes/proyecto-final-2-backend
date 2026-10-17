@@ -65,7 +65,7 @@ class CorrelacionMiddleware:
             await self.app(scope, receive, send)
             return
 
-        recibidos = {}
+        recibidos: dict[bytes, str] = {}
         for clave, valor in scope.get("headers", []):
             if clave in (self._correlation_key, self._request_id_key):
                 recibidos.setdefault(clave, valor.decode("latin-1"))

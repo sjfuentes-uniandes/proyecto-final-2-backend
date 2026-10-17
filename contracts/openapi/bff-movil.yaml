@@ -394,6 +394,452 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/consentimientos/texto-vigente:
+    get:
+      tags:
+      - consentimientos
+      summary: Texto de ejemplo vigente, su versión y las vigencias permitidas
+      description: Texto ilustrativo, sin validez legal (ADR 0005). No contiene datos
+        del titular.
+      operationId: texto_vigente_v1_consentimientos_texto_vigente_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: proposito
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Proposito
+      - name: idioma
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 16
+          - type: 'null'
+          title: Idioma
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TextoVigenteDto'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '401':
+          description: 'NO_AUTENTICADO: falta el token, venció, tiene una firma inválida
+            o no corresponde al titular autenticado. La app debe pedir autenticación
+            completa'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: el token no es del pool de clientes'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: 'SOLICITUD_INVALIDA: proposito o idioma ausentes o no soportados'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: `clientes` no respondió'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/consentimientos:
+    post:
+      tags:
+      - consentimientos
+      summary: Otorga el consentimiento para consultar datos financieros
+      description: Crea el consentimiento `ACTIVO` del titular del token; `clientes`
+        calcula `vigenteHasta`.
+      operationId: otorgar_v1_consentimientos_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Idempotency-Key
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudOtorgar'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentimientoDto'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '200':
+          description: 'Repetición: misma Idempotency-Key y mismo cuerpo. Devuelve
+            la representación actual del consentimiento'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+            Idempotent-Replayed:
+              description: Siempre `true`
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentimientoDto'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '401':
+          description: 'NO_AUTENTICADO: falta el token, venció, tiene una firma inválida
+            o no corresponde al titular autenticado. La app debe pedir autenticación
+            completa'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: el token no es del pool de clientes; o
+            IDENTIDAD_NO_VERIFICADA: la identidad del titular no está VERIFICADA'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'CLIENTE_NO_ENCONTRADO: el titular aún no inició su verificación'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: 'CONSENTIMIENTO_YA_VIGENTE: ya hay uno ACTIVO para el propósito
+            (detalles.consentimientoId)'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos), VIGENCIA_INVALIDA, TEXTO_NO_VIGENTE
+            o IDEMPOTENCIA_CONFLICTO (misma Idempotency-Key con otro cuerpo)
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: no se pudo otorgar; la app informa
+            y puede reintentar con la misma Idempotency-Key sin crear otro consentimiento'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+    get:
+      tags:
+      - consentimientos
+      summary: Consentimientos del titular, del más reciente al más antiguo
+      description: 'El estado es el derivado por `clientes` (`VENCIDO` si ya pasó
+        `vigenteHasta`). Quien aún
+
+        no tiene cliente recibe una lista vacía.'
+      operationId: listar_v1_consentimientos_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConsentimientoDto'
+                title: Response Listar V1 Consentimientos Get
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '401':
+          description: 'NO_AUTENTICADO: falta el token, venció, tiene una firma inválida
+            o no corresponde al titular autenticado. La app debe pedir autenticación
+            completa'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: el token no es del pool de clientes'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: 'SOLICITUD_INVALIDA: un encabezado no cumple su formato'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: `clientes` no respondió'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/consentimientos/{consentimientoId}:
+    get:
+      tags:
+      - consentimientos
+      summary: Detalle y comprobante de un consentimiento del titular
+      operationId: detalle_v1_consentimientos__consentimientoId__get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: consentimientoId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Consentimientoid
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentimientoDto'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '401':
+          description: 'NO_AUTENTICADO: falta el token, venció, tiene una firma inválida
+            o no corresponde al titular autenticado. La app debe pedir autenticación
+            completa'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: el token no es del pool de clientes'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'CONSENTIMIENTO_NO_ENCONTRADO: no existe o es de otro cliente
+            (no se distingue)'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: 'SOLICITUD_INVALIDA: el identificador o un encabezado no cumple
+            su formato'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: `clientes` no respondió'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -430,6 +876,54 @@ components:
       - estado
       - verificadoEn
       title: ClienteVinculadoDto
+    ConsentimientoDto:
+      properties:
+        consentimientoId:
+          type: string
+          format: uuid
+          title: Consentimientoid
+        estado:
+          $ref: '#/components/schemas/EstadoConsentimiento'
+        proposito:
+          type: string
+          title: Proposito
+        alcances:
+          items:
+            type: string
+          type: array
+          title: Alcances
+        versionTexto:
+          type: string
+          title: Versiontexto
+        idioma:
+          type: string
+          title: Idioma
+        otorgadoEn:
+          type: string
+          format: date-time
+          title: Otorgadoen
+        vigenteHasta:
+          type: string
+          format: date-time
+          title: Vigentehasta
+        revocadoEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Revocadoen
+      type: object
+      required:
+      - consentimientoId
+      - estado
+      - proposito
+      - alcances
+      - versionTexto
+      - idioma
+      - otorgadoEn
+      - vigenteHasta
+      - revocadoEn
+      title: ConsentimientoDto
     ErrorDto:
       properties:
         codigo:
@@ -454,6 +948,13 @@ components:
       - correlationId
       - detalles
       title: ErrorDto
+    EstadoConsentimiento:
+      type: string
+      enum:
+      - ACTIVO
+      - REVOCADO
+      - VENCIDO
+      title: EstadoConsentimiento
     EstadoIdentidad:
       type: string
       enum:
@@ -541,6 +1042,47 @@ components:
       - serviciosAutorizados
       - expiraEn
       title: SesionDto
+    SolicitudOtorgar:
+      properties:
+        proposito:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Proposito
+        alcances:
+          anyOf:
+          - items:
+              type: string
+              maxLength: 64
+            type: array
+            maxItems: 16
+          - type: 'null'
+          title: Alcances
+        vigenciaMeses:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Vigenciameses
+        versionTexto:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Versiontexto
+        idioma:
+          anyOf:
+          - type: string
+            maxLength: 16
+          - type: 'null'
+          title: Idioma
+      type: object
+      title: SolicitudOtorgar
+      description: 'Todos los campos son opcionales para el esquema: `clientes` informa
+        en
+
+        `detalles.campos` todos los que faltan o son inválidos, no solo el primero
+        (AC3).'
     SolicitudVerificacion:
       properties:
         selfie:
@@ -602,6 +1144,45 @@ components:
       - registroId
       - tokenRegistro
       title: SolicitudVinculacion
+    TextoVigenteDto:
+      properties:
+        proposito:
+          type: string
+          title: Proposito
+        idioma:
+          type: string
+          title: Idioma
+        versionTexto:
+          type: string
+          title: Versiontexto
+        titulo:
+          type: string
+          title: Titulo
+        cuerpo:
+          type: string
+          title: Cuerpo
+        aviso:
+          type: string
+          title: Aviso
+        vigenciasMeses:
+          items:
+            type: integer
+          type: array
+          title: Vigenciasmeses
+        vigenciaDefectoMeses:
+          type: integer
+          title: Vigenciadefectomeses
+      type: object
+      required:
+      - proposito
+      - idioma
+      - versionTexto
+      - titulo
+      - cuerpo
+      - aviso
+      - vigenciasMeses
+      - vigenciaDefectoMeses
+      title: TextoVigenteDto
     VerificacionDto:
       properties:
         clienteId:

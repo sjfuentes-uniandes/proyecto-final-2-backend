@@ -20,6 +20,9 @@ def test_contrato_de_verificaciones() -> None:
         "/v1/clientes/actual",
         "/v1/clientes/{cliente_id}/identidad",
         "/v1/clientes/actual/identidad/verificaciones",
+        "/v1/clientes/actual/consentimientos",
+        "/v1/clientes/actual/consentimientos/{consentimientoId}",
+        "/v1/consentimientos/textos/vigente",
         "/v1/registros/{registro_id}/verificaciones",
         "/v1/registros/{registro_id}/vinculacion",
         "/health",
@@ -34,6 +37,56 @@ def test_contrato_de_verificaciones() -> None:
         "verificadoEn",
     }
     assert esquemas["EstadoIdentidad"]["enum"] == ["VERIFICADO", "PENDIENTE", "RECHAZADO"]
+
+
+def test_contrato_de_consentimientos() -> None:
+    """HU-M08: las rutas y respuestas del plan (§c); las rutas de revocar y verificar llegan
+    en las Partes 2 y 3."""
+    rutas = app.openapi()["paths"]
+    base = rutas["/v1/clientes/actual/consentimientos"]
+    otorgar = base["post"]
+    assert set(otorgar["responses"]) == {"200", "201", "400", "401", "403", "404", "409", "422"}
+    assert otorgar["responses"]["200"]["headers"]["Idempotent-Replayed"]
+    clave = next(p for p in otorgar["parameters"] if p["name"] == "Idempotency-Key")
+    assert clave["required"] is True
+    assert clave["schema"]["format"] == "uuid"
+    assert set(base["get"]["responses"]) == {"200", "401", "403", "422"}
+    detalle = rutas["/v1/clientes/actual/consentimientos/{consentimientoId}"]["get"]
+    assert set(detalle["responses"]) == {"200", "401", "403", "404", "422"}
+    texto = rutas["/v1/consentimientos/textos/vigente"]["get"]
+    assert set(texto["responses"]) == {"200", "422"}
+
+    esquemas = app.openapi()["components"]["schemas"]
+    assert set(esquemas["ConsentimientoDto"]["required"]) == {
+        "consentimientoId",
+        "estado",
+        "proposito",
+        "alcances",
+        "versionTexto",
+        "idioma",
+        "otorgadoEn",
+        "vigenteHasta",
+        "revocadoEn",
+    }
+    assert esquemas["EstadoConsentimiento"]["enum"] == ["ACTIVO", "REVOCADO", "VENCIDO"]
+    assert "required" not in esquemas["SolicitudOtorgar"]
+    assert set(esquemas["SolicitudOtorgar"]["properties"]) == {
+        "proposito",
+        "alcances",
+        "vigenciaMeses",
+        "versionTexto",
+        "idioma",
+    }
+    assert set(esquemas["TextoVigenteDto"]["required"]) == {
+        "proposito",
+        "idioma",
+        "versionTexto",
+        "titulo",
+        "cuerpo",
+        "aviso",
+        "vigenciasMeses",
+        "vigenciaDefectoMeses",
+    }
 
 
 def test_contrato_del_registro() -> None:

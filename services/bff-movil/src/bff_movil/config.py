@@ -34,6 +34,9 @@ class Settings(ServiceSettings):
     # El vínculo es solo una escritura en la base de `clientes`, pero ocurre justo después de
     # crear la cuenta: se tolera un arranque en frío en vez de perder el vínculo.
     vinculacion_timeout_ms: int = Field(3000, ge=1)
+    # Otorgar escribe dato, clave de idempotencia y outbox en una transacción de `clientes`:
+    # como el vínculo, tolera un arranque en frío. Si se agota, la app repite con la misma clave.
+    otorgamiento_timeout_ms: int = Field(3000, ge=1)
     jwks_ttl_s: int = Field(3600, ge=1)
     jwks_timeout_ms: int = Field(500, ge=1)
     jwks_refresco_min_s: int = Field(60, ge=1)
