@@ -1,0 +1,17 @@
+{
+  "proposito": "PERFILAMIENTO_PRECIO",
+  "version": "2026-10-17.1",
+  "vigente": true,
+  "textos": {
+    "es-CO": {
+      "titulo": "Autorización para consultar tus datos financieros",
+      "cuerpo": "Autorizo a Solventa a consultar mis datos de Open Finance y Open Data, únicamente los alcances que elija, para calcular el precio de mi seguro. Puedo revocar esta autorización en cualquier momento desde Privacidad; después de revocarla no se harán nuevas consultas.",
+      "aviso": "Texto de ejemplo, sin validez legal."
+    },
+    "en-US": {
+      "titulo": "Authorization to access your financial data",
+      "cuerpo": "I authorize Solventa to access my Open Finance and Open Data information, only for the scopes I choose, to calculate the price of my insurance. I can revoke this authorization at any time from Privacy; once revoked, no further queries will be made.",
+      "aviso": "Sample text, no legal validity."
+    }
+  }
+}

@@ -1,0 +1,77 @@
+"""Transactional Outbox de `clientes`: el evento se escribe en la transacción del dato.
+
+La publicación la hará el relay compartido de `solventa_common` (PR 2.2); aquí solo se insertan
+filas con `published_at` nulo.
+"""
+
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
+from uuid import UUID, uuid4
+
+from psycopg import AsyncConnection
+from psycopg.types.json import Jsonb
+
+from clientes.domain.consentimientos.modelos import Consentimiento
+
+CONSENTIMIENTO_OTORGADO = "ConsentimientoOtorgado"
+
+_INSERTAR = (
+    "INSERT INTO outbox (event_id, aggregate_id, event_type, event_version, occurred_at, "
+    "correlation_id, payload) VALUES (%s, %s, %s, %s, %s, %s, %s)"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class EventoOutbox:
+    event_id: UUID
+    aggregate_id: UUID
+    event_type: str
+    event_version: int
+    occurred_at: datetime
+    correlation_id: str
+    payload: dict[str, Any]
+
+
+def _iso(instante: datetime) -> str:
+    return instante.astimezone(UTC).isoformat()
+
+
+def consentimiento_otorgado(
+    consentimiento: Consentimiento, actor_id: str, correlation_id: str
+) -> EventoOutbox:
+    """Solo identificadores y códigos: sin datos personales (contrato v1 del plan)."""
+    return EventoOutbox(
+        event_id=uuid4(),
+        aggregate_id=consentimiento.id,
+        event_type=CONSENTIMIENTO_OTORGADO,
+        event_version=1,
+        occurred_at=consentimiento.otorgado_en,
+        correlation_id=correlation_id,
+        payload={
+            "consentimientoId": str(consentimiento.id),
+            "clienteId": str(consentimiento.cliente_id),
+            "proposito": consentimiento.proposito,
+            "alcances": list(consentimiento.alcances),
+            "versionTexto": consentimiento.version_texto,
+            "otorgadoEn": _iso(consentimiento.otorgado_en),
+            "vigenteHasta": _iso(consentimiento.vigente_hasta),
+            "actorId": actor_id,
+        },
+    )
+
+
+async def insertar(conexion: AsyncConnection[Any], evento: EventoOutbox) -> None:
+    """Inserta el evento en la transacción abierta de `conexion`."""
+    await conexion.execute(
+        _INSERTAR,
+        (
+            evento.event_id,
+            evento.aggregate_id,
+            evento.event_type,
+            evento.event_version,
+            evento.occurred_at,
+            evento.correlation_id,
+            Jsonb(evento.payload),
+        ),
+    )
