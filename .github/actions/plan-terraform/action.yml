@@ -65,3 +65,13 @@ runs:
         path: ${{ runner.temp }}/${{ inputs.raiz }}.tfplan
         retention-days: 1
         if-no-files-found: error
+
+    # El zip de la Lambda pre_sign_up se genera durante el plan y el apply corre en otro runner.
+    - name: Guardar paquetes generados
+      if: steps.revisar.outputs.cambios == 'true' && inputs.raiz == 'platform'
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-${{ inputs.raiz }}
+        path: infra/${{ inputs.raiz }}/.terraform/pre_sign_up.zip
+        retention-days: 1
+        if-no-files-found: error
