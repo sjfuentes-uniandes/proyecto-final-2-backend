@@ -15,6 +15,8 @@ Contratos que publica el backend para sus consumidores (web, móvil, socios y ot
 | `openapi/bff-web.yaml` | API de `bff-web` | Por confirmar (responsable de `bff-web`) | Ver [Regenerar un contrato](#regenerar-un-contrato) |
 | `openapi/api-socios.yaml` | API de `api-socios`: `/admin/socios` (solo `bff-web`; alta, plan y consumo) y rutas del socio (HU-W01, HU-W02) | Integrante 1 (`api-socios`) | Ver [Regenerar un contrato](#regenerar-un-contrato) |
 | `pact/bff-web-api-socios.json` | Pacto consumidor `bff-web` → proveedor `api-socios` (HU-W01, HU-W02) | Integrante 1 | `make test-contract SERVICE=bff-web` lo genera; `make test-contract SERVICE=api-socios` lo verifica |
+| `openapi/bff-movil.yaml` | API de `bff-movil` para la app móvil: sesión, verificación de identidad y registro (HU-M06); `/v1/consentimientos` (otorgar y listar), `/v1/consentimientos/{consentimientoId}` y `/v1/consentimientos/texto-vigente` (HU-M08). El titular sale siempre del token | Por confirmar (responsable de `bff-movil`) | Ver [Regenerar un contrato](#regenerar-un-contrato) |
+| `pact/bff-movil-clientes.json` | Pacto consumidor `bff-movil` → proveedor `clientes`: rutas de consentimiento (HU-M08). Se coteja con `openapi/clientes.yaml`; la verificación del lado de `clientes` está pendiente | Por confirmar (responsable de `bff-movil`) | `make test-contract SERVICE=bff-movil` lo genera |
 | `openapi/adaptador-datos.yaml` | API `/v1/consultas` de `adaptador-datos` (HU-W10) | @capbmaster | Ver [Regenerar un contrato](#regenerar-un-contrato) |
 | `openapi/adaptador-identidad.yaml` | API `/v1/verificaciones` de `adaptador-identidad`: verifica la selfie y la prueba de vida con el proveedor KYC (HU-M06) | Por confirmar (responsable de `adaptador-identidad`) | Ver [Regenerar un contrato](#regenerar-un-contrato) |
 | `openapi/clientes.yaml` | API de `clientes`: `/v1/clientes/actual`, `/v1/clientes/{clienteId}/identidad` y `/v1/clientes/actual/identidad/verificaciones` (HU-M06); `/v1/clientes/actual/consentimientos` (otorgar y listar), `/v1/clientes/actual/consentimientos/{consentimientoId}` y `/v1/consentimientos/textos/vigente` (HU-M08). Cumple la identidad de `clientes.propuesta-cotizacion.yaml` | Por confirmar (responsable de `clientes`) | Ver [Regenerar un contrato](#regenerar-un-contrato) |
@@ -43,6 +45,10 @@ uv run python -c "import yaml; from clientes.main import app; open('contracts/op
 
 ```bash
 uv run python -c "import yaml; from bff_web.main import app; open('contracts/openapi/bff-web.yaml', 'w').write(yaml.safe_dump(app.openapi(), sort_keys=False, allow_unicode=True))"
+```
+
+```bash
+uv run python -c "import yaml; from bff_movil.main import app; open('contracts/openapi/bff-movil.yaml', 'w', encoding='utf-8').write(yaml.safe_dump(app.openapi(), sort_keys=False, allow_unicode=True))"
 ```
 
 ```bash

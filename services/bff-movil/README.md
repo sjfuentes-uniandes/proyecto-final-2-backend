@@ -9,6 +9,7 @@ BFF de la aplicación móvil. Compone las respuestas de los servicios de dominio
 | --- | --- | --- |
 | `sesion` | HU-M07 | `GET /v1/sesion`: revalida el JWT del pool `clientes` de Cognito y devuelve los servicios autorizados del cliente según su identidad |
 | `verificacion` | HU-M06 | `POST /v1/identidad/verificaciones`: revalida el JWT y envía la selfie y la prueba de vida a `clientes`, que verifica la identidad con el proveedor KYC |
+| `consentimientos` | HU-M08 | `GET`/`POST /v1/consentimientos`, `GET /v1/consentimientos/{consentimientoId}` y `GET /v1/consentimientos/texto-vigente`: otorga y consulta el consentimiento del titular del token en `clientes` |
 
 ## `GET /v1/sesion` (HU-M07)
 
@@ -67,6 +68,32 @@ El timeout de esta llamada (`SOLVENTA_VERIFICACION_TIMEOUT_MS`, 5 s) no usa el t
 timeouts de la cadena están anidados (KYC 3 s < `clientes`→`adaptador-identidad` 4 s <
 `bff-movil`→`clientes` 5 s) para que el nivel de afuera nunca se rinda antes que el de adentro.
 
+## Consentimientos (HU-M08)
+
+Contrato: [`contracts/openapi/bff-movil.yaml`](../../contracts/openapi/bff-movil.yaml); pacto con
+`clientes`: [`contracts/pact/bff-movil-clientes.json`](../../contracts/pact/bff-movil-clientes.json).
+
+1. Revalida el JWT igual que `GET /v1/sesion` en las cuatro rutas (también `texto-vigente`).
+2. Llama a las rutas `actual` de `clientes` con `X-Actor-Id=<sub>` y `X-Actor-Rol=CLIENTE`: el
+   titular sale siempre del token; ninguna ruta acepta un `clienteId` de la app.
+   `X-Correlation-Id` viaja en cada salto. El texto vigente no envía el actor (no depende del
+   titular).
+3. Otorgar exige `Idempotency-Key` (UUID) y la reenvía. El cuerpo se reenvía con todos sus
+   campos (los ausentes como `null`): `clientes` informa todos los faltantes en
+   `detalles.campos` (AC3). Una repetición de `clientes` (`200` + `Idempotent-Replayed: true`)
+   se devuelve igual (AC4).
+4. Los rechazos de `clientes` conservan su código (`IDENTIDAD_NO_VERIFICADA`,
+   `CLIENTE_NO_ENCONTRADO`, `CONSENTIMIENTO_YA_VIGENTE` con `detalles.consentimientoId`,
+   `CONSENTIMIENTO_NO_ENCONTRADO`, `SOLICITUD_INVALIDA` con `detalles.campos`,
+   `VIGENCIA_INVALIDA`, `TEXTO_NO_VIGENTE`, `IDEMPOTENCIA_CONFLICTO`). Un timeout, un error de
+   red, un 5xx (incluido `DEPENDENCIA_NO_DISPONIBLE`), un 401/403 de actor o una respuesta fuera
+   del contrato es 503 `SERVICIO_NO_DISPONIBLE`: falla cerrado y nunca reintenta. Si otorgar se
+   agota después de escribir, la app repite con la misma clave y recibe el mismo consentimiento.
+5. No registra cuerpos, claves ni cabeceras en logs ni trazas.
+
+Presupuesto: las lecturas usan `SOLVENTA_CLIENTES_TIMEOUT_MS`; otorgar, una escritura
+transaccional (dato, clave y outbox), usa `SOLVENTA_OTORGAMIENTO_TIMEOUT_MS`.
+
 ## Configuración
 
 Además de lo común (`solventa_common.settings.ServiceSettings`):
@@ -77,6 +104,7 @@ Además de lo común (`solventa_common.settings.ServiceSettings`):
 | `SOLVENTA_JWT_ISSUERS` | `JWT_ISSUERS` | `{}` | Emisor (`iss`) por pool de Cognito, JSON `{"customers": "...", "backoffice": "..."}` |
 | `SOLVENTA_CLIENTES_TIMEOUT_MS` | — | `500` | Timeout de la llamada a `clientes` (tope real 700 ms, `solventa_common.resiliencia`) |
 | `SOLVENTA_VERIFICACION_TIMEOUT_MS` | — | `5000` | Timeout de la verificación biométrica en `clientes`. No aplica el tope de 700 ms: incluye al proveedor KYC (3 s) y `clientes` espera 4 s al adaptador |
+| `SOLVENTA_OTORGAMIENTO_TIMEOUT_MS` | — | `3000` | Timeout de otorgar un consentimiento en `clientes`. No aplica el tope de 700 ms: escribe dato, clave y outbox y tolera un arranque en frío; la app reintenta con la misma `Idempotency-Key` |
 | `SOLVENTA_JWKS_TTL_S` | — | `3600` | Vigencia de las claves del emisor en caché |
 | `SOLVENTA_JWKS_TIMEOUT_MS` | — | `500` | Timeout de la consulta al JWKS |
 | `SOLVENTA_JWKS_REFRESCO_MIN_S` | — | `60` | Intervalo mínimo entre refrescos del JWKS, incluso con un `kid` desconocido |

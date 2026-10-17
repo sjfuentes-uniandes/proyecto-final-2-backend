@@ -1,0 +1,1022 @@
+{
+  "consumer": {
+    "name": "bff-movil"
+  },
+  "interactions": [
+    {
+      "description": "la repetición de un otorgamiento con la misma clave",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el titular ya otorgó con esa Idempotency-Key y el mismo cuerpo"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "alcances": [
+              "FA_PRODUCTOS_VIGENTES"
+            ],
+            "idioma": "es-CO",
+            "proposito": "PERFILAMIENTO_PRECIO",
+            "versionTexto": "2026-10-17.1",
+            "vigenciaMeses": 12
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotency-Key": [
+            "6f1c2b9e-3d4a-4e8f-9b7c-1a2b3c4d5e6f"
+          ],
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "matchingRules": {
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/v1/clientes/actual/consentimientos"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "alcances": [
+              "FA_PRODUCTOS_VIGENTES"
+            ],
+            "consentimientoId": "00000000-0000-4000-9000-000000000001",
+            "estado": "ACTIVO",
+            "idioma": "es-CO",
+            "otorgadoEn": "2026-10-17T15:00:00Z",
+            "proposito": "PERFILAMIENTO_PRECIO",
+            "revocadoEn": null,
+            "versionTexto": "2026-10-17.1",
+            "vigenteHasta": "2027-10-17T23:59:59Z"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotent-Replayed": [
+            "true"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.alcances": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.consentimientoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(ACTIVO|REVOCADO|VENCIDO)$"
+                }
+              ]
+            },
+            "$.idioma": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.otorgadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.proposito": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.versionTexto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.vigenteHasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "un otorgamiento cuando ya hay uno vigente",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el titular ya tiene un consentimiento ACTIVO para PERFILAMIENTO_PRECIO"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "alcances": [
+              "FA_PRODUCTOS_VIGENTES"
+            ],
+            "idioma": "es-CO",
+            "proposito": "PERFILAMIENTO_PRECIO",
+            "versionTexto": "2026-10-17.1",
+            "vigenciaMeses": 12
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotency-Key": [
+            "6f1c2b9e-3d4a-4e8f-9b7c-1a2b3c4d5e6f"
+          ],
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "matchingRules": {
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/v1/clientes/actual/consentimientos"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "CONSENTIMIENTO_YA_VIGENTE",
+            "correlationId": "c0rr3l4c10n",
+            "detalles": {
+              "consentimientoId": "00000000-0000-4000-9000-000000000001"
+            },
+            "mensaje": "Mensaje genérico"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.detalles.consentimientoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 409
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "un otorgamiento de consentimiento",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el titular tiene identidad VERIFICADO y ningún consentimiento vigente"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "alcances": [
+              "FA_PRODUCTOS_VIGENTES"
+            ],
+            "idioma": "es-CO",
+            "proposito": "PERFILAMIENTO_PRECIO",
+            "versionTexto": "2026-10-17.1",
+            "vigenciaMeses": 12
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotency-Key": [
+            "6f1c2b9e-3d4a-4e8f-9b7c-1a2b3c4d5e6f"
+          ],
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "matchingRules": {
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/v1/clientes/actual/consentimientos"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "alcances": [
+              "FA_PRODUCTOS_VIGENTES"
+            ],
+            "consentimientoId": "00000000-0000-4000-9000-000000000001",
+            "estado": "ACTIVO",
+            "idioma": "es-CO",
+            "otorgadoEn": "2026-10-17T15:00:00Z",
+            "proposito": "PERFILAMIENTO_PRECIO",
+            "revocadoEn": null,
+            "versionTexto": "2026-10-17.1",
+            "vigenteHasta": "2027-10-17T23:59:59Z"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.alcances": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.consentimientoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(ACTIVO|REVOCADO|VENCIDO)$"
+                }
+              ]
+            },
+            "$.idioma": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.otorgadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.proposito": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.versionTexto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.vigenteHasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "un otorgamiento de un titular sin identidad verificada",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el titular tiene identidad PENDIENTE"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "alcances": [
+              "FA_PRODUCTOS_VIGENTES"
+            ],
+            "idioma": "es-CO",
+            "proposito": "PERFILAMIENTO_PRECIO",
+            "versionTexto": "2026-10-17.1",
+            "vigenciaMeses": 12
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotency-Key": [
+            "6f1c2b9e-3d4a-4e8f-9b7c-1a2b3c4d5e6f"
+          ],
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "matchingRules": {
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/v1/clientes/actual/consentimientos"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "IDENTIDAD_NO_VERIFICADA",
+            "correlationId": "c0rr3l4c10n",
+            "detalles": {},
+            "mensaje": "Mensaje genérico"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 403
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "un otorgamiento sin propósito, alcances ni vigencia",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el titular tiene identidad VERIFICADO y ningún consentimiento vigente"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "alcances": null,
+            "idioma": null,
+            "proposito": null,
+            "versionTexto": null,
+            "vigenciaMeses": null
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotency-Key": [
+            "6f1c2b9e-3d4a-4e8f-9b7c-1a2b3c4d5e6f"
+          ],
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "matchingRules": {
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/v1/clientes/actual/consentimientos"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "SOLICITUD_INVALIDA",
+            "correlationId": "c0rr3l4c10n",
+            "detalles": {
+              "campos": [
+                "proposito"
+              ]
+            },
+            "mensaje": "Mensaje genérico"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.detalles.campos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 422
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una consulta de los consentimientos del titular",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el titular tiene un consentimiento ACTIVO"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/clientes/actual/consentimientos"
+      },
+      "response": {
+        "body": {
+          "content": [
+            {
+              "alcances": [
+                "FA_PRODUCTOS_VIGENTES"
+              ],
+              "consentimientoId": "00000000-0000-4000-9000-000000000001",
+              "estado": "ACTIVO",
+              "idioma": "es-CO",
+              "otorgadoEn": "2026-10-17T15:00:00Z",
+              "proposito": "PERFILAMIENTO_PRECIO",
+              "revocadoEn": null,
+              "versionTexto": "2026-10-17.1",
+              "vigenteHasta": "2027-10-17T23:59:59Z"
+            }
+          ],
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[*].alcances": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[*].consentimientoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$[*].estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(ACTIVO|REVOCADO|VENCIDO)$"
+                }
+              ]
+            },
+            "$[*].idioma": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[*].otorgadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$[*].proposito": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[*].versionTexto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[*].vigenteHasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una consulta del detalle de un consentimiento ajeno",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el consentimiento 00000000-0000-4000-9000-0000000000ff es de otro cliente"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/clientes/actual/consentimientos/00000000-0000-4000-9000-0000000000ff"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "CONSENTIMIENTO_NO_ENCONTRADO",
+            "correlationId": "c0rr3l4c10n",
+            "detalles": {},
+            "mensaje": "Mensaje genérico"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una consulta del detalle de un consentimiento propio",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el titular tiene el consentimiento 00000000-0000-4000-9000-000000000001"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/clientes/actual/consentimientos/00000000-0000-4000-9000-000000000001"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "alcances": [
+              "FA_PRODUCTOS_VIGENTES"
+            ],
+            "consentimientoId": "00000000-0000-4000-9000-000000000001",
+            "estado": "ACTIVO",
+            "idioma": "es-CO",
+            "otorgadoEn": "2026-10-17T15:00:00Z",
+            "proposito": "PERFILAMIENTO_PRECIO",
+            "revocadoEn": null,
+            "versionTexto": "2026-10-17.1",
+            "vigenteHasta": "2027-10-17T23:59:59Z"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.alcances": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.consentimientoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(ACTIVO|REVOCADO|VENCIDO)$"
+                }
+              ]
+            },
+            "$.idioma": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.otorgadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.proposito": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.versionTexto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.vigenteHasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una consulta del texto vigente",
+      "pending": false,
+      "request": {
+        "method": "GET",
+        "path": "/v1/consentimientos/textos/vigente",
+        "query": {
+          "idioma": [
+            "es-CO"
+          ],
+          "proposito": [
+            "PERFILAMIENTO_PRECIO"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "content": {
+            "aviso": "Sin validez legal",
+            "cuerpo": "Texto ilustrativo.",
+            "idioma": "es-CO",
+            "proposito": "PERFILAMIENTO_PRECIO",
+            "titulo": "Autorización de ejemplo",
+            "versionTexto": "2026-10-17.1",
+            "vigenciaDefectoMeses": 12,
+            "vigenciasMeses": [
+              12
+            ]
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.aviso": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.cuerpo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.titulo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.versionTexto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.vigenciaDefectoMeses": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.vigenciasMeses": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactRust": {
+      "ffi": "0.5.8",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    }
+  },
+  "provider": {
+    "name": "clientes"
+  }
+}
