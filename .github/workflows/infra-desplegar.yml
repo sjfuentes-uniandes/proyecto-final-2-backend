@@ -94,6 +94,11 @@ jobs:
           name: plan-platform
           path: ${{ runner.temp }}
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-platform
+          path: infra/platform/.terraform
+
       - name: Aplicar plan aprobado
         env:
           PLAN_FILE: ${{ runner.temp }}/platform.tfplan
