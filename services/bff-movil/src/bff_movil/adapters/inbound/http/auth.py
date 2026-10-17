@@ -4,7 +4,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Protocol
+from typing import Annotated, Protocol, cast
 
 import jwt
 from fastapi import Depends, Header, Request
@@ -64,7 +64,10 @@ class Autenticador:
         if emisor != self._settings.jwt_issuers.get(POOL_CLIENTES):
             logger.warning("sesión rechazada", extra={"motivo": "pool"})
             raise ErrorNegocio(ROL_NO_AUTORIZADO, "No autorizado", 403)
-        return IdentidadAutenticada(sub=sub, expira_en=datetime.fromtimestamp(claims["exp"], UTC))
+        # `exp` es numérico: jwt.decode lo exige (`require`) y lo valida antes de llegar aquí.
+        return IdentidadAutenticada(
+            sub=sub, expira_en=datetime.fromtimestamp(cast(float, claims["exp"]), UTC)
+        )
 
     def _modo_local(self, sub: str | None) -> IdentidadAutenticada:
         # F1: este modo solo existe con ENVIRONMENT=local.

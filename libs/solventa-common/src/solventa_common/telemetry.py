@@ -7,7 +7,7 @@ import time
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, Self, TypeVar
+from typing import Any, Literal, Self, TypeVar
 
 import httpx
 from fastapi import FastAPI
@@ -237,7 +237,7 @@ class operacion:
         self.resultado = None
         return self
 
-    def __exit__(self, tipo, error, tb) -> bool:
+    def __exit__(self, tipo, error, tb) -> Literal[False]:
         span_cm, (span, token), inicio = self._pila.pop()
         duracion_ms = (time.perf_counter() - inicio) * 1000
         resultado = self.resultado or _resultado_de(error)
@@ -259,7 +259,7 @@ class operacion:
     async def __aenter__(self) -> Self:
         return self.__enter__()
 
-    async def __aexit__(self, tipo, error, tb) -> bool:
+    async def __aexit__(self, tipo, error, tb) -> Literal[False]:
         return self.__exit__(tipo, error, tb)
 
     def __call__(self, funcion: F) -> F:

@@ -27,8 +27,12 @@ class RepositorioClientes(Protocol):
 
 
 class VeredictoKyc(Protocol):
-    resultado: ResultadoKyc
-    motivo: str | None
+    # Propiedades de solo lectura: el adaptador entrega una dataclass congelada.
+    @property
+    def resultado(self) -> ResultadoKyc: ...
+
+    @property
+    def motivo(self) -> str | None: ...
 
 
 class ConsultaVerificacion(Protocol):

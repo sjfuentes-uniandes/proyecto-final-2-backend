@@ -42,7 +42,8 @@ def error(descripcion: str) -> dict[str, Any]:
     return {"model": ErrorDto, "description": descripcion}
 
 
-ERRORES_ACTOR = {
+# Clave `int | str`: es el tipo de `responses` de FastAPI, donde se combina con más respuestas.
+ERRORES_ACTOR: dict[int | str, dict[str, Any]] = {
     401: error("ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol"),
     403: error("ROL_NO_AUTORIZADO: X-Actor-Rol distinto de CLIENTE"),
 }

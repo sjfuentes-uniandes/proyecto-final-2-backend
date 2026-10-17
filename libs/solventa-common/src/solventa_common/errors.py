@@ -5,7 +5,7 @@ router que la usa (bff-web conserva {"detail"} en sus rutas ya publicadas).
 """
 
 import logging
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Callable, Coroutine, Mapping, Sequence
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -144,7 +144,7 @@ def registrar_manejadores(app: FastAPI) -> None:
 class RutaB2(APIRoute):
     """Ruta que responde sus errores en formato B2 sin tocar los manejadores globales."""
 
-    def get_route_handler(self) -> Callable[[Request], Awaitable[Response]]:
+    def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
         original = super().get_route_handler()
 
         async def manejar(request: Request) -> Response:

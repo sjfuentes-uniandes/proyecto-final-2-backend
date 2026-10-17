@@ -1,6 +1,6 @@
 include infra/plataforma.mk
 
-.PHONY: dev-up dev-down dev-sync lint test-unit test-cov test-module test-contract test-e2e diagramas
+.PHONY: dev-up dev-down dev-sync lint typecheck test-unit test-cov test-module test-contract test-e2e diagramas
 
 SERVICE ?=
 
@@ -18,6 +18,11 @@ dev-down:
 
 lint:
 	uv run ruff check services/$(SERVICE) && uv run ruff format --check services/$(SERVICE)
+
+# Tipos (ADR 0008): el código del servicio y solventa-common, que importa. Configuración en
+# [tool.mypy] del pyproject.toml raíz. Sin sintaxis de shell: sirve en Git Bash y en PowerShell.
+typecheck:
+	uv run mypy services/$(SERVICE)/src libs/solventa-common/src
 
 test-unit:
 	uv run pytest $(if $(SERVICE),services/$(SERVICE)/tests/unit,services/*/tests/unit libs/*/tests/unit)
