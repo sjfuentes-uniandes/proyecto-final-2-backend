@@ -3,12 +3,22 @@
 import io
 import json
 import logging
+from calendar import monthrange
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
+from clientes.application.consentimientos.puertos import Otorgamiento
+from clientes.domain.consentimientos.modelos import (
+    ClaveIdempotenciaEnUso,
+    Consentimiento,
+    ConsentimientoActivoExistente,
+    EstadoConsentimiento,
+    RegistroIdempotencia,
+)
 from clientes.domain.identidad.modelos import Cliente, RegistroYaVinculado
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from opentelemetry.sdk.trace import ReadableSpan
@@ -65,6 +75,123 @@ class RepositorioMemoria:
 @pytest.fixture
 def repositorio() -> RepositorioMemoria:
     return RepositorioMemoria()
+
+
+def sumar_meses(instante: datetime, meses: int) -> datetime:
+    """Implementación de referencia de `fin_de_vigencia` (ADR 0010): si el día no existe en el
+    mes de destino se usa el último día del mes; la hora se conserva."""
+    total = instante.month - 1 + meses
+    anio, mes = instante.year + total // 12, total % 12 + 1
+    return instante.replace(year=anio, month=mes, day=min(instante.day, monthrange(anio, mes)[1]))
+
+
+class RelojFalso:
+    """Reloj de la base de datos: se controla desde la prueba."""
+
+    def __init__(self) -> None:
+        self.ahora = datetime(2026, 10, 17, 12, tzinfo=UTC)
+
+    def __call__(self) -> datetime:
+        return self.ahora
+
+    def avanzar(self, delta: timedelta) -> None:
+        self.ahora += delta
+
+
+@pytest.fixture
+def reloj() -> RelojFalso:
+    return RelojFalso()
+
+
+class RepositorioConsentimientosMemoria:
+    """RepositorioConsentimientos en memoria con las mismas reglas que la base: un solo
+    `ACTIVO` por (cliente, propósito), clave de idempotencia por cliente con retención de 24 h
+    y un evento por consentimiento creado."""
+
+    def __init__(self, reloj: Callable[[], datetime]) -> None:
+        self._reloj = reloj
+        self.consentimientos: dict[UUID, Consentimiento] = {}
+        self.claves: dict[tuple[UUID, UUID], tuple[str, UUID, datetime]] = {}
+        self.eventos: list[dict[str, Any]] = []
+        self.falla: Exception | None = None
+
+    def _leer(self, c: Consentimiento) -> Consentimiento:
+        return replace(c, leido_en=self._reloj())
+
+    async def por_clave(self, cliente_id: UUID, clave: UUID) -> RegistroIdempotencia | None:
+        registro = self.claves.get((cliente_id, clave))
+        if registro is None or self._reloj() - registro[2] >= timedelta(hours=24):
+            return None
+        return RegistroIdempotencia(registro[0], self._leer(self.consentimientos[registro[1]]))
+
+    async def activo(self, cliente_id: UUID, proposito: str) -> Consentimiento | None:
+        for c in self.consentimientos.values():
+            if (c.cliente_id, c.proposito, c.estado) == (
+                cliente_id,
+                proposito,
+                EstadoConsentimiento.ACTIVO,
+            ):
+                return self._leer(c)
+        return None
+
+    async def crear(self, otorgamiento: Otorgamiento) -> Consentimiento:
+        if self.falla is not None:
+            raise self.falla
+        ahora = self._reloj()
+        self.claves = {k: v for k, v in self.claves.items() if ahora - v[2] < timedelta(hours=24)}
+        solicitud = otorgamiento.solicitud
+        for c in list(self.consentimientos.values()):
+            if (c.cliente_id, c.proposito, c.estado) != (
+                otorgamiento.cliente_id,
+                solicitud.proposito,
+                EstadoConsentimiento.ACTIVO,
+            ):
+                continue
+            if c.vigente_hasta > ahora:
+                raise ConsentimientoActivoExistente()
+            self.consentimientos[c.id] = replace(c, estado=EstadoConsentimiento.VENCIDO)
+        if (otorgamiento.cliente_id, otorgamiento.clave) in self.claves:
+            raise ClaveIdempotenciaEnUso()
+        creado = Consentimiento(
+            id=otorgamiento.id,
+            cliente_id=otorgamiento.cliente_id,
+            proposito=solicitud.proposito,
+            alcances=solicitud.alcances,
+            version_texto=solicitud.version_texto,
+            idioma=solicitud.idioma,
+            estado=EstadoConsentimiento.ACTIVO,
+            otorgado_en=ahora,
+            vigente_hasta=sumar_meses(ahora, solicitud.vigencia_meses),
+            revocado_en=None,
+            leido_en=ahora,
+        )
+        self.consentimientos[creado.id] = creado
+        self.claves[(otorgamiento.cliente_id, otorgamiento.clave)] = (
+            otorgamiento.huella,
+            creado.id,
+            ahora,
+        )
+        self.eventos.append(
+            {
+                "tipo": "ConsentimientoOtorgado",
+                "agregado": creado.id,
+                "actor": otorgamiento.actor_id,
+            }
+        )
+        return creado
+
+    async def obtener(self, cliente_id: UUID, consentimiento_id: UUID) -> Consentimiento | None:
+        c = self.consentimientos.get(consentimiento_id)
+        return self._leer(c) if c is not None and c.cliente_id == cliente_id else None
+
+    async def listar(self, cliente_id: UUID) -> list[Consentimiento]:
+        propios = [c for c in self.consentimientos.values() if c.cliente_id == cliente_id]
+        return [self._leer(c) for c in sorted(propios, key=lambda c: c.otorgado_en, reverse=True)]
+
+
+@pytest.fixture
+def consentimientos(reloj: RelojFalso) -> RepositorioConsentimientosMemoria:
+    return RepositorioConsentimientosMemoria(reloj)
 
 
 @dataclass

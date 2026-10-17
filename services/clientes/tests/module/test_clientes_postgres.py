@@ -43,7 +43,7 @@ def base() -> Iterator[str]:
 @pytest.fixture
 def repo(base: str) -> RepositorioPostgres:
     with psycopg.connect(base, autocommit=True) as conexion:
-        conexion.execute("TRUNCATE cliente")
+        conexion.execute("TRUNCATE cliente CASCADE")
     return RepositorioPostgres(base)
 
 
