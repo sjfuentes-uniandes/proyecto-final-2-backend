@@ -57,6 +57,17 @@ runs:
           echo '</details>'
         } >> "$GITHUB_STEP_SUMMARY"
 
+    # archive_file genera el ZIP durante plan; apply en otro runner no lo recrea.
+    - name: Guardar código Lambda de plataforma
+      if: inputs.raiz == 'platform' && steps.revisar.outputs.cambios == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: lambda-platform
+        path: infra/platform/.terraform/pre_sign_up.zip
+        include-hidden-files: true
+        retention-days: 1
+        if-no-files-found: error
+
     - name: Guardar plan
       if: steps.revisar.outputs.cambios == 'true'
       uses: actions/upload-artifact@v4

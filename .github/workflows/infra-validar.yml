@@ -10,6 +10,7 @@ on:
       - "infra/apps/**"
       - "infra/envs/**"
       - "infra/lambdas/**"
+      - "infra/tests/**"
       - "libs/solventa-common/src/solventa_common/token_registro.py"
       - "infra/plataforma.mk"
       - "scripts/plataforma/**"
@@ -39,7 +40,7 @@ jobs:
       - uses: ./.github/actions/preparar-python
 
       - name: Lambda pre sign-up (HU-M06)
-        run: uv run pytest infra/lambdas libs/solventa-common/tests/unit/test_token_registro.py -q
+        run: uv run pytest infra/tests infra/lambdas libs/solventa-common/tests/unit/test_token_registro.py -q
 
       - name: Shellcheck
         run: shellcheck -x -P scripts/plataforma scripts/plataforma/*.sh
