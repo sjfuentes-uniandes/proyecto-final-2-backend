@@ -1,4 +1,5 @@
-"""API del consentimiento para el uso de datos (HU-M08): otorgar, listar, detalle y texto vigente.
+"""API del consentimiento para el uso de datos: otorgar, listar, detalle y texto vigente (HU-M08);
+revocar e historial (HU-M09).
 
 Las rutas `actual` resuelven el cliente por el `sub` del titular (ADR 0006); un consentimiento
 ajeno responde como uno inexistente (404). Solo `bff-movil` invoca estas rutas.
@@ -18,6 +19,7 @@ from clientes.application.consentimientos.casos import (
     ConsultarConsentimientos,
     ConsultarTextoVigente,
     OtorgarConsentimiento,
+    RevocarConsentimiento,
 )
 from clientes.domain.consentimientos.modelos import (
     Consentimiento,
@@ -28,6 +30,7 @@ from clientes.domain.consentimientos.modelos import (
     IdentidadNoVerificada,
     SolicitudInvalida,
     TextoNoVigente,
+    TipoHito,
     VigenciaInvalida,
 )
 from clientes.domain.consentimientos.textos import TextoLegal
@@ -75,6 +78,29 @@ class ConsentimientoDto(Dto):
             otorgado_en=consentimiento.otorgado_en,
             vigente_hasta=consentimiento.vigente_hasta,
             revocado_en=consentimiento.revocado_en,
+        )
+
+
+class HitoDto(Dto):
+    tipo: TipoHito
+    ocurrido_en: datetime
+
+
+class HistorialDto(Dto):
+    """Cuándo se otorgó y, si aplica, cuándo se revocó o venció (AC4). Derivado de la fila."""
+
+    consentimiento_id: UUID
+    estado: EstadoConsentimiento
+    hitos: list[HitoDto]
+
+    @classmethod
+    def desde(cls, consentimiento: Consentimiento) -> "HistorialDto":
+        return cls(
+            consentimiento_id=consentimiento.id,
+            estado=consentimiento.estado_derivado,
+            hitos=[
+                HitoDto(tipo=h.tipo, ocurrido_en=h.ocurrido_en) for h in consentimiento.historial
+            ],
         )
 
 
@@ -224,6 +250,56 @@ async def detalle(
         raise ErrorNegocio(
             "CONSENTIMIENTO_NO_ENCONTRADO", "El consentimiento no existe", 404
         ) from falla
+
+
+NO_ENCONTRADO = error(
+    "CONSENTIMIENTO_NO_ENCONTRADO: no existe o es de otro cliente (no se distingue)"
+)
+
+
+def _no_encontrado() -> ErrorNegocio:
+    return ErrorNegocio("CONSENTIMIENTO_NO_ENCONTRADO", "El consentimiento no existe", 404)
+
+
+@router.post(
+    "/{consentimientoId}/revocacion",
+    response_model=ConsentimientoDto,
+    response_model_by_alias=True,
+    summary="Revoca un consentimiento del titular",
+    responses={**ERRORES_ACTOR, 404: NO_ENCONTRADO},
+)
+async def revocar(
+    consentimiento_id: ConsentimientoId, request: Request, sub: Titular
+) -> ConsentimientoDto:
+    """Idempotente por estado (AC3): la primera vez y las repeticiones responden 200 con el mismo
+    cuerpo. Uno `VENCIDO` responde 200 sin cambios; `revocadoEn` sale del reloj de la base."""
+    caso: RevocarConsentimiento = request.app.state.revocar_consentimiento
+    try:
+        revocado = await caso.ejecutar(
+            sub, consentimiento_id, correlation_id=correlation.obtener() or ""
+        )
+    except ConsentimientoNoEncontrado as falla:
+        raise _no_encontrado() from falla
+    return ConsentimientoDto.desde(revocado)
+
+
+@router.get(
+    "/{consentimientoId}/historial",
+    response_model=HistorialDto,
+    response_model_by_alias=True,
+    summary="Historial de un consentimiento del titular: otorgado y revocado o vencido",
+    responses={**ERRORES_ACTOR, 404: NO_ENCONTRADO},
+)
+async def historial(
+    consentimiento_id: ConsentimientoId, request: Request, sub: Titular
+) -> HistorialDto:
+    """Solo lectura: los hitos salen de la fila inmutable (ADR 0009); no hay operación que los
+    modifique."""
+    consultas: ConsultarConsentimientos = request.app.state.consultar_consentimientos
+    try:
+        return HistorialDto.desde(await consultas.detalle(sub, consentimiento_id))
+    except ConsentimientoNoEncontrado as falla:
+        raise _no_encontrado() from falla
 
 
 @router_textos.get(

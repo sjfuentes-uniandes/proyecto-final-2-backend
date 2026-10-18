@@ -22,6 +22,8 @@ def test_contrato_de_verificaciones() -> None:
         "/v1/clientes/actual/identidad/verificaciones",
         "/v1/clientes/actual/consentimientos",
         "/v1/clientes/actual/consentimientos/{consentimientoId}",
+        "/v1/clientes/actual/consentimientos/{consentimientoId}/revocacion",
+        "/v1/clientes/actual/consentimientos/{consentimientoId}/historial",
         "/v1/consentimientos/textos/vigente",
         "/v1/registros/{registro_id}/verificaciones",
         "/v1/registros/{registro_id}/vinculacion",
@@ -87,6 +89,58 @@ def test_contrato_de_consentimientos() -> None:
         "vigenciasMeses",
         "vigenciaDefectoMeses",
     }
+
+
+def test_contrato_de_revocacion_e_historial() -> None:
+    """HU-M09 (plan §c): revocar responde 200 la primera vez y en las repeticiones, con el mismo
+    `ConsentimientoDto` de la Parte 1; no lleva cuerpo ni Idempotency-Key."""
+    rutas = app.openapi()["paths"]
+    base = "/v1/clientes/actual/consentimientos/{consentimientoId}"
+    revocar = rutas[f"{base}/revocacion"]
+    assert set(revocar) == {"post"}
+    assert set(revocar["post"]["responses"]) == {"200", "401", "403", "404", "422"}
+    assert "requestBody" not in revocar["post"]
+    assert [p["name"] for p in revocar["post"]["parameters"]] == [
+        "consentimientoId",
+        "X-Actor-Id",
+        "X-Actor-Rol",
+    ]
+    ok = revocar["post"]["responses"]["200"]["content"]["application/json"]["schema"]
+    assert ok == {"$ref": "#/components/schemas/ConsentimientoDto"}
+    historial = rutas[f"{base}/historial"]
+    assert set(historial) == {"get"}
+    assert set(historial["get"]["responses"]) == {"200", "401", "403", "404", "422"}
+
+    esquemas = app.openapi()["components"]["schemas"]
+    assert set(esquemas["HistorialDto"]["required"]) == {"consentimientoId", "estado", "hitos"}
+    assert set(esquemas["HitoDto"]["required"]) == {"tipo", "ocurridoEn"}
+    assert esquemas["TipoHito"]["enum"] == ["OTORGADO", "REVOCADO", "VENCIDO"]
+
+
+def test_los_cambios_de_la_parte_2_son_aditivos() -> None:
+    """La app N-1 sigue funcionando: la lista sigue siendo un arreglo de ConsentimientoDto y el
+    DTO conserva los campos de la Parte 1."""
+    rutas = app.openapi()["paths"]
+    lista = rutas["/v1/clientes/actual/consentimientos"]["get"]["responses"]["200"]
+    esquema = lista["content"]["application/json"]["schema"]
+    assert esquema["type"] == "array"
+    assert esquema["items"] == {"$ref": "#/components/schemas/ConsentimientoDto"}
+    dto = app.openapi()["components"]["schemas"]["ConsentimientoDto"]
+    assert (
+        set(dto["properties"])
+        == set(dto["required"])
+        == {
+            "consentimientoId",
+            "estado",
+            "proposito",
+            "alcances",
+            "versionTexto",
+            "idioma",
+            "otorgadoEn",
+            "vigenteHasta",
+            "revocadoEn",
+        }
+    )
 
 
 def test_contrato_del_registro() -> None:

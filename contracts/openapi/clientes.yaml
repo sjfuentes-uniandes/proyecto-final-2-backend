@@ -504,6 +504,140 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/clientes/actual/consentimientos/{consentimientoId}/revocacion:
+    post:
+      tags:
+      - consentimientos
+      summary: Revoca un consentimiento del titular
+      description: 'Idempotente por estado (AC3): la primera vez y las repeticiones
+        responden 200 con el mismo
+
+        cuerpo. Uno `VENCIDO` responde 200 sin cambios; `revocadoEn` sale del reloj
+        de la base.'
+      operationId: revocar_v1_clientes_actual_consentimientos__consentimientoId__revocacion_post
+      parameters:
+      - name: consentimientoId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Consentimientoid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentimientoDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de CLIENTE'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'CONSENTIMIENTO_NO_ENCONTRADO: no existe o es de otro cliente
+            (no se distingue)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/clientes/actual/consentimientos/{consentimientoId}/historial:
+    get:
+      tags:
+      - consentimientos
+      summary: 'Historial de un consentimiento del titular: otorgado y revocado o
+        vencido'
+      description: 'Solo lectura: los hitos salen de la fila inmutable (ADR 0009);
+        no hay operación que los
+
+        modifique.'
+      operationId: historial_v1_clientes_actual_consentimientos__consentimientoId__historial_get
+      parameters:
+      - name: consentimientoId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Consentimientoid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistorialDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de CLIENTE'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'CONSENTIMIENTO_NO_ENCONTRADO: no existe o es de otro cliente
+            (no se distingue)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/consentimientos/textos/vigente:
     get:
       tags:
@@ -655,6 +789,40 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    HistorialDto:
+      properties:
+        consentimientoId:
+          type: string
+          format: uuid
+          title: Consentimientoid
+        estado:
+          $ref: '#/components/schemas/EstadoConsentimiento'
+        hitos:
+          items:
+            $ref: '#/components/schemas/HitoDto'
+          type: array
+          title: Hitos
+      type: object
+      required:
+      - consentimientoId
+      - estado
+      - hitos
+      title: HistorialDto
+      description: Cuándo se otorgó y, si aplica, cuándo se revocó o venció (AC4).
+        Derivado de la fila.
+    HitoDto:
+      properties:
+        tipo:
+          $ref: '#/components/schemas/TipoHito'
+        ocurridoEn:
+          type: string
+          format: date-time
+          title: Ocurridoen
+      type: object
+      required:
+      - tipo
+      - ocurridoEn
+      title: HitoDto
     IdentidadDto:
       properties:
         clienteId:
@@ -813,6 +981,13 @@ components:
       - vigenciasMeses
       - vigenciaDefectoMeses
       title: TextoVigenteDto
+    TipoHito:
+      type: string
+      enum:
+      - OTORGADO
+      - REVOCADO
+      - VENCIDO
+      title: TipoHito
     ValidationError:
       properties:
         loc:

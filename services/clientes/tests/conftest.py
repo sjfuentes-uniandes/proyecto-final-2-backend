@@ -11,13 +11,14 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from clientes.application.consentimientos.puertos import Otorgamiento
+from clientes.application.consentimientos.puertos import Otorgamiento, Revocacion
 from clientes.domain.consentimientos.modelos import (
     ClaveIdempotenciaEnUso,
     Consentimiento,
     ConsentimientoActivoExistente,
     EstadoConsentimiento,
     RegistroIdempotencia,
+    esta_vigente,
 )
 from clientes.domain.identidad.modelos import Cliente, RegistroYaVinculado
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
@@ -105,8 +106,8 @@ def reloj() -> RelojFalso:
 
 class RepositorioConsentimientosMemoria:
     """RepositorioConsentimientos en memoria con las mismas reglas que la base: un solo
-    `ACTIVO` por (cliente, propósito), clave de idempotencia por cliente con retención de 24 h
-    y un evento por consentimiento creado."""
+    `ACTIVO` por (cliente, propósito), clave de idempotencia por cliente con retención de 24 h,
+    un evento por consentimiento creado y otro por revocación efectiva."""
 
     def __init__(self, reloj: Callable[[], datetime]) -> None:
         self._reloj = reloj
@@ -187,6 +188,21 @@ class RepositorioConsentimientosMemoria:
     async def listar(self, cliente_id: UUID) -> list[Consentimiento]:
         propios = [c for c in self.consentimientos.values() if c.cliente_id == cliente_id]
         return [self._leer(c) for c in sorted(propios, key=lambda c: c.otorgado_en, reverse=True)]
+
+    async def revocar(self, revocacion: Revocacion) -> Consentimiento | None:
+        if self.falla is not None:
+            raise self.falla
+        c = self.consentimientos.get(revocacion.consentimiento_id)
+        if c is None or c.cliente_id != revocacion.cliente_id:
+            return None
+        ahora = self._reloj()
+        if esta_vigente(c.estado, c.vigente_hasta, ahora):
+            c = replace(c, estado=EstadoConsentimiento.REVOCADO, revocado_en=ahora)
+            self.consentimientos[c.id] = c
+            self.eventos.append(
+                {"tipo": "ConsentimientoRevocado", "agregado": c.id, "actor": revocacion.actor_id}
+            )
+        return self._leer(c)
 
 
 @pytest.fixture

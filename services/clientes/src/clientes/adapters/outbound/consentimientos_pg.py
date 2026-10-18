@@ -13,7 +13,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
 from clientes.adapters.outbound import outbox_pg
-from clientes.application.consentimientos.puertos import Otorgamiento
+from clientes.application.consentimientos.puertos import Otorgamiento, Revocacion
 from clientes.domain.consentimientos.modelos import (
     ClaveIdempotenciaEnUso,
     Consentimiento,
@@ -55,6 +55,13 @@ _INSERTAR = (
     "SELECT %s, %s, %s, %s, %s, %s, 'ACTIVO', t.ahora, fin_de_vigencia(t.ahora, %s::int) FROM t "
     "RETURNING id, cliente_id, proposito, alcances, version_texto, idioma, estado, otorgado_en, "
     "vigente_hasta, revocado_en, otorgado_en AS ahora"
+)
+# ADR 0009: una sola sentencia y una sola captura del reloj para el SET, el WHERE y el RETURNING.
+# Un ACTIVO ya vencido sin materializar no cumple `vigente_hasta > t.ahora` y no se revoca.
+_REVOCAR = (
+    _RELOJ + "UPDATE consentimiento c SET estado = 'REVOCADO', revocado_en = t.ahora FROM t "
+    "WHERE c.id = %s AND c.cliente_id = %s AND c.estado = 'ACTIVO' AND c.vigente_hasta > t.ahora "
+    f"RETURNING {_COLUMNAS}, t.ahora"
 )
 _INSERTAR_CLAVE = (
     "INSERT INTO consentimiento_idempotencia "
@@ -155,3 +162,26 @@ class ConsentimientosPg:
                 raise ClaveIdempotenciaEnUso() from error
             raise
         return creado
+
+    async def revocar(self, revocacion: Revocacion) -> Consentimiento | None:
+        parametros = (revocacion.consentimiento_id, revocacion.cliente_id)
+        async with self._pool.connection() as conexion:
+            async with conexion.transaction():
+                cursor = conexion.cursor(row_factory=dict_row)
+                await cursor.execute(_REVOCAR, parametros)
+                fila = await cursor.fetchone()
+                if fila is not None:
+                    revocado = _consentimiento(fila)
+                    await outbox_pg.insertar(
+                        conexion,
+                        outbox_pg.consentimiento_revocado(
+                            revocado, revocacion.actor_id, revocacion.correlation_id
+                        ),
+                    )
+                    return revocado
+            # 0 filas: ya era final, venció o no es del cliente. Se responde con lo que hay, sin
+            # evento; dos revocaciones simultáneas producen así un solo evento.
+            cursor = conexion.cursor(row_factory=dict_row)
+            await cursor.execute(_POR_ID, parametros)
+            filas = await cursor.fetchall()
+        return _consentimiento(filas[0]) if filas else None

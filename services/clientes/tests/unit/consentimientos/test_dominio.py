@@ -8,8 +8,10 @@ from clientes.domain.consentimientos.modelos import (
     ALCANCES,
     Consentimiento,
     EstadoConsentimiento,
+    Hito,
     SolicitudInvalida,
     SolicitudOtorgamiento,
+    TipoHito,
     VigenciaInvalida,
     esta_vigente,
 )
@@ -78,6 +80,38 @@ def test_el_estado_derivado_de_un_activo_vencido_sin_materializar_es_vencido() -
 def test_el_estado_derivado_de_un_revocado_se_conserva() -> None:
     c = _consentimiento(EstadoConsentimiento.REVOCADO, HASTA - UN_SEGUNDO)
     assert c.estado_derivado is EstadoConsentimiento.REVOCADO
+
+
+def test_el_historial_de_un_activo_vigente_solo_tiene_el_otorgamiento() -> None:
+    c = _consentimiento(EstadoConsentimiento.ACTIVO, HASTA - UN_SEGUNDO)
+    assert c.historial == (Hito(TipoHito.OTORGADO, c.otorgado_en),)
+
+
+def test_el_historial_de_un_revocado_tiene_otorgado_y_revocado() -> None:
+    """HU-M09 AC4: cuándo se otorgó y cuándo se revocó, derivado de la fila."""
+    c = _consentimiento(EstadoConsentimiento.REVOCADO, HASTA + UN_SEGUNDO)
+    assert c.revocado_en is not None
+    assert c.historial == (
+        Hito(TipoHito.OTORGADO, c.otorgado_en),
+        Hito(TipoHito.REVOCADO, c.revocado_en),
+    )
+
+
+@pytest.mark.parametrize(
+    ("estado", "leido_en"),
+    [
+        (EstadoConsentimiento.ACTIVO, HASTA),  # vencido sin materializar, en el límite exacto
+        (EstadoConsentimiento.VENCIDO, HASTA - UN_SEGUNDO),  # materializado al reotorgar
+    ],
+)
+def test_el_historial_de_un_vencido_termina_en_vigente_hasta(
+    estado: EstadoConsentimiento, leido_en: datetime
+) -> None:
+    c = _consentimiento(estado, leido_en)
+    assert c.historial == (
+        Hito(TipoHito.OTORGADO, c.otorgado_en),
+        Hito(TipoHito.VENCIDO, HASTA),
+    )
 
 
 def test_solicitud_valida_se_normaliza() -> None:

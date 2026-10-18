@@ -2,11 +2,12 @@
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
 import schemathesis
-from clientes.application.consentimientos.puertos import Otorgamiento
+from clientes.application.consentimientos.puertos import Otorgamiento, Revocacion
 from clientes.config import Settings
 from clientes.domain.consentimientos.modelos import (
     ClaveIdempotenciaEnUso,
@@ -14,6 +15,7 @@ from clientes.domain.consentimientos.modelos import (
     ConsentimientoActivoExistente,
     EstadoConsentimiento,
     RegistroIdempotencia,
+    esta_vigente,
 )
 from clientes.domain.identidad.modelos import Cliente, EstadoIdentidad
 from clientes.main import crear_app
@@ -30,7 +32,7 @@ ACTOR = {"X-Actor-Id": SUB_CONTRATO, "X-Actor-Rol": "CLIENTE"}
 
 class _ConsentimientosMemoria:
     """Lo mínimo de RepositorioConsentimientos para ejercitar las rutas: un `ACTIVO` por
-    propósito y la clave de idempotencia por cliente."""
+    propósito, la clave de idempotencia por cliente y la revocación de uno vigente."""
 
     def __init__(self) -> None:
         self.consentimientos: dict[UUID, Consentimiento] = {}
@@ -88,6 +90,16 @@ class _ConsentimientosMemoria:
 
     async def listar(self, cliente_id: UUID) -> list[Consentimiento]:
         return [self._leer(c) for c in self.consentimientos.values() if c.cliente_id == cliente_id]
+
+    async def revocar(self, revocacion: Revocacion) -> Consentimiento | None:
+        c = self.consentimientos.get(revocacion.consentimiento_id)
+        if c is None or c.cliente_id != revocacion.cliente_id:
+            return None
+        ahora = datetime.now(UTC)
+        if esta_vigente(c.estado, c.vigente_hasta, ahora):
+            c = replace(c, estado=EstadoConsentimiento.REVOCADO, revocado_en=ahora)
+            self.consentimientos[c.id] = c
+        return self._leer(c)
 
 
 class _RepositorioMemoria:
@@ -191,3 +203,44 @@ def test_el_barrido_con_titular_llega_a_otorgar() -> None:
         headers={**ACTOR, "Idempotency-Key": str(uuid4())},
     )
     assert respuesta.status_code in (201, 409)
+
+
+def _llamar(metodo: str, ruta: str, **kwargs: object) -> Any:
+    """Llama la operación publicada y valida la respuesta contra su esquema."""
+    caso = schema[ruta][metodo].Case(headers=ACTOR, **kwargs)
+    respuesta = caso.call()
+    caso.validate_response(respuesta, excluded_checks=EXCLUIDOS)
+    return respuesta
+
+
+def test_revocar_e_historial_de_uno_propio_cumplen_el_contrato() -> None:
+    """El barrido solo ve 404 con identificadores aleatorios: aquí se revoca uno real (HU-M09)
+    y se validan las respuestas 200 de revocar (primera vez y repetición) e historial."""
+    titular = identidad.por_sub(SUB_CONTRATO)
+    assert titular is not None
+    ahora = datetime.now(UTC)
+    propio = Consentimiento(
+        id=uuid4(),
+        cliente_id=titular.id,
+        proposito="PERFILAMIENTO_PRECIO",
+        alcances=("FA_PRODUCTOS_VIGENTES",),
+        version_texto="v-contrato",
+        idioma="es-CO",
+        estado=EstadoConsentimiento.ACTIVO,
+        otorgado_en=ahora - timedelta(days=1),
+        vigente_hasta=ahora + timedelta(days=180),
+        revocado_en=None,
+        leido_en=ahora,
+    )
+    consentimientos.consentimientos[propio.id] = propio
+    ruta = "/v1/clientes/actual/consentimientos/{consentimientoId}"
+    parametros = {"consentimientoId": str(propio.id)}
+
+    primera = _llamar("POST", f"{ruta}/revocacion", path_parameters=parametros)
+    repeticion = _llamar("POST", f"{ruta}/revocacion", path_parameters=parametros)
+    historial = _llamar("GET", f"{ruta}/historial", path_parameters=parametros)
+
+    assert (primera.status_code, repeticion.status_code, historial.status_code) == (200,) * 3
+    assert primera.json()["estado"] == "REVOCADO"
+    assert repeticion.json() == primera.json()
+    assert [h["tipo"] for h in historial.json()["hitos"]] == ["OTORGADO", "REVOCADO"]
