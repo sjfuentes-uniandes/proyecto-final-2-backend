@@ -24,7 +24,9 @@ class ServiceSettings(BaseSettings):
     db_password: str = Field("solventa", validation_alias=_env("DB_PASSWORD"), repr=False)
     db_sslmode: str = Field("prefer", validation_alias=_env("DB_SSLMODE"))
     db_pool_size: int = Field(5, validation_alias=_env("DB_POOL_SIZE"))
-    database_url_override: str | None = Field(None, validation_alias="SOLVENTA_DATABASE_URL", repr=False)
+    database_url_override: str | None = Field(
+        None, validation_alias="SOLVENTA_DATABASE_URL", repr=False
+    )
 
     @property
     def database_name(self) -> str:

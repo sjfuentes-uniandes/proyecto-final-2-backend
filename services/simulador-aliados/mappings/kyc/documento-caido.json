@@ -1,0 +1,30 @@
+{
+  "name": "kyc documento proveedor caído (error recuperable)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/kyc/v1/verificaciones/documento",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.numeroDocumento",
+          "equalTo": "1000000005"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "error": "unavailable"
+    },
+    "fixedDelayMilliseconds": 50
+  }
+}

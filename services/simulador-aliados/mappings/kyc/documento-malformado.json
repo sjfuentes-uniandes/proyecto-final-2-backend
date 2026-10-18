@@ -1,0 +1,28 @@
+{
+  "name": "kyc documento respuesta malformada",
+  "request": {
+    "method": "POST",
+    "urlPath": "/kyc/v1/verificaciones/documento",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.numeroDocumento",
+          "equalTo": "1000000004"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"resultado\": \"TAL_VEZ\", \"motivo\": ",
+    "fixedDelayMilliseconds": 50
+  }
+}

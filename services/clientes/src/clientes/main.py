@@ -9,7 +9,7 @@ from solventa_common import correlation
 from solventa_common.errors import registrar_manejadores
 from solventa_common.telemetry import instrumentar
 
-from clientes.adapters.inbound.http import consentimientos, identidad, registro
+from clientes.adapters.inbound.http import alta, consentimientos, identidad, registro
 from clientes.adapters.outbound.adaptador_identidad_http import AdaptadorIdentidadHttp
 from clientes.adapters.outbound.textos_json import TextosJson
 from clientes.application.consentimientos.casos import (
@@ -25,6 +25,7 @@ from clientes.application.identidad.casos import (
     VerificarRegistro,
     VincularRegistro,
 )
+from clientes.application.identidad.documental import CrearCliente, VerificarDocumento
 from clientes.application.identidad.puertos import RepositorioClientes
 from clientes.config import Settings
 
@@ -73,14 +74,12 @@ def crear_app(
             cliente_http = await pila.enter_async_context(
                 correlation.cliente_async(transport=transport)
             )
-            verificador = VerificarIdentidad(
-                repo,
-                AdaptadorIdentidadHttp(
-                    cliente_http,
-                    settings.adaptador_identidad_url,
-                    settings.adaptador_identidad_timeout_ms,
-                ),
+            adaptador_identidad = AdaptadorIdentidadHttp(
+                cliente_http,
+                settings.adaptador_identidad_url,
+                settings.adaptador_identidad_timeout_ms,
             )
+            verificador = VerificarIdentidad(repo, adaptador_identidad)
             app.state.verificar_identidad = verificador
             app.state.verificar_registro = VerificarRegistro(
                 repo, verificador, settings.secreto_registro
@@ -89,6 +88,8 @@ def crear_app(
                 repo, settings.secreto_registro, settings.registro_vinculacion_gracia_s
             )
             app.state.consultar_cliente = ConsultarCliente(repo)
+            app.state.crear_cliente = CrearCliente(repo)
+            app.state.verificar_documento = VerificarDocumento(repo, adaptador_identidad)
             if repo_consentimientos is not None:
                 textos = TextosJson.cargar()
                 app.state.otorgar_consentimiento = OtorgarConsentimiento(
@@ -111,6 +112,7 @@ def crear_app(
     )
     registrar_manejadores(app)
     app.include_router(identidad.router)
+    app.include_router(alta.router)
     app.include_router(registro.router)
     app.include_router(consentimientos.router)
     app.include_router(consentimientos.router_textos)

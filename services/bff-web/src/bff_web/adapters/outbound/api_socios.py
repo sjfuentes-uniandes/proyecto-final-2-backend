@@ -5,7 +5,9 @@ from solventa_common.correlation import cliente_async
 
 
 class ErrorApiSocios(Exception):
-    def __init__(self, status: int, codigo: str | None, mensaje: str | None, detalles: dict[str, Any]) -> None:
+    def __init__(
+        self, status: int, codigo: str | None, mensaje: str | None, detalles: dict[str, Any]
+    ) -> None:
         super().__init__(f"api-socios respondió {status}")
         self.status = status
         self.codigo = codigo
@@ -14,23 +16,35 @@ class ErrorApiSocios(Exception):
 
 
 class ApiSocios:
-    def __init__(self, url: str, transporte: httpx.AsyncBaseTransport | None = None, timeout: float = 10.0) -> None:
+    def __init__(
+        self, url: str, transporte: httpx.AsyncBaseTransport | None = None, timeout: float = 10.0
+    ) -> None:
         self.url = url.rstrip("/")
         self.transporte = transporte
         self.timeout = timeout
 
-    async def _llamar(self, metodo: str, ruta: str, administrador: str | None, cuerpo: Any = None) -> Any:
+    async def _llamar(
+        self, metodo: str, ruta: str, administrador: str | None, cuerpo: Any = None
+    ) -> Any:
         encabezados = {"X-Authenticated-Sub": administrador} if administrador else {}
-        async with cliente_async(base_url=self.url, timeout=self.timeout, transport=self.transporte) as cliente:
-            respuesta = await cliente.request(metodo, f"/admin/socios{ruta}", json=cuerpo, headers=encabezados)
+        async with cliente_async(
+            base_url=self.url, timeout=self.timeout, transport=self.transporte
+        ) as cliente:
+            respuesta = await cliente.request(
+                metodo, f"/admin/socios{ruta}", json=cuerpo, headers=encabezados
+            )
         if respuesta.status_code >= 400:
             try:
                 cuerpo = respuesta.json()
             except ValueError:
                 cuerpo = {}
             cuerpo = cuerpo if isinstance(cuerpo, dict) else {}
-            raise ErrorApiSocios(respuesta.status_code, cuerpo.get("codigo"), cuerpo.get("mensaje"),
-                                 cuerpo.get("detalles") or {})
+            raise ErrorApiSocios(
+                respuesta.status_code,
+                cuerpo.get("codigo"),
+                cuerpo.get("mensaje"),
+                cuerpo.get("detalles") or {},
+            )
         return respuesta.json()
 
     async def listar(self, administrador: str | None) -> list[dict[str, Any]]:
@@ -48,7 +62,9 @@ class ApiSocios:
     async def planes(self, administrador: str | None) -> list[dict[str, Any]]:
         return await self._llamar("GET", "/planes", administrador)
 
-    async def cambiar_plan(self, socio_id: str, plan: str, administrador: str | None) -> dict[str, Any]:
+    async def cambiar_plan(
+        self, socio_id: str, plan: str, administrador: str | None
+    ) -> dict[str, Any]:
         return await self._llamar("PUT", f"/{socio_id}/plan", administrador, {"plan": plan})
 
     async def consumo(self, socio_id: str, administrador: str | None) -> dict[str, Any]:

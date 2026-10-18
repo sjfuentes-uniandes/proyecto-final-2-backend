@@ -1049,6 +1049,217 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/clientes:
+    post:
+      tags:
+      - clientes
+      summary: Da de alta al cliente en estado PENDIENTE
+      description: El mismo documento devuelve el mismo cliente, sin duplicarlo (paso
+        1 de la cotización).
+      operationId: crear_cliente_v1_clientes_post
+      parameters:
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudAltaCliente'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo asesores o no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '200':
+          description: 'El documento ya tenía cliente: se reutiliza'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/clientes/{clienteId}:
+    get:
+      tags:
+      - clientes
+      summary: Estado de la identidad y traza de la verificación del cliente
+      operationId: consultar_cliente_v1_clientes__clienteId__get
+      parameters:
+      - name: clienteId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Clienteid
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo asesores o no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: CLIENTE_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/clientes/{clienteId}/identidad/verificaciones:
+    post:
+      tags:
+      - clientes
+      summary: Pide al proveedor que verifique la identidad del cliente
+      description: Un cliente ya VERIFICADO responde su estado sin consultar de nuevo
+        al proveedor.
+      operationId: verificar_cliente_v1_clientes__clienteId__identidad_verificaciones_post
+      parameters:
+      - name: clienteId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Clienteid
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo asesores o no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: CLIENTE_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: CLIENTE_SIN_DOCUMENTO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'DEPENDENCIA_NO_DISPONIBLE: el proveedor no respondió; no es
+            un rechazo y se puede reintentar (detalles.estado); o SERVICIO_NO_DISPONIBLE'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -1185,6 +1396,40 @@ components:
       - comercio
       - otro
       title: CanalVenta
+    ClienteDto:
+      properties:
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        estado:
+          $ref: '#/components/schemas/EstadoIdentidad'
+        verificadoEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Verificadoen
+        proveedor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Proveedor
+        referencia:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Referencia
+      type: object
+      required:
+      - clienteId
+      - estado
+      - verificadoEn
+      - proveedor
+      - referencia
+      title: ClienteDto
+      description: Estado del cliente y traza de la verificación. No incluye PII ni
+        el motivo del proveedor.
     ComparacionPerfiles:
       properties:
         anterior:
@@ -1417,6 +1662,13 @@ components:
       - NO_DISPONIBLE
       - RESPUESTA_INVALIDA
       title: EstadoFuente
+    EstadoIdentidad:
+      type: string
+      enum:
+      - VERIFICADO
+      - PENDIENTE
+      - RECHAZADO
+      title: EstadoIdentidad
     EstadoPerfil:
       type: string
       enum:
@@ -1923,6 +2175,32 @@ components:
       - clientId
       - creado
       title: SocioRespuesta
+    SolicitudAltaCliente:
+      properties:
+        tipoDocumento:
+          type: string
+          pattern: ^[A-Z]{2,3}$
+          title: Tipodocumento
+        numeroDocumento:
+          type: string
+          pattern: ^[A-Za-z0-9]{3,20}$
+          title: Numerodocumento
+        nombreCompleto:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Nombrecompleto
+        fechaNacimiento:
+          type: string
+          format: date
+          title: Fechanacimiento
+      type: object
+      required:
+      - tipoDocumento
+      - numeroDocumento
+      - nombreCompleto
+      - fechaNacimiento
+      title: SolicitudAltaCliente
     SolicitudPerfil:
       properties:
         clienteId:

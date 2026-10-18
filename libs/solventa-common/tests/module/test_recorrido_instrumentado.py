@@ -83,13 +83,21 @@ def _app_socios(transporte_cotizacion: httpx.BaseTransport, con_propagacion: boo
         with operacion("solicitar_cotizacion"):
             logging.getLogger("api_socios").info(
                 "solicitud recibida",
-                extra={"socio": "SOC-000114", "credenciales": {"client_secret": SECRETO}, "payload": datos},
+                extra={
+                    "socio": "SOC-000114",
+                    "credenciales": {"client_secret": SECRETO},
+                    "payload": datos,
+                },
             )
             fabrica = correlation.cliente if con_propagacion else httpx.Client
-            with fabrica(transport=transporte_cotizacion, base_url="http://cotizacion:8080") as cliente:
+            with fabrica(
+                transport=transporte_cotizacion, base_url="http://cotizacion:8080"
+            ) as cliente:
                 # instrumentar() parchea httpx.HTTPTransport, el transporte real entre servicios;
                 # aquí el transporte es el TestClient de cotización y se instrumenta el cliente.
-                HTTPXClientInstrumentor.instrument_client(cliente, tracer_provider=telemetry._estado.tracer_provider)
+                HTTPXClientInstrumentor.instrument_client(
+                    cliente, tracer_provider=telemetry._estado.tracer_provider
+                )
                 respuesta = cliente.post("/cotizaciones", json={"producto": "vida"})
             return respuesta.json()
 
@@ -97,7 +105,9 @@ def _app_socios(transporte_cotizacion: httpx.BaseTransport, con_propagacion: boo
 
 
 @pytest.fixture
-def recorrido(monkeypatch: pytest.MonkeyPatch, capturar_logs: Callable[..., io.StringIO]) -> Iterator[Callable[..., Recorrido]]:
+def recorrido(
+    monkeypatch: pytest.MonkeyPatch, capturar_logs: Callable[..., io.StringIO]
+) -> Iterator[Callable[..., Recorrido]]:
     monkeypatch.setenv("ENVIRONMENT", "int")
     monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
@@ -105,7 +115,9 @@ def recorrido(monkeypatch: pytest.MonkeyPatch, capturar_logs: Callable[..., io.S
     def crear(con_propagacion: bool = True) -> Recorrido:
         recibidos: list[dict[str, Any]] = []
         spans_cotizacion = InMemorySpanExporter()
-        cotizacion = instrumentar(_app_cotizacion(recibidos), SettingsCotizacion(), span_exporter=spans_cotizacion)
+        cotizacion = instrumentar(
+            _app_cotizacion(recibidos), SettingsCotizacion(), span_exporter=spans_cotizacion
+        )
         transporte = TransporteAislado(TestClient(cotizacion)._transport)
 
         spans_socios, lector = InMemorySpanExporter(), InMemoryMetricReader()
@@ -116,7 +128,9 @@ def recorrido(monkeypatch: pytest.MonkeyPatch, capturar_logs: Callable[..., io.S
             metric_readers=[lector],
         )
         logs = capturar_logs("api-socios", "int")
-        return Recorrido(TestClient(socios), spans_socios, spans_cotizacion, lector, logs, recibidos)
+        return Recorrido(
+            TestClient(socios), spans_socios, spans_cotizacion, lector, logs, recibidos
+        )
 
     yield crear
 
@@ -149,9 +163,16 @@ def test_log_metrica_y_traza_comparten_operacion_servicio_ambiente_y_correlacion
     assert respuesta.headers["X-Correlation-Id"] == "prueba-123"  # AC2
 
     # Log de la operación.
-    log = next(linea for linea in r.lineas() if linea["operation"] == "solicitar_cotizacion" and linea["result"])
+    log = next(
+        linea
+        for linea in r.lineas()
+        if linea["operation"] == "solicitar_cotizacion" and linea["result"]
+    )
     assert (log["service"], log["environment"], log["correlation_id"], log["result"]) == (
-        "api-socios", "int", "prueba-123", "ok",
+        "api-socios",
+        "int",
+        "prueba-123",
+        "ok",
     )
     assert log["duration_ms"] > 0
 
@@ -174,17 +195,23 @@ def test_log_metrica_y_traza_comparten_operacion_servicio_ambiente_y_correlacion
 
 def test_httpx_conserva_el_id_y_la_traza_en_el_segundo_servicio(recorrido) -> None:
     r = recorrido()
-    respuesta = r.socios.post("/socios/cotizaciones", json={}, headers={"X-Correlation-Id": "prueba-123"})
+    respuesta = r.socios.post(
+        "/socios/cotizaciones", json={}, headers={"X-Correlation-Id": "prueba-123"}
+    )
     assert respuesta.json()["cotizacion"] == "COT-1"
     assert r.recibido_por_cotizacion == [{"correlation_id": "prueba-123"}]
 
     servidor_socios = _servidor(r.spans_socios.get_finished_spans())
     servidor_cotizacion = _servidor(r.spans_cotizacion.get_finished_spans())
-    cliente_httpx = next(s for s in r.spans_socios.get_finished_spans() if s.kind == SpanKind.CLIENT)
+    cliente_httpx = next(
+        s for s in r.spans_socios.get_finished_spans() if s.kind == SpanKind.CLIENT
+    )
     # Misma traza en ambos componentes y el servidor remoto cuelga del span del cliente httpx.
     assert servidor_cotizacion.context.trace_id == servidor_socios.context.trace_id
     assert servidor_cotizacion.parent.span_id == cliente_httpx.context.span_id
-    assert {s.attributes["correlation_id"] for s in r.spans_cotizacion.get_finished_spans()} == {"prueba-123"}
+    assert {s.attributes["correlation_id"] for s in r.spans_cotizacion.get_finished_spans()} == {
+        "prueba-123"
+    }
     assert cliente_httpx.attributes["correlation_id"] == "prueba-123"
 
 
@@ -201,7 +228,11 @@ def test_sin_id_la_entrada_lo_genera_y_todo_el_recorrido_lo_usa(recorrido) -> No
 
 def test_id_de_api_gateway_cuando_el_socio_no_envia_uno(recorrido) -> None:
     r = recorrido()
-    respuesta = r.socios.post("/socios/cotizaciones", json={}, headers={"X-Request-Id": "c6af9ac6-7b61-11e6-9a41-93e8deadbeef"})
+    respuesta = r.socios.post(
+        "/socios/cotizaciones",
+        json={},
+        headers={"X-Request-Id": "c6af9ac6-7b61-11e6-9a41-93e8deadbeef"},
+    )
     assert respuesta.headers["X-Correlation-Id"] == "c6af9ac6-7b61-11e6-9a41-93e8deadbeef"
     assert r.recibido_por_cotizacion == [{"correlation_id": "c6af9ac6-7b61-11e6-9a41-93e8deadbeef"}]
 
@@ -217,17 +248,38 @@ def test_seguridad_logs_y_trazas_sin_secretos_ni_payload_financiero(recorrido) -
     r = recorrido()
     r.socios.post(
         "/socios/cotizaciones",
-        json={"ingresos": 9_500_000, "obligaciones": [{"saldo": 4_400_000}], "selfie": "iVBORw0KGgo" * 50},
-        headers={"X-Correlation-Id": "prueba-123", "Authorization": f"Bearer {TOKEN}", "x-api-key": SECRETO},
+        json={
+            "ingresos": 9_500_000,
+            "obligaciones": [{"saldo": 4_400_000}],
+            "selfie": "iVBORw0KGgo" * 50,
+        },
+        headers={
+            "X-Correlation-Id": "prueba-123",
+            "Authorization": f"Bearer {TOKEN}",
+            "x-api-key": SECRETO,
+        },
     )
     texto_logs = r.logs.getvalue()
     texto_spans = json.dumps(
-        [{"name": s.name, "attributes": dict(s.attributes), "events": [dict(e.attributes or {}) for e in s.events]}
-         for s in (*r.spans_socios.get_finished_spans(), *r.spans_cotizacion.get_finished_spans())],
+        [
+            {
+                "name": s.name,
+                "attributes": dict(s.attributes),
+                "events": [dict(e.attributes or {}) for e in s.events],
+            }
+            for s in (
+                *r.spans_socios.get_finished_spans(),
+                *r.spans_cotizacion.get_finished_spans(),
+            )
+        ],
         default=str,
     )
     for prohibido in (SECRETO, TOKEN, "9500000", "4400000", "iVBORw0KGgo"):
         assert prohibido not in texto_logs, prohibido
         assert prohibido not in texto_spans, prohibido
     payload = next(linea["payload"] for linea in r.lineas() if "payload" in linea)
-    assert payload == {"ingresos": "[REDACTADO]", "obligaciones": "[REDACTADO]", "selfie": "[REDACTADO]"}
+    assert payload == {
+        "ingresos": "[REDACTADO]",
+        "obligaciones": "[REDACTADO]",
+        "selfie": "[REDACTADO]",
+    }

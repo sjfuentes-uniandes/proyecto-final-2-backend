@@ -20,7 +20,7 @@ from clientes.domain.consentimientos.modelos import (
     RegistroIdempotencia,
     esta_vigente,
 )
-from clientes.domain.identidad.modelos import Cliente, RegistroYaVinculado
+from clientes.domain.identidad.modelos import Cliente, DatosCliente, RegistroYaVinculado
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -71,6 +71,28 @@ class RepositorioMemoria:
 
     def guardar(self, cliente: Cliente) -> None:
         self.clientes[cliente.id] = cliente
+
+    def asegurar_por_documento(self, datos: DatosCliente) -> tuple[Cliente, bool]:
+        existente = next(
+            (
+                c
+                for c in self.clientes.values()
+                if (c.tipo_documento, c.numero_documento)
+                == (datos.tipo_documento, datos.numero_documento)
+            ),
+            None,
+        )
+        if existente is not None:
+            return existente, False
+        nuevo = Cliente(
+            id=uuid4(),
+            tipo_documento=datos.tipo_documento,
+            numero_documento=datos.numero_documento,
+            nombre_completo=datos.nombre_completo,
+            fecha_nacimiento=datos.fecha_nacimiento,
+        )
+        self.clientes[nuevo.id] = nuevo
+        return nuevo, True
 
 
 @pytest.fixture

@@ -1,0 +1,32 @@
+{
+  "name": "kyc documento aprobado (nominal)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/kyc/v1/verificaciones/documento",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.numeroDocumento",
+          "equalTo": "1020456789"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "resultado": "APROBADO",
+      "motivo": null,
+      "referencia": "kyc-doc-ref-0001"
+    },
+    "fixedDelayMilliseconds": 50
+  }
+}

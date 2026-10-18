@@ -69,15 +69,23 @@ class CorrelacionMiddleware:
         for clave, valor in scope.get("headers", []):
             if clave in (self._correlation_key, self._request_id_key):
                 recibidos.setdefault(clave, valor.decode("latin-1"))
-        correlation_id = resolver(recibidos.get(self._correlation_key), recibidos.get(self._request_id_key))
+        correlation_id = resolver(
+            recibidos.get(self._correlation_key), recibidos.get(self._request_id_key)
+        )
         # Si ya hay un span activo (middleware montado dentro del de OpenTelemetry) se anota;
         # con instrumentar() lo hace el procesador de spans al crearlos.
         trace.get_current_span().set_attribute(ATRIBUTO_CORRELACION, correlation_id)
 
         async def enviar(message: Message) -> None:
             if message["type"] == "http.response.start":
-                headers = [(k, v) for k, v in message.get("headers", []) if k.lower() != self._correlation_key]
-                headers.append((self.correlation_header.encode("latin-1"), correlation_id.encode("latin-1")))
+                headers = [
+                    (k, v)
+                    for k, v in message.get("headers", [])
+                    if k.lower() != self._correlation_key
+                ]
+                headers.append(
+                    (self.correlation_header.encode("latin-1"), correlation_id.encode("latin-1"))
+                )
                 message["headers"] = headers
             await send(message)
 
@@ -88,7 +96,9 @@ class CorrelacionMiddleware:
             restablecer(token)
 
 
-def encabezados_salientes(headers: MutableMapping[str, str] | None = None) -> MutableMapping[str, str]:
+def encabezados_salientes(
+    headers: MutableMapping[str, str] | None = None,
+) -> MutableMapping[str, str]:
     """Agrega el correlationId y el contexto de traza (traceparent, X-Amzn-Trace-Id)."""
     headers = {} if headers is None else headers
     correlation_id = obtener()
