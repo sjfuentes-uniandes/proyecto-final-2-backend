@@ -29,3 +29,19 @@ lleva las pruebas de módulo a `clientes` real.
 | C17 | `…11` | VERIFICADO | PERMITIDO_PARCIAL, solo `DA_REGISTROS_PUBLICOS` |
 
 `clienteId` completo: `00000000-0000-4000-8000-0000000000NN`.
+
+## Escenarios (HU-W31, PR 3.4)
+
+`escenarios/` tiene mapeos de WireMock con escenario para C01 (`…01`). Solo responden cuando una
+prueba los activa con `WireMock.activar_escenario(nombre, "fase-a")`: en el estado inicial
+(`Started`) no coinciden y C01 responde como siempre. Tienen prioridad 1 (la de C01 es 5). La
+primera verificación (fase A) pasa el escenario a `comprobacion-final`.
+
+| Escenario | Fase A | Comprobación final |
+| --- | --- | --- |
+| `revocacion-en-vuelo-c01` | igual que C01 (PERMITIDO, 4 alcances) | RECHAZADO, `REVOCADO` (el cuerpo de C08) |
+| `caida-al-comprobar-c01` | igual que C01 | 500 sin cuerpo (falla técnica, fuera de contrato a propósito) |
+
+`tests/contract/test_dobles_clientes.py` comprueba que cada respuesta 200 cumpla `clientes.yaml`
+y los DTO, y que la fase A sea idéntica a la de C01. `tests/module/conftest.py` los carga después
+del doble y `reiniciar_escenarios` los desactiva antes de cada prueba.

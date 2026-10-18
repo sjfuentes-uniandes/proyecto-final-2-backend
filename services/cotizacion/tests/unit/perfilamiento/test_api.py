@@ -20,7 +20,11 @@ from cotizacion.domain.perfilamiento.errores import (
     ModeloNoDisponible,
     PerfilNoEncontrado,
 )
-from cotizacion.domain.perfilamiento.modelos import EstadoPerfil, ResultadoEvaluacion
+from cotizacion.domain.perfilamiento.modelos import (
+    DecisionConsentimiento,
+    EstadoPerfil,
+    ResultadoEvaluacion,
+)
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from solventa_common.errors import registrar_manejadores
@@ -429,3 +433,77 @@ def test_recalculo_valida_encabezados_y_ruta(
     encabezados = {k: v for k, v in {**ASESOR, **cambios}.items() if v is not None}
     assert api.post(ruta, headers=encabezados).status_code == estado
     assert app.state.recalcular_perfil.llamadas == []
+
+
+# --- HU-W31 · comprobación final y marca de revocación (PR 3.4) --------------------------
+
+
+def _revocado(perfil: Any, verificacion_de: Any, causa: str = "REVOCADO") -> Any:
+    return replace(
+        perfil,
+        comprobacion_final=verificacion_de(DecisionConsentimiento.RECHAZADO, frozenset(), causa),
+    )
+
+
+def test_perfil_sin_comprobacion_responde_los_campos_opcionales_por_omision(
+    api: TestClient,
+) -> None:
+    cuerpo = api.post("/v1/perfiles", json=C01, headers=ASESOR).json()
+    assert (cuerpo["comprobacionFinal"], cuerpo["revocadoDurantePerfilamiento"]) == (None, False)
+
+
+def test_perfil_comprobado_y_vigente_no_lleva_la_marca(
+    api: TestClient, app: FastAPI, perfil_c01: Any, verificacion_de: Any
+) -> None:
+    app.state.crear_perfil.respuesta = (
+        replace(perfil_c01, comprobacion_final=verificacion_de()),
+        True,
+    )
+    cuerpo = api.post("/v1/perfiles", json=C01, headers=ASESOR).json()
+    assert cuerpo["comprobacionFinal"] == {
+        "decision": "PERMITIDO",
+        "causa": None,
+        "vigenteHasta": "2027-10-01T00:00:00Z",
+    }
+    assert cuerpo["revocadoDurantePerfilamiento"] is False
+
+
+@pytest.mark.parametrize("causa", ["REVOCADO", "VENCIDO"])
+def test_perfil_revocado_durante_el_perfilamiento_se_entrega_marcado(
+    api: TestClient, app: FastAPI, perfil_c01: Any, verificacion_de: Any, causa: str
+) -> None:
+    marcado = _revocado(perfil_c01, verificacion_de, causa)
+    app.state.crear_perfil.respuesta = (marcado, True)
+    respuesta = api.post("/v1/perfiles", json=C01, headers=ASESOR)
+    assert respuesta.status_code == 201
+    cuerpo = respuesta.json()
+    assert cuerpo["revocadoDurantePerfilamiento"] is True
+    assert cuerpo["comprobacionFinal"] == {
+        "decision": "RECHAZADO",
+        "causa": causa,
+        "vigenteHasta": None,
+    }
+    # La fase A no cambia y lo obtenido se conserva (ADR 0004); sin insumos ni declarados.
+    assert cuerpo["consentimiento"]["decision"] == "PERMITIDO"
+    assert cuerpo["fuentesConsultadas"] == 4
+    assert not {"insumos", "datosDeclarados", "hashModelo"} & set(cuerpo)
+    for centinela in ("1800000", "6500000", "180000000", "1990-04-18"):
+        assert centinela not in respuesta.text
+
+
+def test_la_marca_se_conserva_al_consultar_el_perfil(
+    api: TestClient, app: FastAPI, perfil_c01: Any, verificacion_de: Any
+) -> None:
+    marcado = _revocado(perfil_c01, verificacion_de)
+    app.state.perfiles.perfiles[marcado.id] = marcado
+    cuerpo = api.get(f"/v1/perfiles/{marcado.id}", headers=ASESOR).json()
+    assert cuerpo["revocadoDurantePerfilamiento"] is True
+    assert cuerpo["comprobacionFinal"]["causa"] == "REVOCADO"
+
+
+def test_falla_cerrada_de_la_comprobacion_responde_503(api: TestClient, app: FastAPI) -> None:
+    app.state.crear_perfil.respuesta = DependenciaNoDisponible("clientes.consentimiento")
+    respuesta = api.post("/v1/perfiles", json=C01, headers=ASESOR)
+    assert respuesta.status_code == 503
+    assert respuesta.json()["codigo"] == "DEPENDENCIA_NO_DISPONIBLE"
+    assert respuesta.json()["detalles"] == {"dependencia": "clientes.consentimiento"}

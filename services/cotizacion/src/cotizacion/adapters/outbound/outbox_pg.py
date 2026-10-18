@@ -13,6 +13,7 @@ from psycopg.types.json import Jsonb
 from cotizacion.adapters.outbound.eventos import (
     DATOS_CONSENTIDOS_CONSULTADOS,
     PERFIL_RIESGO_CALCULADO,
+    ComprobacionFinalEvento,
     DatoRequeridoEvento,
     DatosConsentidosConsultadosV1,
     FactorEvento,
@@ -35,6 +36,7 @@ _INSERTAR = (
 def eventos_de(perfil: Perfil, correlation_id: str) -> list[SobreEvento[Any]]:
     """PerfilRiesgoCalculado y DatosConsentidosConsultados del perfil, sin valores financieros."""
     resultado = perfil.resultado
+    comprobacion = perfil.comprobacion_final
     calculado = PerfilRiesgoCalculadoV1(
         perfil_id=perfil.id,
         cliente_id=perfil.cliente_id,
@@ -75,6 +77,10 @@ def eventos_de(perfil: Perfil, correlation_id: str) -> list[SobreEvento[Any]]:
             )
             for r in perfil.fuentes
         ],
+        comprobacion_final=None
+        if comprobacion is None
+        else ComprobacionFinalEvento(decision=comprobacion.decision, causa=comprobacion.causa),
+        revocado_durante_perfilamiento=perfil.revocado_durante_perfilamiento,
     )
     return [
         SobreEvento[PerfilRiesgoCalculadoV1](

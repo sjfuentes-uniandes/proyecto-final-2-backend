@@ -154,3 +154,12 @@ def test_contrato_de_perfiles() -> None:
         "anterior",
         "actual",
     ]
+
+
+def test_hu_w31_la_marca_de_revocacion_es_opcional_en_el_bff() -> None:
+    """El BFF transmite la marca de cotizacion como campos opcionales (aditivo para la web)."""
+    perfil = app.openapi()["components"]["schemas"]["PerfilRespuesta"]
+    nuevos = {"comprobacionFinal", "revocadoDurantePerfilamiento"}
+    assert nuevos <= set(perfil["properties"])
+    assert not nuevos & set(perfil["required"])
+    assert len(perfil["required"]) == 20

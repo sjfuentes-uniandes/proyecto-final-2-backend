@@ -8,6 +8,7 @@ Nombres de `Operation` en `OperationDuration` y `OperationErrors` (`solventa_com
 | `perfilamiento.recalculo` | `cotizacion` | Caso de uso `recalcular_perfil` | Igual que `perfilamiento` |
 | `perfilamiento.dependencia.clientes.identidad` | `cotizacion` | Llamada a la identidad del cliente | `ok`, `timeout`, `error` |
 | `perfilamiento.dependencia.clientes.consentimiento` | `cotizacion` | Verificación del consentimiento | `ok`, `timeout`, `error` |
+| `perfilamiento.comprobacion_final` | `cotizacion` | Comprobación final del consentimiento tras consultar las fuentes (HU-W31); un `timeout` o `error` responde `DEPENDENCIA_NO_DISPONIBLE` (`clientes.consentimiento`) | `ok`, `timeout`, `error` |
 | `perfilamiento.dependencia.catalogo.modelo` | `cotizacion` | Consulta del modelo de riesgo | `ok`, `timeout`, `error` |
 | `perfilamiento.dependencia.fuente.<FUENTE>` | `cotizacion` | Rama de cada fuente | `ok`, `timeout`, `error` |
 | `consulta.<FUENTE>` | `adaptador-datos` | Caso de uso `consultar_fuente` | `ok`, `timeout`, `error`, `rechazado` |

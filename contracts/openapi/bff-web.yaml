@@ -1964,6 +1964,18 @@ components:
             format: uuid
           - type: 'null'
           title: Perfilanteriorid
+        comprobacionFinal:
+          anyOf:
+          - $ref: '#/components/schemas/ConsentimientoDto'
+          - type: 'null'
+          description: Comprobación del consentimiento al terminar la consulta de
+            las fuentes
+        revocadoDurantePerfilamiento:
+          type: boolean
+          title: Revocadoduranteperfilamiento
+          description: El consentimiento dejó de estar vigente mientras se consultaban
+            las fuentes; lo obtenido se conserva (causa en comprobacionFinal.causa)
+          default: false
       type: object
       required:
       - id

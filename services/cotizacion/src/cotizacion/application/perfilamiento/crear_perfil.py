@@ -2,6 +2,10 @@
 
 No retiene conexiones de base mientras espera a otros servicios (regla 8): el repositorio
 solo se usa en la consulta de idempotencia y al guardar.
+
+Tras la fase B se vuelve a verificar el consentimiento (comprobación final, ADR 0011 §3, HU-W31):
+si dejó de estar vigente, lo obtenido se conserva y el perfil queda marcado (ADR 0004); un fallo
+técnico de `clientes` falla cerrado y no se guarda nada.
 """
 
 import asyncio
@@ -82,6 +86,10 @@ _RESULTADO_FUENTE = {
 }
 EDAD_MAXIMA = 120
 CAMPO_FECHA_NACIMIENTO = "datosDeclarados.fechaNacimiento"
+DEPENDENCIA_CONSENTIMIENTO = "clientes.consentimiento"
+COMPROBACION_FINAL = "clientes.comprobacion_final"
+# Paso propio del perfilamiento, no una dependencia más de las fases A y B.
+OPERACION_COMPROBACION_FINAL = "perfilamiento.comprobacion_final"
 
 T = TypeVar("T")
 PlanificadorFuentes = Callable[[ModeloRiesgo, VerificacionConsentimiento], PlanFuentes]
@@ -151,9 +159,12 @@ class CrearPerfil:
         repo: RepositorioPerfiles,
         reloj: Reloj,
         config: ConfigPerfilamiento,
+        comprobacion: PuertoConsentimiento | None = None,
     ) -> None:
+        """`comprobacion` atiende la comprobación final; por omisión, el puerto de la fase A."""
         self._identidad = identidad
         self._consentimiento = consentimiento
+        self._comprobacion = comprobacion or consentimiento
         self._modelos = modelos
         self._plan_fuentes = plan_fuentes
         self._ejecutor = ejecutor
@@ -187,6 +198,8 @@ class CrearPerfil:
         verificacion, modelo = await self._fase_a(cmd, ahora, dependencias)
         plan = self._plan_fuentes(modelo, verificacion)
         resultados = await self._fase_b(cmd, plan, verificacion, dependencias)
+        comprobaciones = _Dependencias()
+        comprobacion = await self._comprobacion_final(cmd, plan, comprobaciones)
         fuentes = _todas_las_fuentes(modelo, plan, resultados)
 
         variables = {
@@ -220,6 +233,7 @@ class CrearPerfil:
             duracion_ms=round((time.perf_counter() - inicio) * 1000),
             correlation_id=cmd.correlation_id,
             actor_id=cmd.actor_id,
+            comprobacion_final=comprobacion,
         )
         try:
             await self._repo.guardar(perfil)
@@ -235,6 +249,8 @@ class CrearPerfil:
                 "perfil_id": str(perfil.id),
                 "estado": perfil.resultado.estado.value,
                 "dependencias": dependencias.registros,
+                "comprobacion_final": next(iter(comprobaciones.registros), None),
+                "revocado_durante_perfilamiento": perfil.revocado_durante_perfilamiento,
             },
         )
         return perfil, True
@@ -252,7 +268,7 @@ class CrearPerfil:
         llamadas: Sequence[tuple[str, Callable[[], Awaitable[Any]]]] = (
             ("clientes.identidad", lambda: self._identidad.estado(cmd.cliente_id)),
             (
-                "clientes.consentimiento",
+                DEPENDENCIA_CONSENTIMIENTO,
                 lambda: self._consentimiento.verificar(
                     cmd.cliente_id, PROPOSITO_PERFILAMIENTO, list(Fuente)
                 ),
@@ -285,12 +301,16 @@ class CrearPerfil:
         return verificacion, modelo
 
     async def _medir(
-        self, nombre: str, llamada: Callable[[], Awaitable[T]], dependencias: _Dependencias
+        self,
+        nombre: str,
+        llamada: Callable[[], Awaitable[T]],
+        dependencias: _Dependencias,
+        nombre_operacion: str | None = None,
     ) -> T:
         inicio = time.perf_counter()
         resultado = RESULTADO_OK
         try:
-            with operacion(f"perfilamiento.dependencia.{nombre}") as op:
+            with operacion(nombre_operacion or f"perfilamiento.dependencia.{nombre}") as op:
                 try:
                     valor = await asyncio.wait_for(
                         llamada(), self.config.dependencia_timeout_ms / 1000
@@ -329,6 +349,29 @@ class CrearPerfil:
             resultado = _RESULTADO_FUENTE.get(r.estado, RESULTADO_ERROR)
             dependencias.agregar(f"fuente.{r.fuente.value}", r.duracion_ms or 0, resultado)
         return resultados
+
+    async def _comprobacion_final(
+        self, cmd: ComandoPerfil, plan: PlanFuentes, comprobaciones: _Dependencias
+    ) -> VerificacionConsentimiento | None:
+        """Vuelve a verificar los alcances consultados, solo para dejar constancia (ADR 0011 §3).
+
+        Sin fuentes consultadas no hay nada que comprobar. No cancela ni repite consultas. Un
+        timeout o una falla técnica de `clientes` falla cerrado: el perfil no se entrega.
+        """
+        if not plan.a_consultar:
+            return None
+        alcances = [s.fuente for s in plan.a_consultar]
+        try:
+            return await self._medir(
+                COMPROBACION_FINAL,
+                lambda: self._comprobacion.verificar(
+                    cmd.cliente_id, PROPOSITO_PERFILAMIENTO, alcances
+                ),
+                comprobaciones,
+                OPERACION_COMPROBACION_FINAL,
+            )
+        except (TimeoutError, DependenciaNoDisponible) as error:
+            raise DependenciaNoDisponible(DEPENDENCIA_CONSENTIMIENTO) from error
 
 
 def _todas_las_fuentes(

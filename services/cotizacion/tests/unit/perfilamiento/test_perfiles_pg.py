@@ -327,3 +327,27 @@ def test_columnas_del_linaje_coinciden_con_las_filas(perfil_c01: Perfil) -> None
     assert set(filas_linaje(perfil_c01)[0]) == set(COLUMNAS_LINAJE)
     assert set(fila_perfil(perfil_c01)) == set(COLUMNAS_PERFIL)
     assert perfil_c01.calculado_en == datetime(2026, 10, 15, 15, 0, 0, 212000, tzinfo=UTC)
+
+
+@pytest.mark.parametrize("causa", [None, "REVOCADO"], ids=["vigente", "revocado"])
+def test_ida_y_vuelta_con_comprobacion_final(
+    perfil_c01: Perfil, verificacion_de: Any, causa: str | None
+) -> None:
+    decision = DecisionConsentimiento.RECHAZADO if causa else DecisionConsentimiento.PERMITIDO
+    perfil = replace(perfil_c01, comprobacion_final=verificacion_de(decision, causa=causa))
+    assert _ida_y_vuelta(perfil) == perfil
+    assert _ida_y_vuelta(perfil).revocado_durante_perfilamiento is (causa is not None)
+    fila = fila_perfil(perfil)["comprobacion_final"].obj
+    assert set(fila) == {
+        "decision",
+        "consentimiento_id",
+        "vigente_hasta",
+        "alcances_permitidos",
+        "causa",
+    }
+    assert (fila["decision"], fila["causa"]) == (decision.value, causa)
+
+
+def test_sin_comprobacion_final_la_columna_es_nula(perfil_c01: Perfil) -> None:
+    assert fila_perfil(perfil_c01)["comprobacion_final"] is None
+    assert _ida_y_vuelta(perfil_c01).comprobacion_final is None

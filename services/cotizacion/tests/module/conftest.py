@@ -3,7 +3,8 @@
 - PostgreSQL 16 efímero con las bases `catalogo` y `cotizacion`, migradas con su `migrar`.
 - WireMock 3.9.2 con los mapeos versionados del simulador (aliados) y, cargado por su API de
   administración, el doble de `clientes` de estas pruebas (`tests/dobles/clientes/`, C01–C19;
-  se coteja con `contracts/openapi/clientes.yaml` en `tests/contract/test_dobles_clientes.py`).
+  se coteja con `contracts/openapi/clientes.yaml` en `tests/contract/test_dobles_clientes.py`) y
+  sus escenarios (`escenarios/`, HU-W31), que solo responden cuando una prueba los activa.
 - Las apps reales de catalogo y adaptador-datos, servidas con uvicorn en hilos.
 - cotizacion con TestClient, apuntada a todo lo anterior y sin caché del modelo.
 - psycopg asíncrono no corre sobre el ProactorEventLoop de Windows: los servidores en hilo y el
@@ -131,6 +132,10 @@ class WireMock:
     def reiniciar_escenarios(self) -> None:
         self._admin.post("/scenarios/reset").raise_for_status()
 
+    def activar_escenario(self, nombre: str, estado: str) -> None:
+        """Lleva un escenario del doble a `estado`; `reiniciar_escenarios` lo desactiva."""
+        self._admin.put(f"/scenarios/{nombre}/state", json={"state": estado}).raise_for_status()
+
     def cargar(self, carpeta: Path) -> None:
         """Agrega los mapeos de la carpeta a los que el contenedor leyó al arrancar."""
         for ruta in sorted(carpeta.glob("*.json")):
@@ -166,6 +171,7 @@ def wiremock() -> Iterator[WireMock]:
         )
         servidor.esperar_listo()
         servidor.cargar(DOBLE_CLIENTES)
+        servidor.cargar(DOBLE_CLIENTES / "escenarios")
         yield servidor
 
 

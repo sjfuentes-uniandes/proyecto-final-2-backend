@@ -43,6 +43,7 @@ from cotizacion.domain.perfilamiento.modelos import (
     NivelRiesgo,
     Perfil,
     TipoFuente,
+    VerificacionConsentimiento,
 )
 
 ROL_ASESOR = "ASESOR"
@@ -162,6 +163,19 @@ class PerfilRespuesta(_Dto):
     duracion_ms: int
     presupuesto_ms: int
     perfil_anterior_id: UUID | None
+    # HU-W31 (aditivos, opcionales): comprobación final tras consultar las fuentes. Null si no
+    # se consultó ninguna fuente o si el perfil es anterior a la comprobación.
+    comprobacion_final: ConsentimientoDto | None = Field(
+        default=None,
+        description="Comprobación del consentimiento al terminar la consulta de las fuentes",
+    )
+    revocado_durante_perfilamiento: bool = Field(
+        default=False,
+        description=(
+            "El consentimiento dejó de estar vigente mientras se consultaban las fuentes; "
+            "lo obtenido se conserva (causa en comprobacionFinal.causa)"
+        ),
+    )
 
 
 class ResumenPerfil(_Dto):
@@ -192,9 +206,20 @@ def _utc(instante: datetime | None) -> datetime | None:
     return None if instante is None else instante.astimezone(UTC)
 
 
+def _consentimiento_dto(
+    verificacion: VerificacionConsentimiento | None,
+) -> ConsentimientoDto | None:
+    if verificacion is None:
+        return None
+    return ConsentimientoDto(
+        decision=verificacion.decision,
+        causa=verificacion.causa,
+        vigente_hasta=_utc(verificacion.vigente_hasta),
+    )
+
+
 def respuesta_de(perfil: Perfil, presupuesto_ms: int) -> PerfilRespuesta:
     r = perfil.resultado
-    consentimiento = perfil.consentimiento
     return PerfilRespuesta(
         id=perfil.id,
         cliente_id=perfil.cliente_id,
@@ -221,13 +246,7 @@ def respuesta_de(perfil: Perfil, presupuesto_ms: int) -> PerfilRespuesta:
             for d in r.datos_requeridos
         ],
         accion_sugerida=r.accion,
-        consentimiento=None
-        if consentimiento is None
-        else ConsentimientoDto(
-            decision=consentimiento.decision,
-            causa=consentimiento.causa,
-            vigente_hasta=_utc(consentimiento.vigente_hasta),
-        ),
+        consentimiento=_consentimiento_dto(perfil.consentimiento),
         fuentes=[
             FuenteDto(
                 fuente=f.fuente,
@@ -247,6 +266,8 @@ def respuesta_de(perfil: Perfil, presupuesto_ms: int) -> PerfilRespuesta:
         duracion_ms=perfil.duracion_ms,
         presupuesto_ms=presupuesto_ms,
         perfil_anterior_id=perfil.perfil_anterior_id,
+        comprobacion_final=_consentimiento_dto(perfil.comprobacion_final),
+        revocado_durante_perfilamiento=perfil.revocado_durante_perfilamiento,
     )
 
 
