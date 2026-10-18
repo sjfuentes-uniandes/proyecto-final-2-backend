@@ -90,8 +90,15 @@ def test_sin_encabezado_de_sub_responde_401(entorno: Entorno) -> None:
     assert _codigo(respuesta) == "NO_AUTENTICADO"
 
 
-def test_token_de_acceso_es_obligatorio(entorno: Entorno) -> None:
-    respuesta = entorno.consultar(entorno.emitir(token_use="id"))
+@pytest.mark.parametrize("token_use", ["id", "access"])
+def test_acepta_id_token_y_access_token(entorno: Entorno, token_use: str) -> None:
+    respuesta = entorno.consultar(entorno.emitir(token_use=token_use))
+
+    assert respuesta.status_code == 200
+
+
+def test_token_use_desconocido_responde_401(entorno: Entorno) -> None:
+    respuesta = entorno.consultar(entorno.emitir(token_use="refresh"))
 
     assert respuesta.status_code == 401
     assert _codigo(respuesta) == "NO_AUTENTICADO"

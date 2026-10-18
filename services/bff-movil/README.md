@@ -16,7 +16,7 @@ BFF de la aplicación móvil. Compone las respuestas de los servicios de dominio
 Contrato: [`contracts/openapi/bff-movil.yaml`](../../contracts/openapi/bff-movil.yaml).
 
 1. Revalida el `Authorization: Bearer <token>` contra el JWKS del emisor (`JWT_ISSUERS`):
-   firma, `exp`, `token_use == "access"`, que `sub` sea igual a `X-Authenticated-Sub` y que el
+   firma, `exp`, `token_use` (`id` o `access`), que `sub` sea igual a `X-Authenticated-Sub` y que el
    emisor sea el pool `clientes`. Un token de otro pool (por ejemplo, `backoffice`) recibe 403
    `ROL_NO_AUTORIZADO`; cualquier otro rechazo es 401 `NO_AUTENTICADO`.
 2. Resuelve el `clienteId` del titular del token (`sub`) con `GET /v1/clientes/actual` en
