@@ -22,6 +22,8 @@ ALGORITMOS = ["RS256"]
 SESION_LOCAL = timedelta(minutes=30)
 _PATRON_SUB = re.compile(r"[A-Za-z0-9._:@-]{1,128}")
 _CLAIMS_REQUERIDOS = ["exp", "iss", "sub", "token_use"]
+# Sin ámbitos OAuth el authorizer del gateway solo admite el ID token; el access token sigue válido.
+TOKEN_USE_ACEPTADOS = frozenset({"access", "id"})
 
 logger = logging.getLogger("solventa.sesion")
 
@@ -54,7 +56,7 @@ class Autenticador:
             return self._modo_local(sub_encabezado)
         emisor, kid = self._leer_cabecera(token)
         claims = await self._verificar(token, emisor, kid)
-        if claims["token_use"] != "access":
+        if claims["token_use"] not in TOKEN_USE_ACEPTADOS:
             raise _no_autenticado("token_use")
         sub = claims["sub"]
         if not isinstance(sub, str) or sub != sub_encabezado or not _PATRON_SUB.fullmatch(sub):
@@ -114,7 +116,7 @@ class Autenticador:
 _esquema = HTTPBearer(
     auto_error=False,
     scheme_name="bearerAuth",
-    description="Access token de Cognito del pool de clientes",
+    description="ID token o access token de Cognito del pool de clientes",
 )
 
 

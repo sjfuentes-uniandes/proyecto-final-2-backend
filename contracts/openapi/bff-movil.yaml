@@ -1475,5 +1475,5 @@ components:
   securitySchemes:
     bearerAuth:
       type: http
-      description: Access token de Cognito del pool de clientes
+      description: ID token o access token de Cognito del pool de clientes
       scheme: bearer
