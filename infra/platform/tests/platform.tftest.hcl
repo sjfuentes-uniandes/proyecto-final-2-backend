@@ -89,6 +89,10 @@ run "minimo_costo" {
     error_message = "Solo los administradores crean usuarios del back-office (grupo administradores)."
   }
   assert {
+    condition     = toset(keys(aws_cognito_user_group.backoffice)) == toset(["administradores", "administradores-socios", "asesores", "operacion"])
+    error_message = "Los grupos del pool backoffice deben coincidir con los que asigna el portal (bff_web.domain.usuarios.GRUPOS)."
+  }
+  assert {
     condition     = length(aws_cognito_user_pool.backoffice.admin_create_user_config[0].invite_message_template) == 1 && aws_ssm_parameter.web_config.name == "/solventa/int/web/config" && aws_ssm_parameter.web_config.type == "String" && aws_cognito_user_pool_client.backoffice.auth_session_validity == 15
     error_message = "La invitación del back-office y el parámetro de configuración pública del portal deben existir."
   }

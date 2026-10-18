@@ -158,7 +158,8 @@ resource "aws_cognito_user_group" "backoffice" {
   for_each = {
     administradores        = "Crea usuarios del back-office y asigna sus grupos"
     administradores-socios = "Gestiona socios, credenciales y cuotas"
-    operacion              = "Consulta tableros y alertas"
+    asesores               = "Perfila clientes y prepara ofertas"
+    operacion              = "Consulta tableros, trazas y alertas"
   }
   name         = each.key
   description  = each.value
