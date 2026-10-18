@@ -341,3 +341,44 @@ def test_cada_decision_de_la_verificacion_cumple_el_contrato() -> None:
         vistos[caso] = cuerpo["causa"] or cuerpo["decision"]
 
     assert vistos == {caso: caso for caso in casos}
+
+
+ASESOR = {"X-Actor-Id": "asesor-contrato", "X-Actor-Rol": "ASESOR"}
+
+
+# Con el actor asesor, el barrido de la lectura web pasa del 401/403 y llega a la lógica: 404 con
+# clientes y consentimientos aleatorios y 422 con identificadores inválidos (HU-W31, PR 3.3).
+@schema.include(
+    path_regex=r"^/v1/clientes/\{clienteId\}/consentimientos(/\{consentimientoId\}/historial)?$"
+).parametrize()
+@settings(max_examples=40, deadline=None)
+def test_lectura_web_cumple_su_contrato_con_un_asesor(case: schemathesis.Case) -> None:
+    case.call_and_validate(headers=ASESOR, excluded_checks=EXCLUIDOS)
+
+
+def test_lectura_web_de_un_cliente_con_consentimientos_cumple_el_contrato() -> None:
+    """El barrido solo ve 404: aquí la lista y el historial responden 200 con un activo, un
+    revocado y un vencido, y se validan contra el esquema publicado."""
+    ahora = datetime.now(UTC)
+    cliente_id = _sembrar_cliente(
+        {},
+        {"estado": EstadoConsentimiento.REVOCADO, "revocado_en": ahora - timedelta(hours=1)},
+        {"vigente_hasta": ahora - timedelta(seconds=1)},
+    )
+    ruta = "/v1/clientes/{clienteId}/consentimientos"
+    parametros = {"clienteId": str(cliente_id)}
+    lista = schema[ruta]["GET"].Case(headers=ASESOR, path_parameters=parametros)
+    respuesta = lista.call()
+    lista.validate_response(respuesta, excluded_checks=EXCLUIDOS)
+    assert respuesta.status_code == 200, respuesta.text
+    assert sorted(c["estado"] for c in respuesta.json()) == ["ACTIVO", "REVOCADO", "VENCIDO"]
+
+    for consentimiento in respuesta.json():
+        caso = schema[f"{ruta}/{{consentimientoId}}/historial"]["GET"].Case(
+            headers=ASESOR,
+            path_parameters={**parametros, "consentimientoId": consentimiento["consentimientoId"]},
+        )
+        historial = caso.call()
+        caso.validate_response(historial, excluded_checks=EXCLUIDOS)
+        assert historial.status_code == 200, historial.text
+        assert historial.json()["estado"] == consentimiento["estado"]

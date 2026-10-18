@@ -589,3 +589,72 @@ async def test_tras_revocar_se_otorga_uno_nuevo_y_la_lista_conserva_ambos(
         (segundo["consentimientoId"], "ACTIVO"),
         (primero["consentimientoId"], "REVOCADO"),
     ]
+
+
+ASESOR = {"X-Actor-Id": "asesor-sintetico", "X-Actor-Rol": "ASESOR"}
+
+
+def _web(cliente_id: Any) -> str:
+    return f"/v1/clientes/{cliente_id}/consentimientos"
+
+
+async def test_lectura_web_deriva_el_vencido_con_el_reloj_de_la_base_sin_escribir(
+    api: httpx.AsyncClient, base: str
+) -> None:
+    """HU-W31, PR 3.3: el asesor lee por `clienteId`. Un `ACTIVO` almacenado cuyo `vigente_hasta`
+    ya pasó se lee `VENCIDO` (ADR 0009), sin materializarlo ni escribir en el outbox."""
+    cliente_id = _titular(base)
+    revocado = await _otorgado(api)
+    await api.post(f"{RUTA}/{revocado['consentimientoId']}/revocacion", headers=_actor())
+    vencido = uuid4()
+    ahora = datetime.now(UTC)
+    _sql(
+        base,
+        "INSERT INTO consentimiento (id, cliente_id, proposito, alcances, version_texto, idioma, "
+        "estado, otorgado_en, vigente_hasta) VALUES (%s, %s, 'PERFILAMIENTO_PRECIO', "
+        "ARRAY['FA_PRODUCTOS_VIGENTES'], 'v0', 'es-CO', 'ACTIVO', %s, %s)",
+        (vencido, cliente_id, ahora - timedelta(days=400), ahora - timedelta(seconds=1)),
+    )
+    antes = _conteos(base)
+
+    lista = await api.get(_web(cliente_id), headers=ASESOR)
+    historial = await api.get(f"{_web(cliente_id)}/{vencido}/historial", headers=ASESOR)
+
+    assert lista.status_code == 200, lista.text
+    assert [(c["consentimientoId"], c["estado"]) for c in lista.json()] == [
+        (revocado["consentimientoId"], "REVOCADO"),
+        (str(vencido), "VENCIDO"),
+    ]
+    assert lista.json() == (await api.get(RUTA, headers=_actor())).json()
+    assert historial.status_code == 200, historial.text
+    assert historial.json()["estado"] == "VENCIDO"
+    assert [h["tipo"] for h in historial.json()["hitos"]] == ["OTORGADO", "VENCIDO"]
+    assert _conteos(base) == antes
+    assert _sql(base, "SELECT estado FROM consentimiento WHERE id = %s", (vencido,)) == [
+        ("ACTIVO",)
+    ]
+
+
+async def test_lectura_web_aisla_clientes_y_exige_al_asesor(
+    api: httpx.AsyncClient, base: str
+) -> None:
+    cliente_id = _titular(base, SUB)
+    otro_id = _titular(base, OTRO_SUB)
+    ajeno = await _otorgado(api, OTRO_SUB)
+
+    assert (await api.get(_web(cliente_id), headers=ASESOR)).json() == []
+    assert len((await api.get(_web(otro_id), headers=ASESOR)).json()) == 1
+    for respuesta, codigo in (
+        (await api.get(_web(uuid4()), headers=ASESOR), "CLIENTE_NO_ENCONTRADO"),
+        (
+            await api.get(
+                f"{_web(cliente_id)}/{ajeno['consentimientoId']}/historial", headers=ASESOR
+            ),
+            "CONSENTIMIENTO_NO_ENCONTRADO",
+        ),
+    ):
+        assert respuesta.status_code == 404
+        assert respuesta.json()["codigo"] == codigo
+    # Un titular no lee por `clienteId`, ni siquiera el propio (ADR 0006).
+    propio = await api.get(_web(cliente_id), headers=_actor())
+    assert (propio.status_code, propio.json()["codigo"]) == (403, "ROL_NO_AUTORIZADO")

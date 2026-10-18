@@ -457,6 +457,78 @@ async def test_listar_del_mas_reciente_al_mas_antiguo(
     assert [c.id for c in await consulta.listar(SUB)] == [segundo.id, primero.id]
 
 
+async def test_lectura_web_lista_los_del_cliente_por_su_id_con_estado_derivado(
+    repositorio: RepositorioMemoria,
+    consentimientos: RepositorioConsentimientosMemoria,
+    reloj: RelojFalso,
+) -> None:
+    """HU-W31, vista web (ADR 0002): el asesor ve los consentimientos del cliente por su id."""
+    cliente = _cliente(repositorio)
+    _cliente(repositorio, "sub-otro")
+    caso = _otorgar(repositorio, consentimientos)
+    primero = (await caso.ejecutar(SUB, uuid4(), **_cuerpo(vigencia_meses=6))).consentimiento
+    await caso.ejecutar("sub-otro", uuid4(), **_cuerpo())
+    reloj.ahora = primero.vigente_hasta
+    segundo = (await caso.ejecutar(SUB, uuid4(), **_cuerpo())).consentimiento
+    consulta = ConsultarConsentimientos(consentimientos, ConsultarCliente(repositorio))
+    lista = await consulta.listar_del_cliente(cliente.id)
+    assert [(c.id, c.estado_derivado) for c in lista] == [
+        (segundo.id, EstadoConsentimiento.ACTIVO),
+        (primero.id, EstadoConsentimiento.VENCIDO),
+    ]
+
+
+async def test_lectura_web_de_un_cliente_sin_consentimientos_es_una_lista_vacia(
+    repositorio: RepositorioMemoria, consentimientos: RepositorioConsentimientosMemoria
+) -> None:
+    cliente = _cliente(repositorio)
+    consulta = ConsultarConsentimientos(consentimientos, ConsultarCliente(repositorio))
+    assert await consulta.listar_del_cliente(cliente.id) == []
+
+
+async def test_lectura_web_de_un_cliente_inexistente_es_cliente_no_encontrado(
+    repositorio: RepositorioMemoria, consentimientos: RepositorioConsentimientosMemoria
+) -> None:
+    consulta = ConsultarConsentimientos(consentimientos, ConsultarCliente(repositorio))
+    with pytest.raises(ClienteNoEncontrado):
+        await consulta.listar_del_cliente(uuid4())
+
+
+async def test_lectura_web_del_detalle_solo_dentro_del_cliente(
+    repositorio: RepositorioMemoria, consentimientos: RepositorioConsentimientosMemoria
+) -> None:
+    """Un consentimiento de otro cliente, o inexistente, no se distingue (ADR 0006)."""
+    cliente = _cliente(repositorio)
+    otro = _cliente(repositorio, "sub-otro")
+    propio = (
+        await _otorgar(repositorio, consentimientos).ejecutar(SUB, uuid4(), **_cuerpo())
+    ).consentimiento
+    consulta = ConsultarConsentimientos(consentimientos, ConsultarCliente(repositorio))
+    assert (await consulta.detalle_del_cliente(cliente.id, propio.id)).id == propio.id
+    for cliente_id, consentimiento_id in [
+        (otro.id, propio.id),
+        (cliente.id, uuid4()),
+        (uuid4(), propio.id),
+    ]:
+        with pytest.raises(ConsentimientoNoEncontrado):
+            await consulta.detalle_del_cliente(cliente_id, consentimiento_id)
+
+
+async def test_lectura_web_no_escribe_eventos(
+    repositorio: RepositorioMemoria, consentimientos: RepositorioConsentimientosMemoria
+) -> None:
+    """Solo lectura: ni la lista ni el detalle tocan el outbox."""
+    cliente = _cliente(repositorio)
+    propio = (
+        await _otorgar(repositorio, consentimientos).ejecutar(SUB, uuid4(), **_cuerpo())
+    ).consentimiento
+    eventos = list(consentimientos.eventos)
+    consulta = ConsultarConsentimientos(consentimientos, ConsultarCliente(repositorio))
+    await consulta.listar_del_cliente(cliente.id)
+    await consulta.detalle_del_cliente(cliente.id, propio.id)
+    assert consentimientos.eventos == eventos
+
+
 def _revocador(
     repositorio: RepositorioMemoria, consentimientos: RepositorioConsentimientosMemoria
 ) -> RevocarConsentimiento:

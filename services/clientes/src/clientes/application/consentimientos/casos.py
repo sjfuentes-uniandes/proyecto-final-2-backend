@@ -163,6 +163,21 @@ class ConsultarConsentimientos:
             return []
         return await self._repositorio.listar(cliente.id)
 
+    async def listar_del_cliente(self, cliente_id: UUID) -> list[Consentimiento]:
+        """Lectura web por `clienteId` (HU-W31, ADR 0002). A diferencia de `listar`, un cliente
+        inexistente es un error: el asesor consulta un cliente concreto."""
+        cliente = await self._clientes.identidad(cliente_id)
+        return await self._repositorio.listar(cliente.id)
+
+    async def detalle_del_cliente(
+        self, cliente_id: UUID, consentimiento_id: UUID
+    ) -> Consentimiento:
+        """Uno de otro cliente, o de un cliente inexistente, es indistinguible de uno inexistente."""
+        consentimiento = await self._repositorio.obtener(cliente_id, consentimiento_id)
+        if consentimiento is None:
+            raise ConsentimientoNoEncontrado()
+        return consentimiento
+
 
 class RevocarConsentimiento:
     def __init__(self, repositorio: RepositorioConsentimientos, clientes: ConsultarCliente) -> None:

@@ -135,6 +135,8 @@ def crear_app(
     app.include_router(consentimientos.router)
     app.include_router(consentimientos.router_textos)
     app.include_router(verificaciones_consentimiento.router)
+    # Después de `consentimientos.router`: `/v1/clientes/actual/...` no debe caer en `{clienteId}`.
+    app.include_router(consentimientos.router_web)
 
     @app.get("/health")
     async def health() -> dict[str, str]:

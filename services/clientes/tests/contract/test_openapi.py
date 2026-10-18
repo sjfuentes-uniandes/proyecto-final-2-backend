@@ -29,6 +29,8 @@ def test_contrato_de_verificaciones() -> None:
         "/v1/clientes/actual/consentimientos/{consentimientoId}/historial",
         "/v1/consentimientos/textos/vigente",
         "/v1/clientes/{clienteId}/consentimientos/verificaciones",
+        "/v1/clientes/{clienteId}/consentimientos",
+        "/v1/clientes/{clienteId}/consentimientos/{consentimientoId}/historial",
         "/v1/registros/{registro_id}/verificaciones",
         "/v1/registros/{registro_id}/vinculacion",
         "/health",
@@ -176,6 +178,40 @@ def test_los_cambios_de_la_parte_2_son_aditivos() -> None:
             "revocadoEn",
         }
     )
+
+
+def test_contrato_de_la_lectura_web() -> None:
+    """HU-W31 (plan §c, PR 3.3): solo GET, con actor asesor y los mismos DTO que el titular
+    (ADR 0002: en web no hay escritura). Aditivo: las rutas `actual` no cambian."""
+    rutas = app.openapi()["paths"]
+    base = "/v1/clientes/{clienteId}/consentimientos"
+    lista = rutas[base]
+    historial = rutas[f"{base}/{{consentimientoId}}/historial"]
+    assert set(lista) == set(historial) == {"get"}
+    assert set(lista["get"]["responses"]) == {"200", "401", "403", "404", "422"}
+    assert set(historial["get"]["responses"]) == {"200", "401", "403", "404", "422"}
+    assert [p["name"] for p in lista["get"]["parameters"]] == [
+        "clienteId",
+        "X-Actor-Id",
+        "X-Actor-Rol",
+    ]
+    assert [p["name"] for p in historial["get"]["parameters"]] == [
+        "clienteId",
+        "consentimientoId",
+        "X-Actor-Id",
+        "X-Actor-Rol",
+    ]
+    assert "ASESOR" in lista["get"]["responses"]["403"]["description"]
+    esquema = lista["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+    assert esquema == {
+        "type": "array",
+        "items": {"$ref": "#/components/schemas/ConsentimientoDto"},
+        "title": esquema["title"],
+    }
+    ok = historial["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+    assert ok == {"$ref": "#/components/schemas/HistorialDto"}
+    # La ruta de verificación, en el mismo prefijo, sigue siendo solo POST.
+    assert set(rutas[f"{base}/verificaciones"]) == {"post"}
 
 
 def test_contrato_del_registro() -> None:

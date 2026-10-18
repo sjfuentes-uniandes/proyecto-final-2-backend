@@ -938,6 +938,145 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/clientes/{clienteId}/consentimientos:
+    get:
+      tags:
+      - consentimientos
+      summary: Consentimientos del cliente para la vista web, del más reciente al
+        más antiguo
+      description: 'Solo lectura (ADR 0002). El estado es el derivado al leer, con
+        el reloj de la base
+
+        capturado una vez por sentencia (`VENCIDO` si ya pasó `vigenteHasta`).'
+      operationId: listar_del_cliente_v1_clientes__clienteId__consentimientos_get
+      parameters:
+      - name: clienteId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Clienteid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConsentimientoDto'
+                title: Response Listar Del Cliente V1 Clientes  Clienteid  Consentimientos
+                  Get
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de ASESOR'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'CLIENTE_NO_ENCONTRADO: el cliente no existe'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/clientes/{clienteId}/consentimientos/{consentimientoId}/historial:
+    get:
+      tags:
+      - consentimientos
+      summary: Historial de un consentimiento del cliente para la vista web
+      operationId: historial_del_cliente_v1_clientes__clienteId__consentimientos__consentimientoId__historial_get
+      parameters:
+      - name: clienteId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Clienteid
+      - name: consentimientoId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Consentimientoid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistorialDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de ASESOR'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'CONSENTIMIENTO_NO_ENCONTRADO: no existe, es de otro cliente
+            o el cliente no existe (no se distingue)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /health:
     get:
       summary: Health
