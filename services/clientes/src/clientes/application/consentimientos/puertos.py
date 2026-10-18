@@ -8,6 +8,7 @@ from clientes.domain.consentimientos.modelos import (
     SolicitudOtorgamiento,
 )
 from clientes.domain.consentimientos.textos import TextoLegal
+from clientes.domain.consentimientos.verificacion import SolicitudVerificacion, Verificacion
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +69,18 @@ class RepositorioConsentimientos(Protocol):
         Si no lo está (ya `REVOCADO`, `VENCIDO` o `ACTIVO` vencido sin materializar), lo devuelve
         tal como está, sin cambios ni evento. None si no existe o es de otro cliente.
         """
+        ...
+
+
+class RepositorioVerificaciones(Protocol):
+    """Verificación sin caché (ADR 0011): cada llamada lee la base y registra su decisión."""
+
+    async def verificar(
+        self, cliente_id: UUID, solicitud: SolicitudVerificacion, correlation_id: str
+    ) -> Verificacion | None:
+        """Lee el cliente y su consentimiento con una sola captura del reloj, decide con la
+        función pura del dominio y escribe `VerificacionConsentimientoRegistrada` en el outbox,
+        todo en una transacción. None si el cliente no existe, sin evento."""
         ...
 
 

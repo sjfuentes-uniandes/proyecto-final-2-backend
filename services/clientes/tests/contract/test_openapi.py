@@ -25,6 +25,7 @@ def test_contrato_de_verificaciones() -> None:
         "/v1/clientes/actual/consentimientos/{consentimientoId}/revocacion",
         "/v1/clientes/actual/consentimientos/{consentimientoId}/historial",
         "/v1/consentimientos/textos/vigente",
+        "/v1/clientes/{clienteId}/consentimientos/verificaciones",
         "/v1/registros/{registro_id}/verificaciones",
         "/v1/registros/{registro_id}/vinculacion",
         "/health",
@@ -169,3 +170,46 @@ def test_identidad_es_compatible_con_la_propuesta_de_cotizacion() -> None:
     publicado = app.openapi()["components"]["schemas"]["IdentidadDto"]
     assert set(publicado["required"]) == set(propuesta["required"])
     assert set(publicado["properties"]) == set(propuesta["properties"])
+
+
+def test_verificacion_es_compatible_con_la_propuesta_de_cotizacion() -> None:
+    """HU-W31 (plan §c): la ruta de verificación cumple sin cambios lo que `cotizacion` espera:
+    mismos campos obligatorios, mismos nulos y mismas enumeraciones, y sin encabezados de actor."""
+    propuesta = yaml.safe_load(
+        (CONTRATO.parent / "clientes.propuesta-cotizacion.yaml").read_text(encoding="utf-8")
+    )
+    esperado = propuesta["components"]["schemas"]
+    publicado = app.openapi()["components"]["schemas"]
+    ruta = "/v1/clientes/{clienteId}/consentimientos/verificaciones"
+    operacion = app.openapi()["paths"][ruta]["post"]
+
+    assert set(operacion["responses"]) == {"200", "400", "404", "422"}
+    assert [p["name"] for p in operacion["parameters"]] == ["clienteId"]
+    assert operacion["requestBody"]["required"] is True
+
+    solicitud = publicado["SolicitudVerificacionConsentimiento"]
+    assert set(solicitud["required"]) == set(esperado["SolicitudVerificacion"]["required"])
+    assert solicitud["properties"]["alcances"]["minItems"] == 1
+    proposito = esperado["SolicitudVerificacion"]["properties"]["proposito"]
+    assert publicado["Proposito"]["enum"] == proposito["enum"]
+    assert publicado["Alcance"]["enum"] == esperado["Alcance"]["enum"]
+
+    respuesta = publicado["VerificacionConsentimientoDto"]
+    assert set(respuesta["required"]) == set(esperado["Verificacion"]["required"])
+    assert set(respuesta["properties"]) == set(esperado["Verificacion"]["properties"])
+    for nullable in ("consentimientoId", "vigenteHasta", "causa"):
+        assert {"type": "null"} in respuesta["properties"][nullable]["anyOf"]
+    propiedades = esperado["Verificacion"]["properties"]
+    assert publicado["Decision"]["enum"] == propiedades["decision"]["enum"]
+    assert publicado["CausaRechazo"]["enum"] + [None] == propiedades["causa"]["enum"]
+    causa_alcance = esperado["AlcanceRechazado"]["properties"]["causa"]
+    assert publicado["CausaAlcance"]["enum"] == causa_alcance["enum"]
+    assert set(publicado["AlcanceRechazadoDto"]["required"]) == {"alcance", "causa"}
+
+
+def test_los_enums_de_la_verificacion_son_los_del_dominio() -> None:
+    from clientes.domain.consentimientos.modelos import ALCANCES, PROPOSITOS
+
+    esquemas = app.openapi()["components"]["schemas"]
+    assert set(esquemas["Alcance"]["enum"]) == ALCANCES
+    assert set(esquemas["Proposito"]["enum"]) == PROPOSITOS

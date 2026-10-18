@@ -17,6 +17,12 @@ from clientes.domain.consentimientos.modelos import (
     RegistroIdempotencia,
     esta_vigente,
 )
+from clientes.domain.consentimientos.verificacion import (
+    LecturaVerificacion,
+    SolicitudVerificacion,
+    Verificacion,
+    decidir,
+)
 from clientes.domain.identidad.modelos import Cliente, EstadoIdentidad
 from clientes.main import crear_app
 from fastapi.testclient import TestClient
@@ -102,6 +108,35 @@ class _ConsentimientosMemoria:
         return self._leer(c)
 
 
+class _VerificacionesMemoria:
+    """RepositorioVerificaciones sobre los dos repositorios de arriba: el más reciente del
+    propósito y la decisión pura del dominio."""
+
+    def __init__(self, clientes: "_RepositorioMemoria", memoria: _ConsentimientosMemoria) -> None:
+        self._clientes = clientes
+        self._memoria = memoria
+
+    async def verificar(
+        self, cliente_id: UUID, solicitud: SolicitudVerificacion, correlation_id: str
+    ) -> Verificacion | None:
+        if self._clientes.obtener(cliente_id) is None:
+            return None
+        propios = [c for c in self._memoria.consentimientos.values() if c.cliente_id == cliente_id]
+        del_proposito = sorted(
+            (c for c in propios if c.proposito == solicitud.proposito),
+            key=lambda c: c.otorgado_en,
+        )
+        otros = tuple(
+            c.vigente_hasta
+            for c in propios
+            if c.proposito != solicitud.proposito and c.estado is EstadoConsentimiento.ACTIVO
+        )
+        lectura = LecturaVerificacion(
+            cliente_id, datetime.now(UTC), del_proposito[-1] if del_proposito else None, otros
+        )
+        return decidir(solicitud, lectura)
+
+
 class _RepositorioMemoria:
     def __init__(self) -> None:
         self.clientes: dict[UUID, Cliente] = {}
@@ -157,6 +192,7 @@ app = crear_app(
     transport=httpx.MockTransport(_nominal),
     repositorio=identidad,
     repositorio_consentimientos=consentimientos,
+    repositorio_verificaciones=_VerificacionesMemoria(identidad, consentimientos),
 )
 # Arranca el lifespan una vez: crea el cliente HTTP y los casos de uso en app.state.
 _ciclo = TestClient(app)
@@ -244,3 +280,64 @@ def test_revocar_e_historial_de_uno_propio_cumplen_el_contrato() -> None:
     assert primera.json()["estado"] == "REVOCADO"
     assert repeticion.json() == primera.json()
     assert [h["tipo"] for h in historial.json()["hitos"]] == ["OTORGADO", "REVOCADO"]
+
+
+CUATRO = [
+    "FA_PRODUCTOS_VIGENTES",
+    "FA_HISTORIAL_PAGOS_12M",
+    "FA_INGRESOS_AGREGADOS",
+    "DA_REGISTROS_PUBLICOS",
+]
+
+
+def _sembrar_cliente(*consentimientos_del_cliente: dict[str, Any]) -> UUID:
+    """Un cliente nuevo con consentimientos sembrados en memoria."""
+    cliente = Cliente(id=uuid4(), sub=f"sub-{uuid4()}", estado=EstadoIdentidad.VERIFICADO)
+    identidad.guardar(cliente)
+    ahora = datetime.now(UTC)
+    for datos in consentimientos_del_cliente:
+        c = Consentimiento(
+            id=uuid4(),
+            cliente_id=cliente.id,
+            proposito="PERFILAMIENTO_PRECIO",
+            alcances=tuple(CUATRO),
+            version_texto="v-contrato",
+            idioma="es-CO",
+            estado=EstadoConsentimiento.ACTIVO,
+            otorgado_en=ahora - timedelta(days=1),
+            vigente_hasta=ahora + timedelta(days=180),
+            revocado_en=None,
+            leido_en=ahora,
+        )
+        consentimientos.consentimientos[c.id] = replace(c, **datos)
+    return cliente.id
+
+
+def test_cada_decision_de_la_verificacion_cumple_el_contrato() -> None:
+    """El barrido solo ve 404 con clientes aleatorios: aquí se siembra cada caso y se valida la
+    respuesta 200 contra el esquema publicado (HU-W31)."""
+    ahora = datetime.now(UTC)
+    casos = {
+        "PERMITIDO": _sembrar_cliente({}),
+        "PERMITIDO_PARCIAL": _sembrar_cliente({"alcances": ("DA_REGISTROS_PUBLICOS",)}),
+        "REVOCADO": _sembrar_cliente(
+            {"estado": EstadoConsentimiento.REVOCADO, "revocado_en": ahora - timedelta(hours=1)}
+        ),
+        "VENCIDO": _sembrar_cliente({"vigente_hasta": ahora - timedelta(seconds=1)}),
+        "SIN_CONSENTIMIENTO": _sembrar_cliente(),
+        "PROPOSITO_NO_AUTORIZADO": _sembrar_cliente({"proposito": "PROPOSITO_SINTETICO"}),
+    }
+    ruta = "/v1/clientes/{clienteId}/consentimientos/verificaciones"
+    vistos = {}
+    for caso, cliente_id in casos.items():
+        respuesta = _llamar(
+            "POST",
+            ruta,
+            path_parameters={"clienteId": str(cliente_id)},
+            body={"proposito": "PERFILAMIENTO_PRECIO", "alcances": CUATRO},
+        )
+        assert respuesta.status_code == 200, respuesta.text
+        cuerpo = respuesta.json()
+        vistos[caso] = cuerpo["causa"] or cuerpo["decision"]
+
+    assert vistos == {caso: caso for caso in casos}

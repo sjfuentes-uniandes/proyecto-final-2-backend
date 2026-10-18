@@ -678,6 +678,60 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/clientes/{clienteId}/consentimientos/verificaciones:
+    post:
+      tags:
+      - consentimientos
+      summary: Verifica el consentimiento vigente del cliente para un propósito y
+        unos alcances
+      description: 'Sin caché (ADR 0011): cada llamada lee el consentimiento y registra
+        la decisión en el
+
+        outbox (`VerificacionConsentimientoRegistrada`). Un fallo técnico responde
+        5xx y quien
+
+        verifica falla cerrado.'
+      operationId: verificar_v1_clientes__clienteId__consentimientos_verificaciones_post
+      parameters:
+      - name: clienteId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Clienteid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudVerificacionConsentimiento'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificacionConsentimientoDto'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'CLIENTE_NO_ENCONTRADO: el cliente no existe; no se registra
+            ninguna decisión'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: 'SOLICITUD_INVALIDA: propósito o alcances ausentes o no soportados'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -694,6 +748,41 @@ paths:
                 title: Response Health Health Get
 components:
   schemas:
+    Alcance:
+      type: string
+      enum:
+      - FA_PRODUCTOS_VIGENTES
+      - FA_HISTORIAL_PAGOS_12M
+      - FA_INGRESOS_AGREGADOS
+      - DA_REGISTROS_PUBLICOS
+      title: Alcance
+      description: Los de `ALCANCES` del dominio (ADR 0001).
+    AlcanceRechazadoDto:
+      properties:
+        alcance:
+          $ref: '#/components/schemas/Alcance'
+        causa:
+          $ref: '#/components/schemas/CausaAlcance'
+      type: object
+      required:
+      - alcance
+      - causa
+      title: AlcanceRechazadoDto
+    CausaAlcance:
+      type: string
+      enum:
+      - ALCANCE_NO_AUTORIZADO
+      title: CausaAlcance
+      description: Causa de cada alcance rechazado (W31 AC3).
+    CausaRechazo:
+      type: string
+      enum:
+      - SIN_CONSENTIMIENTO
+      - REVOCADO
+      - VENCIDO
+      - PROPOSITO_NO_AUTORIZADO
+      title: CausaRechazo
+      description: Causa funcional estable de un `RECHAZADO` (W31 AC2).
     ConsentimientoDto:
       properties:
         consentimientoId:
@@ -742,6 +831,13 @@ components:
       - vigenteHasta
       - revocadoEn
       title: ConsentimientoDto
+    Decision:
+      type: string
+      enum:
+      - PERMITIDO
+      - PERMITIDO_PARCIAL
+      - RECHAZADO
+      title: Decision
     ErrorDto:
       properties:
         codigo:
@@ -843,6 +939,12 @@ components:
       - estado
       - verificadoEn
       title: IdentidadDto
+    Proposito:
+      type: string
+      enum:
+      - PERFILAMIENTO_PRECIO
+      title: Proposito
+      description: Los de `PROPOSITOS` del dominio.
     ResultadoKyc:
       type: string
       enum:
@@ -908,6 +1010,21 @@ components:
       - selfie
       - pruebaDeVida
       title: SolicitudVerificacion
+    SolicitudVerificacionConsentimiento:
+      properties:
+        proposito:
+          $ref: '#/components/schemas/Proposito'
+        alcances:
+          items:
+            $ref: '#/components/schemas/Alcance'
+          type: array
+          minItems: 1
+          title: Alcances
+      type: object
+      required:
+      - proposito
+      - alcances
+      title: SolicitudVerificacionConsentimiento
     SolicitudVerificacionRegistro:
       properties:
         correo:
@@ -1014,6 +1131,47 @@ components:
       - msg
       - type
       title: ValidationError
+    VerificacionConsentimientoDto:
+      properties:
+        decision:
+          $ref: '#/components/schemas/Decision'
+        consentimientoId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Consentimientoid
+        vigenteHasta:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Vigentehasta
+        alcancesPermitidos:
+          items:
+            $ref: '#/components/schemas/Alcance'
+          type: array
+          title: Alcancespermitidos
+        alcancesRechazados:
+          items:
+            $ref: '#/components/schemas/AlcanceRechazadoDto'
+          type: array
+          title: Alcancesrechazados
+        causa:
+          anyOf:
+          - $ref: '#/components/schemas/CausaRechazo'
+          - type: 'null'
+      type: object
+      required:
+      - decision
+      - consentimientoId
+      - vigenteHasta
+      - alcancesPermitidos
+      - alcancesRechazados
+      - causa
+      title: VerificacionConsentimientoDto
+      description: '`consentimientoId` y `vigenteHasta` son nulos en un `RECHAZADO`;
+        `causa`, solo en él.'
     VerificacionDto:
       properties:
         clienteId:

@@ -20,6 +20,12 @@ from clientes.domain.consentimientos.modelos import (
     RegistroIdempotencia,
     esta_vigente,
 )
+from clientes.domain.consentimientos.verificacion import (
+    LecturaVerificacion,
+    SolicitudVerificacion,
+    Verificacion,
+    decidir,
+)
 from clientes.domain.identidad.modelos import Cliente, RegistroYaVinculado
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from opentelemetry.sdk.trace import ReadableSpan
@@ -208,6 +214,60 @@ class RepositorioConsentimientosMemoria:
 @pytest.fixture
 def consentimientos(reloj: RelojFalso) -> RepositorioConsentimientosMemoria:
     return RepositorioConsentimientosMemoria(reloj)
+
+
+class RepositorioVerificacionesMemoria:
+    """RepositorioVerificaciones sobre los repositorios en memoria: lee como la consulta real (el
+    más reciente del propósito y los `ACTIVO` de otros propósitos), decide con la función pura y
+    registra un evento por verificación."""
+
+    def __init__(
+        self,
+        clientes: RepositorioMemoria,
+        memoria: RepositorioConsentimientosMemoria,
+        reloj: Callable[[], datetime],
+    ) -> None:
+        self._clientes = clientes
+        self._memoria = memoria
+        self._reloj = reloj
+        self.eventos: list[tuple[Verificacion, str]] = []
+        self.falla: Exception | None = None
+
+    async def verificar(
+        self, cliente_id: UUID, solicitud: SolicitudVerificacion, correlation_id: str
+    ) -> Verificacion | None:
+        if self.falla is not None:
+            raise self.falla
+        if self._clientes.obtener(cliente_id) is None:
+            return None
+        ahora = self._reloj()
+        propios = [c for c in self._memoria.consentimientos.values() if c.cliente_id == cliente_id]
+        del_proposito = sorted(
+            (c for c in propios if c.proposito == solicitud.proposito),
+            key=lambda c: c.otorgado_en,
+        )
+        lectura = LecturaVerificacion(
+            cliente_id=cliente_id,
+            ahora=ahora,
+            consentimiento=replace(del_proposito[-1], leido_en=ahora) if del_proposito else None,
+            otros_activos_hasta=tuple(
+                c.vigente_hasta
+                for c in propios
+                if c.proposito != solicitud.proposito and c.estado is EstadoConsentimiento.ACTIVO
+            ),
+        )
+        verificacion = decidir(solicitud, lectura)
+        self.eventos.append((verificacion, correlation_id))
+        return verificacion
+
+
+@pytest.fixture
+def verificaciones(
+    repositorio: RepositorioMemoria,
+    consentimientos: RepositorioConsentimientosMemoria,
+    reloj: RelojFalso,
+) -> RepositorioVerificacionesMemoria:
+    return RepositorioVerificacionesMemoria(repositorio, consentimientos, reloj)
 
 
 class PoolFalso:

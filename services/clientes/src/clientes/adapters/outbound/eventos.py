@@ -1,6 +1,7 @@
-"""Sobres y payloads v1 de `ConsentimientoOtorgado` y `ConsentimientoRevocado` (ADR 0009).
+"""Sobres y payloads v1 de `ConsentimientoOtorgado` y `ConsentimientoRevocado` (ADR 0009) y de
+`VerificacionConsentimientoRegistrada` (HU-W31).
 
-Solo identificadores y códigos: sin datos personales. El esquema publicado se regenera con:
+Solo identificadores y códigos: sin datos personales. Los esquemas publicados se regeneran con:
     uv run python -m clientes.adapters.outbound.eventos
 """
 
@@ -13,8 +14,11 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
+from clientes.domain.consentimientos.verificacion import CausaRechazo, Decision
+
 CONSENTIMIENTO_OTORGADO = "ConsentimientoOtorgado"
 CONSENTIMIENTO_REVOCADO = "ConsentimientoRevocado"
+VERIFICACION_REGISTRADA = "VerificacionConsentimientoRegistrada"
 
 
 class _Dto(BaseModel):
@@ -71,15 +75,46 @@ class SobreConsentimientoRevocado(_Dto):
     payload: ConsentimientoRevocadoV1
 
 
+class VerificacionConsentimientoRegistradaV1(_Dto):
+    """La decisión de una verificación (W31 AC1 y AC3). `consentimientoId` es el consentimiento
+    evaluado, también si estaba revocado o vencido; nulo si no hay ninguno del propósito."""
+
+    cliente_id: UUID
+    consentimiento_id: UUID | None
+    proposito: str
+    alcances_solicitados: list[str] = Field(min_length=1)
+    decision: Decision
+    causa: CausaRechazo | None
+    alcances_rechazados: list[str]
+    verificado_en: datetime
+
+
+class SobreVerificacionConsentimientoRegistrada(_Dto):
+    """Sobre versionado. `aggregateId` es siempre el `clienteId` y no lleva `aggregateVersion`:
+    las verificaciones no pertenecen a la cadena de un consentimiento (ADR 0009)."""
+
+    event_id: UUID
+    aggregate_id: UUID
+    type: Literal["VerificacionConsentimientoRegistrada"]
+    version: Literal[1]
+    occurred_at: datetime
+    correlation_id: str
+    payload: VerificacionConsentimientoRegistradaV1
+
+
 ESQUEMAS: dict[str, type[BaseModel]] = {
     f"{CONSENTIMIENTO_OTORGADO}.v1.schema.json": SobreConsentimientoOtorgado,
     f"{CONSENTIMIENTO_REVOCADO}.v1.schema.json": SobreConsentimientoRevocado,
+}
+# Aparte de los del agregado: van solo a `auditoria`, sin `aggregateVersion` (ADR 0009).
+ESQUEMAS_VERIFICACION: dict[str, type[BaseModel]] = {
+    f"{VERIFICACION_REGISTRADA}.v1.schema.json": SobreVerificacionConsentimientoRegistrada,
 }
 
 
 if __name__ == "__main__":
     destino = Path("contracts/events")
-    for nombre, modelo in ESQUEMAS.items():
+    for nombre, modelo in (ESQUEMAS | ESQUEMAS_VERIFICACION).items():
         esquema = json.dumps(modelo.model_json_schema(by_alias=True), indent=2, sort_keys=True)
         (destino / nombre).write_text(esquema + "\n", encoding="utf-8")
         print(destino / nombre)

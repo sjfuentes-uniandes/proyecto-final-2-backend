@@ -10,8 +10,12 @@ from uuid import UUID, uuid4
 
 import psycopg
 import pytest
-from clientes.adapters.outbound import outbox_pg
-from clientes.adapters.outbound.consentimientos_pg import RETENCION_CLAVES, ConsentimientosPg
+from clientes.adapters.outbound import consentimientos_pg, outbox_pg
+from clientes.adapters.outbound.consentimientos_pg import (
+    RETENCION_CLAVES,
+    ConsentimientosPg,
+    lectura_verificacion,
+)
 from clientes.application.consentimientos.puertos import Otorgamiento, Revocacion
 from clientes.domain.consentimientos.modelos import (
     ClaveIdempotenciaEnUso,
@@ -19,6 +23,12 @@ from clientes.domain.consentimientos.modelos import (
     ConsentimientoActivoExistente,
     EstadoConsentimiento,
     SolicitudOtorgamiento,
+)
+from clientes.domain.consentimientos.verificacion import (
+    CausaRechazo,
+    Decision,
+    SolicitudVerificacion,
+    decidir,
 )
 from psycopg.types.json import Jsonb
 
@@ -396,3 +406,149 @@ async def test_insertar_escribe_la_fila_sin_publicar() -> None:
         "corr-1",
     )
     assert isinstance(parametros[6], Jsonb)
+
+
+# Verificación (HU-W31, PR 3.2): una consulta con el reloj atómico y el evento en la transacción.
+CUATRO = (
+    "FA_PRODUCTOS_VIGENTES",
+    "FA_HISTORIAL_PAGOS_12M",
+    "FA_INGRESOS_AGREGADOS",
+    "DA_REGISTROS_PUBLICOS",
+)
+VERIFICACION = SolicitudVerificacion.crear("PERFILAMIENTO_PRECIO", CUATRO)
+_SIN_CONSENTIMIENTO = dict.fromkeys(
+    (
+        "id",
+        "cliente_id",
+        "proposito",
+        "alcances",
+        "version_texto",
+        "idioma",
+        "estado",
+        "otorgado_en",
+        "vigente_hasta",
+        "revocado_en",
+    )
+)
+
+
+def _fila_verificacion(
+    consentimiento: dict[str, Any] | None = None, otros: list[datetime] | None = None
+) -> dict[str, Any]:
+    """Como llega de `_VERIFICAR`: sin consentimiento del propósito, sus columnas son nulas."""
+    ahora = OTORGADO + timedelta(days=1)
+    columnas = _fila(ahora=ahora.astimezone(BOGOTA)) | (consentimiento or {})
+    if consentimiento is None:
+        columnas |= _SIN_CONSENTIMIENTO
+    return columnas | {"cliente_id_consultado": CLIENTE, "otros_activos_hasta": otros or []}
+
+
+def test_la_consulta_de_verificacion_captura_el_reloj_una_vez_y_no_decide_la_vigencia() -> None:
+    sql = consentimientos_pg._VERIFICAR
+    assert sql.startswith("WITH t AS MATERIALIZED (SELECT clock_timestamp() AS ahora) ")
+    assert sql.count("clock_timestamp()") == 1
+    assert "now()" not in sql
+    assert "vigente_hasta >" not in sql and "vigente_hasta <" not in sql  # la decide el dominio
+    assert "ORDER BY u.otorgado_en DESC LIMIT 1" in sql
+
+
+def test_lectura_de_verificacion_en_utc_y_con_otros_propositos() -> None:
+    otro = VIGENTE_HASTA.astimezone(BOGOTA)
+
+    lectura = lectura_verificacion(_fila_verificacion({}, otros=[otro]))
+
+    assert lectura.cliente_id == CLIENTE
+    assert lectura.ahora == OTORGADO + timedelta(days=1)
+    assert lectura.ahora.tzinfo is UTC
+    assert lectura.consentimiento is not None and lectura.consentimiento.id == ID
+    assert lectura.otros_activos_hasta == (VIGENTE_HASTA,)
+    assert lectura.otros_activos_hasta[0].tzinfo is UTC
+
+
+def test_lectura_de_verificacion_sin_consentimiento_del_proposito() -> None:
+    lectura = lectura_verificacion(_fila_verificacion())
+
+    assert (lectura.consentimiento, lectura.otros_activos_hasta) == (None, ())
+
+
+async def test_verificar_lee_decide_y_registra_en_la_misma_transaccion() -> None:
+    repo, conexion = _repo(_fila_verificacion({"alcances": list(CUATRO)}))
+
+    verificacion = await repo.verificar(CLIENTE, VERIFICACION, "corr-w31")
+
+    assert verificacion is not None
+    assert verificacion.decision is Decision.PERMITIDO
+    assert conexion.transacciones == 1
+    (lectura, _), (insercion, parametros) = conexion.sentencias
+    assert "FROM cliente cl" in lectura and insercion.startswith("INSERT INTO outbox")
+    assert conexion.en_transaccion == [True, True]
+    assert conexion.sentencias[0][1] == {"cliente": CLIENTE, "proposito": "PERFILAMIENTO_PRECIO"}
+    assert parametros[1:6] == (
+        CLIENTE,
+        "VerificacionConsentimientoRegistrada",
+        1,
+        OTORGADO + timedelta(days=1),
+        "corr-w31",
+    )
+    assert parametros[6].obj["decision"] == "PERMITIDO"
+
+
+async def test_verificar_un_cliente_inexistente_no_escribe_evento() -> None:
+    repo, conexion = _repo()
+
+    assert await repo.verificar(CLIENTE, VERIFICACION, "corr-w31") is None
+    assert len(conexion.sentencias) == 1  # solo la lectura
+
+
+async def test_verificar_sin_consentimiento_registra_el_rechazo() -> None:
+    repo, conexion = _repo(_fila_verificacion())
+
+    verificacion = await repo.verificar(CLIENTE, VERIFICACION, "corr-w31")
+
+    assert verificacion is not None
+    assert (verificacion.decision, verificacion.causa) == (
+        Decision.RECHAZADO,
+        CausaRechazo.SIN_CONSENTIMIENTO,
+    )
+    assert conexion.sentencias[1][1][6].obj["causa"] == "SIN_CONSENTIMIENTO"
+
+
+async def test_si_falla_el_outbox_la_verificacion_falla() -> None:
+    repo, conexion = _repo(_fila_verificacion({}))
+    conexion.fallas["INSERT INTO outbox"] = psycopg.OperationalError("caída")
+
+    with pytest.raises(psycopg.OperationalError):
+        await repo.verificar(CLIENTE, VERIFICACION, "corr-w31")
+
+
+def test_el_evento_de_verificacion_lleva_solo_identificadores_y_codigos() -> None:
+    lectura = lectura_verificacion(
+        _fila_verificacion({"estado": "REVOCADO", "revocado_en": OTORGADO.astimezone(BOGOTA)})
+    )
+    verificacion = decidir(VERIFICACION, lectura)
+    evento = outbox_pg.verificacion_registrada(verificacion, "corr-1")
+
+    assert (evento.event_type, evento.event_version, evento.aggregate_id) == (
+        "VerificacionConsentimientoRegistrada",
+        1,
+        CLIENTE,
+    )
+    assert evento.occurred_at == verificacion.verificado_en
+    assert evento.payload == {
+        "clienteId": str(CLIENTE),
+        "consentimientoId": str(ID),  # el evaluado, aunque la respuesta lo omita
+        "proposito": "PERFILAMIENTO_PRECIO",
+        "alcancesSolicitados": list(CUATRO),
+        "decision": "RECHAZADO",
+        "causa": "REVOCADO",
+        "alcancesRechazados": list(CUATRO),
+        "verificadoEn": "2026-10-18T12:00:00+00:00",
+    }
+
+
+def test_el_evento_de_verificacion_sin_consentimiento_lleva_nulos() -> None:
+    verificacion = decidir(VERIFICACION, lectura_verificacion(_fila_verificacion()))
+    evento = outbox_pg.verificacion_registrada(verificacion, "corr-1")
+
+    assert evento.payload["consentimientoId"] is None
+    assert evento.payload["causa"] == "SIN_CONSENTIMIENTO"

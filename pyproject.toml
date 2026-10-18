@@ -51,6 +51,7 @@ module = [
     "clientes.adapters.outbound.textos_json",
     "clientes.adapters.outbound.eventos",
     "clientes.adapters.inbound.http.consentimientos",
+    "clientes.adapters.inbound.http.verificaciones_consentimiento",
     "bff_movil.domain.consentimientos.*",
     "bff_movil.application.consentimientos.*",
     "bff_movil.adapters.outbound.consentimientos_http",

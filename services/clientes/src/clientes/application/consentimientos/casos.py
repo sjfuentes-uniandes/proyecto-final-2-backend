@@ -1,5 +1,5 @@
 """Casos de uso del consentimiento: otorgar, consultar, listar y texto vigente (HU-M08); revocar
-y consultar el historial (HU-M09)."""
+y consultar el historial (HU-M09); verificar antes de consultar datos financieros (HU-W31)."""
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -9,6 +9,7 @@ from clientes.application.consentimientos.puertos import (
     CatalogoTextos,
     Otorgamiento,
     RepositorioConsentimientos,
+    RepositorioVerificaciones,
     Revocacion,
 )
 from clientes.application.identidad.casos import ConsultarCliente
@@ -28,6 +29,7 @@ from clientes.domain.consentimientos.modelos import (
     TextoNoVigente,
 )
 from clientes.domain.consentimientos.textos import TextoLegal
+from clientes.domain.consentimientos.verificacion import SolicitudVerificacion, Verificacion
 from clientes.domain.identidad.modelos import ClienteNoEncontrado
 
 
@@ -188,6 +190,23 @@ class RevocarConsentimiento:
         if consentimiento is None:
             raise ConsentimientoNoEncontrado()
         return consentimiento
+
+
+class VerificarConsentimiento:
+    def __init__(self, repositorio: RepositorioVerificaciones) -> None:
+        self._repositorio = repositorio
+
+    async def ejecutar(
+        self, cliente_id: UUID, proposito: str, alcances: Sequence[str], *, correlation_id: str
+    ) -> Verificacion:
+        """Sin caché (ADR 0011): cada llamada lee la base y registra su decisión, también si
+        repite la anterior. Un cliente inexistente no registra nada."""
+        verificacion = await self._repositorio.verificar(
+            cliente_id, SolicitudVerificacion.crear(proposito, alcances), correlation_id
+        )
+        if verificacion is None:
+            raise ClienteNoEncontrado()
+        return verificacion
 
 
 class ConsultarTextoVigente:
