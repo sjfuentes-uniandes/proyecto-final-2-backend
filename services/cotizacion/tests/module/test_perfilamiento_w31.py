@@ -1,9 +1,10 @@
 """Pruebas de módulo de HU-W31 (PR 3.4): comprobación final del consentimiento tras la fase B.
 
-Con PostgreSQL, WireMock (doble de `clientes` con escenarios) y las apps reales de catalogo y
-adaptador-datos. El escenario hace que `clientes` responda vigente en la fase A y distinto en la
-comprobación final, como si la revocación ocurriera mientras se consultan las fuentes. La PR 3.7
-repite el caso contra `clientes` real (R2 de fallo b).
+Con PostgreSQL, WireMock (aliados) y las apps reales de catalogo, adaptador-datos y `clientes`
+(desde la PR 3.7; antes, un doble con escenarios). Para que algo pase "mientras se consultan las
+fuentes", la prueba usa un adaptador-datos propio que, antes de dejar pasar la primera consulta,
+ejecuta una acción contra `clientes` real (`AntesDeConsultar`, en el `conftest`): revocar por su
+API, o bloquear su outbox para que la comprobación final no responda.
 """
 
 import json
@@ -25,6 +26,7 @@ MIGRACIONES = (
     / "migraciones"
 )
 C01 = "00000000-0000-4000-8000-000000000001"
+CONSENTIMIENTO_C01 = "00000000-0000-4000-9000-000000000001"
 TODAS = [
     "FA_PRODUCTOS_VIGENTES",
     "FA_HISTORIAL_PAGOS_12M",
@@ -34,13 +36,10 @@ TODAS = [
 ACTOR = {"X-Actor-Id": "asesor-sintetico", "X-Actor-Rol": "ASESOR"}
 
 
-def _verificaciones(svc: Any) -> list[list[str]]:
-    """Alcances de cada verificación de C01 que recibió el doble, en orden."""
-    return [
-        json.loads(r["body"])["alcances"]
-        for r in svc.wiremock.solicitudes()
-        if r["url"] == f"/clientes/v1/clientes/{C01}/consentimientos/verificaciones"
-    ]
+def _verificaciones(svc: Any, cliente: str = C01) -> list[list[str]]:
+    """Alcances de cada verificación del cliente que recibió `clientes`, en orden: cada una deja
+    su `VerificacionConsentimientoRegistrada` en el outbox (PR 3.2)."""
+    return [v["alcancesSolicitados"] for v in svc.clientes.verificaciones(cliente)]
 
 
 def _datos_consentidos(svc: Any, perfil_id: str) -> dict[str, Any]:
@@ -66,12 +65,15 @@ def _datos_consentidos(svc: Any, perfil_id: str) -> dict[str, Any]:
 
 
 def test_mt_w31_01_revocacion_durante_la_fase_b_conserva_y_marca(
-    cotizacion: Any, centinelas: tuple[str, ...]
+    cotizacion: Any, adaptador_con_accion: Any, clientes_real: Any, centinelas: tuple[str, ...]
 ) -> None:
-    svc = cotizacion()
-    svc.wiremock.activar_escenario("revocacion-en-vuelo-c01", "fase-a")
+    def revocar_en_vuelo() -> None:
+        # El titular revoca desde la app mientras las fuentes están en vuelo (ADR 0004).
+        clientes_real.revocar("01", CONSENTIMIENTO_C01)
 
-    respuesta = svc.enviar("01")
+    with adaptador_con_accion(revocar_en_vuelo) as adaptador:
+        svc = cotizacion(ADAPTADOR_DATOS_URL=adaptador)
+        respuesta = svc.enviar("01")
 
     assert respuesta.status_code == 201, respuesta.text
     perfil = respuesta.json()
@@ -132,21 +134,29 @@ def test_mt_w31_03_rechazo_en_fase_a_no_comprueba(cotizacion: Any) -> None:
     perfil = svc.enviar("08").json()  # C08: revocado antes de empezar
     assert perfil["accionSugerida"] == "COMPLETAR_CONSENTIMIENTO"
     assert (perfil["comprobacionFinal"], perfil["revocadoDurantePerfilamiento"]) == (None, False)
-    verificaciones = [r for r in svc.wiremock.solicitudes() if r["url"].endswith("/verificaciones")]
+    verificaciones = _verificaciones(svc, "00000000-0000-4000-8000-000000000008")
     assert len(verificaciones) == 1
 
 
-def test_mt_w31_04_caida_de_clientes_en_la_comprobacion_falla_cerrado(cotizacion: Any) -> None:
-    svc = cotizacion()
-    svc.wiremock.activar_escenario("caida-al-comprobar-c01", "fase-a")
+def test_mt_w31_04_caida_de_clientes_en_la_comprobacion_falla_cerrado(
+    cotizacion: Any, adaptador_con_accion: Any, clientes_real: Any
+) -> None:
+    """La fase A responde; la comprobación final no (`clientes` no puede registrar su decisión
+    y agota el tiempo de cotizacion): falla técnica real en lugar del 500 del doble."""
+    bloqueo = clientes_real.bloqueo_outbox()
     clave = uuid4()
-
-    respuesta = svc.enviar("01", clave=clave)
+    try:
+        with adaptador_con_accion(bloqueo.tomar) as adaptador:
+            svc = cotizacion(ADAPTADOR_DATOS_URL=adaptador)
+            respuesta = svc.enviar("01", clave=clave)
+    finally:
+        bloqueo.soltar()
 
     assert respuesta.status_code == 503, respuesta.text
     cuerpo = respuesta.json()
     assert cuerpo["codigo"] == "DEPENDENCIA_NO_DISPONIBLE"
     assert cuerpo["detalles"] == {"dependencia": "clientes.consentimiento"}
+    svc.clientes.esperar_verificaciones(C01, 2)  # la bloqueada termina al soltar el outbox
     assert len(_verificaciones(svc)) == 2
     assert (
         svc.bases.filas(

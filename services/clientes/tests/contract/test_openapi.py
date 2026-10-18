@@ -198,7 +198,7 @@ def test_contrato_del_registro() -> None:
 
 # Lo que `cotizacion` espera de `clientes`: los valores de la propuesta del consumidor, retirada en
 # la PR 3.6. Del lado de `cotizacion`, sus DTO se cotejan con este contrato
-# (`test_dobles_clientes.py`), y su pacto lo verifica `test_pact_proveedor.py`.
+# (`test_dto_clientes.py`), y su pacto lo verifica `test_pact_proveedor.py`.
 CAMPOS_IDENTIDAD = {"clienteId", "estado", "verificadoEn"}
 CAMPOS_VERIFICACION = {
     "decision",
