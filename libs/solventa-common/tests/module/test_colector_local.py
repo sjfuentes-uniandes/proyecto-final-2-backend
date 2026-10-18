@@ -31,7 +31,9 @@ class SettingsCotizacion(ServiceSettings):
     service_name: str = "cotizacion"
 
 
-class ColectorLocal(trace_service_pb2_grpc.TraceServiceServicer, metrics_service_pb2_grpc.MetricsServiceServicer):
+class ColectorLocal(
+    trace_service_pb2_grpc.TraceServiceServicer, metrics_service_pb2_grpc.MetricsServiceServicer
+):
     def __init__(self) -> None:
         self.trazas: list[trace_service_pb2.ExportTraceServiceRequest] = []
         self.metricas: list[metrics_service_pb2.ExportMetricsServiceRequest] = []
@@ -68,13 +70,18 @@ def colector() -> Iterator[tuple[ColectorLocal, int]]:
 
 @pytest.fixture
 def servicio(
-    monkeypatch: pytest.MonkeyPatch, colector: tuple[ColectorLocal, int], capturar_logs: Callable[..., io.StringIO]
+    monkeypatch: pytest.MonkeyPatch,
+    colector: tuple[ColectorLocal, int],
+    capturar_logs: Callable[..., io.StringIO],
 ) -> Iterator[tuple[TestClient, ColectorLocal, io.StringIO]]:
     receptor, puerto = colector
     # Contrato de infra/apps/ecs.tf, apuntando al colector local.
     monkeypatch.setenv("ENVIRONMENT", "int")
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", f"http://127.0.0.1:{puerto}")
-    monkeypatch.setenv("OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION", "base2_exponential_bucket_histogram")
+    monkeypatch.setenv(
+        "OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION",
+        "base2_exponential_bucket_histogram",
+    )
     monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
 
     app = FastAPI()
@@ -112,7 +119,11 @@ def test_log_metrica_y_traza_llegan_al_colector_con_la_misma_correlacion(servici
         for span in ss.spans
     ]
     recurso, span = next((r, s) for r, s in spans if s.name == "perfilamiento")
-    assert (recurso["Service"], recurso["Environment"], recurso["service.name"]) == ("cotizacion", "int", "cotizacion")
+    assert (recurso["Service"], recurso["Environment"], recurso["service.name"]) == (
+        "cotizacion",
+        "int",
+        "cotizacion",
+    )
     assert _atributos(span.attributes)["correlation_id"] == "prueba-123"
     assert _atributos(span.attributes)["operation"] == "perfilamiento"
     assert {_atributos(s.attributes).get("correlation_id") for _, s in spans} == {"prueba-123"}
@@ -129,14 +140,23 @@ def test_log_metrica_y_traza_llegan_al_colector_con_la_misma_correlacion(servici
     duracion, recurso_metrica = metricas["OperationDuration"]
     assert duracion.unit == "ms"
     assert duracion.WhichOneof("data") == "exponential_histogram"
-    operaciones = {_atributos(p.attributes)["Operation"] for p in duracion.exponential_histogram.data_points}
+    operaciones = {
+        _atributos(p.attributes)["Operation"] for p in duracion.exponential_histogram.data_points
+    }
     assert {"perfilamiento", "POST /perfilamiento"} <= operaciones
     assert (recurso_metrica["Service"], recurso_metrica["Environment"]) == ("cotizacion", "int")
 
     # Log de la misma operación: servicio, ambiente, correlación y trace_id de la traza exportada.
-    log = next(json.loads(linea) for linea in logs.getvalue().splitlines() if '"operation": "perfilamiento"' in linea)
+    log = next(
+        json.loads(linea)
+        for linea in logs.getvalue().splitlines()
+        if '"operation": "perfilamiento"' in linea
+    )
     assert (log["service"], log["environment"], log["correlation_id"], log["result"]) == (
-        "cotizacion", "int", "prueba-123", "ok",
+        "cotizacion",
+        "int",
+        "prueba-123",
+        "ok",
     )
     assert log["trace_id"] == trace_id_xray(int.from_bytes(span.trace_id, "big"))
 

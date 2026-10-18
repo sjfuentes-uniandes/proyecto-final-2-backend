@@ -97,7 +97,7 @@ def test_200_respuesta_canonica(cliente_con: Any) -> None:
     assert request.headers["X-Api-Key"] == "local-sintetico"
     assert request.headers["X-Correlation-Id"] == CORRELACION
     # Timeout efectivo de 270 ms; ProteccionDependencia pasa lo que resta de él (reloj real).
-    assert 0.25 < request.extensions["timeout"]["read"] <= 0.27
+    assert 0.25 < request.extensions["timeout"]["read"] <= 0.27 + 1e-6
 
 
 def test_200_valores_decimales_en_texto_y_no_disponible(cliente_con: Any) -> None:

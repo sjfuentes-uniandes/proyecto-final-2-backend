@@ -7,7 +7,9 @@ from bff_web.domain.usuarios import GRUPOS, NuevoUsuario, Usuario, UsuarioYaExis
 
 
 def _atributos(usuario: Mapping[str, Any]) -> dict[str, str]:
-    return {a["Name"]: a["Value"] for a in usuario.get("Attributes", usuario.get("UserAttributes", []))}
+    return {
+        a["Name"]: a["Value"] for a in usuario.get("Attributes", usuario.get("UserAttributes", []))
+    }
 
 
 def _usuario(datos: Mapping[str, Any], grupos: list[str]) -> Usuario:
@@ -29,14 +31,21 @@ class DirectorioCognito:
 
     def _paginar(self, operacion: str, **parametros: Any) -> list[Mapping[str, Any]]:
         paginador = self.cliente.get_paginator(operacion)
-        return [u for pagina in paginador.paginate(UserPoolId=self.pool_id, **parametros) for u in pagina["Users"]]
+        return [
+            u
+            for pagina in paginador.paginate(UserPoolId=self.pool_id, **parametros)
+            for u in pagina["Users"]
+        ]
 
     def listar(self) -> list[Usuario]:
         grupos_por_usuario: dict[str, list[str]] = {}
         for grupo in GRUPOS:
             for usuario in self._paginar("list_users_in_group", GroupName=grupo):
                 grupos_por_usuario.setdefault(str(usuario["Username"]), []).append(grupo)
-        return [_usuario(u, grupos_por_usuario.get(str(u["Username"]), [])) for u in self._paginar("list_users")]
+        return [
+            _usuario(u, grupos_por_usuario.get(str(u["Username"]), []))
+            for u in self._paginar("list_users")
+        ]
 
     def crear(self, nuevo: NuevoUsuario) -> Usuario:
         try:
@@ -53,7 +62,9 @@ class DirectorioCognito:
         except self.cliente.exceptions.UsernameExistsException as error:
             raise UsuarioYaExiste(nuevo.email) from error
         for grupo in nuevo.grupos:
-            self.cliente.admin_add_user_to_group(UserPoolId=self.pool_id, Username=nuevo.email, GroupName=grupo)
+            self.cliente.admin_add_user_to_group(
+                UserPoolId=self.pool_id, Username=nuevo.email, GroupName=grupo
+            )
         return _usuario(respuesta["User"], list(nuevo.grupos))
 
 

@@ -28,7 +28,11 @@ PERFIL_ID = "00000000-0000-4000-a000-000000000001"
 C01 = {
     "clienteId": "00000000-0000-4000-8000-000000000001",
     "productoId": "vida-hipotecario",
-    "datosDeclarados": {"fechaNacimiento": "1990-04-18", "plazoCreditoMeses": 180, "sumaAsegurada": 180000000},
+    "datosDeclarados": {
+        "fechaNacimiento": "1990-04-18",
+        "plazoCreditoMeses": 180,
+        "sumaAsegurada": 180000000,
+    },
 }
 PERFIL = {
     "id": PERFIL_ID,
@@ -39,16 +43,34 @@ PERFIL = {
     "puntaje": 75.9,
     "confianza": 0.92,
     "factores": [
-        {"codigo": "PUNTUALIDAD_PAGOS", "fuente": "FA_HISTORIAL_PAGOS_12M", "peso": 0.3, "estado": "EVALUADO",
-         "contribucion": 0.9, "direccion": "REDUCE_RIESGO", "motivo": None},
+        {
+            "codigo": "PUNTUALIDAD_PAGOS",
+            "fuente": "FA_HISTORIAL_PAGOS_12M",
+            "peso": 0.3,
+            "estado": "EVALUADO",
+            "contribucion": 0.9,
+            "direccion": "REDUCE_RIESGO",
+            "motivo": None,
+        },
     ],
     "ajustes": [],
     "datosRequeridos": [],
     "accionSugerida": None,
-    "consentimiento": {"decision": "PERMITIDO", "causa": None, "vigenteHasta": "2027-10-01T00:00:00Z"},
+    "consentimiento": {
+        "decision": "PERMITIDO",
+        "causa": None,
+        "vigenteHasta": "2027-10-01T00:00:00Z",
+    },
     "fuentes": [
-        {"fuente": "FA_PRODUCTOS_VIGENTES", "tipo": "FINANZAS_ABIERTAS", "estado": "CONSULTADA",
-         "versionFuente": "3.1", "confianza": 0.95, "consultadaEn": "2026-10-15T15:00:00.100000Z", "duracionMs": 52},
+        {
+            "fuente": "FA_PRODUCTOS_VIGENTES",
+            "tipo": "FINANZAS_ABIERTAS",
+            "estado": "CONSULTADA",
+            "versionFuente": "3.1",
+            "confianza": 0.95,
+            "consultadaEn": "2026-10-15T15:00:00.100000Z",
+            "duracionMs": 52,
+        },
     ],
     "fuentesConsultadas": 4,
     "fuentesDeclaradas": 4,
@@ -58,8 +80,18 @@ PERFIL = {
     "presupuestoMs": 400,
     "perfilAnteriorId": None,
 }
-RESUMEN = {k: PERFIL[k] for k in ("id", "estado", "nivelRiesgo", "confianza", "versionModelo", "calculadoEn",
-                                  "perfilAnteriorId")}
+RESUMEN = {
+    k: PERFIL[k]
+    for k in (
+        "id",
+        "estado",
+        "nivelRiesgo",
+        "confianza",
+        "versionModelo",
+        "calculadoEn",
+        "perfilAnteriorId",
+    )
+}
 
 
 class CotizacionFalsa:
@@ -76,7 +108,9 @@ class CotizacionFalsa:
         if solicitud.method == "GET" and solicitud.url.path == "/v1/perfiles":
             return httpx.Response(200, json={"items": [RESUMEN]})
         if solicitud.method == "GET":
-            return self.por_id.get(solicitud.url.path.rsplit("/", 1)[-1], httpx.Response(200, json=PERFIL))
+            return self.por_id.get(
+                solicitud.url.path.rsplit("/", 1)[-1], httpx.Response(200, json=PERFIL)
+            )
         return self.respuesta
 
 
@@ -90,9 +124,12 @@ def cotizacion(monkeypatch: pytest.MonkeyPatch) -> Iterator[CotizacionFalsa]:
     app.dependency_overrides.clear()
 
 
-def _crear(encabezados: dict[str, str] | None = None, cuerpo: dict[str, Any] | None = None) -> httpx.Response:
+def _crear(
+    encabezados: dict[str, str] | None = None, cuerpo: dict[str, Any] | None = None
+) -> httpx.Response:
     return TestClient(app).post(
-        "/v1/perfiles", json=C01 if cuerpo is None else cuerpo,
+        "/v1/perfiles",
+        json=C01 if cuerpo is None else cuerpo,
         headers={**ASESOR, "Idempotency-Key": CLAVE} if encabezados is None else encabezados,
     )
 
@@ -101,17 +138,32 @@ def _crear(encabezados: dict[str, str] | None = None, cuerpo: dict[str, Any] | N
     "encabezados",
     [
         {"X-Authenticated-Issuer": BACKOFFICE, "X-Authenticated-Sub": "s"},
-        {"X-Authenticated-Groups": "[operacion]", "X-Authenticated-Issuer": BACKOFFICE, "X-Authenticated-Sub": "s"},
-        {"X-Authenticated-Groups": "[asesores]", "X-Authenticated-Issuer": "https://otro", "X-Authenticated-Sub": "s"},
+        {
+            "X-Authenticated-Groups": "[operacion]",
+            "X-Authenticated-Issuer": BACKOFFICE,
+            "X-Authenticated-Sub": "s",
+        },
+        {
+            "X-Authenticated-Groups": "[asesores]",
+            "X-Authenticated-Issuer": "https://otro",
+            "X-Authenticated-Sub": "s",
+        },
     ],
     ids=["sin-grupo", "otro-grupo", "otro-emisor"],
 )
-def test_solo_asesores_del_backoffice(cotizacion: CotizacionFalsa, encabezados: dict[str, str]) -> None:
-    for metodo, url in (("post", "/v1/perfiles"), ("get", f"/v1/perfiles/{PERFIL_ID}"),
-                        ("get", f"/v1/perfiles?clienteId={C01['clienteId']}"),
-                        ("post", f"/v1/perfiles/{PERFIL_ID}/recalculos"),
-                        ("get", f"/v1/perfiles/{PERFIL_ID}/comparacion")):
-        respuesta = TestClient(app).request(metodo, url, json=C01, headers={**encabezados, "Idempotency-Key": CLAVE})
+def test_solo_asesores_del_backoffice(
+    cotizacion: CotizacionFalsa, encabezados: dict[str, str]
+) -> None:
+    for metodo, url in (
+        ("post", "/v1/perfiles"),
+        ("get", f"/v1/perfiles/{PERFIL_ID}"),
+        ("get", f"/v1/perfiles?clienteId={C01['clienteId']}"),
+        ("post", f"/v1/perfiles/{PERFIL_ID}/recalculos"),
+        ("get", f"/v1/perfiles/{PERFIL_ID}/comparacion"),
+    ):
+        respuesta = TestClient(app).request(
+            metodo, url, json=C01, headers={**encabezados, "Idempotency-Key": CLAVE}
+        )
         assert respuesta.status_code == 403
         assert respuesta.json()["codigo"] == "ROL_NO_AUTORIZADO"
         assert set(respuesta.json()) == {"codigo", "mensaje", "correlationId", "detalles"}
@@ -138,7 +190,9 @@ def test_misma_clave_responde_200(cotizacion: CotizacionFalsa) -> None:
 
 
 def test_sin_usuario_autenticado_responde_401(cotizacion: CotizacionFalsa) -> None:
-    encabezados = {k: v for k, v in ASESOR.items() if k != "X-Authenticated-Sub"} | {"Idempotency-Key": CLAVE}
+    encabezados = {k: v for k, v in ASESOR.items() if k != "X-Authenticated-Sub"} | {
+        "Idempotency-Key": CLAVE
+    }
     respuesta = _crear(encabezados)
     assert respuesta.status_code == 401
     assert respuesta.json()["codigo"] == "ACTOR_REQUERIDO"
@@ -149,13 +203,16 @@ def test_sin_usuario_autenticado_responde_401(cotizacion: CotizacionFalsa) -> No
     ("cuerpo", "campo"),
     [
         ({**C01, "productoId": "Vida"}, "productoId"),
-        ({**C01, "datosDeclarados": {**C01["datosDeclarados"], "plazoCreditoMeses": 400}},
-         "datosDeclarados.plazoCreditoMeses"),
+        (
+            {**C01, "datosDeclarados": {**C01["datosDeclarados"], "plazoCreditoMeses": 400}},
+            "datosDeclarados.plazoCreditoMeses",
+        ),
         ({k: v for k, v in C01.items() if k != "clienteId"}, "clienteId"),
     ],
 )
-def test_cuerpo_invalido_no_llega_a_cotizacion(cotizacion: CotizacionFalsa, cuerpo: dict[str, Any],
-                                               campo: str) -> None:
+def test_cuerpo_invalido_no_llega_a_cotizacion(
+    cotizacion: CotizacionFalsa, cuerpo: dict[str, Any], campo: str
+) -> None:
     respuesta = _crear(cuerpo=cuerpo)
     assert respuesta.status_code == 422
     assert respuesta.json()["codigo"] == "SOLICITUD_INVALIDA"
@@ -183,20 +240,34 @@ def test_idempotency_key_obligatoria(cotizacion: CotizacionFalsa, clave: str | N
         (503, "DEPENDENCIA_NO_DISPONIBLE", {"dependencia": "catalogo.modelo"}),
     ],
 )
-def test_errores_b2_de_cotizacion_pasan_sin_cambios(cotizacion: CotizacionFalsa, estado: int, codigo: str,
-                                                    detalles: dict[str, Any]) -> None:
-    cotizacion.respuesta = httpx.Response(estado, json={"codigo": codigo, "mensaje": "Mensaje de cotizacion",
-                                                        "correlationId": "otro", "detalles": detalles})
+def test_errores_b2_de_cotizacion_pasan_sin_cambios(
+    cotizacion: CotizacionFalsa, estado: int, codigo: str, detalles: dict[str, Any]
+) -> None:
+    cotizacion.respuesta = httpx.Response(
+        estado,
+        json={
+            "codigo": codigo,
+            "mensaje": "Mensaje de cotizacion",
+            "correlationId": "otro",
+            "detalles": detalles,
+        },
+    )
     respuesta = _crear()
     assert respuesta.status_code == estado
-    assert respuesta.json() == {"codigo": codigo, "mensaje": "Mensaje de cotizacion",
-                                "correlationId": "corr-bff-w11", "detalles": detalles}
+    assert respuesta.json() == {
+        "codigo": codigo,
+        "mensaje": "Mensaje de cotizacion",
+        "correlationId": "corr-bff-w11",
+        "detalles": detalles,
+    }
 
 
 @pytest.mark.parametrize(
     "falla",
     [
-        httpx.Response(500, json={"codigo": "ERROR_INTERNO", "mensaje": "Error interno", "detalles": {}}),
+        httpx.Response(
+            500, json={"codigo": "ERROR_INTERNO", "mensaje": "Error interno", "detalles": {}}
+        ),
         httpx.Response(502, text="Bad Gateway"),
         httpx.Response(503, text="Service Unavailable"),
         httpx.Response(504, json={"codigo": "TIEMPO_AGOTADO", "mensaje": "x", "detalles": {}}),
@@ -219,7 +290,9 @@ def test_consultar_y_listar(cotizacion: CotizacionFalsa) -> None:
     cliente = TestClient(app)
     perfil = cliente.get(f"/v1/perfiles/{PERFIL_ID}", headers=ASESOR)
     assert (perfil.status_code, perfil.json()) == (200, PERFIL)
-    lista = cliente.get("/v1/perfiles", params={"clienteId": C01["clienteId"], "limite": 5}, headers=ASESOR)
+    lista = cliente.get(
+        "/v1/perfiles", params={"clienteId": C01["clienteId"], "limite": 5}, headers=ASESOR
+    )
     assert lista.json() == {"items": [RESUMEN]}
     detalle, listado = cotizacion.solicitudes
     assert detalle.url.path == f"/v1/perfiles/{PERFIL_ID}"
@@ -228,15 +301,26 @@ def test_consultar_y_listar(cotizacion: CotizacionFalsa) -> None:
 
 
 def test_perfil_inexistente(cotizacion: CotizacionFalsa) -> None:
-    cuerpo = {"codigo": "PERFIL_NO_ENCONTRADO", "mensaje": "El perfil no existe", "correlationId": None, "detalles": {}}
-    cliente = CotizacionCliente("http://cotizacion:8080", 1500, httpx.MockTransport(lambda _: httpx.Response(404, json=cuerpo)))
+    cuerpo = {
+        "codigo": "PERFIL_NO_ENCONTRADO",
+        "mensaje": "El perfil no existe",
+        "correlationId": None,
+        "detalles": {},
+    }
+    cliente = CotizacionCliente(
+        "http://cotizacion:8080",
+        1500,
+        httpx.MockTransport(lambda _: httpx.Response(404, json=cuerpo)),
+    )
     app.dependency_overrides[ruta.perfilamiento] = lambda: Perfilamiento(cliente)
     respuesta = TestClient(app).get(f"/v1/perfiles/{PERFIL_ID}", headers=ASESOR)
     assert respuesta.status_code == 404
     assert respuesta.json()["codigo"] == "PERFIL_NO_ENCONTRADO"
 
 
-@pytest.mark.parametrize("params", [{"clienteId": "x"}, {}, {"clienteId": C01["clienteId"], "limite": 51}])
+@pytest.mark.parametrize(
+    "params", [{"clienteId": "x"}, {}, {"clienteId": C01["clienteId"], "limite": 51}]
+)
 def test_listado_invalido(cotizacion: CotizacionFalsa, params: dict[str, Any]) -> None:
     respuesta = TestClient(app).get("/v1/perfiles", params=params, headers=ASESOR)
     assert respuesta.status_code == 422
@@ -252,8 +336,11 @@ def test_las_rutas_de_hu_w27_conservan_su_formato() -> None:
 def test_cors_permite_idempotency_key() -> None:
     respuesta = TestClient(app).options(
         "/v1/perfiles",
-        headers={"Origin": "http://localhost:4200", "Access-Control-Request-Method": "POST",
-                 "Access-Control-Request-Headers": "idempotency-key,content-type"},
+        headers={
+            "Origin": "http://localhost:4200",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "idempotency-key,content-type",
+        },
     )
     assert respuesta.status_code == 200
     assert "idempotency-key" in respuesta.headers["access-control-allow-headers"].lower()
@@ -305,7 +392,8 @@ def test_recalcular_reenvia_actor_rol_y_clave(cotizacion: CotizacionFalsa) -> No
     assert respuesta.json() == RECALCULADO
     (solicitud,) = cotizacion.solicitudes
     assert (solicitud.method, str(solicitud.url)) == (
-        "POST", f"http://cotizacion:8080/v1/perfiles/{PERFIL_ID}/recalculos",
+        "POST",
+        f"http://cotizacion:8080/v1/perfiles/{PERFIL_ID}/recalculos",
     )
     assert solicitud.headers["Idempotency-Key"] == CLAVE
     assert solicitud.headers["X-Actor-Id"] == "sub-asesora"
@@ -330,10 +418,18 @@ def test_recalcular_exige_idempotency_key(cotizacion: CotizacionFalsa, clave: st
 
 @pytest.mark.parametrize(
     ("estado", "codigo"),
-    [(404, "PERFIL_NO_ENCONTRADO"), (422, "IDEMPOTENCIA_CONFLICTO"), (503, "DEPENDENCIA_NO_DISPONIBLE")],
+    [
+        (404, "PERFIL_NO_ENCONTRADO"),
+        (422, "IDEMPOTENCIA_CONFLICTO"),
+        (503, "DEPENDENCIA_NO_DISPONIBLE"),
+    ],
 )
-def test_recalcular_pasa_los_errores_b2(cotizacion: CotizacionFalsa, estado: int, codigo: str) -> None:
-    cotizacion.respuesta = httpx.Response(estado, json={"codigo": codigo, "mensaje": "m", "detalles": {}})
+def test_recalcular_pasa_los_errores_b2(
+    cotizacion: CotizacionFalsa, estado: int, codigo: str
+) -> None:
+    cotizacion.respuesta = httpx.Response(
+        estado, json={"codigo": codigo, "mensaje": "m", "detalles": {}}
+    )
     respuesta = _recalcular()
     assert (respuesta.status_code, respuesta.json()["codigo"]) == (estado, codigo)
 
@@ -357,7 +453,8 @@ def test_comparacion_responde_anterior_y_actual(cotizacion: CotizacionFalsa) -> 
     assert respuesta.status_code == 200
     assert respuesta.json() == {"anterior": DEGRADADO, "actual": RECALCULADO}
     assert [s.url.path for s in cotizacion.solicitudes] == [
-        f"/v1/perfiles/{NUEVO_ID}", f"/v1/perfiles/{PERFIL_ID}",
+        f"/v1/perfiles/{NUEVO_ID}",
+        f"/v1/perfiles/{PERFIL_ID}",
     ]
     assert {s.headers["X-Actor-Id"] for s in cotizacion.solicitudes} == {"sub-asesora"}
 
@@ -374,7 +471,9 @@ def test_comparacion_sin_perfil_anterior_responde_422(cotizacion: CotizacionFals
 def test_comparacion_con_un_perfil_inexistente_responde_404(
     cotizacion: CotizacionFalsa, inexistente: str
 ) -> None:
-    no_existe = httpx.Response(404, json={"codigo": "PERFIL_NO_ENCONTRADO", "mensaje": "m", "detalles": {}})
+    no_existe = httpx.Response(
+        404, json={"codigo": "PERFIL_NO_ENCONTRADO", "mensaje": "m", "detalles": {}}
+    )
     cotizacion.por_id = {NUEVO_ID: httpx.Response(200, json=RECALCULADO), inexistente: no_existe}
     respuesta = _comparar()
     assert (respuesta.status_code, respuesta.json()["codigo"]) == (404, "PERFIL_NO_ENCONTRADO")

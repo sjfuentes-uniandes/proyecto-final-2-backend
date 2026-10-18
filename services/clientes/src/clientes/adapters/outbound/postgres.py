@@ -5,20 +5,38 @@ from uuid import UUID, uuid4
 import psycopg
 from psycopg.rows import dict_row
 
-from clientes.domain.identidad.modelos import Cliente, EstadoIdentidad, RegistroYaVinculado
+from clientes.domain.identidad.modelos import (
+    Cliente,
+    DatosCliente,
+    EstadoIdentidad,
+    RegistroYaVinculado,
+)
 
-_COLUMNAS = "id, sub, estado, verificado_en, registro_id, correo"
+_COLUMNAS = (
+    "id, sub, estado, verificado_en, registro_id, correo, tipo_documento, numero_documento, "
+    "nombre_completo, fecha_nacimiento, proveedor, referencia"
+)
 _SELECT = f"SELECT {_COLUMNAS} FROM cliente"
 _POR_ID = _SELECT + " WHERE id = %s"
 _POR_SUB = _SELECT + " WHERE sub = %s"
 _POR_REGISTRO = _SELECT + " WHERE registro_id = %s"
+_POR_DOCUMENTO = _SELECT + " WHERE tipo_documento = %s AND numero_documento = %s"
 # DO NOTHING + SELECT: dos solicitudes simultáneas del mismo `sub` terminan con un solo cliente.
 _CREAR = "INSERT INTO cliente (id, sub, estado) VALUES (%s, %s, 'PENDIENTE') ON CONFLICT (sub) DO NOTHING"
 _CREAR_REGISTRO = (
     "INSERT INTO cliente (id, registro_id, correo, estado) VALUES (%s, %s, %s, 'PENDIENTE') "
     "ON CONFLICT (registro_id) DO NOTHING"
 )
-_ACTUALIZAR = "UPDATE cliente SET estado = %s, verificado_en = %s WHERE id = %s"
+# RETURNING solo devuelve fila si este INSERT creó el cliente: distingue el alta del reintento.
+_CREAR_DOCUMENTO = (
+    "INSERT INTO cliente (id, tipo_documento, numero_documento, nombre_completo, "
+    "fecha_nacimiento, estado) VALUES (%s, %s, %s, %s, %s, 'PENDIENTE') "
+    "ON CONFLICT (tipo_documento, numero_documento) DO NOTHING RETURNING id"
+)
+_ACTUALIZAR = (
+    "UPDATE cliente SET estado = %s, verificado_en = %s, proveedor = %s, referencia = %s "
+    "WHERE id = %s"
+)
 # Solo asocia si el cliente no tiene `sub` o ya es el mismo (idempotente).
 _VINCULAR = (
     f"UPDATE cliente SET sub = %s WHERE id = %s AND (sub IS NULL OR sub = %s) RETURNING {_COLUMNAS}"
@@ -52,6 +70,12 @@ def _cliente(fila: dict[str, Any]) -> Cliente:
         verificado_en=fila["verificado_en"],
         registro_id=fila["registro_id"],
         correo=fila["correo"],
+        tipo_documento=fila["tipo_documento"],
+        numero_documento=fila["numero_documento"],
+        nombre_completo=fila["nombre_completo"],
+        fecha_nacimiento=fila["fecha_nacimiento"],
+        proveedor=fila["proveedor"],
+        referencia=fila["referencia"],
     )
 
 
@@ -93,6 +117,28 @@ class RepositorioPostgres:
             raise RuntimeError("El cliente no existe tras crearlo")
         return _cliente(fila)
 
+    def asegurar_por_documento(self, datos: DatosCliente) -> tuple[Cliente, bool]:
+        with self._conectar() as conexion:
+            creado = (
+                conexion.execute(
+                    _CREAR_DOCUMENTO,
+                    (
+                        uuid4(),
+                        datos.tipo_documento,
+                        datos.numero_documento,
+                        datos.nombre_completo,
+                        datos.fecha_nacimiento,
+                    ),
+                ).fetchone()
+                is not None
+            )
+            fila = conexion.execute(
+                _POR_DOCUMENTO, (datos.tipo_documento, datos.numero_documento)
+            ).fetchone()
+        if fila is None:
+            raise RuntimeError("El cliente no existe tras crearlo")
+        return _cliente(fila), creado
+
     def vincular(self, cliente_id: UUID, sub: str) -> Cliente:
         try:
             with self._conectar() as conexion:
@@ -105,4 +151,13 @@ class RepositorioPostgres:
 
     def guardar(self, cliente: Cliente) -> None:
         with self._conectar() as conexion:
-            conexion.execute(_ACTUALIZAR, (cliente.estado.value, cliente.verificado_en, cliente.id))
+            conexion.execute(
+                _ACTUALIZAR,
+                (
+                    cliente.estado.value,
+                    cliente.verificado_en,
+                    cliente.proveedor,
+                    cliente.referencia,
+                    cliente.id,
+                ),
+            )

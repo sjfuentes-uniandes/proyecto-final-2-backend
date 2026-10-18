@@ -3,7 +3,7 @@
 import os
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -12,7 +12,12 @@ import psycopg
 import pytest
 from clientes.adapters.outbound.postgres import RepositorioPostgres, migrar
 from clientes.config import Settings
-from clientes.domain.identidad.modelos import EstadoIdentidad, RegistroYaVinculado, ResultadoKyc
+from clientes.domain.identidad.modelos import (
+    DatosCliente,
+    EstadoIdentidad,
+    RegistroYaVinculado,
+    ResultadoKyc,
+)
 from clientes.main import crear_app
 from fastapi.testclient import TestClient
 
@@ -56,7 +61,23 @@ def test_la_tabla_no_guarda_biometria(base: str) -> None:
                 "SELECT column_name FROM information_schema.columns WHERE table_name = 'cliente'"
             )
         }
-    assert columnas == {"id", "sub", "registro_id", "correo", "estado", "verificado_en", "creado"}
+    assert columnas == {
+        "id",
+        "sub",
+        "registro_id",
+        "correo",
+        "estado",
+        "verificado_en",
+        "creado",
+        # HU-W30: documento del alta por un asesor y traza de la verificación.
+        "tipo_documento",
+        "numero_documento",
+        "nombre_completo",
+        "fecha_nacimiento",
+        "proveedor",
+        "referencia",
+    }
+    assert not {c for c in columnas if "selfie" in c or "biometr" in c or "rostro" in c}
 
 
 def test_asegurar_es_idempotente(repo: RepositorioPostgres) -> None:
@@ -240,3 +261,143 @@ def test_flujo_de_registro_con_reintentos_sobre_postgres(repo: RepositorioPostgr
     with psycopg.connect(repo.url) as conexion:
         filas = conexion.execute("SELECT sub, correo, estado FROM cliente").fetchall()
     assert filas == [("sub-registro-1", "persona@ejemplo.co", "VERIFICADO")]
+
+
+# --- HU-W30: alta por documento y verificación documental ---
+
+ASESOR = {"X-Actor-Id": "asesor-1", "X-Actor-Rol": "ASESOR"}
+ALTA = {
+    "tipoDocumento": "CC",
+    "numeroDocumento": "1020456789",
+    "nombreCompleto": "Natalia González Ruiz",
+    "fechaNacimiento": "1990-04-18",
+}
+
+
+def _proveedor(resultado: str = "APROBADO") -> httpx.Response:
+    cuerpo = {
+        "resultado": resultado,
+        "motivo": None,
+        "referencia": "kyc-ref-001",
+        "proveedor": "KYC",
+    }
+    return httpx.Response(200, json=cuerpo)
+
+
+def _contar(repo: RepositorioPostgres) -> int:
+    with psycopg.connect(repo.url) as conexion:
+        fila = conexion.execute("SELECT count(*) FROM cliente").fetchone()
+    assert fila is not None
+    return int(fila[0])
+
+
+def test_el_alta_por_documento_es_idempotente_y_nace_pendiente(repo: RepositorioPostgres) -> None:
+    datos = DatosCliente("CC", "1020456789", "Natalia González Ruiz", date(1990, 4, 18))
+
+    primero, creado = repo.asegurar_por_documento(datos)
+    segundo, creado_de_nuevo = repo.asegurar_por_documento(
+        DatosCliente("CC", "1020456789", "Otro Nombre", date(1980, 1, 1))
+    )
+
+    assert (creado, creado_de_nuevo) == (True, False)
+    assert primero == segundo
+    assert primero.estado is EstadoIdentidad.PENDIENTE
+    assert primero.datos == datos
+    assert _contar(repo) == 1
+
+
+def test_el_alta_concurrente_del_mismo_documento_deja_un_solo_cliente(
+    repo: RepositorioPostgres,
+) -> None:
+    datos = DatosCliente("CC", "1020456789", "Natalia González Ruiz", date(1990, 4, 18))
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        resultados = list(pool.map(lambda _: repo.asegurar_por_documento(datos), range(20)))
+    assert len({c.id for c, _ in resultados}) == 1
+    assert sum(1 for _, creado in resultados if creado) == 1
+
+
+def test_el_mismo_numero_con_otro_tipo_de_documento_es_otro_cliente(
+    repo: RepositorioPostgres,
+) -> None:
+    fecha = date(1990, 4, 18)
+    cedula, _ = repo.asegurar_por_documento(DatosCliente("CC", "1020456789", "A B", fecha))
+    extranjeria, _ = repo.asegurar_por_documento(DatosCliente("CE", "1020456789", "A B", fecha))
+    assert cedula.id != extranjeria.id
+
+
+def test_guardar_persiste_proveedor_y_referencia(repo: RepositorioPostgres) -> None:
+    ahora = datetime(2026, 10, 17, 12, tzinfo=UTC)
+    cliente, _ = repo.asegurar_por_documento(
+        DatosCliente("CC", "1020456789", "Natalia González Ruiz", date(1990, 4, 18))
+    )
+
+    repo.guardar(cliente.con_resultado(ResultadoKyc.APROBADO, ahora, "KYC", "kyc-ref-001"))
+
+    guardado = repo.obtener(cliente.id)
+    assert guardado is not None and guardado.verificado
+    assert (guardado.verificado_en, guardado.proveedor, guardado.referencia) == (
+        ahora,
+        "KYC",
+        "kyc-ref-001",
+    )
+
+
+def test_un_documento_incompleto_no_existe(base: str, repo: RepositorioPostgres) -> None:
+    with psycopg.connect(base) as conexion, pytest.raises(psycopg.errors.CheckViolation):
+        conexion.execute(
+            "INSERT INTO cliente (id, numero_documento, estado) VALUES (%s, '1020456789', 'PENDIENTE')",
+            (uuid4(),),
+        )
+
+
+def test_el_cliente_por_documento_y_el_de_registro_conviven_tras_migrar_de_nuevo(
+    base: str, repo: RepositorioPostgres
+) -> None:
+    """La migración es idempotente y no rompe a los clientes de la HU-M06."""
+    repo.asegurar("sub-m06")
+    repo.asegurar_registro(uuid4(), "a@b.co")
+    repo.asegurar_por_documento(DatosCliente("CC", "1020456789", "A B", date(1990, 4, 18)))
+    migrar(base)
+    assert _contar(repo) == 3
+
+
+def test_flujo_del_asesor_sobre_postgres_con_falla_tecnica_y_reintento(
+    repo: RepositorioPostgres,
+) -> None:
+    """AC1, AC3 y AC4: pendiente ante la falla, verificado al reintentar, una sola identidad."""
+    cliente = _app(repo, [httpx.Response(503), _proveedor("APROBADO")])
+    with cliente:
+        alta = cliente.post("/v1/clientes", json=ALTA, headers=ASESOR)
+        assert alta.status_code == 201
+        cliente_id = alta.json()["clienteId"]
+        ruta = f"/v1/clientes/{cliente_id}/identidad/verificacion-documental"
+
+        caida = cliente.post(ruta, headers=ASESOR)
+        assert caida.status_code == 503
+        assert caida.json()["detalles"]["estado"] == "PENDIENTE"
+        assert cliente.get(f"/v1/clientes/{cliente_id}", headers=ASESOR).json()["estado"] == (
+            "PENDIENTE"
+        )
+
+        verificado = cliente.post(ruta, headers=ASESOR).json()
+        assert verificado["estado"] == "VERIFICADO"
+        assert (verificado["proveedor"], verificado["referencia"]) == ("KYC", "kyc-ref-001")
+        # Confirmación repetida: no consume otra respuesta del proveedor.
+        assert cliente.post(ruta, headers=ASESOR).json() == verificado
+        assert cliente.post("/v1/clientes", json=ALTA, headers=ASESOR).status_code == 200
+        identidad = cliente.get(f"/v1/clientes/{cliente_id}/identidad").json()
+        assert identidad["estado"] == "VERIFICADO"
+    assert _contar(repo) == 1
+
+
+def test_un_rechazo_deja_la_identidad_rechazada_sobre_postgres(repo: RepositorioPostgres) -> None:
+    """AC2: la identidad rechazada queda registrada, con su traza y sin duplicar al cliente."""
+    cliente = _app(repo, [_proveedor("RECHAZADO")])
+    with cliente:
+        cliente_id = cliente.post("/v1/clientes", json=ALTA, headers=ASESOR).json()["clienteId"]
+        respuesta = cliente.post(
+            f"/v1/clientes/{cliente_id}/identidad/verificacion-documental", headers=ASESOR
+        ).json()
+        assert respuesta["estado"] == "RECHAZADO" and respuesta["verificadoEn"] is None
+        assert cliente.get(f"/v1/clientes/{cliente_id}/identidad").json()["estado"] == "RECHAZADO"
+    assert _contar(repo) == 1

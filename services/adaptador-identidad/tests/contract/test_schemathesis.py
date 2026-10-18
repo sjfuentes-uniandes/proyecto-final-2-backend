@@ -10,7 +10,10 @@ from schemathesis.specs.openapi.checks import positive_data_acceptance
 
 
 def _nominal(request: httpx.Request) -> httpx.Response:
-    return httpx.Response(200, json={"resultado": "APROBADO", "motivo": None})
+    cuerpo = {"resultado": "APROBADO", "motivo": None}
+    if request.url.path.endswith("/documento"):
+        cuerpo["referencia"] = "kyc-ref-sintetica"
+    return httpx.Response(200, json=cuerpo)
 
 
 app = crear_app(Settings(), transport=httpx.MockTransport(_nominal))

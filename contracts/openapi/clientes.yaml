@@ -160,6 +160,212 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/clientes:
+    post:
+      tags:
+      - alta-de-clientes
+      summary: Da de alta al cliente en estado PENDIENTE
+      description: El mismo documento devuelve el mismo cliente, sin duplicarlo ni
+        cambiar sus datos.
+      operationId: crear_v1_clientes_post
+      parameters:
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudAltaCliente'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de ASESOR'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '200':
+          description: 'El documento ya tenía cliente: se reutiliza'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteDto'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/clientes/{cliente_id}:
+    get:
+      tags:
+      - alta-de-clientes
+      summary: Estado de la identidad y traza de la verificación del cliente
+      operationId: obtener_v1_clientes__cliente_id__get
+      parameters:
+      - name: cliente_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cliente Id
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de ASESOR'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: CLIENTE_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/clientes/{cliente_id}/identidad/verificacion-documental:
+    post:
+      tags:
+      - alta-de-clientes
+      summary: Pide al proveedor que verifique la identidad del cliente por su documento
+      description: Un cliente ya VERIFICADO responde su estado actual sin consultar
+        de nuevo al proveedor.
+      operationId: verificar_v1_clientes__cliente_id__identidad_verificacion_documental_post
+      parameters:
+      - name: cliente_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cliente Id
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de ASESOR'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: CLIENTE_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: 'CLIENTE_SIN_DOCUMENTO: el cliente no se dio de alta con documento'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'DEPENDENCIA_NO_DISPONIBLE: el proveedor no respondió; no es
+            un rechazo, el cliente conserva su estado y se puede reintentar (detalles.motivo
+            y detalles.estado)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/registros/{registro_id}/verificaciones:
     post:
       tags:
@@ -783,6 +989,40 @@ components:
       - PROPOSITO_NO_AUTORIZADO
       title: CausaRechazo
       description: Causa funcional estable de un `RECHAZADO` (W31 AC2).
+    ClienteDto:
+      properties:
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        estado:
+          $ref: '#/components/schemas/EstadoIdentidad'
+        verificadoEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Verificadoen
+        proveedor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Proveedor
+        referencia:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Referencia
+      type: object
+      required:
+      - clienteId
+      - estado
+      - verificadoEn
+      - proveedor
+      - referencia
+      title: ClienteDto
+      description: Estado del cliente y traza de la verificación. No incluye PII ni
+        el motivo del proveedor.
     ConsentimientoDto:
       properties:
         consentimientoId:
@@ -953,6 +1193,32 @@ components:
       - RECHAZADO
       title: ResultadoKyc
       description: Veredicto del proveedor de identidad, tal como lo entrega `adaptador-identidad`.
+    SolicitudAltaCliente:
+      properties:
+        tipoDocumento:
+          type: string
+          pattern: ^[A-Z]{2,3}$
+          title: Tipodocumento
+        numeroDocumento:
+          type: string
+          pattern: ^[A-Za-z0-9]{3,20}$
+          title: Numerodocumento
+        nombreCompleto:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Nombrecompleto
+        fechaNacimiento:
+          type: string
+          format: date
+          title: Fechanacimiento
+      type: object
+      required:
+      - tipoDocumento
+      - numeroDocumento
+      - nombreCompleto
+      - fechaNacimiento
+      title: SolicitudAltaCliente
     SolicitudOtorgar:
       properties:
         proposito:

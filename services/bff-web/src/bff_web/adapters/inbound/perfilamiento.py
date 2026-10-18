@@ -28,7 +28,9 @@ def _error(descripcion: str) -> dict[str, Any]:
 
 
 router = APIRouter(
-    prefix="/v1/perfiles", tags=["perfiles"], route_class=RutaB2,
+    prefix="/v1/perfiles",
+    tags=["perfiles"],
+    route_class=RutaB2,
     dependencies=[Depends(requerir_grupo(settings.grupo_asesores))],
     responses={
         401: _error("ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado"),
@@ -214,7 +216,9 @@ def perfilamiento() -> Perfilamiento:
 
 
 def actor(
-    x_authenticated_sub: Annotated[str | None, Header(alias="X-Authenticated-Sub", include_in_schema=False)] = None,
+    x_authenticated_sub: Annotated[
+        str | None, Header(alias="X-Authenticated-Sub", include_in_schema=False)
+    ] = None,
 ) -> str:
     """El asesor autenticado: API Gateway pone su `sub` en X-Authenticated-Sub (DT-17)."""
     if not x_authenticated_sub:
@@ -231,7 +235,9 @@ IdPerfil = Annotated[UUID, Path(alias="perfilId")]
 
 
 @router.post(
-    "", response_model=PerfilRespuesta, status_code=201,
+    "",
+    response_model=PerfilRespuesta,
+    status_code=201,
     responses={
         200: {"model": PerfilRespuesta, "description": "Misma Idempotency-Key y mismo cuerpo"},
         403: _error("ROL_NO_AUTORIZADO o IDENTIDAD_NO_VERIFICADA"),
@@ -241,18 +247,24 @@ IdPerfil = Annotated[UUID, Path(alias="perfilId")]
     },
 )
 async def crear_perfil(
-    solicitud: SolicitudPerfil, http: Response, servicio: Servicio, asesor: Actor,
+    solicitud: SolicitudPerfil,
+    http: Response,
+    servicio: Servicio,
+    asesor: Actor,
     idempotency_key: Annotated[UUID, Header(alias="Idempotency-Key")],
 ) -> dict[str, Any]:
     """Calcula el perfil de riesgo del cliente (paso 1 del perfilamiento)."""
-    estado, perfil = await servicio.crear(solicitud.model_dump(mode="json", by_alias=True), asesor, idempotency_key)
+    estado, perfil = await servicio.crear(
+        solicitud.model_dump(mode="json", by_alias=True), asesor, idempotency_key
+    )
     http.status_code = estado
     return perfil
 
 
 @router.get("", response_model=ListaPerfiles)
 async def listar_perfiles(
-    servicio: Servicio, asesor: Actor,
+    servicio: Servicio,
+    asesor: Actor,
     cliente_id: Annotated[UUID, Query(alias="clienteId")],
     limite: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> dict[str, Any]:
@@ -260,14 +272,20 @@ async def listar_perfiles(
     return await servicio.listar(cliente_id, limite, asesor)
 
 
-@router.get("/{perfilId}", response_model=PerfilRespuesta, responses={404: _error("PERFIL_NO_ENCONTRADO")})
-async def consultar_perfil(perfil_id: IdPerfil, servicio: Servicio, asesor: Actor) -> dict[str, Any]:
+@router.get(
+    "/{perfilId}", response_model=PerfilRespuesta, responses={404: _error("PERFIL_NO_ENCONTRADO")}
+)
+async def consultar_perfil(
+    perfil_id: IdPerfil, servicio: Servicio, asesor: Actor
+) -> dict[str, Any]:
     """Un perfil calculado (D02)."""
     return await servicio.obtener(perfil_id, asesor)
 
 
 @router.post(
-    "/{perfilId}/recalculos", response_model=PerfilRespuesta, status_code=201,
+    "/{perfilId}/recalculos",
+    response_model=PerfilRespuesta,
+    status_code=201,
     responses={
         200: {"model": PerfilRespuesta, "description": "Misma Idempotency-Key"},
         403: _error("ROL_NO_AUTORIZADO o IDENTIDAD_NO_VERIFICADA"),
@@ -277,7 +295,10 @@ async def consultar_perfil(perfil_id: IdPerfil, servicio: Servicio, asesor: Acto
     },
 )
 async def recalcular_perfil(
-    perfil_id: IdPerfil, http: Response, servicio: Servicio, asesor: Actor,
+    perfil_id: IdPerfil,
+    http: Response,
+    servicio: Servicio,
+    asesor: Actor,
     idempotency_key: Annotated[UUID, Header(alias="Idempotency-Key")],
 ) -> dict[str, Any]:
     """Recalcula el perfil con el modelo vigente: crea uno nuevo y el anterior no cambia."""
@@ -287,7 +308,8 @@ async def recalcular_perfil(
 
 
 @router.get(
-    "/{perfilId}/comparacion", response_model=ComparacionPerfiles,
+    "/{perfilId}/comparacion",
+    response_model=ComparacionPerfiles,
     responses={
         404: _error("PERFIL_NO_ENCONTRADO"),
         422: _error("SOLICITUD_INVALIDA o SIN_PERFIL_ANTERIOR"),

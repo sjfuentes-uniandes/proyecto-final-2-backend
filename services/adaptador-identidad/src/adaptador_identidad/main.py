@@ -12,6 +12,7 @@ from solventa_common.telemetry import instrumentar
 
 from adaptador_identidad.adapters.inbound.http import verificaciones
 from adaptador_identidad.adapters.outbound.kyc_http import KycHttp
+from adaptador_identidad.application.verificaciones.verificar_documento import VerificarDocumento
 from adaptador_identidad.application.verificaciones.verificar_identidad import VerificarIdentidad
 from adaptador_identidad.config import Settings
 
@@ -33,14 +34,21 @@ def crear_app(
             cliente_kyc = await pila.enter_async_context(
                 correlation.cliente_async(transport=transport)
             )
+            proveedor = KycHttp(
+                cliente_kyc, settings.ally_kyc_url, settings.ally_kyc_credentials.client_secret
+            )
+            # Solo timeout; la protección completa es de la historia de consulta en paralelo
+            # (W12). El corte es el timeout del proveedor (3 s en infra): una verificación
+            # biométrica no cabe en los 700 ms de las consultas de perfilamiento.
+            proteccion = SinProteccion(corte_duro_ms=settings.ally_kyc_timeout_ms)
             app.state.verificar_identidad = VerificarIdentidad(
-                proveedor=KycHttp(
-                    cliente_kyc, settings.ally_kyc_url, settings.ally_kyc_credentials.client_secret
-                ),
-                # Solo timeout; la protección completa es de la historia de consulta en paralelo
-                # (W12). El corte es el timeout del proveedor (3 s en infra): una verificación
-                # biométrica no cabe en los 700 ms de las consultas de perfilamiento.
-                proteccion=SinProteccion(corte_duro_ms=settings.ally_kyc_timeout_ms),
+                proveedor=proveedor,
+                proteccion=proteccion,
+                timeout_ms=settings.ally_kyc_timeout_ms,
+            )
+            app.state.verificar_documento = VerificarDocumento(
+                proveedor=proveedor,
+                proteccion=proteccion,
                 timeout_ms=settings.ally_kyc_timeout_ms,
             )
             yield

@@ -25,10 +25,14 @@ def _error(descripcion: str) -> dict[str, Any]:
 
 
 router = APIRouter(
-    prefix="/socios", tags=["socios"], route_class=RutaB2,
+    prefix="/socios",
+    tags=["socios"],
+    route_class=RutaB2,
     dependencies=[Depends(requerir_grupo(settings.grupo_administradores_socios))],
     responses={
-        403: _error("ROL_NO_AUTORIZADO: falta el grupo administradores-socios o no es del back-office"),
+        403: _error(
+            "ROL_NO_AUTORIZADO: falta el grupo administradores-socios o no es del back-office"
+        ),
         404: _error("SOCIO_NO_ENCONTRADO"),
         422: _error("SOLICITUD_INVALIDA (detalles.campos)"),
         503: _error("SERVICIO_NO_DISPONIBLE: api-socios no respondió"),
@@ -82,7 +86,9 @@ RAZON_SOCIAL = rf"^[^\S{_CONTROL}]*[^\s{_CONTROL}][^{_CONTROL}]*[^\s{_CONTROL}][
 class NuevoSocioSolicitud(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    nombre: str = Field(min_length=2, max_length=120, pattern=RAZON_SOCIAL, description="Razón social")
+    nombre: str = Field(
+        min_length=2, max_length=120, pattern=RAZON_SOCIAL, description="Razón social"
+    )
     canal: CanalVenta
     plan: Plan
     permisos: list[Permiso] = Field(min_length=1, max_length=len(Permiso))
@@ -143,7 +149,9 @@ class ConsumoSocio(BaseModel):
     restante: int
     porcentaje: int
     estado: EstadoCuota
-    limitadas: int | None = Field(None, description="Respuestas 429 en la ventana; null si no hay métricas")
+    limitadas: int | None = Field(
+        None, description="Respuestas 429 en la ventana; null si no hay métricas"
+    )
 
 
 @lru_cache
@@ -161,48 +169,76 @@ async def _proteger(llamada: Any) -> Any:
         return await llamada
     except ErrorApiSocios as error:
         if error.status in _REENVIADOS and error.codigo:
-            raise ErrorNegocio(error.codigo, error.mensaje or "Solicitud rechazada", error.status, error.detalles) from error
-        raise ErrorNegocio("SERVICIO_NO_DISPONIBLE", "api-socios no respondió correctamente", 503) from error
+            raise ErrorNegocio(
+                error.codigo, error.mensaje or "Solicitud rechazada", error.status, error.detalles
+            ) from error
+        raise ErrorNegocio(
+            "SERVICIO_NO_DISPONIBLE", "api-socios no respondió correctamente", 503
+        ) from error
     except httpx.HTTPError as error:
         raise ErrorNegocio("SERVICIO_NO_DISPONIBLE", "api-socios no respondió", 503) from error
 
 
 @router.get("", response_model=list[SocioRespuesta], response_model_by_alias=True)
-async def listar_socios(cliente: Cliente, administrador: Administrador = None) -> list[dict[str, Any]]:
+async def listar_socios(
+    cliente: Cliente, administrador: Administrador = None
+) -> list[dict[str, Any]]:
     return await _proteger(cliente.listar(administrador))
 
 
 @router.post("", response_model=SocioCreado, response_model_by_alias=True, status_code=201)
-async def habilitar_socio(solicitud: NuevoSocioSolicitud, cliente: Cliente, http: Response,
-                          administrador: Administrador = None) -> dict[str, Any]:
+async def habilitar_socio(
+    solicitud: NuevoSocioSolicitud,
+    cliente: Cliente,
+    http: Response,
+    administrador: Administrador = None,
+) -> dict[str, Any]:
     creado = await _proteger(cliente.crear(solicitud.model_dump(mode="json"), administrador))
     http.headers["Cache-Control"] = "no-store"
     return creado
 
 
 @router.get("/planes", response_model=list[LimitesPlan], response_model_by_alias=True)
-async def listar_planes(cliente: Cliente, administrador: Administrador = None) -> list[dict[str, Any]]:
+async def listar_planes(
+    cliente: Cliente, administrador: Administrador = None
+) -> list[dict[str, Any]]:
     return await _proteger(cliente.planes(administrador))
 
 
 @router.get("/{socio_id}", response_model=SocioRespuesta, response_model_by_alias=True)
-async def consultar_socio(socio_id: IdSocio, cliente: Cliente, administrador: Administrador = None) -> dict[str, Any]:
+async def consultar_socio(
+    socio_id: IdSocio, cliente: Cliente, administrador: Administrador = None
+) -> dict[str, Any]:
     return await _proteger(cliente.obtener(socio_id, administrador))
 
 
 @router.post("/{socio_id}/desactivar", response_model=SocioRespuesta, response_model_by_alias=True)
-async def desactivar_socio(socio_id: IdSocio, cliente: Cliente, administrador: Administrador = None) -> dict[str, Any]:
+async def desactivar_socio(
+    socio_id: IdSocio, cliente: Cliente, administrador: Administrador = None
+) -> dict[str, Any]:
     return await _proteger(cliente.desactivar(socio_id, administrador))
 
 
-@router.put("/{socio_id}/plan", response_model=SocioRespuesta, response_model_by_alias=True,
-            responses={409: _error("SOCIO_DESACTIVADO"),
-                       422: _error("SOLICITUD_INVALIDA o PLAN_NO_DISPONIBLE (detalles.plan)")})
-async def cambiar_plan(socio_id: IdSocio, solicitud: CambioPlanSolicitud, cliente: Cliente,
-                       administrador: Administrador = None) -> dict[str, Any]:
+@router.put(
+    "/{socio_id}/plan",
+    response_model=SocioRespuesta,
+    response_model_by_alias=True,
+    responses={
+        409: _error("SOCIO_DESACTIVADO"),
+        422: _error("SOLICITUD_INVALIDA o PLAN_NO_DISPONIBLE (detalles.plan)"),
+    },
+)
+async def cambiar_plan(
+    socio_id: IdSocio,
+    solicitud: CambioPlanSolicitud,
+    cliente: Cliente,
+    administrador: Administrador = None,
+) -> dict[str, Any]:
     return await _proteger(cliente.cambiar_plan(socio_id, solicitud.plan.value, administrador))
 
 
 @router.get("/{socio_id}/consumo", response_model=ConsumoSocio, response_model_by_alias=True)
-async def consultar_consumo(socio_id: IdSocio, cliente: Cliente, administrador: Administrador = None) -> dict[str, Any]:
+async def consultar_consumo(
+    socio_id: IdSocio, cliente: Cliente, administrador: Administrador = None
+) -> dict[str, Any]:
     return await _proteger(cliente.consumo(socio_id, administrador))

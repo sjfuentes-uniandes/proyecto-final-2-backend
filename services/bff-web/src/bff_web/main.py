@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from solventa_common.telemetry import instrumentar
 
-from bff_web.adapters.inbound import operacion, perfilamiento, socios, usuarios
+from bff_web.adapters.inbound import clientes, operacion, perfilamiento, socios, usuarios
 from bff_web.config import settings
 
 app = instrumentar(FastAPI(title=settings.service_name), settings)
@@ -21,6 +21,7 @@ app.include_router(operacion.router)
 app.include_router(usuarios.router)
 app.include_router(socios.router)
 app.include_router(perfilamiento.router)
+app.include_router(clientes.router)
 
 
 @app.get("/health")

@@ -20,6 +20,9 @@ def test_contrato_de_verificaciones() -> None:
         "/v1/clientes/actual",
         "/v1/clientes/{cliente_id}/identidad",
         "/v1/clientes/actual/identidad/verificaciones",
+        "/v1/clientes",
+        "/v1/clientes/{cliente_id}",
+        "/v1/clientes/{cliente_id}/identidad/verificacion-documental",
         "/v1/clientes/actual/consentimientos",
         "/v1/clientes/actual/consentimientos/{consentimientoId}",
         "/v1/clientes/actual/consentimientos/{consentimientoId}/revocacion",
@@ -40,6 +43,37 @@ def test_contrato_de_verificaciones() -> None:
         "verificadoEn",
     }
     assert esquemas["EstadoIdentidad"]["enum"] == ["VERIFICADO", "PENDIENTE", "RECHAZADO"]
+
+
+def test_contrato_del_alta_y_la_verificacion_documental() -> None:
+    """HU-W30: alta idempotente en PENDIENTE y verificación por documento, solo para asesores."""
+    rutas = app.openapi()["paths"]
+    alta = rutas["/v1/clientes"]["post"]
+    assert set(alta["responses"]) == {"200", "201", "400", "401", "403", "422"}
+    verificar = rutas["/v1/clientes/{cliente_id}/identidad/verificacion-documental"]["post"]
+    assert set(verificar["responses"]) == {"200", "401", "403", "404", "409", "422", "503"}
+    assert set(rutas["/v1/clientes/{cliente_id}"]["get"]["responses"]) == {
+        "200",
+        "401",
+        "403",
+        "404",
+        "422",
+    }
+    esquemas = app.openapi()["components"]["schemas"]
+    assert set(esquemas["SolicitudAltaCliente"]["required"]) == {
+        "tipoDocumento",
+        "numeroDocumento",
+        "nombreCompleto",
+        "fechaNacimiento",
+    }
+    # La respuesta lleva el estado y la traza, nunca PII ni el motivo del proveedor.
+    assert set(esquemas["ClienteDto"]["properties"]) == {
+        "clienteId",
+        "estado",
+        "verificadoEn",
+        "proveedor",
+        "referencia",
+    }
 
 
 def test_contrato_de_consentimientos() -> None:

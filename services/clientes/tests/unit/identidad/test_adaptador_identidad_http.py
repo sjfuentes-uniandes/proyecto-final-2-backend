@@ -1,11 +1,12 @@
 import json
 from collections.abc import Callable
+from datetime import date
 from uuid import UUID
 
 import httpx
 import pytest
 from clientes.adapters.outbound.adaptador_identidad_http import AdaptadorIdentidadHttp
-from clientes.domain.identidad.modelos import IdentidadNoDisponible, ResultadoKyc
+from clientes.domain.identidad.modelos import DatosCliente, IdentidadNoDisponible, ResultadoKyc
 
 pytestmark = pytest.mark.anyio
 
@@ -86,4 +87,78 @@ async def test_fallas_de_red(excepcion: Exception, motivo: str) -> None:
 
     with pytest.raises(IdentidadNoDisponible) as error:
         await _adaptador(manejador).verificar(CLIENTE, "selfie", {})
+    assert error.value.motivo == motivo
+
+
+DATOS = DatosCliente("CC", "1020456789", "Natalia González Ruiz", date(1990, 4, 18))
+APROBADO = {
+    "resultado": "APROBADO",
+    "motivo": None,
+    "referencia": "kyc-ref-001",
+    "proveedor": "KYC",
+}
+
+
+async def test_documento_url_cuerpo_y_veredicto() -> None:
+    recibidas: list[httpx.Request] = []
+
+    def manejador(request: httpx.Request) -> httpx.Response:
+        recibidas.append(request)
+        return httpx.Response(200, json=APROBADO)
+
+    veredicto = await _adaptador(manejador).verificar_documento(CLIENTE, DATOS)
+
+    assert (veredicto.resultado, veredicto.referencia, veredicto.proveedor) == (
+        ResultadoKyc.APROBADO,
+        "kyc-ref-001",
+        "KYC",
+    )
+    (request,) = recibidas
+    assert str(request.url) == "http://adaptador-identidad:8080/v1/verificaciones/documento"
+    assert json.loads(request.content) == {
+        "clienteId": str(CLIENTE),
+        "tipoDocumento": "CC",
+        "numeroDocumento": "1020456789",
+        "nombreCompleto": "Natalia González Ruiz",
+        "fechaNacimiento": "1990-04-18",
+    }
+    assert request.extensions["timeout"]["read"] == 0.5
+
+
+async def test_documento_rechazado_con_motivo() -> None:
+    respuesta = {**APROBADO, "resultado": "RECHAZADO", "motivo": "DATOS_NO_COINCIDEN"}
+    veredicto = await _adaptador(lambda _: httpx.Response(200, json=respuesta)).verificar_documento(
+        CLIENTE, DATOS
+    )
+    assert (veredicto.resultado, veredicto.motivo) == (ResultadoKyc.RECHAZADO, "DATOS_NO_COINCIDEN")
+
+
+@pytest.mark.parametrize(
+    ("respuesta", "motivo"),
+    [
+        (httpx.Response(503), "ERROR"),
+        (httpx.Response(502), "ERROR"),
+        (httpx.Response(504), "TIEMPO_AGOTADO"),
+        (httpx.Response(422), "ERROR"),
+        (httpx.Response(200, text="<html>"), "ERROR"),
+        (httpx.Response(200, json={"resultado": "NO_EXISTE"}), "ERROR"),
+        (httpx.Response(200, json={"resultado": "APROBADO", "motivo": None}), "ERROR"),
+    ],
+)
+async def test_documento_errores_recuperables(respuesta: httpx.Response, motivo: str) -> None:
+    with pytest.raises(IdentidadNoDisponible) as error:
+        await _adaptador(lambda _: respuesta).verificar_documento(CLIENTE, DATOS)
+    assert error.value.motivo == motivo
+
+
+@pytest.mark.parametrize(
+    ("excepcion", "motivo"),
+    [(httpx.ReadTimeout("lento"), "TIEMPO_AGOTADO"), (httpx.ConnectError("caído"), "ERROR")],
+)
+async def test_documento_fallas_de_red(excepcion: Exception, motivo: str) -> None:
+    def manejador(request: httpx.Request) -> httpx.Response:
+        raise excepcion
+
+    with pytest.raises(IdentidadNoDisponible) as error:
+        await _adaptador(manejador).verificar_documento(CLIENTE, DATOS)
     assert error.value.motivo == motivo

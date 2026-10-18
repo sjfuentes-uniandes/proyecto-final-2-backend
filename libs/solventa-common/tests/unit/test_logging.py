@@ -24,18 +24,47 @@ TOKEN = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjMifQ.firma-del-token"
 @pytest.mark.parametrize(
     "clave",
     [
-        "password", "Password", "db_password", "secret", "client_secret", "CLIENT-SECRET", "token",
-        "access_token", "refreshToken", "authorization", "Authorization", "api_key", "x-api-key", "apiKey",
-        "selfie", "selfie_base64", "biometria", "datos_biometricos", "imagen", "imagen_documento",
-        "cuenta", "numero_cuenta", "ingresos", "ingresos_mensuales", "obligaciones", "obligaciones_financieras",
-        "cookie", "set-cookie", "credenciales", "pin", "cvv", "contraseña",
+        "password",
+        "Password",
+        "db_password",
+        "secret",
+        "client_secret",
+        "CLIENT-SECRET",
+        "token",
+        "access_token",
+        "refreshToken",
+        "authorization",
+        "Authorization",
+        "api_key",
+        "x-api-key",
+        "apiKey",
+        "selfie",
+        "selfie_base64",
+        "biometria",
+        "datos_biometricos",
+        "imagen",
+        "imagen_documento",
+        "cuenta",
+        "numero_cuenta",
+        "ingresos",
+        "ingresos_mensuales",
+        "obligaciones",
+        "obligaciones_financieras",
+        "cookie",
+        "set-cookie",
+        "credenciales",
+        "pin",
+        "cvv",
+        "contraseña",
     ],
 )
 def test_claves_sensibles(clave: str) -> None:
     assert es_clave_sensible(clave)
 
 
-@pytest.mark.parametrize("clave", ["operation", "service", "status", "correlation_id", "socio_id", "producto", "opinion"])
+@pytest.mark.parametrize(
+    "clave", ["operation", "service", "status", "correlation_id", "socio_id", "producto", "opinion"]
+)
 def test_claves_normales(clave: str) -> None:
     assert not es_clave_sensible(clave)
 
@@ -48,7 +77,10 @@ def test_sanitiza_casos_anidados() -> None:
             "headers": {"Authorization": f"Bearer {TOKEN}", "X-Correlation-Id": "prueba-123"},
             "cliente": {
                 "documento": "CC-1",
-                "perfil_financiero": {"ingresos": 9_500_000, "obligaciones": [{"entidad": "B", "saldo": 1}]},
+                "perfil_financiero": {
+                    "ingresos": 9_500_000,
+                    "obligaciones": [{"entidad": "B", "saldo": 1}],
+                },
                 "kyc": [{"selfie": "iVBORw0KGgo" * 100}, {"biometria": {"plantilla": "x"}}],
             },
         },
@@ -61,7 +93,10 @@ def test_sanitiza_casos_anidados() -> None:
     assert salida["solicitud"]["headers"]["X-Correlation-Id"] == "prueba-123"
     financiero = salida["solicitud"]["cliente"]["perfil_financiero"]
     assert financiero == {"ingresos": REDACTADO, "obligaciones": REDACTADO}
-    assert salida["solicitud"]["cliente"]["kyc"] == [{"selfie": REDACTADO}, {"biometria": REDACTADO}]
+    assert salida["solicitud"]["cliente"]["kyc"] == [
+        {"selfie": REDACTADO},
+        {"biometria": REDACTADO},
+    ]
     assert salida["listas"] == [[{"password": REDACTADO}]]
     texto = json.dumps(salida)
     assert SECRETO not in texto and TOKEN not in texto and "9500000" not in texto
@@ -88,7 +123,9 @@ def test_limita_la_profundidad() -> None:
 
 
 def test_enmascara_texto_libre() -> None:
-    texto = enmascarar(f"llamada con Authorization: Bearer {TOKEN} password={SECRETO} api_key: {SECRETO} token={TOKEN}")
+    texto = enmascarar(
+        f"llamada con Authorization: Bearer {TOKEN} password={SECRETO} api_key: {SECRETO} token={TOKEN}"
+    )
     assert SECRETO not in texto and TOKEN not in texto
     assert enmascarar(f"Bearer {TOKEN}") == "Bearer [REDACTADO]"
 
@@ -100,7 +137,10 @@ def test_modelos_pydantic() -> None:
         usuario: str
         password: str
 
-    assert sanitizar(Solicitud(usuario="u", password=SECRETO)) == {"usuario": "u", "password": REDACTADO}
+    assert sanitizar(Solicitud(usuario="u", password=SECRETO)) == {
+        "usuario": "u",
+        "password": REDACTADO,
+    }
 
 
 def test_log_json_con_campos_del_contrato(capturar_logs: Callable[..., io.StringIO]) -> None:
@@ -109,14 +149,35 @@ def test_log_json_con_campos_del_contrato(capturar_logs: Callable[..., io.String
     try:
         logging.getLogger("prueba").info(
             "socio creado",
-            extra={"operation": "crear_socio", "result": "ok", "duration_ms": 12.5, "client_secret": SECRETO},
+            extra={
+                "operation": "crear_socio",
+                "result": "ok",
+                "duration_ms": 12.5,
+                "client_secret": SECRETO,
+            },
         )
     finally:
         correlation.restablecer(token)
     linea = json.loads(salida.getvalue())
-    assert {k: linea[k] for k in ("level", "service", "environment", "operation", "result", "duration_ms", "correlation_id")} == {
-        "level": "INFO", "service": "api-socios", "environment": "int", "operation": "crear_socio",
-        "result": "ok", "duration_ms": 12.5, "correlation_id": "prueba-123",
+    assert {
+        k: linea[k]
+        for k in (
+            "level",
+            "service",
+            "environment",
+            "operation",
+            "result",
+            "duration_ms",
+            "correlation_id",
+        )
+    } == {
+        "level": "INFO",
+        "service": "api-socios",
+        "environment": "int",
+        "operation": "crear_socio",
+        "result": "ok",
+        "duration_ms": 12.5,
+        "correlation_id": "prueba-123",
     }
     assert linea["timestamp"].endswith("+00:00")
     assert linea["client_secret"] == REDACTADO
@@ -145,13 +206,15 @@ def test_excepciones_sin_secretos(capturar_logs: Callable[..., io.StringIO]) -> 
     assert SECRETO not in salida.getvalue()
 
 
-def test_configurar_logging_reemplaza_handlers_y_silencia_access_log(capsys: pytest.CaptureFixture[str]) -> None:
+def test_configurar_logging_reemplaza_handlers_y_silencia_access_log(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     raiz = logging.getLogger()
     anteriores = list(raiz.handlers)
     try:
         configurar_logging("catalogo", "int")
         logging.getLogger("uvicorn.error").info("arranque")
-        logging.getLogger("uvicorn.access").info('GET /x?token=%s 200', SECRETO)
+        logging.getLogger("uvicorn.access").info("GET /x?token=%s 200", SECRETO)
         lineas = [json.loads(linea) for linea in capsys.readouterr().out.splitlines()]
         assert [linea["message"] for linea in lineas] == ["arranque"]
         assert lineas[0]["service"] == "catalogo"

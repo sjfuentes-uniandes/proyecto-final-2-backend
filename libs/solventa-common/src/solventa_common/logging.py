@@ -18,10 +18,33 @@ MAX_PROFUNDIDAD = 8
 
 # Fragmentos de clave (en minúsculas, sin separadores) que nunca se registran.
 _FRAGMENTOS_SENSIBLES = (
-    "password", "passwd", "contrasena", "contraseña", "secret", "secreto", "token",
-    "authorization", "autorizacion", "apikey", "cookie", "credential", "credencial",
-    "privatekey", "llaveprivada", "selfie", "biometr", "imagen", "image", "foto",
-    "cuenta", "ingreso", "obligacion", "salario", "saldo", "tarjeta", "card",
+    "password",
+    "passwd",
+    "contrasena",
+    "contraseña",
+    "secret",
+    "secreto",
+    "token",
+    "authorization",
+    "autorizacion",
+    "apikey",
+    "cookie",
+    "credential",
+    "credencial",
+    "privatekey",
+    "llaveprivada",
+    "selfie",
+    "biometr",
+    "imagen",
+    "image",
+    "foto",
+    "cuenta",
+    "ingreso",
+    "obligacion",
+    "salario",
+    "saldo",
+    "tarjeta",
+    "card",
 )
 _CLAVES_SENSIBLES = {"pin", "cvv", "otp", "jwt"}
 
@@ -41,7 +64,9 @@ _MASCARAS = (
 operacion_actual: ContextVar[str | None] = ContextVar("operacion_actual", default=None)
 
 _CAMPOS_ESTANDAR = set(logging.LogRecord("", 0, "", 0, "", None, None).__dict__) | {
-    "message", "asctime", "taskName",
+    "message",
+    "asctime",
+    "taskName",
     "color_message",  # copia con códigos ANSI que agrega uvicorn
 }
 _CAMPOS_BASE = ("operation", "result", "duration_ms")
@@ -100,7 +125,9 @@ class FormateadorJson(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         contexto = trace.get_current_span().get_span_context()
         linea: dict[str, Any] = {
-            "timestamp": datetime.fromtimestamp(record.created, UTC).isoformat(timespec="milliseconds"),
+            "timestamp": datetime.fromtimestamp(record.created, UTC).isoformat(
+                timespec="milliseconds"
+            ),
             "level": record.levelname,
             "service": self.servicio,
             "environment": self.ambiente,
@@ -114,13 +141,16 @@ class FormateadorJson(logging.Formatter):
             "span_id": f"{contexto.span_id:016x}" if contexto.is_valid else None,
         }
         extras = {
-            k: v for k, v in record.__dict__.items()
+            k: v
+            for k, v in record.__dict__.items()
             if k not in _CAMPOS_ESTANDAR and k not in _CAMPOS_BASE and not k.startswith("_")
         }
         linea.update(sanitizar(extras))
         if record.exc_info and record.exc_info[0] is not None:
             linea["error_type"] = record.exc_info[0].__name__
-            linea["exception"] = enmascarar(self.formatException(record.exc_info), maximo=4 * MAX_TEXTO)
+            linea["exception"] = enmascarar(
+                self.formatException(record.exc_info), maximo=4 * MAX_TEXTO
+            )
         return json.dumps(linea, ensure_ascii=False, default=str)
 
 

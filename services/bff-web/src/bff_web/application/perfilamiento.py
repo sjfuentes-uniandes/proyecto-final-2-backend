@@ -23,7 +23,9 @@ _REENVIADOS_5XX = {503}
 
 
 def _servicio_no_disponible() -> ErrorNegocio:
-    return ErrorNegocio(SERVICIO_NO_DISPONIBLE, "El servicio de perfilamiento no está disponible", 503)
+    return ErrorNegocio(
+        SERVICIO_NO_DISPONIBLE, "El servicio de perfilamiento no está disponible", 503
+    )
 
 
 async def _proteger[T](llamada: Awaitable[T]) -> T:
@@ -55,7 +57,9 @@ class Perfilamiento:
     def __init__(self, cotizacion: CotizacionCliente) -> None:
         self.cotizacion = cotizacion
 
-    async def crear(self, cuerpo: dict[str, Any], actor: str, clave: UUID) -> tuple[int, dict[str, Any]]:
+    async def crear(
+        self, cuerpo: dict[str, Any], actor: str, clave: UUID
+    ) -> tuple[int, dict[str, Any]]:
         return await _proteger(self.cotizacion.crear(cuerpo, actor, clave))
 
     async def obtener(self, perfil_id: UUID, actor: str) -> dict[str, Any]:
@@ -64,7 +68,9 @@ class Perfilamiento:
     async def listar(self, cliente_id: UUID, limite: int, actor: str) -> dict[str, Any]:
         return await _proteger(self.cotizacion.listar(cliente_id, limite, actor))
 
-    async def recalcular(self, perfil_id: UUID, actor: str, clave: UUID) -> tuple[int, dict[str, Any]]:
+    async def recalcular(
+        self, perfil_id: UUID, actor: str, clave: UUID
+    ) -> tuple[int, dict[str, Any]]:
         return await _proteger(self.cotizacion.recalcular(perfil_id, actor, clave))
 
     async def comparacion(self, perfil_id: UUID, actor: str) -> dict[str, Any]:
