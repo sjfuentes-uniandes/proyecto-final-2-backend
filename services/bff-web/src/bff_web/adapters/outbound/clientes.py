@@ -1,4 +1,4 @@
-"""Cliente HTTP de la API interna de clientes (/v1/clientes, HU-W30)."""
+"""Cliente HTTP de la API interna de clientes (/v1/clientes, HU-W30 y lectura de HU-W31)."""
 
 from typing import Any
 from uuid import UUID
@@ -26,9 +26,7 @@ class ClientesCliente:
         self.timeout = timeout_ms / 1000
         self.transporte = transporte
 
-    async def _llamar(
-        self, metodo: str, ruta: str, actor: str, **opciones: Any
-    ) -> tuple[int, dict[str, Any]]:
+    async def _llamar(self, metodo: str, ruta: str, actor: str, **opciones: Any) -> tuple[int, Any]:
         encabezados = {"X-Actor-Id": actor, "X-Actor-Rol": ROL_ASESOR}
         async with cliente_async(
             base_url=self.url, timeout=self.timeout, transport=self.transporte
@@ -53,3 +51,10 @@ class ClientesCliente:
     async def verificar(self, cliente_id: UUID, actor: str) -> dict[str, Any]:
         ruta = f"/{cliente_id}/identidad/verificacion-documental"
         return (await self._llamar("POST", ruta, actor))[1]
+
+    async def consentimientos(self, cliente_id: UUID, actor: str) -> Any:
+        return (await self._llamar("GET", f"/{cliente_id}/consentimientos", actor))[1]
+
+    async def historial(self, cliente_id: UUID, consentimiento_id: UUID, actor: str) -> Any:
+        ruta = f"/{cliente_id}/consentimientos/{consentimiento_id}/historial"
+        return (await self._llamar("GET", ruta, actor))[1]
