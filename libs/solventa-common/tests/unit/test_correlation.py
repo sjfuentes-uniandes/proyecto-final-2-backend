@@ -26,7 +26,18 @@ def test_ids_validos(valor: str) -> None:
 
 @pytest.mark.parametrize(
     "valor",
-    [None, "", "x" * 129, "con espacio", "inyección\n", "<script>", "a/b", "id;drop", "ñandú", "tab\t"],
+    [
+        None,
+        "",
+        "x" * 129,
+        "con espacio",
+        "inyección\n",
+        "<script>",
+        "a/b",
+        "id;drop",
+        "ñandú",
+        "tab\t",
+    ],
 )
 def test_ids_invalidos(valor: str | None) -> None:
     assert not correlation.es_valido(valor)
@@ -55,13 +66,17 @@ def test_respeta_el_id_del_socio() -> None:
 
 
 def test_usa_x_request_id_de_api_gateway() -> None:
-    respuesta = TestClient(_app()).get("/eco", headers={"X-Request-Id": "c6af9ac6-7b61-11e6-9a41-93e8deadbeef"})
+    respuesta = TestClient(_app()).get(
+        "/eco", headers={"X-Request-Id": "c6af9ac6-7b61-11e6-9a41-93e8deadbeef"}
+    )
     assert respuesta.headers["X-Correlation-Id"] == "c6af9ac6-7b61-11e6-9a41-93e8deadbeef"
 
 
 def test_rechaza_id_invalido_y_usa_el_siguiente() -> None:
     cliente = TestClient(_app())
-    respuesta = cliente.get("/eco", headers={"X-Correlation-Id": "x" * 129, "X-Request-Id": "req-9"})
+    respuesta = cliente.get(
+        "/eco", headers={"X-Correlation-Id": "x" * 129, "X-Request-Id": "req-9"}
+    )
     assert respuesta.headers["X-Correlation-Id"] == "req-9"
     respuesta = cliente.get("/eco", headers={"X-Correlation-Id": "<script>alert(1)</script>"})
     assert "<" not in respuesta.headers["X-Correlation-Id"]
@@ -88,7 +103,11 @@ def test_encabezados_configurables() -> None:
     async def eco() -> dict[str, str | None]:
         return {"correlation_id": correlation.obtener()}
 
-    app.add_middleware(correlation.CorrelacionMiddleware, correlation_header="X-Trace-Ref", request_id_header="X-Req")
+    app.add_middleware(
+        correlation.CorrelacionMiddleware,
+        correlation_header="X-Trace-Ref",
+        request_id_header="X-Req",
+    )
     respuesta = TestClient(app).get("/eco", headers={"X-Req": "req-7"})
     assert respuesta.headers["X-Trace-Ref"] == "req-7"
 
@@ -100,7 +119,9 @@ def test_el_contexto_se_limpia_al_terminar() -> None:
 
 def test_hook_httpx_propaga_id_y_contexto_de_traza() -> None:
     recibidos: list[httpx.Request] = []
-    transporte = httpx.MockTransport(lambda request: recibidos.append(request) or httpx.Response(200))
+    transporte = httpx.MockTransport(
+        lambda request: recibidos.append(request) or httpx.Response(200)
+    )
     token = correlation.establecer("prueba-123")
     try:
         with correlation.cliente(transport=transporte) as cliente:
@@ -112,7 +133,9 @@ def test_hook_httpx_propaga_id_y_contexto_de_traza() -> None:
 
 def test_hook_httpx_async_propaga_id() -> None:
     recibidos: list[httpx.Request] = []
-    transporte = httpx.MockTransport(lambda request: recibidos.append(request) or httpx.Response(200))
+    transporte = httpx.MockTransport(
+        lambda request: recibidos.append(request) or httpx.Response(200)
+    )
 
     async def llamar() -> None:
         token = correlation.establecer("async-1")
@@ -129,8 +152,12 @@ def test_hook_httpx_async_propaga_id() -> None:
 def test_hook_conserva_otros_hooks_y_no_agrega_nada_sin_contexto() -> None:
     llamados: list[str] = []
     recibidos: list[httpx.Request] = []
-    transporte = httpx.MockTransport(lambda request: recibidos.append(request) or httpx.Response(200))
-    with correlation.cliente(transport=transporte, event_hooks={"request": [lambda r: llamados.append("propio")]}) as c:
+    transporte = httpx.MockTransport(
+        lambda request: recibidos.append(request) or httpx.Response(200)
+    )
+    with correlation.cliente(
+        transport=transporte, event_hooks={"request": [lambda r: llamados.append("propio")]}
+    ) as c:
         c.get("http://otro-servicio/")
     assert llamados == ["propio"]
     assert "X-Correlation-Id" not in recibidos[0].headers
@@ -139,6 +166,9 @@ def test_hook_conserva_otros_hooks_y_no_agrega_nada_sin_contexto() -> None:
 def test_encabezados_salientes_para_otros_clientes() -> None:
     token = correlation.establecer("cola-1")
     try:
-        assert correlation.encabezados_salientes({"Accept": "application/json"})["X-Correlation-Id"] == "cola-1"
+        assert (
+            correlation.encabezados_salientes({"Accept": "application/json"})["X-Correlation-Id"]
+            == "cola-1"
+        )
     finally:
         correlation.restablecer(token)

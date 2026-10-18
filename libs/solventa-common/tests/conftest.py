@@ -83,4 +83,8 @@ def telemetria(settings: Settings, capturar_logs: Callable[..., io.StringIO]) ->
     spans = InMemorySpanExporter()
     lector = InMemoryMetricReader()
     telemetry.configurar(settings, span_exporter=spans, metric_readers=[lector])
-    return Telemetria(spans=spans, lector=lector, salida=capturar_logs(settings.service_name, settings.environment))
+    return Telemetria(
+        spans=spans,
+        lector=lector,
+        salida=capturar_logs(settings.service_name, settings.environment),
+    )

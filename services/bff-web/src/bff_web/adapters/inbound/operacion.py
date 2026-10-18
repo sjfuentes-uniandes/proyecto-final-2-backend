@@ -77,9 +77,15 @@ def _respuesta(detalle: DetalleTraza, umbral_ms: int) -> TrazaRespuesta:
         resultado=detalle.resultado,
         tramos=[
             TramoRespuesta(
-                servicio=t.servicio, operacion=t.operacion, externo=t.externo, inicio_ms=t.inicio_ms,
-                duracion_ms=t.duracion_ms, propio_ms=t.propio_ms, participacion=t.participacion,
-                estado=t.estado, destacado=t.destacado,
+                servicio=t.servicio,
+                operacion=t.operacion,
+                externo=t.externo,
+                inicio_ms=t.inicio_ms,
+                duracion_ms=t.duracion_ms,
+                propio_ms=t.propio_ms,
+                participacion=t.participacion,
+                estado=t.estado,
+                destacado=t.destacado,
             )
             for t in detalle.tramos
         ],
@@ -94,7 +100,11 @@ def _respuesta(detalle: DetalleTraza, umbral_ms: int) -> TrazaRespuesta:
     )
 
 
-@router.get("/trazas", response_model=TrazaRespuesta, dependencies=[Depends(requerir_grupo(settings.grupo_operacion))])
+@router.get(
+    "/trazas",
+    response_model=TrazaRespuesta,
+    dependencies=[Depends(requerir_grupo(settings.grupo_operacion))],
+)
 async def obtener_traza(
     caso: Annotated[ConsultarTraza, Depends(consultar_traza)],
     correlation_id: Annotated[str | None, Query(max_length=128)] = None,
@@ -104,7 +114,12 @@ async def obtener_traza(
 ) -> TrazaRespuesta:
     if correlation_id is not None and not es_valido(correlation_id):
         raise HTTPException(400, "Identificador inválido: hasta 128 caracteres de [A-Za-z0-9._:-]")
-    filtro = FiltroTrazas(correlation_id=correlation_id, entrada=recorrido, duracion_min_ms=duracion_min_ms, horas=horas)
+    filtro = FiltroTrazas(
+        correlation_id=correlation_id,
+        entrada=recorrido,
+        duracion_min_ms=duracion_min_ms,
+        horas=horas,
+    )
     # boto3 es bloqueante: se ejecuta fuera del event loop.
     detalle = await asyncio.to_thread(caso.ejecutar, filtro)
     if detalle is None:
@@ -177,7 +192,10 @@ async def _nombre_de_socio(alerta: AlertaAbierta, socios: ApiSocios) -> str:
     try:
         nombre = (await socios.obtener(socio_id, None)).get("nombre") or socio_id
     except Exception as error:  # noqa: BLE001 - sin nombre se muestra el identificador
-        logger.warning("no se pudo leer el socio de la alerta", extra={"socio_id": socio_id, "error_type": type(error).__name__})
+        logger.warning(
+            "no se pudo leer el socio de la alerta",
+            extra={"socio_id": socio_id, "error_type": type(error).__name__},
+        )
         nombre = socio_id
     return alerta.titulo.replace("Socio ", f"Socio {nombre} ", 1)
 
@@ -190,8 +208,14 @@ async def _respuesta_alertas(panel: PanelAlertas, socios: ApiSocios) -> AlertasR
         atencion_min=settings.alertas_atencion_min,
         abiertas=[
             AlertaRespuesta(
-                alarma=a.alarma, severidad=a.severidad, titulo=await _nombre_de_socio(a, socios), valor_actual=a.valor_actual,
-                umbral=a.umbral, unidad=a.unidad, abierta_desde=a.abierta_desde, enlace=EnlaceRespuesta(**a.enlace),
+                alarma=a.alarma,
+                severidad=a.severidad,
+                titulo=await _nombre_de_socio(a, socios),
+                valor_actual=a.valor_actual,
+                umbral=a.umbral,
+                unidad=a.unidad,
+                abierta_desde=a.abierta_desde,
+                enlace=EnlaceRespuesta(**a.enlace),
             )
             for a in panel.abiertas
         ],
@@ -200,7 +224,11 @@ async def _respuesta_alertas(panel: PanelAlertas, socios: ApiSocios) -> AlertasR
     )
 
 
-@router.get("/alertas", response_model=AlertasRespuesta, dependencies=[Depends(requerir_grupo(settings.grupo_operacion))])
+@router.get(
+    "/alertas",
+    response_model=AlertasRespuesta,
+    dependencies=[Depends(requerir_grupo(settings.grupo_operacion))],
+)
 async def obtener_alertas(
     caso: Annotated[ConsultarAlertas, Depends(consultar_alertas)],
     socios: Annotated[ApiSocios, Depends(api_socios)],

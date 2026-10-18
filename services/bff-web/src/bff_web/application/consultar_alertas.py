@@ -53,18 +53,32 @@ class ConsultarAlertas:
         ahora = self.ahora()
         desde = ahora - PERIODO_RESUMEN
         abiertas = [
-            a for a in (alerta_abierta(alarma, self.prefijo, self.catalogo) for alarma in self.repositorio.abiertas(self.prefijo))
+            a
+            for a in (
+                alerta_abierta(alarma, self.prefijo, self.catalogo)
+                for alarma in self.repositorio.abiertas(self.prefijo)
+            )
             if a is not None
         ]
         transiciones = self.repositorio.transiciones(self.prefijo, desde, ahora)
         return PanelAlertas(
             abiertas=ordenar(self._con_socio(a) for a in abiertas),
             umbrales=self.umbrales,
-            resumen=resumir(transiciones, self.catalogo, self.prefijo, desde, ahora, self.falso_positivo_min, self.atencion_min),
+            resumen=resumir(
+                transiciones,
+                self.catalogo,
+                self.prefijo,
+                desde,
+                ahora,
+                self.falso_positivo_min,
+                self.atencion_min,
+            ),
         )
 
     def _con_socio(self, alerta: AlertaAbierta) -> AlertaAbierta:
         if alerta.enlace.get("tipo") != "socio":
             return alerta
         socio_id = self.repositorio.socio_con_mayor_cuota()
-        return replace(alerta, enlace={**alerta.enlace, "socio_id": socio_id}) if socio_id else alerta
+        return (
+            replace(alerta, enlace={**alerta.enlace, "socio_id": socio_id}) if socio_id else alerta
+        )

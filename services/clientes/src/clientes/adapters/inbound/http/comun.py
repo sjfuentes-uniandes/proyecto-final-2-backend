@@ -8,6 +8,7 @@ from pydantic.alias_generators import to_camel
 from solventa_common.errors import ROL_NO_AUTORIZADO, ErrorNegocio
 
 ROL_CLIENTE = "CLIENTE"
+ROL_ASESOR = "ASESOR"
 # Tope de la selfie en base64 (~3,7 MB de imagen): por debajo del límite del API Gateway.
 MAX_SELFIE = 5_000_000
 
@@ -25,6 +26,21 @@ def actor_cliente(
 
 
 Titular = Annotated[str, Depends(actor_cliente)]
+
+
+def actor_asesor(
+    x_actor_id: Annotated[str | None, Header(alias="X-Actor-Id")] = None,
+    x_actor_rol: Annotated[str | None, Header(alias="X-Actor-Rol")] = None,
+) -> str:
+    """Identificador del asesor que da de alta o verifica a un cliente (trazabilidad)."""
+    if not x_actor_id or not x_actor_rol:
+        raise ErrorNegocio("ACTOR_REQUERIDO", "Faltan los encabezados del actor", 401)
+    if x_actor_rol != ROL_ASESOR:
+        raise ErrorNegocio(ROL_NO_AUTORIZADO, "No autorizado", 403)
+    return x_actor_id
+
+
+Asesor = Annotated[str, Depends(actor_asesor)]
 
 
 class Dto(BaseModel):
@@ -46,4 +62,9 @@ def error(descripcion: str) -> dict[str, Any]:
 ERRORES_ACTOR: dict[int | str, dict[str, Any]] = {
     401: error("ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol"),
     403: error("ROL_NO_AUTORIZADO: X-Actor-Rol distinto de CLIENTE"),
+}
+
+ERRORES_ASESOR: dict[int | str, dict[str, Any]] = {
+    401: error("ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol"),
+    403: error("ROL_NO_AUTORIZADO: X-Actor-Rol distinto de ASESOR"),
 }

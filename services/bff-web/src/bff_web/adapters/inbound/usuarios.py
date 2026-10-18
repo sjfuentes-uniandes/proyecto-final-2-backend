@@ -15,7 +15,9 @@ from bff_web.config import settings
 from bff_web.domain.usuarios import GRUPOS, NuevoUsuario, Usuario, UsuarioYaExiste
 
 router = APIRouter(
-    prefix="/backoffice", tags=["administracion"], dependencies=[Depends(requerir_grupo(settings.grupo_administradores))]
+    prefix="/backoffice",
+    tags=["administracion"],
+    dependencies=[Depends(requerir_grupo(settings.grupo_administradores))],
 )
 
 
@@ -43,7 +45,9 @@ class NuevoUsuarioSolicitud(BaseModel):
 def administrar_usuarios() -> AdministrarUsuarios:
     if not settings.backoffice_user_pool_id:
         raise HTTPException(503, "Falta BACKOFFICE_USER_POOL_ID")
-    return AdministrarUsuarios(crear_directorio(settings.aws_region, settings.backoffice_user_pool_id))
+    return AdministrarUsuarios(
+        crear_directorio(settings.aws_region, settings.backoffice_user_pool_id)
+    )
 
 
 Caso = Annotated[AdministrarUsuarios, Depends(administrar_usuarios)]
@@ -55,7 +59,10 @@ def _respuesta(usuario: Usuario) -> UsuarioRespuesta:
 
 @router.get("/grupos", response_model=list[GrupoRespuesta])
 async def listar_grupos() -> list[GrupoRespuesta]:
-    return [GrupoRespuesta(nombre=nombre, descripcion=descripcion) for nombre, descripcion in GRUPOS.items()]
+    return [
+        GrupoRespuesta(nombre=nombre, descripcion=descripcion)
+        for nombre, descripcion in GRUPOS.items()
+    ]
 
 
 @router.get("/usuarios", response_model=list[UsuarioRespuesta])
@@ -66,7 +73,11 @@ async def listar_usuarios(caso: Caso) -> list[UsuarioRespuesta]:
 @router.post("/usuarios", response_model=UsuarioRespuesta, status_code=201)
 async def crear_usuario(solicitud: NuevoUsuarioSolicitud, caso: Caso) -> UsuarioRespuesta:
     try:
-        nuevo = NuevoUsuario(email=solicitud.email.strip().lower(), nombre=solicitud.nombre, grupos=tuple(dict.fromkeys(solicitud.grupos)))
+        nuevo = NuevoUsuario(
+            email=solicitud.email.strip().lower(),
+            nombre=solicitud.nombre,
+            grupos=tuple(dict.fromkeys(solicitud.grupos)),
+        )
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
     try:

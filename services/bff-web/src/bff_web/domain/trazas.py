@@ -94,25 +94,41 @@ def _correlacion(doc: Mapping[str, Any]) -> str | None:
 
 
 def _tramos(documentos: Iterable[Mapping[str, Any]]) -> list[Tramo]:
-    segmentos = [doc for doc in documentos if doc.get("type") != "subsegment" and not doc.get("inferred")]
+    segmentos = [
+        doc for doc in documentos if doc.get("type") != "subsegment" and not doc.get("inferred")
+    ]
     internos = {str(doc.get("name")) for doc in segmentos}
     dueno: dict[str, str] = {}  # id de subsegmento -> id del segmento que lo contiene
     tramos: list[Tramo] = []
     for doc in segmentos:
-        tramos.append(Tramo(
-            id=str(doc["id"]), servicio=str(doc.get("name")), operacion=_operacion(doc), externo=False,
-            inicio=float(doc["start_time"]), fin=float(doc.get("end_time") or doc["start_time"]),
-            estado=_estado(doc), padre=doc.get("parent_id"),
-        ))
+        tramos.append(
+            Tramo(
+                id=str(doc["id"]),
+                servicio=str(doc.get("name")),
+                operacion=_operacion(doc),
+                externo=False,
+                inicio=float(doc["start_time"]),
+                fin=float(doc.get("end_time") or doc["start_time"]),
+                estado=_estado(doc),
+                padre=doc.get("parent_id"),
+            )
+        )
         for sub in _subsegmentos(doc):
             dueno[str(sub.get("id"))] = str(doc["id"])
             # Llamadas a dependencias que no reportan su propio segmento (aliados, AWS).
             if sub.get("namespace") in ("remote", "aws") and str(sub.get("name")) not in internos:
-                tramos.append(Tramo(
-                    id=str(sub.get("id")), servicio=str(sub.get("name")), operacion="externo", externo=True,
-                    inicio=float(sub["start_time"]), fin=float(sub.get("end_time") or sub["start_time"]),
-                    estado=_estado(sub), padre=str(sub.get("id")),
-                ))
+                tramos.append(
+                    Tramo(
+                        id=str(sub.get("id")),
+                        servicio=str(sub.get("name")),
+                        operacion="externo",
+                        externo=True,
+                        inicio=float(sub["start_time"]),
+                        fin=float(sub.get("end_time") or sub["start_time"]),
+                        estado=_estado(sub),
+                        padre=str(sub.get("id")),
+                    )
+                )
     # El padre de un segmento es un subsegmento cliente del llamador: se traduce al tramo dueño.
     for tramo in tramos:
         if tramo.padre is not None:
@@ -197,7 +213,9 @@ def construir_detalle(
         inicio=datetime.fromtimestamp(inicio, UTC),
         duracion_total_ms=total_ms,
         servicio_entrada=entrada.servicio,
-        resultado=ESTADO_ERROR if any(t.estado == ESTADO_ERROR for t in tramos) else ESTADO_CORRECTO,
+        resultado=ESTADO_ERROR
+        if any(t.estado == ESTADO_ERROR for t in tramos)
+        else ESTADO_CORRECTO,
         tramos=tramos,
         interpretacion=interpretar(tramos, total_ms, umbral_ms),
         servicios_internos=len({t.servicio for t in tramos if not t.externo}),

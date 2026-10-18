@@ -63,6 +63,66 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/verificaciones/documento:
+    post:
+      tags:
+      - verificaciones
+      summary: Verificar Documento
+      description: 'Consulta al proveedor KYC con los datos del documento: no recibe
+        ni guarda biometría.'
+      operationId: verificar_documento_v1_verificaciones_documento_post
+      parameters:
+      - name: X-Deadline-Ms
+        in: header
+        required: false
+        schema:
+          type: integer
+          maximum: 700
+          minimum: 1
+          title: X-Deadline-Ms
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudVerificacionDocumento'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificacionDocumentoDto'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '502':
+          description: RESPUESTA_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: FUENTE_NO_DISPONIBLE (detalles.motivo y detalles.circuito)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '504':
+          description: TIEMPO_AGOTADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -103,6 +163,14 @@ components:
       - correlationId
       - detalles
       title: ErrorDto
+    ResultadoDocumento:
+      type: string
+      enum:
+      - APROBADO
+      - RECHAZADO
+      title: ResultadoDocumento
+      description: 'Veredicto de la verificación documental: sin captura, solo aprueba
+        o rechaza.'
     ResultadoVerificacion:
       type: string
       enum:
@@ -130,6 +198,61 @@ components:
       - selfie
       - pruebaDeVida
       title: SolicitudVerificacion
+    SolicitudVerificacionDocumento:
+      properties:
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        tipoDocumento:
+          type: string
+          maxLength: 10
+          minLength: 1
+          title: Tipodocumento
+        numeroDocumento:
+          type: string
+          maxLength: 20
+          minLength: 3
+          title: Numerodocumento
+        nombreCompleto:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Nombrecompleto
+        fechaNacimiento:
+          type: string
+          format: date
+          title: Fechanacimiento
+      type: object
+      required:
+      - clienteId
+      - tipoDocumento
+      - numeroDocumento
+      - nombreCompleto
+      - fechaNacimiento
+      title: SolicitudVerificacionDocumento
+    VerificacionDocumentoDto:
+      properties:
+        resultado:
+          $ref: '#/components/schemas/ResultadoDocumento'
+        motivo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Motivo
+        referencia:
+          type: string
+          title: Referencia
+        proveedor:
+          type: string
+          title: Proveedor
+      type: object
+      required:
+      - resultado
+      - motivo
+      - referencia
+      - proveedor
+      title: VerificacionDocumentoDto
     VerificacionDto:
       properties:
         resultado:

@@ -35,11 +35,15 @@ def expresion_filtro(filtro: FiltroTrazas) -> str | None:
 
 
 class RepositorioXRay:
-    def __init__(self, cliente: Any, ahora: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
+    def __init__(
+        self, cliente: Any, ahora: Callable[[], datetime] = lambda: datetime.now(UTC)
+    ) -> None:
         self.cliente = cliente
         self.ahora = ahora
 
-    def _resumenes(self, inicio: datetime, fin: datetime, expresion: str | None) -> list[Mapping[str, Any]]:
+    def _resumenes(
+        self, inicio: datetime, fin: datetime, expresion: str | None
+    ) -> list[Mapping[str, Any]]:
         parametros: dict[str, Any] = {"StartTime": inicio, "EndTime": fin, "Sampling": False}
         if expresion:
             parametros["FilterExpression"] = expresion
@@ -62,7 +66,11 @@ class RepositorioXRay:
             resumenes = self._resumenes(inicio, fin, expresion)
             if filtro.entrada:
                 # service() incluye trazas que solo pasan por el servicio; se exige que entren por él.
-                resumenes = [r for r in resumenes if (r.get("EntryPoint") or {}).get("Name") == filtro.entrada]
+                resumenes = [
+                    r
+                    for r in resumenes
+                    if (r.get("EntryPoint") or {}).get("Name") == filtro.entrada
+                ]
             resumenes = sorted(resumenes, key=lambda r: r.get("StartTime") or fin, reverse=True)
             encontrados.extend(str(r["Id"]) for r in resumenes if r["Id"] not in encontrados)
             fin = inicio

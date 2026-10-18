@@ -8,15 +8,27 @@ class Settings(ServiceSettings):
 
 @pytest.fixture(autouse=True)
 def entorno_limpio(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in ["DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD", "DB_SSLMODE",
-                 "ENVIRONMENT", "SOLVENTA_DATABASE_URL", "SOLVENTA_DB_HOST"]:
+    for name in [
+        "DB_HOST",
+        "DB_PORT",
+        "DB_NAME",
+        "DB_USER",
+        "DB_PASSWORD",
+        "DB_SSLMODE",
+        "ENVIRONMENT",
+        "SOLVENTA_DATABASE_URL",
+        "SOLVENTA_DB_HOST",
+    ]:
         monkeypatch.delenv(name, raising=False)
 
 
 def test_valores_locales_por_defecto() -> None:
     settings = Settings()
     assert settings.environment == "local"
-    assert settings.database_url == "postgresql://solventa:solventa@localhost:5432/api_socios?sslmode=prefer"
+    assert (
+        settings.database_url
+        == "postgresql://solventa:solventa@localhost:5432/api_socios?sslmode=prefer"
+    )
 
 
 def test_contrato_de_infra_en_aws(monkeypatch: pytest.MonkeyPatch) -> None:
