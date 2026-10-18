@@ -40,6 +40,20 @@ def esta_vigente(estado: EstadoConsentimiento, vigente_hasta: datetime, ahora: d
     return estado is EstadoConsentimiento.ACTIVO and ahora < vigente_hasta
 
 
+class TipoHito(StrEnum):
+    OTORGADO = "OTORGADO"
+    REVOCADO = "REVOCADO"
+    VENCIDO = "VENCIDO"
+
+
+@dataclass(frozen=True, slots=True)
+class Hito:
+    """Un momento del historial de un consentimiento (HU-M09 AC4)."""
+
+    tipo: TipoHito
+    ocurrido_en: datetime
+
+
 @dataclass(frozen=True, slots=True)
 class Consentimiento:
     """`estado` es el almacenado; `leido_en` es el instante de la base en que se leyó la fila.
@@ -69,6 +83,17 @@ class Consentimiento:
         if self.estado is EstadoConsentimiento.ACTIVO and not self.vigente:
             return EstadoConsentimiento.VENCIDO
         return self.estado
+
+    @property
+    def historial(self) -> tuple[Hito, ...]:
+        """Derivado de la fila, sin tabla aparte (ADR 0009): el otorgamiento y, si lo hubo, el
+        estado final. Un vencido termina en `vigente_hasta`; un revocado nunca llega a vencer."""
+        otorgado = Hito(TipoHito.OTORGADO, self.otorgado_en)
+        if self.revocado_en is not None:
+            return (otorgado, Hito(TipoHito.REVOCADO, self.revocado_en))
+        if self.estado_derivado is EstadoConsentimiento.VENCIDO:
+            return (otorgado, Hito(TipoHito.VENCIDO, self.vigente_hasta))
+        return (otorgado,)
 
 
 @dataclass(frozen=True, slots=True)

@@ -71,3 +71,71 @@ def test_contrato_de_consentimientos() -> None:
     esquemas = app.openapi()["components"]["schemas"]
     assert esquemas["EstadoConsentimiento"]["enum"] == ["ACTIVO", "REVOCADO", "VENCIDO"]
     assert "required" not in esquemas["SolicitudOtorgar"]
+
+
+def test_contrato_de_revocacion_e_historial() -> None:
+    """HU-M09 (plan §c, tabla del BFF): revocar sin cuerpo ni Idempotency-Key y responde el mismo
+    `ConsentimientoDto` de la Parte 1; el historial es de solo lectura."""
+    rutas = app.openapi()["paths"]
+    base = "/v1/consentimientos/{consentimientoId}"
+    revocar = rutas[f"{base}/revocacion"]
+    assert set(revocar) == {"post"}
+    assert set(revocar["post"]["responses"]) == {"200", "401", "403", "404", "422", "503"}
+    assert "requestBody" not in revocar["post"]
+    assert all(p["name"] != "Idempotency-Key" for p in revocar["post"]["parameters"])
+    ok = revocar["post"]["responses"]["200"]["content"]["application/json"]["schema"]
+    assert ok == {"$ref": "#/components/schemas/ConsentimientoDto"}
+    historial = rutas[f"{base}/historial"]
+    assert set(historial) == {"get"}
+    assert set(historial["get"]["responses"]) == {"200", "401", "403", "404", "422", "503"}
+    for operacion in (revocar["post"], historial["get"]):
+        assert operacion["security"] == [{"bearerAuth": []}]
+        assert "X-Correlation-Id" in operacion["responses"]["200"]["headers"]
+    esquemas = app.openapi()["components"]["schemas"]
+    assert set(esquemas["HistorialDto"]["required"]) == {"consentimientoId", "estado", "hitos"}
+    assert set(esquemas["HitoDto"]["required"]) == {"tipo", "ocurridoEn"}
+    assert esquemas["TipoHito"]["enum"] == ["OTORGADO", "REVOCADO", "VENCIDO"]
+
+
+def test_los_cambios_de_la_parte_2_son_aditivos() -> None:
+    """La app N-1 sigue funcionando: las rutas de la Parte 1 siguen, la lista es un arreglo de
+    `ConsentimientoDto` y el DTO conserva sus campos."""
+    rutas = app.openapi()["paths"]
+    for ruta in (
+        "/v1/consentimientos",
+        "/v1/consentimientos/{consentimientoId}",
+        "/v1/consentimientos/texto-vigente",
+    ):
+        assert ruta in rutas
+    lista = rutas["/v1/consentimientos"]["get"]["responses"]["200"]["content"]
+    assert lista["application/json"]["schema"]["items"] == {
+        "$ref": "#/components/schemas/ConsentimientoDto"
+    }
+    dto = app.openapi()["components"]["schemas"]["ConsentimientoDto"]
+    assert (
+        set(dto["properties"])
+        == set(dto["required"])
+        == {
+            "consentimientoId",
+            "estado",
+            "proposito",
+            "alcances",
+            "versionTexto",
+            "idioma",
+            "otorgadoEn",
+            "vigenteHasta",
+            "revocadoEn",
+        }
+    )
+
+
+def test_el_bff_es_compatible_con_lo_que_clientes_publica() -> None:
+    """Las dos rutas nuevas reenvían a `clientes`: sus esquemas de respuesta tienen los mismos
+    campos obligatorios en ambos contratos."""
+    clientes = yaml.safe_load((CONTRATO.parent / "clientes.yaml").read_text(encoding="utf-8"))[
+        "components"
+    ]["schemas"]
+    propios = app.openapi()["components"]["schemas"]
+    for nombre in ("ConsentimientoDto", "HistorialDto", "HitoDto"):
+        assert set(propios[nombre]["required"]) == set(clientes[nombre]["required"])
+    assert propios["TipoHito"]["enum"] == clientes["TipoHito"]["enum"]

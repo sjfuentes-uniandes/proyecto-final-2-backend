@@ -1,14 +1,20 @@
-"""El generador del esquema publicado de `ConsentimientoOtorgado` v1."""
+"""El generador de los esquemas publicados de `ConsentimientoOtorgado` y
+`ConsentimientoRevocado` v1."""
 
 import json
 import runpy
 from pathlib import Path
 
 import pytest
-from clientes.adapters.outbound.eventos import ESQUEMAS, SobreConsentimientoOtorgado
+from clientes.adapters.outbound.eventos import (
+    ESQUEMAS,
+    SobreConsentimientoOtorgado,
+    SobreConsentimientoRevocado,
+)
 
-ARCHIVO = "ConsentimientoOtorgado.v1.schema.json"
-PUBLICADO = Path(__file__).parents[5] / "contracts" / "events" / ARCHIVO
+EVENTOS = Path(__file__).parents[5] / "contracts" / "events"
+OTORGADO = "ConsentimientoOtorgado.v1.schema.json"
+REVOCADO = "ConsentimientoRevocado.v1.schema.json"
 
 
 def test_el_generador_escribe_el_esquema_publicado(
@@ -20,13 +26,18 @@ def test_el_generador_escribe_el_esquema_publicado(
     with pytest.warns(RuntimeWarning):  # runpy reejecuta un módulo ya importado
         runpy.run_module("clientes.adapters.outbound.eventos", run_name="__main__")
 
-    generado = (tmp_path / "contracts" / "events" / ARCHIVO).read_text(encoding="utf-8")
-    assert generado == PUBLICADO.read_text(encoding="utf-8")
-    assert ARCHIVO in capsys.readouterr().out
+    salida = capsys.readouterr().out
+    for archivo in (OTORGADO, REVOCADO):
+        generado = (tmp_path / "contracts" / "events" / archivo).read_text(encoding="utf-8")
+        assert generado == (EVENTOS / archivo).read_text(encoding="utf-8")
+        assert archivo in salida
 
 
-def test_el_unico_esquema_es_el_del_sobre_de_otorgado() -> None:
-    assert ESQUEMAS == {ARCHIVO: SobreConsentimientoOtorgado}
-    assert json.loads(PUBLICADO.read_text(encoding="utf-8"))["title"] == (
-        "SobreConsentimientoOtorgado"
-    )
+def test_los_esquemas_son_los_sobres_de_otorgado_y_revocado() -> None:
+    assert ESQUEMAS == {
+        OTORGADO: SobreConsentimientoOtorgado,
+        REVOCADO: SobreConsentimientoRevocado,
+    }
+    for archivo, modelo in ESQUEMAS.items():
+        publicado = json.loads((EVENTOS / archivo).read_text(encoding="utf-8"))
+        assert publicado["title"] == modelo.__name__

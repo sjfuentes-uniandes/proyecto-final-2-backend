@@ -1,4 +1,5 @@
-"""Casos de uso del consentimiento con repositorio en memoria (HU-M08: AC1, AC3, AC4)."""
+"""Casos de uso del consentimiento con repositorio en memoria (HU-M08: AC1, AC3, AC4; HU-M09:
+AC1, AC3, AC4)."""
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -11,6 +12,7 @@ from clientes.application.consentimientos.casos import (
     ConsultarConsentimientos,
     ConsultarTextoVigente,
     OtorgarConsentimiento,
+    RevocarConsentimiento,
 )
 from clientes.application.consentimientos.puertos import Otorgamiento
 from clientes.application.identidad.casos import ConsultarCliente
@@ -453,6 +455,162 @@ async def test_listar_del_mas_reciente_al_mas_antiguo(
     segundo = (await caso.ejecutar(SUB, uuid4(), **_cuerpo())).consentimiento
     consulta = ConsultarConsentimientos(consentimientos, ConsultarCliente(repositorio))
     assert [c.id for c in await consulta.listar(SUB)] == [segundo.id, primero.id]
+
+
+def _revocador(
+    repositorio: RepositorioMemoria, consentimientos: RepositorioConsentimientosMemoria
+) -> RevocarConsentimiento:
+    return RevocarConsentimiento(consentimientos, ConsultarCliente(repositorio))
+
+
+async def _otorgado(
+    repositorio: RepositorioMemoria,
+    consentimientos: RepositorioConsentimientosMemoria,
+    sub: str = SUB,
+    **cambios: Any,
+) -> Consentimiento:
+    caso = _otorgar(repositorio, consentimientos)
+    return (await caso.ejecutar(sub, uuid4(), **_cuerpo(**cambios))).consentimiento
+
+
+def _revocados(consentimientos: RepositorioConsentimientosMemoria) -> list[dict[str, Any]]:
+    return [e for e in consentimientos.eventos if e["tipo"] == "ConsentimientoRevocado"]
+
+
+async def test_revocar_un_activo_lo_deja_revocado_con_la_fecha_y_su_evento(
+    repositorio: RepositorioMemoria,
+    consentimientos: RepositorioConsentimientosMemoria,
+    reloj: RelojFalso,
+) -> None:
+    """AC1: estado REVOCADO, fecha efectiva y evidencia (evento en el outbox)."""
+    _cliente(repositorio)
+    creado = await _otorgado(repositorio, consentimientos)
+    reloj.avanzar(timedelta(days=3))
+    revocado = await _revocador(repositorio, consentimientos).ejecutar(
+        SUB, creado.id, correlation_id=CORRELACION
+    )
+    assert revocado.estado is EstadoConsentimiento.REVOCADO
+    assert revocado.revocado_en == reloj.ahora
+    assert (revocado.otorgado_en, revocado.alcances) == (creado.otorgado_en, creado.alcances)
+    assert _revocados(consentimientos) == [
+        {"tipo": "ConsentimientoRevocado", "agregado": creado.id, "actor": SUB}
+    ]
+
+
+async def test_revocar_otra_vez_conserva_el_estado_sin_efectos_duplicados(
+    repositorio: RepositorioMemoria,
+    consentimientos: RepositorioConsentimientosMemoria,
+    reloj: RelojFalso,
+) -> None:
+    """AC3: mismo estado efectivo y un solo evento."""
+    _cliente(repositorio)
+    creado = await _otorgado(repositorio, consentimientos)
+    caso = _revocador(repositorio, consentimientos)
+    primera = await caso.ejecutar(SUB, creado.id, correlation_id=CORRELACION)
+    reloj.avanzar(timedelta(minutes=5))
+    segunda = await caso.ejecutar(SUB, creado.id, correlation_id="corr-2")
+    assert (segunda.estado, segunda.revocado_en) == (primera.estado, primera.revocado_en)
+    assert len(_revocados(consentimientos)) == 1
+
+
+async def test_revocar_un_vencido_responde_vencido_sin_cambios_ni_evento(
+    repositorio: RepositorioMemoria,
+    consentimientos: RepositorioConsentimientosMemoria,
+    reloj: RelojFalso,
+) -> None:
+    """Decisión P2-6 / ADR 0009: revocar un VENCIDO es 200 sin cambios; en el límite exacto ya
+    venció."""
+    _cliente(repositorio)
+    creado = await _otorgado(repositorio, consentimientos, vigencia_meses=6)
+    reloj.ahora = creado.vigente_hasta
+    visto = await _revocador(repositorio, consentimientos).ejecutar(
+        SUB, creado.id, correlation_id=CORRELACION
+    )
+    assert visto.estado is EstadoConsentimiento.ACTIVO  # almacenado, sin materializar
+    assert visto.estado_derivado is EstadoConsentimiento.VENCIDO
+    assert visto.revocado_en is None
+    assert _revocados(consentimientos) == []
+
+
+async def test_revocar_un_instante_antes_de_vencer_si_revoca(
+    repositorio: RepositorioMemoria,
+    consentimientos: RepositorioConsentimientosMemoria,
+    reloj: RelojFalso,
+) -> None:
+    _cliente(repositorio)
+    creado = await _otorgado(repositorio, consentimientos, vigencia_meses=6)
+    reloj.ahora = creado.vigente_hasta - timedelta(microseconds=1)
+    revocado = await _revocador(repositorio, consentimientos).ejecutar(
+        SUB, creado.id, correlation_id=CORRELACION
+    )
+    assert revocado.estado is EstadoConsentimiento.REVOCADO
+    assert revocado.revocado_en is not None
+    assert revocado.revocado_en < revocado.vigente_hasta
+
+
+async def test_revocar_no_exige_identidad_verificada(
+    repositorio: RepositorioMemoria,
+    consentimientos: RepositorioConsentimientosMemoria,
+) -> None:
+    """Retirar el permiso siempre es posible, aunque la identidad haya cambiado después."""
+    cliente = _cliente(repositorio)
+    creado = await _otorgado(repositorio, consentimientos)
+    repositorio.guardar(replace(cliente, estado=EstadoIdentidad.RECHAZADO, verificado_en=None))
+    revocado = await _revocador(repositorio, consentimientos).ejecutar(
+        SUB, creado.id, correlation_id=CORRELACION
+    )
+    assert revocado.estado is EstadoConsentimiento.REVOCADO
+
+
+async def test_revocar_uno_ajeno_inexistente_o_sin_cliente_es_no_encontrado(
+    repositorio: RepositorioMemoria,
+    consentimientos: RepositorioConsentimientosMemoria,
+) -> None:
+    _cliente(repositorio, "sub-a")
+    _cliente(repositorio, "sub-b")
+    ajeno = await _otorgado(repositorio, consentimientos, "sub-a")
+    caso = _revocador(repositorio, consentimientos)
+    for sub, consentimiento_id in (
+        ("sub-b", ajeno.id),
+        ("sub-b", uuid4()),
+        ("sub-sin-cliente", ajeno.id),
+    ):
+        with pytest.raises(ConsentimientoNoEncontrado):
+            await caso.ejecutar(sub, consentimiento_id, correlation_id=CORRELACION)
+    assert consentimientos.consentimientos[ajeno.id].estado is EstadoConsentimiento.ACTIVO
+    assert _revocados(consentimientos) == []
+
+
+async def test_revocar_propaga_un_fallo_tecnico_del_repositorio(
+    repositorio: RepositorioMemoria,
+    consentimientos: RepositorioConsentimientosMemoria,
+) -> None:
+    _cliente(repositorio)
+    creado = await _otorgado(repositorio, consentimientos)
+    consentimientos.falla = RuntimeError("base caída")
+    with pytest.raises(RuntimeError, match="base caída"):
+        await _revocador(repositorio, consentimientos).ejecutar(
+            SUB, creado.id, correlation_id=CORRELACION
+        )
+
+
+async def test_tras_revocar_se_puede_otorgar_uno_nuevo_y_el_revocado_se_conserva(
+    repositorio: RepositorioMemoria,
+    consentimientos: RepositorioConsentimientosMemoria,
+    reloj: RelojFalso,
+) -> None:
+    _cliente(repositorio)
+    primero = await _otorgado(repositorio, consentimientos)
+    await _revocador(repositorio, consentimientos).ejecutar(
+        SUB, primero.id, correlation_id=CORRELACION
+    )
+    reloj.avanzar(timedelta(seconds=1))
+    segundo = await _otorgado(repositorio, consentimientos)
+    consulta = ConsultarConsentimientos(consentimientos, ConsultarCliente(repositorio))
+    assert [(c.id, c.estado_derivado) for c in await consulta.listar(SUB)] == [
+        (segundo.id, EstadoConsentimiento.ACTIVO),
+        (primero.id, EstadoConsentimiento.REVOCADO),
+    ]
 
 
 def test_texto_vigente_normaliza_y_devuelve_version_y_vigencias() -> None:

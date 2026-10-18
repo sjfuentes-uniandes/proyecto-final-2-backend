@@ -1,4 +1,4 @@
-"""Sobre y payload v1 del evento `ConsentimientoOtorgado` (ADR 0009).
+"""Sobres y payloads v1 de `ConsentimientoOtorgado` y `ConsentimientoRevocado` (ADR 0009).
 
 Solo identificadores y códigos: sin datos personales. El esquema publicado se regenera con:
     uv run python -m clientes.adapters.outbound.eventos
@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 CONSENTIMIENTO_OTORGADO = "ConsentimientoOtorgado"
+CONSENTIMIENTO_REVOCADO = "ConsentimientoRevocado"
 
 
 class _Dto(BaseModel):
@@ -47,8 +48,32 @@ class SobreConsentimientoOtorgado(_Dto):
     payload: ConsentimientoOtorgadoV1
 
 
+class ConsentimientoRevocadoV1(_Dto):
+    consentimiento_id: UUID
+    cliente_id: UUID
+    revocado_en: datetime
+    actor_id: str
+
+
+class SobreConsentimientoRevocado(_Dto):
+    """Sobre versionado. `aggregateId` es el `consentimientoId`."""
+
+    event_id: UUID
+    aggregate_id: UUID
+    type: Literal["ConsentimientoRevocado"]
+    version: Literal[1]
+    occurred_at: datetime
+    correlation_id: str
+    # Opcional y aditivo, como en Otorgado: el relay lo deriva del `type` (ADR 0009).
+    aggregate_version: Literal[2] = Field(
+        default=2, description="Posición en la cadena del consentimiento: Revocado es 2"
+    )
+    payload: ConsentimientoRevocadoV1
+
+
 ESQUEMAS: dict[str, type[BaseModel]] = {
     f"{CONSENTIMIENTO_OTORGADO}.v1.schema.json": SobreConsentimientoOtorgado,
+    f"{CONSENTIMIENTO_REVOCADO}.v1.schema.json": SobreConsentimientoRevocado,
 }
 
 

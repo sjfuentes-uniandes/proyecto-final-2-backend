@@ -21,6 +21,7 @@ from bff_movil.application.consentimientos.casos import (
     ConsultarConsentimientos,
     ConsultarTextoVigente,
     OtorgarConsentimiento,
+    RevocarConsentimiento,
 )
 from bff_movil.application.registro.casos import VerificarRegistro, VincularRegistro
 from bff_movil.application.sesion.consultar_sesion import ConsultarSesion
@@ -84,9 +85,11 @@ def crear_app(
                 settings.clientes_url,
                 settings.clientes_timeout_ms,
                 settings.otorgamiento_timeout_ms,
+                settings.revocacion_timeout_ms,
             )
             app.state.otorgar_consentimiento = OtorgarConsentimiento(servicio_consentimientos)
             app.state.consultar_consentimientos = ConsultarConsentimientos(servicio_consentimientos)
+            app.state.revocar_consentimiento = RevocarConsentimiento(servicio_consentimientos)
             app.state.consultar_texto_vigente = ConsultarTextoVigente(servicio_consentimientos)
             yield
 

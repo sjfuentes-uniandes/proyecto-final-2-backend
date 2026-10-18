@@ -23,6 +23,16 @@ class Otorgamiento:
     correlation_id: str
 
 
+@dataclass(frozen=True, slots=True)
+class Revocacion:
+    """Lo que `revocar` necesita: el consentimiento del cliente y quién lo revoca."""
+
+    consentimiento_id: UUID
+    cliente_id: UUID
+    actor_id: str
+    correlation_id: str
+
+
 class RepositorioConsentimientos(Protocol):
     """Todas las marcas de tiempo salen del reloj de la base de datos (ADR 0010)."""
 
@@ -49,6 +59,15 @@ class RepositorioConsentimientos(Protocol):
 
     async def listar(self, cliente_id: UUID) -> list[Consentimiento]:
         """Del más reciente al más antiguo."""
+        ...
+
+    async def revocar(self, revocacion: Revocacion) -> Consentimiento | None:
+        """Revoca en una sola sentencia si el consentimiento está `ACTIVO` y vigente en ese
+        instante, y escribe el evento en el outbox en la misma transacción (ADR 0009).
+
+        Si no lo está (ya `REVOCADO`, `VENCIDO` o `ACTIVO` vencido sin materializar), lo devuelve
+        tal como está, sin cambios ni evento. None si no existe o es de otro cliente.
+        """
         ...
 
 

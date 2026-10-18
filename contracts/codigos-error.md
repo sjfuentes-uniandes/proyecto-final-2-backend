@@ -44,7 +44,7 @@ Formato estable de todo error de las rutas nuevas (`solventa_common.errors`):
 | `REGISTRO_CORREO_DISTINTO` | 409 | `clientes`, `bff-movil` | El registro ya se verificó con otro correo: la verificación va ligada a un correo (HU-M06) |
 | `REGISTRO_YA_VINCULADO` | 409 | `clientes`, `bff-movil` | La cuenta de ese registro ya existe, o el titular ya pertenece a otro cliente (HU-M06) |
 | `TOKEN_REGISTRO_INVALIDO` | 403 | `clientes`, `bff-movil` | El token de registro no sirve (`detalles.motivo`: `FORMATO`, `FIRMA`, `VENCIDO`, `REGISTRO`, `CORREO`, `CLIENTE`, `NO_VERIFICADO`) (HU-M06) |
-| `CONSENTIMIENTO_NO_ENCONTRADO` | 404 | `clientes`, `bff-movil` | El consentimiento no existe o es de otro cliente: no se distingue, para no revelar su existencia (HU-M08) |
+| `CONSENTIMIENTO_NO_ENCONTRADO` | 404 | `clientes`, `bff-movil` | El consentimiento no existe o es de otro cliente: no se distingue, para no revelar su existencia (HU-M08). En `clientes`, también al revocar y al consultar el historial (HU-M09); revocar uno ya `REVOCADO` o `VENCIDO` no es error: responde 200 con su estado |
 | `CONSENTIMIENTO_YA_VIGENTE` | 409 | `clientes`, `bff-movil` | Ya hay un consentimiento `ACTIVO` y vigente para el propósito; para cambiar alcances o vigencia se revoca y se otorga de nuevo (`detalles.consentimientoId`, HU-M08) |
 | `VIGENCIA_INVALIDA` | 422 | `clientes`, `bff-movil` | `vigenciaMeses` no es una de las permitidas (6 o 12, ADR 0005) (HU-M08) |
 | `TEXTO_NO_VIGENTE` | 422 | `clientes`, `bff-movil` | `versionTexto` no es la del texto vigente del propósito e idioma (ADR 0005) (HU-M08) |

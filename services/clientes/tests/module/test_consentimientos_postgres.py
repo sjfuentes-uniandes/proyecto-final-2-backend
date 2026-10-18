@@ -1,4 +1,5 @@
-"""Pruebas de módulo: consentimientos de `clientes` contra un Postgres real (HU-M08, PR 1.3).
+"""Pruebas de módulo: consentimientos de `clientes` contra un Postgres real (HU-M08, PR 1.3;
+revocación de HU-M09, PR 2.4).
 
 Cubren la migración 002 (hacia adelante, reejecutada y hacia atrás), las invariantes de la base
 (índice único parcial, `CHECK`, disparador), la función de fin de vigencia (ADR 0010) y el
@@ -22,7 +23,7 @@ from clientes.adapters.outbound.consentimientos_pg import ConsentimientosPg
 from clientes.adapters.outbound.postgres import RepositorioPostgres, migrar
 from clientes.adapters.outbound.textos_json import TextosJson
 from clientes.application.consentimientos.casos import OtorgarConsentimiento
-from clientes.application.consentimientos.puertos import Otorgamiento
+from clientes.application.consentimientos.puertos import Otorgamiento, Revocacion
 from clientes.application.identidad.casos import ConsultarCliente
 from clientes.domain.consentimientos.modelos import (
     ClaveIdempotenciaEnUso,
@@ -657,3 +658,242 @@ async def test_otorgar_concurrente_con_la_misma_clave_crea_uno_y_el_resto_son_re
     assert sum(not r.repeticion for r in resultados) == 1
     assert _sql(base, "SELECT count(*) FROM consentimiento") == [(1,)]
     assert _sql(base, "SELECT count(*) FROM outbox") == [(1,)]
+
+
+# --- Revocación (HU-M09, PR 2.4) ---------------------------------------------------------------
+
+
+def _revocacion(cliente_id: UUID, consentimiento_id: UUID) -> Revocacion:
+    return Revocacion(
+        consentimiento_id=consentimiento_id,
+        cliente_id=cliente_id,
+        actor_id="sub-modulo",
+        correlation_id="corr-revocar",
+    )
+
+
+def _revocados(base: str) -> list[tuple[Any, ...]]:
+    return _sql(
+        base,
+        "SELECT aggregate_id, event_version, occurred_at, correlation_id, payload, published_at "
+        "FROM outbox WHERE event_type = 'ConsentimientoRevocado'",
+    )
+
+
+def _fila(base: str, consentimiento_id: UUID) -> list[tuple[Any, ...]]:
+    return _sql(
+        base, "SELECT estado, revocado_en FROM consentimiento WHERE id = %s", (consentimiento_id,)
+    )
+
+
+async def test_revocar_un_activo_usa_una_sola_captura_del_reloj_y_escribe_el_evento(
+    base: str, repo: ConsentimientosPg
+) -> None:
+    """AC1: REVOCADO con la fecha efectiva de la base y el evento en el outbox, sin publicar."""
+    cliente_id = _cliente(base)
+    creado = await repo.crear(_otorgamiento(cliente_id))
+    antes = datetime.now(UTC)
+    revocado = await repo.revocar(_revocacion(cliente_id, creado.id))
+    despues = datetime.now(UTC)
+
+    assert revocado is not None
+    assert revocado.estado is EstadoConsentimiento.REVOCADO
+    assert revocado.revocado_en is not None
+    # El SET y el RETURNING ven la misma captura (ADR 0010).
+    assert revocado.revocado_en == revocado.leido_en
+    assert antes - timedelta(seconds=5) <= revocado.revocado_en <= despues + timedelta(seconds=5)
+    assert creado.otorgado_en < revocado.revocado_en < revocado.vigente_hasta
+    assert (revocado.alcances, revocado.otorgado_en, revocado.vigente_hasta) == (
+        creado.alcances,
+        creado.otorgado_en,
+        creado.vigente_hasta,
+    )
+    assert _fila(base, creado.id) == [("REVOCADO", revocado.revocado_en)]
+    ((agregado, version, ocurrido, correlacion, payload, publicado),) = _revocados(base)
+    assert (agregado, version, ocurrido, correlacion, publicado) == (
+        creado.id,
+        1,
+        revocado.revocado_en,
+        "corr-revocar",
+        None,
+    )
+    assert payload == {
+        "consentimientoId": str(creado.id),
+        "clienteId": str(cliente_id),
+        "revocadoEn": revocado.revocado_en.isoformat(),
+        "actorId": "sub-modulo",
+    }
+    assert _sql(base, "SELECT count(*) FROM outbox") == [(2,)]  # Otorgado + Revocado
+
+
+async def test_revocar_otra_vez_no_cambia_nada_ni_escribe_otro_evento(
+    base: str, repo: ConsentimientosPg
+) -> None:
+    """AC3."""
+    cliente_id = _cliente(base)
+    creado = await repo.crear(_otorgamiento(cliente_id))
+    primera = await repo.revocar(_revocacion(cliente_id, creado.id))
+    segunda = await repo.revocar(_revocacion(cliente_id, creado.id))
+    assert primera is not None and segunda is not None
+    assert (segunda.estado, segunda.revocado_en) == (primera.estado, primera.revocado_en)
+    assert len(_revocados(base)) == 1
+
+
+async def test_un_activo_almacenado_ya_vencido_no_se_revoca(
+    base: str, repo: ConsentimientosPg
+) -> None:
+    """Prueba obligatoria de la ADR 0009: insertado sin materializar, responde como VENCIDO,
+    `revocado_en` queda nulo y no hay evento."""
+    cliente_id = uuid4()
+    ahora = datetime.now(UTC)
+    vencido = _insertar_consentimiento(
+        base,
+        cliente_id,
+        otorgado_en=ahora - timedelta(days=400),
+        vigente_hasta=ahora - timedelta(seconds=1),
+    )
+    visto = await repo.revocar(_revocacion(cliente_id, vencido))
+    assert visto is not None
+    assert visto.estado is EstadoConsentimiento.ACTIVO
+    assert visto.estado_derivado is EstadoConsentimiento.VENCIDO
+    assert visto.revocado_en is None
+    assert _fila(base, vencido) == [("ACTIVO", None)]
+    assert _sql(base, "SELECT count(*) FROM outbox") == [(0,)]
+
+
+async def test_un_vencido_materializado_no_se_revoca(base: str, repo: ConsentimientosPg) -> None:
+    cliente_id = uuid4()
+    ahora = datetime.now(UTC)
+    vencido = _insertar_consentimiento(
+        base,
+        cliente_id,
+        estado="VENCIDO",
+        otorgado_en=ahora - timedelta(days=400),
+        vigente_hasta=ahora - timedelta(days=35),
+    )
+    visto = await repo.revocar(_revocacion(cliente_id, vencido))
+    assert visto is not None
+    assert (visto.estado, visto.revocado_en) == (EstadoConsentimiento.VENCIDO, None)
+    assert _sql(base, "SELECT count(*) FROM outbox") == [(0,)]
+
+
+async def test_revocar_uno_ajeno_o_inexistente_es_none_y_no_lo_toca(
+    base: str, repo: ConsentimientosPg
+) -> None:
+    propio, ajeno = _cliente(base), _cliente(base)
+    de_otro = await repo.crear(_otorgamiento(ajeno))
+    assert await repo.revocar(_revocacion(propio, de_otro.id)) is None
+    assert await repo.revocar(_revocacion(propio, uuid4())) is None
+    assert _fila(base, de_otro.id) == [("ACTIVO", None)]
+    assert _revocados(base) == []
+
+
+async def test_si_falla_el_outbox_la_revocacion_no_queda(
+    base: str, repo: ConsentimientosPg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Atomicidad: estado + evento en la misma transacción."""
+    cliente_id = _cliente(base)
+    creado = await repo.crear(_otorgamiento(cliente_id))
+
+    async def falla(*_: object) -> None:
+        raise RuntimeError("outbox caído")
+
+    monkeypatch.setattr(outbox_pg, "insertar", falla)
+    with pytest.raises(RuntimeError):
+        await repo.revocar(_revocacion(cliente_id, creado.id))
+    assert _fila(base, creado.id) == [("ACTIVO", None)]
+    assert _revocados(base) == []
+
+
+async def test_revocaciones_concurrentes_dejan_un_solo_evento(
+    base: str, repo: ConsentimientosPg
+) -> None:
+    """Plan §d, concurrencia: la segunda espera el bloqueo de fila, reevalúa
+    `estado = 'ACTIVO'`, afecta 0 filas y responde lo que hay, sin evento."""
+    cliente_id = _cliente(base)
+    creado = await repo.crear(_otorgamiento(cliente_id))
+    resultados = await asyncio.gather(
+        *(repo.revocar(_revocacion(cliente_id, creado.id)) for _ in range(8))
+    )
+    assert all(r is not None and r.estado is EstadoConsentimiento.REVOCADO for r in resultados)
+    assert len({r.revocado_en for r in resultados if r is not None}) == 1
+    assert len(_revocados(base)) == 1
+
+
+async def test_carrera_revocar_y_reotorgar_sobre_un_activo_vencido(
+    base: str, repo: ConsentimientosPg
+) -> None:
+    """Carrera revocar/vencer: mientras un otorgamiento materializa el vencido, la revocación
+    no lo revoca; lo ve VENCIDO (almacenado o derivado) y no escribe evento."""
+    cliente_id = _cliente(base)
+    ahora = datetime.now(UTC)
+    vencido = _insertar_consentimiento(
+        base,
+        cliente_id,
+        otorgado_en=ahora - timedelta(days=400),
+        vigente_hasta=ahora - timedelta(seconds=1),
+    )
+    visto, nuevo = await asyncio.gather(
+        repo.revocar(_revocacion(cliente_id, vencido)), repo.crear(_otorgamiento(cliente_id))
+    )
+    assert visto is not None
+    assert visto.estado_derivado is EstadoConsentimiento.VENCIDO
+    assert visto.revocado_en is None
+    assert _fila(base, vencido) == [("VENCIDO", None)]
+    assert nuevo.estado is EstadoConsentimiento.ACTIVO
+    assert _revocados(base) == []
+
+
+async def test_carrera_revocar_mientras_otro_bloquea_la_fila_y_vence_en_la_espera(
+    base: str, repo: ConsentimientosPg
+) -> None:
+    """Carrera revocar/vencer con la fila bloqueada: el reloj se capturó al empezar la sentencia
+    (ADR 0010), cuando aún estaba vigente. La reevaluación tras el bloqueo usa esa misma captura,
+    así que la revocación gana con un `revocado_en` anterior a `vigente_hasta`: los dos hechos
+    nunca se contradicen."""
+    cliente_id = _cliente(base)
+    consentimiento_id = uuid4()
+    _sql(
+        base,
+        "INSERT INTO consentimiento (id, cliente_id, proposito, alcances, version_texto, idioma, "
+        "estado, otorgado_en, vigente_hasta) SELECT %s, %s, %s, ARRAY['FA_PRODUCTOS_VIGENTES'], "
+        "'v', 'es-CO', 'ACTIVO', clock_timestamp() - interval '1 day', "
+        "clock_timestamp() + interval '1 second'",
+        (consentimiento_id, cliente_id, PROPOSITO),
+    )
+    bloqueo = await psycopg.AsyncConnection.connect(base)
+    try:
+        await bloqueo.execute(
+            "SELECT 1 FROM consentimiento WHERE id = %s FOR UPDATE", (consentimiento_id,)
+        )
+        revocacion = asyncio.create_task(repo.revocar(_revocacion(cliente_id, consentimiento_id)))
+        await asyncio.sleep(2)  # vence mientras la revocación espera el bloqueo
+        assert not revocacion.done()
+        await bloqueo.commit()
+        visto = await revocacion
+    finally:
+        await bloqueo.close()
+    assert visto is not None
+    assert visto.estado is EstadoConsentimiento.REVOCADO
+    assert visto.revocado_en is not None
+    assert visto.revocado_en < visto.vigente_hasta
+    assert len(_revocados(base)) == 1
+
+
+async def test_un_revocado_por_el_repositorio_no_se_modifica_ni_se_elimina(
+    base: str, repo: ConsentimientosPg
+) -> None:
+    """AC4: el historial no se puede alterar; lo impide el disparador."""
+    cliente_id = _cliente(base)
+    creado = await repo.crear(_otorgamiento(cliente_id))
+    revocado = await repo.revocar(_revocacion(cliente_id, creado.id))
+    assert revocado is not None
+    for sentencia in (
+        "UPDATE consentimiento SET revocado_en = revocado_en - interval '1 day' WHERE id = %s",
+        "UPDATE consentimiento SET estado = 'ACTIVO', revocado_en = NULL WHERE id = %s",
+        "UPDATE consentimiento SET otorgado_en = otorgado_en + interval '1 day' WHERE id = %s",
+        "DELETE FROM consentimiento WHERE id = %s",
+    ):
+        with pytest.raises(psycopg.errors.RaiseException):
+            _sql(base, sentencia, (creado.id,))
+    assert _fila(base, creado.id) == [("REVOCADO", revocado.revocado_en)]

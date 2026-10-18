@@ -16,6 +16,7 @@ from clientes.application.consentimientos.casos import (
     ConsultarConsentimientos,
     ConsultarTextoVigente,
     OtorgarConsentimiento,
+    RevocarConsentimiento,
 )
 from clientes.application.consentimientos.puertos import RepositorioConsentimientos
 from clientes.application.identidad.casos import (
@@ -95,6 +96,9 @@ def crear_app(
                     repo_consentimientos, app.state.consultar_cliente, textos
                 )
                 app.state.consultar_consentimientos = ConsultarConsentimientos(
+                    repo_consentimientos, app.state.consultar_cliente
+                )
+                app.state.revocar_consentimiento = RevocarConsentimiento(
                     repo_consentimientos, app.state.consultar_cliente
                 )
                 app.state.consultar_texto_vigente = ConsultarTextoVigente(textos)

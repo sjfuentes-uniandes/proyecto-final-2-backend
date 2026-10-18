@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 from psycopg import AsyncConnection
 from psycopg.types.json import Jsonb
 
-from clientes.adapters.outbound.eventos import CONSENTIMIENTO_OTORGADO
+from clientes.adapters.outbound.eventos import CONSENTIMIENTO_OTORGADO, CONSENTIMIENTO_REVOCADO
 from clientes.domain.consentimientos.modelos import Consentimiento
 
 _INSERTAR = (
@@ -55,6 +55,28 @@ def consentimiento_otorgado(
             "versionTexto": consentimiento.version_texto,
             "otorgadoEn": _iso(consentimiento.otorgado_en),
             "vigenteHasta": _iso(consentimiento.vigente_hasta),
+            "actorId": actor_id,
+        },
+    )
+
+
+def consentimiento_revocado(
+    consentimiento: Consentimiento, actor_id: str, correlation_id: str
+) -> EventoOutbox:
+    """`occurredAt` es `revocado_en`, la captura del reloj de la sentencia que revocó (ADR 0010)."""
+    revocado_en = consentimiento.revocado_en
+    assert revocado_en is not None  # solo se llama con la fila que devolvió la revocación
+    return EventoOutbox(
+        event_id=uuid4(),
+        aggregate_id=consentimiento.id,
+        event_type=CONSENTIMIENTO_REVOCADO,
+        event_version=1,
+        occurred_at=revocado_en,
+        correlation_id=correlation_id,
+        payload={
+            "consentimientoId": str(consentimiento.id),
+            "clienteId": str(consentimiento.cliente_id),
+            "revocadoEn": _iso(revocado_en),
             "actorId": actor_id,
         },
     )

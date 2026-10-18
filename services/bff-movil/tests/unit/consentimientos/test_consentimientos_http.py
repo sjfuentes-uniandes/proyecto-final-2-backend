@@ -16,7 +16,7 @@ VACIA = SolicitudOtorgamiento(None, None, None, None, None)
 
 def _adaptador(manejador, base_url: str = "http://clientes.test") -> ConsentimientosHttp:
     cliente = correlation.cliente_async(transport=httpx.MockTransport(manejador))
-    return ConsentimientosHttp(cliente, base_url, 500, 3000)
+    return ConsentimientosHttp(cliente, base_url, 500, 3000, 3000)
 
 
 def _rechazo(detalles: object) -> httpx.Response:

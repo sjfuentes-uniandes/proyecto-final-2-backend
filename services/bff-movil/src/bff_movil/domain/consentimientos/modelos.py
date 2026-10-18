@@ -1,4 +1,5 @@
-"""Consentimiento para el uso de datos (HU-M08), tal como lo devuelve `clientes`.
+"""Consentimiento para el uso de datos (HU-M08) y su historial (HU-M09), tal como lo devuelve
+`clientes`.
 
 El BFF no decide nada del consentimiento: `clientes` valida, calcula la vigencia y deriva el
 estado. Aquí solo viven la representación y los rechazos que la app traduce por `codigo`.
@@ -28,6 +29,28 @@ class Consentimiento:
     otorgado_en: datetime
     vigente_hasta: datetime
     revocado_en: datetime | None
+
+
+class TipoHito(StrEnum):
+    OTORGADO = "OTORGADO"
+    REVOCADO = "REVOCADO"
+    VENCIDO = "VENCIDO"
+
+
+@dataclass(frozen=True, slots=True)
+class Hito:
+    tipo: TipoHito
+    ocurrido_en: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class Historial:
+    """Cuándo se otorgó y, si aplica, cuándo se revocó o venció (HU-M09 AC4). Lo deriva
+    `clientes` de la fila inmutable; el BFF solo lo transporta."""
+
+    consentimiento_id: UUID
+    estado: EstadoConsentimiento
+    hitos: tuple[Hito, ...]
 
 
 @dataclass(frozen=True, slots=True)

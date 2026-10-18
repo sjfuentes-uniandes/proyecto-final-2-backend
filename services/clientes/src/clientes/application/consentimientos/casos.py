@@ -1,4 +1,5 @@
-"""Casos de uso del consentimiento: otorgar, consultar, listar y texto vigente (HU-M08)."""
+"""Casos de uso del consentimiento: otorgar, consultar, listar y texto vigente (HU-M08); revocar
+y consultar el historial (HU-M09)."""
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -8,6 +9,7 @@ from clientes.application.consentimientos.puertos import (
     CatalogoTextos,
     Otorgamiento,
     RepositorioConsentimientos,
+    Revocacion,
 )
 from clientes.application.identidad.casos import ConsultarCliente
 from clientes.domain.consentimientos.modelos import (
@@ -158,6 +160,34 @@ class ConsultarConsentimientos:
         except ClienteNoEncontrado:
             return []
         return await self._repositorio.listar(cliente.id)
+
+
+class RevocarConsentimiento:
+    def __init__(self, repositorio: RepositorioConsentimientos, clientes: ConsultarCliente) -> None:
+        self._repositorio = repositorio
+        self._clientes = clientes
+
+    async def ejecutar(
+        self, sub: str, consentimiento_id: UUID, *, correlation_id: str
+    ) -> Consentimiento:
+        """Idempotente por estado (AC3, ADR 0009): la primera vez revoca y escribe el evento; si
+        ya está `REVOCADO` o `VENCIDO`, devuelve el mismo estado sin efectos. No exige identidad
+        verificada: retirar el permiso siempre es posible. Uno ajeno es como uno inexistente."""
+        try:
+            cliente = await self._clientes.por_sub(sub)
+        except ClienteNoEncontrado as error:
+            raise ConsentimientoNoEncontrado() from error
+        consentimiento = await self._repositorio.revocar(
+            Revocacion(
+                consentimiento_id=consentimiento_id,
+                cliente_id=cliente.id,
+                actor_id=sub,
+                correlation_id=correlation_id,
+            )
+        )
+        if consentimiento is None:
+            raise ConsentimientoNoEncontrado()
+        return consentimiento
 
 
 class ConsultarTextoVigente:
