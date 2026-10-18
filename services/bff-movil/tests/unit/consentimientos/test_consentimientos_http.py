@@ -38,9 +38,9 @@ async def test_respeta_el_prefijo_de_ruta_del_servidor_de_clientes() -> None:
         recibidas.append(request)
         return httpx.Response(200, json=[])
 
-    await _adaptador(manejador, "http://simulador:8080/clientes-stub/").listar("sub-1")
+    await _adaptador(manejador, "http://pasarela:8080/clientes/").listar("sub-1")
 
-    assert recibidas[0].url.path == "/clientes-stub/v1/clientes/actual/consentimientos"
+    assert recibidas[0].url.path == "/clientes/v1/clientes/actual/consentimientos"
 
 
 async def test_un_cuerpo_vacio_se_envia_con_todos_los_campos_nulos() -> None:

@@ -10,12 +10,12 @@ from solventa_common.errors import registrar_manejadores
 from solventa_common.telemetry import instrumentar
 
 from clientes.adapters.inbound.http import (
+    alta,
     consentimientos,
     identidad,
     registro,
     verificaciones_consentimiento,
 )
-from clientes.adapters.inbound.http import alta, consentimientos, identidad, registro
 from clientes.adapters.outbound.adaptador_identidad_http import AdaptadorIdentidadHttp
 from clientes.adapters.outbound.textos_json import TextosJson
 from clientes.application.consentimientos.casos import (

@@ -1,10 +1,9 @@
-"""PuertoIdentidad y PuertoConsentimiento sobre el contrato propuesto de clientes
-(contracts/openapi/clientes.propuesta-cotizacion.yaml).
+"""PuertoIdentidad y PuertoConsentimiento sobre el contrato de clientes
+(contracts/openapi/clientes.yaml y el pacto contracts/pact/cotizacion-clientes.json).
 
-Mientras no exista `clientes`, la URL apunta al stub de simulador-aliados. Una respuesta fuera
-del contrato (estado o alcance desconocido) se trata como dependencia no disponible. Un 404 solo
-es "cliente no encontrado" si trae el `codigo` del contrato; uno de ruta, de gateway o con otro
-cuerpo es dependencia no disponible.
+Una respuesta fuera del contrato (estado o alcance desconocido) se trata como dependencia no
+disponible. Un 404 solo es "cliente no encontrado" si trae el `codigo` del contrato; uno de ruta,
+de gateway o con otro cuerpo es dependencia no disponible.
 """
 
 from collections.abc import Sequence

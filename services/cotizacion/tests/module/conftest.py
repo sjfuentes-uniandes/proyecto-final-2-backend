@@ -1,13 +1,19 @@
 """Arnés de módulo de cotizacion (W11-P14): lo usan W10-P12, W11-P14 y W12-P08.
 
 - PostgreSQL 16 efímero con las bases `catalogo` y `cotizacion`, migradas con su `migrar`.
-- WireMock 3.9.2 con los mapeos versionados del simulador (aliados y stub de clientes).
+- WireMock 3.9.2 con los mapeos versionados del simulador (aliados) y, cargado por su API de
+  administración, el doble de `clientes` de estas pruebas (`tests/dobles/clientes/`, C01–C19;
+  se coteja con `contracts/openapi/clientes.yaml` en `tests/contract/test_dobles_clientes.py`).
 - Las apps reales de catalogo y adaptador-datos, servidas con uvicorn en hilos.
 - cotizacion con TestClient, apuntada a todo lo anterior y sin caché del modelo.
+- psycopg asíncrono no corre sobre el ProactorEventLoop de Windows: los servidores en hilo y el
+  TestClient usan un SelectorEventLoop (en Linux es el bucle por defecto), como `bff-movil`.
 - Centinelas: los logs y spans de toda la suite se revisan al final (test_zz_centinelas.py).
 """
 
+import asyncio
 import io
+import json
 import logging
 import os
 import socket
@@ -35,6 +41,7 @@ docker = pytest.importorskip("docker")
 
 RAIZ = Path(__file__).resolve().parents[4]
 SIMULADOR = RAIZ / "services" / "simulador-aliados"
+DOBLE_CLIENTES = Path(__file__).resolve().parents[1] / "dobles" / "clientes"
 EVENTOS = RAIZ / "contracts" / "events"
 IMAGEN_WIREMOCK = "wiremock/wiremock:3.9.2"
 
@@ -111,7 +118,7 @@ class WireMock:
         return [r["request"] for r in reversed(self._admin.get("/requests").json()["requests"])]
 
     def a_aliados(self, cliente: str) -> list[dict[str, Any]]:
-        """Solicitudes a open-finance y datos-abiertos de un cliente (sin el stub de clientes)."""
+        """Solicitudes a open-finance y datos-abiertos de un cliente (sin el doble de clientes)."""
         return [
             r
             for r in self.solicitudes()
@@ -123,6 +130,12 @@ class WireMock:
 
     def reiniciar_escenarios(self) -> None:
         self._admin.post("/scenarios/reset").raise_for_status()
+
+    def cargar(self, carpeta: Path) -> None:
+        """Agrega los mapeos de la carpeta a los que el contenedor leyó al arrancar."""
+        for ruta in sorted(carpeta.glob("*.json")):
+            mapeo = json.loads(ruta.read_text(encoding="utf-8"))
+            self._admin.post("/mappings", json=mapeo).raise_for_status()
 
     def esperar_listo(self, segundos: float = 60) -> None:
         limite = time.monotonic() + segundos
@@ -152,6 +165,7 @@ def wiremock() -> Iterator[WireMock]:
             f"http://{contenedor.get_container_host_ip()}:{contenedor.get_exposed_port(8080)}"
         )
         servidor.esperar_listo()
+        servidor.cargar(DOBLE_CLIENTES)
         yield servidor
 
 
@@ -172,7 +186,10 @@ def servir(app: FastAPI) -> Iterator[str]:
     servidor = uvicorn.Server(
         uvicorn.Config(app, host="127.0.0.1", port=puerto, log_config=None, access_log=False)
     )
-    hilo = threading.Thread(target=servidor.run, daemon=True)
+    hilo = threading.Thread(
+        target=lambda: asyncio.run(servidor.serve(), loop_factory=asyncio.SelectorEventLoop),
+        daemon=True,
+    )
     hilo.start()
     limite = time.monotonic() + 30
     while not servidor.started:
@@ -303,7 +320,7 @@ def cotizacion(
             "SOLVENTA_DATABASE_URL": bases.cotizacion,
             "CATALOGO_URL": catalogo_url,
             "ADAPTADOR_DATOS_URL": adaptador_url,
-            "SOLVENTA_CLIENTES_URL": f"{wiremock.url}/clientes-stub",
+            "CLIENTES_URL": f"{wiremock.url}/clientes",
             "modelo_cache_ttl_s": 0,
             # Holgura para apps en hilos y contenedores en la CI; nunca sobre el corte de 700.
             "dependencia_timeout_ms": 1000,
@@ -319,7 +336,7 @@ def cotizacion(
         handler.setFormatter(FormateadorJson("cotizacion", "pruebas"))
         raiz.handlers = [handler]
         raiz.setLevel(logging.INFO)
-        cliente = TestClient(app)
+        cliente = TestClient(app, backend_options={"loop_factory": asyncio.SelectorEventLoop})
         cliente.__enter__()
         abiertos.append(cliente)
         registro.logs.append(salida)

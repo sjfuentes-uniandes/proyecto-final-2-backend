@@ -38,6 +38,7 @@ NO_EXISTE = "00000000-0000-4000-8000-0000000000ff"
 CONSENTIMIENTO_ID = "00000000-0000-4000-9000-000000000001"
 FECHA = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$"
 UUID_RE = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+RUTA_VERIFICACION = "/v1/clientes/{clienteId}/consentimientos/verificaciones"
 ALCANCE_RE = "^(" + "|".join(Fuente) + ")$"
 TODAS = list(Fuente)
 # cotizacion siempre pide los cuatro alcances para el propósito único (CrearPerfil, fase A).
@@ -244,16 +245,14 @@ def _resolver(nodo: dict[str, Any], contrato: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_el_pacto_cumple_el_contrato_de_verificacion() -> None:
-    """Mientras `clientes` no verifique el pacto (PR 3.2), se coteja con el contrato vigente de
-    verificación (`clientes.propuesta-cotizacion.yaml`): cada interacción existe allí, la
-    solicitud y los ejemplos validan su esquema, y están todas las decisiones y causas.
+    """Cotejo con el contrato publicado de `clientes` (`contracts/openapi/clientes.yaml`), además
+    de la verificación como proveedor (PR 3.2): cada interacción existe allí, la solicitud y los
+    ejemplos validan su esquema, y están todas las decisiones y causas.
 
     Corre al final del módulo: lee el pacto que escribieron las pruebas anteriores.
     """
     contrato = yaml.safe_load(
-        (PACTOS.parent / "openapi" / "clientes.propuesta-cotizacion.yaml").read_text(
-            encoding="utf-8"
-        )
+        (PACTOS.parent / "openapi" / "clientes.yaml").read_text(encoding="utf-8")
     )
     pacto = json.loads((PACTOS / ARCHIVO).read_text(encoding="utf-8"))
     assert len(pacto["interactions"]) == 7
@@ -283,8 +282,16 @@ def test_el_pacto_cumple_el_contrato_de_verificacion() -> None:
                 cuerpo.get("causa") or cuerpo.get("codigo"),
             )
         )
-    verificacion = contrato["components"]["schemas"]["Verificacion"]["properties"]
-    causas = {c for c in verificacion["causa"]["enum"] if c is not None}
-    assert {d for _, d, _ in vistas if d} == set(verificacion["decision"]["enum"])
+    operacion = contrato["paths"][RUTA_VERIFICACION]["post"]
+    respuesta_200 = _resolver(operacion["responses"]["200"], contrato)
+    verificacion = _resolver(respuesta_200["content"]["application/json"]["schema"], contrato)
+    propiedades = verificacion["properties"]
+    causas = {
+        c
+        for opcion in propiedades["causa"]["anyOf"]
+        for c in _resolver(opcion, contrato).get("enum", [])
+    }
+    decisiones = set(_resolver(propiedades["decision"], contrato)["enum"])
+    assert {d for _, d, _ in vistas if d} == decisiones
     assert {c for s, d, c in vistas if d == "RECHAZADO"} == causas
     assert (404, None, "CLIENTE_NO_ENCONTRADO") in vistas

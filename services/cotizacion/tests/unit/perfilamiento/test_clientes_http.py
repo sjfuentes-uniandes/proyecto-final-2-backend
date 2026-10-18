@@ -21,7 +21,7 @@ from solventa_common import resiliencia
 pytestmark = pytest.mark.anyio
 
 CLIENTE = UUID("00000000-0000-4000-8000-000000000001")
-BASE = "http://simulador-aliados:8080/clientes-stub/"
+BASE = "http://pasarela:8080/clientes/"
 TODAS = list(Fuente)
 
 
@@ -78,9 +78,7 @@ async def test_consentimiento_permitido_con_vigencia_utc() -> None:
     assert verificacion.alcances_permitidos == frozenset(TODAS)
     (request,) = recibidas
     assert request.method == "POST"
-    assert (
-        request.url.path == f"/clientes-stub/v1/clientes/{CLIENTE}/consentimientos/verificaciones"
-    )
+    assert request.url.path == f"/clientes/v1/clientes/{CLIENTE}/consentimientos/verificaciones"
     assert json.loads(request.content) == {
         "proposito": "PERFILAMIENTO_PRECIO",
         "alcances": [str(f) for f in TODAS],

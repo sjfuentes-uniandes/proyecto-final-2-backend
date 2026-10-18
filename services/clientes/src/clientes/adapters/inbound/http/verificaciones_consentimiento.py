@@ -2,7 +2,7 @@
 
 Servicio a servicio: la invoca `cotizacion` en el perfilamiento, con el `clienteId` en la ruta
 (ADR 0006) y, como `GET /v1/clientes/{clienteId}/identidad`, sin encabezados de actor. Cumple sin
-cambios `clientes.propuesta-cotizacion.yaml` y el pacto `contracts/pact/cotizacion-clientes.json`.
+cambios lo que `cotizacion` espera (su pacto `contracts/pact/cotizacion-clientes.json`).
 La respuesta no lleva valores financieros: solo la decisión, identificadores y códigos.
 """
 

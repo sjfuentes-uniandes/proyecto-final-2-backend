@@ -196,23 +196,30 @@ def test_contrato_del_registro() -> None:
     assert {"type": "null"} in token["anyOf"]
 
 
-def test_identidad_es_compatible_con_la_propuesta_de_cotizacion() -> None:
+# Lo que `cotizacion` espera de `clientes`: los valores de la propuesta del consumidor, retirada en
+# la PR 3.6. Del lado de `cotizacion`, sus DTO se cotejan con este contrato
+# (`test_dobles_clientes.py`), y su pacto lo verifica `test_pact_proveedor.py`.
+CAMPOS_IDENTIDAD = {"clienteId", "estado", "verificadoEn"}
+CAMPOS_VERIFICACION = {
+    "decision",
+    "consentimientoId",
+    "vigenteHasta",
+    "alcancesPermitidos",
+    "alcancesRechazados",
+    "causa",
+}
+
+
+def test_identidad_cumple_lo_que_espera_cotizacion() -> None:
     """cotizacion lee {clienteId, estado, verificadoEn} de GET .../identidad."""
-    propuesta = yaml.safe_load(
-        (CONTRATO.parent / "clientes.propuesta-cotizacion.yaml").read_text(encoding="utf-8")
-    )["components"]["schemas"]["Identidad"]
     publicado = app.openapi()["components"]["schemas"]["IdentidadDto"]
-    assert set(publicado["required"]) == set(propuesta["required"])
-    assert set(publicado["properties"]) == set(propuesta["properties"])
+    assert set(publicado["required"]) == CAMPOS_IDENTIDAD
+    assert set(publicado["properties"]) == CAMPOS_IDENTIDAD
 
 
-def test_verificacion_es_compatible_con_la_propuesta_de_cotizacion() -> None:
+def test_verificacion_cumple_lo_que_espera_cotizacion() -> None:
     """HU-W31 (plan §c): la ruta de verificación cumple sin cambios lo que `cotizacion` espera:
     mismos campos obligatorios, mismos nulos y mismas enumeraciones, y sin encabezados de actor."""
-    propuesta = yaml.safe_load(
-        (CONTRATO.parent / "clientes.propuesta-cotizacion.yaml").read_text(encoding="utf-8")
-    )
-    esperado = propuesta["components"]["schemas"]
     publicado = app.openapi()["components"]["schemas"]
     ruta = "/v1/clientes/{clienteId}/consentimientos/verificaciones"
     operacion = app.openapi()["paths"][ruta]["post"]
@@ -222,22 +229,30 @@ def test_verificacion_es_compatible_con_la_propuesta_de_cotizacion() -> None:
     assert operacion["requestBody"]["required"] is True
 
     solicitud = publicado["SolicitudVerificacionConsentimiento"]
-    assert set(solicitud["required"]) == set(esperado["SolicitudVerificacion"]["required"])
+    assert set(solicitud["required"]) == {"proposito", "alcances"}
     assert solicitud["properties"]["alcances"]["minItems"] == 1
-    proposito = esperado["SolicitudVerificacion"]["properties"]["proposito"]
-    assert publicado["Proposito"]["enum"] == proposito["enum"]
-    assert publicado["Alcance"]["enum"] == esperado["Alcance"]["enum"]
+    assert publicado["Proposito"]["enum"] == ["PERFILAMIENTO_PRECIO"]
+    assert publicado["Alcance"]["enum"] == [
+        "FA_PRODUCTOS_VIGENTES",
+        "FA_HISTORIAL_PAGOS_12M",
+        "FA_INGRESOS_AGREGADOS",
+        "DA_REGISTROS_PUBLICOS",
+    ]
 
     respuesta = publicado["VerificacionConsentimientoDto"]
-    assert set(respuesta["required"]) == set(esperado["Verificacion"]["required"])
-    assert set(respuesta["properties"]) == set(esperado["Verificacion"]["properties"])
+    assert set(respuesta["required"]) == CAMPOS_VERIFICACION
+    assert set(respuesta["properties"]) == CAMPOS_VERIFICACION
     for nullable in ("consentimientoId", "vigenteHasta", "causa"):
         assert {"type": "null"} in respuesta["properties"][nullable]["anyOf"]
-    propiedades = esperado["Verificacion"]["properties"]
-    assert publicado["Decision"]["enum"] == propiedades["decision"]["enum"]
-    assert publicado["CausaRechazo"]["enum"] + [None] == propiedades["causa"]["enum"]
-    causa_alcance = esperado["AlcanceRechazado"]["properties"]["causa"]
-    assert publicado["CausaAlcance"]["enum"] == causa_alcance["enum"]
+    assert publicado["Decision"]["enum"] == ["PERMITIDO", "PERMITIDO_PARCIAL", "RECHAZADO"]
+    assert publicado["CausaRechazo"]["enum"] + [None] == [
+        "SIN_CONSENTIMIENTO",
+        "REVOCADO",
+        "VENCIDO",
+        "PROPOSITO_NO_AUTORIZADO",
+        None,
+    ]
+    assert publicado["CausaAlcance"]["enum"] == ["ALCANCE_NO_AUTORIZADO"]
     assert set(publicado["AlcanceRechazadoDto"]["required"]) == {"alcance", "causa"}
 
 

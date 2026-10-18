@@ -67,7 +67,7 @@ def test_cableado_con_base_configurada(entorno_limpio: pytest.MonkeyPatch) -> No
         assert caso.config.presupuesto_ms == 380
         assert caso._modelos._base_url == "http://catalogo:8080"
         assert caso._ejecutor._puerto._url == "http://adaptador-datos:8080/v1/consultas"
-        assert caso._identidad._base_url == "http://localhost:8089/clientes-stub"
+        assert caso._identidad._base_url == "http://localhost:8083"
         assert estado.reconstruir_perfil is not None
     assert migraciones == [settings.database_url]
     assert pool.argumentos == {"min_size": 1, "max_size": 7, "open": False}
@@ -80,11 +80,11 @@ def test_sin_base_no_hay_casos_de_uso(entorno_limpio: pytest.MonkeyPatch) -> Non
         assert cliente.get("/health").json() == {"status": "ok"}
 
 
-def test_dt_02_el_stub_tiene_prioridad(entorno_limpio: pytest.MonkeyPatch) -> None:
+def test_solventa_clientes_url_tiene_prioridad(entorno_limpio: pytest.MonkeyPatch) -> None:
     entorno_limpio.setenv("CLIENTES_URL", "http://clientes:8080")
     assert Settings().clientes_url == "http://clientes:8080"
-    entorno_limpio.setenv("SOLVENTA_CLIENTES_URL", "http://simulador-aliados:8080/clientes-stub")
-    assert Settings().clientes_url == "http://simulador-aliados:8080/clientes-stub"
+    entorno_limpio.setenv("SOLVENTA_CLIENTES_URL", "http://clientes-alterno:8080")
+    assert Settings().clientes_url == "http://clientes-alterno:8080"
 
 
 def test_la_rama_de_una_fuente_no_pasa_de_700_ms(entorno_limpio: pytest.MonkeyPatch) -> None:
