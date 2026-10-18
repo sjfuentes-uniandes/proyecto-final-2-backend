@@ -1,7 +1,8 @@
-"""ServicioConsentimientos sobre las rutas de consentimiento del servicio `clientes` (HU-M08).
+"""ServicioConsentimientos sobre las rutas de consentimiento del servicio `clientes`.
 
 `POST/GET /v1/clientes/actual/consentimientos`, `GET .../{consentimientoId}` y
-`GET /v1/consentimientos/textos/vigente`. El titular viaja solo en `X-Actor-Id` (el `sub` del
+`GET /v1/consentimientos/textos/vigente` (HU-M08); `POST .../{consentimientoId}/revocacion` y
+`GET .../{consentimientoId}/historial` (HU-M09). El titular viaja solo en `X-Actor-Id` (el `sub` del
 token): el BFF nunca envía un `clienteId` ni acepta uno de la app.
 """
 
@@ -28,11 +29,14 @@ from bff_movil.domain.consentimientos.modelos import (
     ConsentimientoNoEncontrado,
     ConsentimientoYaVigente,
     EstadoConsentimiento,
+    Historial,
+    Hito,
     IdentidadNoVerificada,
     Otorgamiento,
     SolicitudOtorgamiento,
     SolicitudRechazada,
     TextoVigente,
+    TipoHito,
 )
 from bff_movil.domain.sesion.errores import ClienteNoEncontrado, ServicioNoDisponible
 
@@ -70,6 +74,24 @@ class _ConsentimientoDto(_Dto):
             self.otorgado_en,
             self.vigente_hasta,
             self.revocado_en,
+        )
+
+
+class _HitoDto(_Dto):
+    tipo: TipoHito
+    ocurrido_en: datetime
+
+
+class _HistorialDto(_Dto):
+    consentimiento_id: UUID
+    estado: EstadoConsentimiento
+    hitos: list[_HitoDto]
+
+    def modelo(self) -> Historial:
+        return Historial(
+            self.consentimiento_id,
+            self.estado,
+            tuple(Hito(h.tipo, h.ocurrido_en) for h in self.hitos),
         )
 
 
@@ -122,10 +144,10 @@ def _validar[R](modelo: Callable[[], R]) -> R:
 class ConsentimientosHttp:
     """Falla cerrado y nunca reintenta. No registra los cuerpos ni las cabeceras.
 
-    Cada operación tiene su presupuesto: las lecturas usan el de `clientes`; otorgar es una
-    escritura transaccional (dato, clave y outbox) y tolera un arranque en frío. Si se agota
-    tras escribir, la app repite con la misma `Idempotency-Key` y recibe el mismo
-    consentimiento.
+    Cada operación tiene su presupuesto: las lecturas usan el de `clientes`; otorgar y revocar
+    son escrituras transaccionales (dato y outbox) y toleran un arranque en frío. Si se agota
+    tras escribir, la app repite: al otorgar con la misma `Idempotency-Key`; al revocar, sin
+    clave, porque `clientes` es idempotente por estado. En ambos casos recibe el mismo resultado.
     """
 
     def __init__(
@@ -134,8 +156,10 @@ class ConsentimientosHttp:
         base_url: str,
         consulta_timeout_ms: int,
         otorgamiento_timeout_ms: int,
+        revocacion_timeout_ms: int,
         proteccion_consulta: Proteccion | None = None,
         proteccion_otorgamiento: Proteccion | None = None,
+        proteccion_revocacion: Proteccion | None = None,
     ) -> None:
         self._cliente = cliente
         self._base_url = base_url.rstrip("/")
@@ -144,6 +168,10 @@ class ConsentimientosHttp:
         self._proteccion_consulta = proteccion_consulta or SinProteccion()
         self._proteccion_otorgamiento = proteccion_otorgamiento or SinProteccion(
             corte_duro_ms=otorgamiento_timeout_ms
+        )
+        self._revocacion_timeout_ms = revocacion_timeout_ms
+        self._proteccion_revocacion = proteccion_revocacion or SinProteccion(
+            corte_duro_ms=revocacion_timeout_ms
         )
 
     async def otorgar(
@@ -198,19 +226,47 @@ class ConsentimientosHttp:
                 headers=self._actor(sub),
                 timeout=timeout_s,
             )
-            if respuesta.status_code == 404 and _error(respuesta)[0] == (
-                "CONSENTIMIENTO_NO_ENCONTRADO"
-            ):
-                raise ConsentimientoNoEncontrado()
-            if respuesta.status_code != 200:
-                raise ServicioNoDisponible("ERROR")
-            consentimiento = self._consentimiento(respuesta)
-            if consentimiento.consentimiento_id != consentimiento_id:
-                raise ServicioNoDisponible("ERROR")
-            return consentimiento
+            return self._propio(respuesta, consentimiento_id)
 
         return await self._proteger(
             "clientes.consentimientos.detalle",
+            self._proteccion_consulta,
+            self._consulta_timeout_ms,
+            llamada,
+        )
+
+    async def revocar(self, sub: str, consentimiento_id: UUID) -> Consentimiento:
+        async def llamada(timeout_s: float) -> Consentimiento:
+            # Sin cuerpo ni Idempotency-Key: `clientes` es idempotente por estado (ADR 0009).
+            respuesta = await self._cliente.post(
+                f"{self._base_url}{RUTA}/{consentimiento_id}/revocacion",
+                headers=self._actor(sub),
+                timeout=timeout_s,
+            )
+            return self._propio(respuesta, consentimiento_id)
+
+        return await self._proteger(
+            "clientes.consentimientos.revocar",
+            self._proteccion_revocacion,
+            self._revocacion_timeout_ms,
+            llamada,
+        )
+
+    async def historial(self, sub: str, consentimiento_id: UUID) -> Historial:
+        async def llamada(timeout_s: float) -> Historial:
+            respuesta = await self._cliente.get(
+                f"{self._base_url}{RUTA}/{consentimiento_id}/historial",
+                headers=self._actor(sub),
+                timeout=timeout_s,
+            )
+            self._exigir_200(respuesta)
+            dto = _validar(lambda: _HistorialDto.model_validate_json(respuesta.content))
+            if dto.consentimiento_id != consentimiento_id:
+                raise ServicioNoDisponible("ERROR")
+            return dto.modelo()
+
+        return await self._proteger(
+            "clientes.consentimientos.historial",
             self._proteccion_consulta,
             self._consulta_timeout_ms,
             llamada,
@@ -267,6 +323,26 @@ class ConsentimientosHttp:
             raise ServicioNoDisponible("TIEMPO_AGOTADO") from error
         except DependenciaNoDisponible as error:
             raise ServicioNoDisponible("ERROR") from error
+
+    @staticmethod
+    def _exigir_200(respuesta: httpx.Response) -> None:
+        """El 404 de lo ajeno o inexistente pasa en transparencia; cualquier otra respuesta que
+        no sea 200 (5xx, 401/403 de actor, otro código) falla cerrado."""
+        if respuesta.status_code == 404 and _error(respuesta)[0] == (
+            "CONSENTIMIENTO_NO_ENCONTRADO"
+        ):
+            raise ConsentimientoNoEncontrado()
+        if respuesta.status_code != 200:
+            raise ServicioNoDisponible("ERROR")
+
+    @classmethod
+    def _propio(cls, respuesta: httpx.Response, consentimiento_id: UUID) -> Consentimiento:
+        """El consentimiento pedido; uno con otro identificador viola el contrato."""
+        cls._exigir_200(respuesta)
+        consentimiento = cls._consentimiento(respuesta)
+        if consentimiento.consentimiento_id != consentimiento_id:
+            raise ServicioNoDisponible("ERROR")
+        return consentimiento
 
     @staticmethod
     def _consentimiento(respuesta: httpx.Response) -> Consentimiento:

@@ -1,4 +1,5 @@
-"""API del consentimiento para el uso de datos (HU-M08): otorgar, listar, detalle y texto vigente.
+"""API del consentimiento para el uso de datos: otorgar, listar, detalle y texto vigente (HU-M08);
+revocar e historial (HU-M09).
 
 El titular es siempre el del token: ninguna ruta acepta un `clienteId` de la app. `clientes`
 valida la solicitud y calcula la vigencia; el BFF solo traduce sus errores por `codigo`.
@@ -25,16 +26,19 @@ from bff_movil.application.consentimientos.casos import (
     ConsultarConsentimientos,
     ConsultarTextoVigente,
     OtorgarConsentimiento,
+    RevocarConsentimiento,
 )
 from bff_movil.domain.consentimientos.modelos import (
     Consentimiento,
     ConsentimientoNoEncontrado,
     ConsentimientoYaVigente,
     EstadoConsentimiento,
+    Historial,
     IdentidadNoVerificada,
     SolicitudOtorgamiento,
     SolicitudRechazada,
     TextoVigente,
+    TipoHito,
 )
 from bff_movil.domain.sesion.errores import ClienteNoEncontrado, ServicioNoDisponible
 
@@ -103,6 +107,27 @@ class ConsentimientoDto(Dto):
         )
 
 
+class HitoDto(Dto):
+    tipo: TipoHito
+    ocurrido_en: datetime
+
+
+class HistorialDto(Dto):
+    """Cuándo se otorgó y, si aplica, cuándo se revocó o venció (HU-M09 AC4)."""
+
+    consentimiento_id: UUID
+    estado: EstadoConsentimiento
+    hitos: list[HitoDto]
+
+    @classmethod
+    def desde(cls, historial: Historial) -> "HistorialDto":
+        return cls(
+            consentimiento_id=historial.consentimiento_id,
+            estado=historial.estado,
+            hitos=[HitoDto(tipo=h.tipo, ocurrido_en=h.ocurrido_en) for h in historial.hitos],
+        )
+
+
 class TextoVigenteDto(Dto):
     proposito: str
     idioma: str
@@ -138,6 +163,16 @@ def _rechazo(falla: SolicitudRechazada) -> ErrorNegocio:
 
 def _no_disponible() -> ErrorNegocio:
     return ErrorNegocio(SERVICIO_NO_DISPONIBLE, "Servicio no disponible", 503)
+
+
+def _no_encontrado() -> ErrorNegocio:
+    return ErrorNegocio(CONSENTIMIENTO_NO_ENCONTRADO, "El consentimiento no existe", 404)
+
+
+_NO_ENCONTRADO = error(
+    "CONSENTIMIENTO_NO_ENCONTRADO: no existe o es de otro cliente (no se distingue)"
+)
+_ID_INVALIDO = error("SOLICITUD_INVALIDA: el identificador o un encabezado no cumple su formato")
 
 
 # Antes de /{consentimientoId}: si no, "texto-vigente" se leería como un identificador.
@@ -293,5 +328,64 @@ async def detalle(
         raise ErrorNegocio(
             CONSENTIMIENTO_NO_ENCONTRADO, "El consentimiento no existe", 404
         ) from falla
+    except ServicioNoDisponible as falla:
+        raise _no_disponible() from falla
+
+
+@router.post(
+    "/{consentimientoId}/revocacion",
+    response_model=ConsentimientoDto,
+    response_model_by_alias=True,
+    summary="Revoca un consentimiento del titular",
+    responses={
+        200: {"headers": CABECERAS},
+        401: _NO_AUTENTICADO,
+        403: error(_ROL),
+        404: _NO_ENCONTRADO,
+        422: _ID_INVALIDO,
+        503: error(
+            "SERVICIO_NO_DISPONIBLE: no se pudo confirmar la revocación; la app informa y puede "
+            "repetirla: es idempotente por estado y no genera otro evento"
+        ),
+    },
+)
+async def revocar(
+    consentimiento_id: ConsentimientoId, request: Request, identidad: Titular
+) -> ConsentimientoDto:
+    """Sin cuerpo ni Idempotency-Key: `clientes` es idempotente por estado (AC3). La primera vez
+    y las repeticiones responden 200 con el mismo cuerpo; uno ya vencido responde 200 como
+    `VENCIDO`, con `revocadoEn` nulo. El BFF pasa el estado tal como lo devuelve `clientes`."""
+    caso: RevocarConsentimiento = request.app.state.revocar_consentimiento
+    try:
+        return ConsentimientoDto.desde(await caso.ejecutar(identidad.sub, consentimiento_id))
+    except ConsentimientoNoEncontrado as falla:
+        raise _no_encontrado() from falla
+    except ServicioNoDisponible as falla:
+        raise _no_disponible() from falla
+
+
+@router.get(
+    "/{consentimientoId}/historial",
+    response_model=HistorialDto,
+    response_model_by_alias=True,
+    summary="Historial de un consentimiento del titular: otorgado y revocado o vencido",
+    responses={
+        200: {"headers": CABECERAS},
+        401: _NO_AUTENTICADO,
+        403: error(_ROL),
+        404: _NO_ENCONTRADO,
+        422: _ID_INVALIDO,
+        503: error("SERVICIO_NO_DISPONIBLE: `clientes` no respondió"),
+    },
+)
+async def historial(
+    consentimiento_id: ConsentimientoId, request: Request, identidad: Titular
+) -> HistorialDto:
+    """Solo lectura (AC4): los hitos los deriva `clientes` de la fila inmutable."""
+    consultas: ConsultarConsentimientos = request.app.state.consultar_consentimientos
+    try:
+        return HistorialDto.desde(await consultas.historial(identidad.sub, consentimiento_id))
+    except ConsentimientoNoEncontrado as falla:
+        raise _no_encontrado() from falla
     except ServicioNoDisponible as falla:
         raise _no_disponible() from falla

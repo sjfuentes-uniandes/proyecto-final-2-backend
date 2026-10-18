@@ -12,6 +12,7 @@ from bff_movil.domain.consentimientos.modelos import (
     Consentimiento,
     ConsentimientoNoEncontrado,
     ConsentimientoYaVigente,
+    Historial,
     IdentidadNoVerificada,
     Otorgamiento,
     SolicitudOtorgamiento,
@@ -69,6 +70,36 @@ class ConsultarConsentimientos:
         with operacion("consentimientos.detalle") as op:
             try:
                 return await self._servicio.detalle(sub, consentimiento_id)
+            except ServicioNoDisponible as error:
+                op.marcar(_resultado(error))
+                raise
+            except ConsentimientoNoEncontrado:
+                op.marcar(RESULTADO_RECHAZADO)
+                raise
+
+    async def historial(self, sub: str, consentimiento_id: UUID) -> Historial:
+        with operacion("consentimientos.historial") as op:
+            try:
+                return await self._servicio.historial(sub, consentimiento_id)
+            except ServicioNoDisponible as error:
+                op.marcar(_resultado(error))
+                raise
+            except ConsentimientoNoEncontrado:
+                op.marcar(RESULTADO_RECHAZADO)
+                raise
+
+
+class RevocarConsentimiento:
+    def __init__(self, servicio: ServicioConsentimientos) -> None:
+        self._servicio = servicio
+
+    async def ejecutar(self, sub: str, consentimiento_id: UUID) -> Consentimiento:
+        """Nunca reintenta: revocar es idempotente por estado en `clientes` (AC3), así que si la
+        respuesta se pierde por un timeout la app repite y recibe el mismo estado, sin otro
+        evento."""
+        with operacion("consentimientos.revocar") as op:
+            try:
+                return await self._servicio.revocar(sub, consentimiento_id)
             except ServicioNoDisponible as error:
                 op.marcar(_resultado(error))
                 raise

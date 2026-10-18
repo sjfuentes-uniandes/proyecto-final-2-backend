@@ -1,10 +1,12 @@
-"""Módulo `bff-movil` completo contra un `clientes` simulado por HTTP real (HU-M08).
+"""Módulo `bff-movil` completo contra un `clientes` simulado por HTTP real (HU-M08; revocación e
+historial de HU-M09).
 
 A diferencia de las unitarias (respx), aquí no se inyecta transporte: el BFF usa su pila HTTP
 de producción (`correlation.cliente_async`, timeouts, JWKS) contra un servidor uvicorn local que
 simula `clientes` y el JWKS del pool de clientes. El simulado aplica las reglas que importan al
 BFF (titular por `X-Actor-Id`, idempotencia por titular, 409, 422 con todos los campos, 404 de
-lo ajeno) y puede caerse o volverse lento. Solo datos sintéticos.
+lo ajeno, revocación idempotente por estado) y puede caerse o volverse lento. Solo datos
+sintéticos.
 """
 
 import asyncio
@@ -51,6 +53,8 @@ class ClientesSimulado:
     recibidas: list[dict[str, Any]] = field(default_factory=list)
     caido: bool = False
     retraso_s: float = 0.0
+    # Revocaciones efectivas: lo que en `clientes` sería un evento ConsentimientoRevocado.
+    revocaciones: int = 0
 
     def reiniciar(self) -> None:
         self.consentimientos.clear()
@@ -58,6 +62,17 @@ class ClientesSimulado:
         self.recibidas.clear()
         self.caido = False
         self.retraso_s = 0.0
+        self.revocaciones = 0
+
+    def propio(self, sub: str, consentimiento_id: str) -> dict[str, Any] | None:
+        return next(
+            (
+                c
+                for c in self.consentimientos.get(sub, [])
+                if c["consentimientoId"] == consentimiento_id
+            ),
+            None,
+        )
 
     def total(self) -> int:
         return sum(len(lista) for lista in self.consentimientos.values())
@@ -113,7 +128,14 @@ def _app_clientes(estado: ClientesSimulado) -> FastAPI:
         if x_actor_id == SUB_SIN_VERIFICAR:
             return _error(403, "IDENTIDAD_NO_VERIFICADA")
         propios = estado.consentimientos.setdefault(x_actor_id, [])
-        activo = next((c for c in propios if c["proposito"] == cuerpo["proposito"]), None)
+        activo = next(
+            (
+                c
+                for c in propios
+                if c["proposito"] == cuerpo["proposito"] and c["estado"] == "ACTIVO"
+            ),
+            None,
+        )
         if activo is not None:
             return _error(
                 409, "CONSENTIMIENTO_YA_VIGENTE", {"consentimientoId": activo["consentimientoId"]}
@@ -153,6 +175,39 @@ def _app_clientes(estado: ClientesSimulado) -> FastAPI:
             if consentimiento["consentimientoId"] == consentimiento_id:
                 return JSONResponse(consentimiento)
         return _error(404, "CONSENTIMIENTO_NO_ENCONTRADO")
+
+    @app.post("/v1/clientes/actual/consentimientos/{consentimiento_id}/revocacion")
+    async def revocar(consentimiento_id: str, x_actor_id: str = Header()) -> JSONResponse:
+        consentimiento = estado.propio(x_actor_id, consentimiento_id)
+        if consentimiento is None:
+            return _error(404, "CONSENTIMIENTO_NO_ENCONTRADO")
+        # Idempotente por estado: solo un ACTIVO cambia; el resto responde tal como está.
+        if consentimiento["estado"] == "ACTIVO":
+            consentimiento["estado"] = "REVOCADO"
+            consentimiento["revocadoEn"] = datetime.now(UTC).isoformat()
+            estado.revocaciones += 1
+        # Como en `clientes`, el cambio queda escrito antes de responder.
+        if estado.retraso_s:
+            await asyncio.sleep(estado.retraso_s)
+        return JSONResponse(consentimiento)
+
+    @app.get("/v1/clientes/actual/consentimientos/{consentimiento_id}/historial")
+    async def historial(consentimiento_id: str, x_actor_id: str = Header()) -> JSONResponse:
+        consentimiento = estado.propio(x_actor_id, consentimiento_id)
+        if consentimiento is None:
+            return _error(404, "CONSENTIMIENTO_NO_ENCONTRADO")
+        hitos = [{"tipo": "OTORGADO", "ocurridoEn": consentimiento["otorgadoEn"]}]
+        if consentimiento["revocadoEn"]:
+            hitos.append({"tipo": "REVOCADO", "ocurridoEn": consentimiento["revocadoEn"]})
+        elif consentimiento["estado"] == "VENCIDO":
+            hitos.append({"tipo": "VENCIDO", "ocurridoEn": consentimiento["vigenteHasta"]})
+        return JSONResponse(
+            {
+                "consentimientoId": consentimiento_id,
+                "estado": consentimiento["estado"],
+                "hitos": hitos,
+            }
+        )
 
     @app.get("/v1/consentimientos/textos/vigente")
     async def texto(proposito: str | None = None, idioma: str | None = None) -> JSONResponse:
@@ -451,3 +506,134 @@ def test_una_lectura_lenta_corta_en_el_presupuesto_de_clientes(modulo_ajustado: 
     assert respuesta.status_code == 503
     assert time.monotonic() - inicio < 0.9
     assert len(modulo.clientes.recibidas) == 1
+
+
+# --- Revocación e historial (HU-M09) -----------------------------------------------------------
+
+
+def _revocar(modulo: Modulo, consentimiento_id: str, sub: str = SUB, **kwargs: Any) -> Any:
+    return modulo.pedir(
+        "POST", f"/v1/consentimientos/{consentimiento_id}/revocacion", sub, **kwargs
+    )
+
+
+@pytest.mark.hu("M09", "AC1")
+def test_revocar_y_consultar_el_historial_de_punta_a_punta(modulo: Modulo) -> None:
+    correlacion = "corr-modulo-m09"
+    otorgado = modulo.otorgar().json()
+    consentimiento_id = otorgado["consentimientoId"]
+
+    revocado = _revocar(modulo, consentimiento_id, headers={"X-Correlation-Id": correlacion})
+    detalle = modulo.pedir("GET", f"/v1/consentimientos/{consentimiento_id}")
+    lista = modulo.pedir("GET", "/v1/consentimientos")
+    historial = modulo.pedir("GET", f"/v1/consentimientos/{consentimiento_id}/historial")
+
+    assert revocado.status_code == 200
+    assert revocado.json()["estado"] == "REVOCADO"
+    assert revocado.json()["revocadoEn"] is not None
+    assert revocado.headers["X-Correlation-Id"] == correlacion
+    assert detalle.json() == revocado.json()
+    assert lista.json() == [revocado.json()]
+    assert historial.status_code == 200
+    assert [h["tipo"] for h in historial.json()["hitos"]] == ["OTORGADO", "REVOCADO"]
+    assert historial.json()["hitos"][1]["ocurridoEn"] == revocado.json()["revocadoEn"]
+    llamada = next(r for r in modulo.clientes.recibidas if r["ruta"].endswith("/revocacion"))
+    assert llamada["x-actor-id"] == SUB
+    assert llamada["x-actor-rol"] == "CLIENTE"
+    assert llamada["x-correlation-id"] == correlacion
+    assert "idempotency-key" not in llamada
+    assert modulo.clientes.revocaciones == 1
+
+
+@pytest.mark.hu("M09", "AC3")
+def test_revocar_otra_vez_responde_igual_sin_otra_revocacion(modulo: Modulo) -> None:
+    consentimiento_id = modulo.otorgar().json()["consentimientoId"]
+
+    primera = _revocar(modulo, consentimiento_id)
+    segunda = _revocar(modulo, consentimiento_id)
+
+    assert (primera.status_code, segunda.status_code) == (200, 200)
+    assert segunda.json() == primera.json()
+    assert modulo.clientes.revocaciones == 1
+
+
+def test_revocar_un_vencido_responde_vencido_sin_cambios(modulo: Modulo) -> None:
+    consentimiento_id = modulo.otorgar().json()["consentimientoId"]
+    vencido = modulo.clientes.propio(SUB, consentimiento_id)
+    assert vencido is not None
+    vencido["estado"] = "VENCIDO"
+
+    respuesta = _revocar(modulo, consentimiento_id)
+    historial = modulo.pedir("GET", f"/v1/consentimientos/{consentimiento_id}/historial")
+
+    assert respuesta.status_code == 200
+    assert (respuesta.json()["estado"], respuesta.json()["revocadoEn"]) == ("VENCIDO", None)
+    assert [h["tipo"] for h in historial.json()["hitos"]] == ["OTORGADO", "VENCIDO"]
+    assert modulo.clientes.revocaciones == 0
+
+
+def test_un_cliente_no_revoca_ni_ve_el_historial_de_otro(modulo: Modulo) -> None:
+    ajeno = modulo.otorgar(sub=SUB_AJENO).json()["consentimientoId"]
+
+    revocar = _revocar(modulo, ajeno)
+    historial = modulo.pedir("GET", f"/v1/consentimientos/{ajeno}/historial")
+    inexistente = _revocar(modulo, str(uuid.uuid4()))
+
+    for respuesta in (revocar, historial, inexistente):
+        assert respuesta.status_code == 404
+        assert respuesta.json()["codigo"] == "CONSENTIMIENTO_NO_ENCONTRADO"
+    assert (modulo.clientes.propio(SUB_AJENO, ajeno) or {}).get("estado") == "ACTIVO"
+    assert modulo.clientes.revocaciones == 0
+
+
+def test_tras_revocar_se_otorga_uno_nuevo_y_la_lista_conserva_ambos(modulo: Modulo) -> None:
+    """Compatibilidad N-1: la lista sigue siendo un arreglo e incluye el revocado."""
+    primero = modulo.otorgar().json()["consentimientoId"]
+    _revocar(modulo, primero)
+
+    segundo = modulo.otorgar()
+    lista = modulo.pedir("GET", "/v1/consentimientos").json()
+
+    assert segundo.status_code == 201
+    assert [(c["consentimientoId"], c["estado"]) for c in lista] == [
+        (segundo.json()["consentimientoId"], "ACTIVO"),
+        (primero, "REVOCADO"),
+    ]
+
+
+def test_clientes_fallando_no_revoca_y_responde_503(modulo: Modulo) -> None:
+    consentimiento_id = modulo.otorgar().json()["consentimientoId"]
+    modulo.clientes.caido = True
+
+    revocar = _revocar(modulo, consentimiento_id)
+    historial = modulo.pedir("GET", f"/v1/consentimientos/{consentimiento_id}/historial")
+
+    for respuesta in (revocar, historial):
+        assert respuesta.status_code == 503
+        assert respuesta.json()["codigo"] == "SERVICIO_NO_DISPONIBLE"
+    assert (modulo.clientes.propio(SUB, consentimiento_id) or {}).get("estado") == "ACTIVO"
+    assert modulo.clientes.revocaciones == 0
+
+
+def test_clientes_lento_al_revocar_corta_y_repetir_devuelve_el_mismo_estado(
+    modulo_ajustado: Any,
+) -> None:
+    """La respuesta se pierde por el timeout, pero la revocación ya quedó escrita: repetir
+    devuelve el mismo estado y `clientes` no revoca dos veces (idempotente por estado)."""
+    modulo = modulo_ajustado(revocacion_timeout_ms=200)
+    consentimiento_id = modulo.otorgar().json()["consentimientoId"]
+    modulo.clientes.retraso_s = 1.0
+
+    inicio = time.monotonic()
+    lenta = _revocar(modulo, consentimiento_id)
+    transcurrido = time.monotonic() - inicio
+    modulo.clientes.retraso_s = 0.0
+    repeticion = _revocar(modulo, consentimiento_id)
+
+    assert lenta.status_code == 503
+    assert lenta.json()["codigo"] == "SERVICIO_NO_DISPONIBLE"
+    assert transcurrido < 0.9
+    assert repeticion.status_code == 200
+    assert repeticion.json()["estado"] == "REVOCADO"
+    assert modulo.clientes.revocaciones == 1
+    assert sum(r["ruta"].endswith("/revocacion") for r in modulo.clientes.recibidas) == 2
