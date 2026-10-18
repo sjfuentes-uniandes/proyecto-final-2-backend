@@ -1,0 +1,46 @@
+{
+  "name": "clientes C01 revocación en vuelo: comprobación final REVOCADO",
+  "priority": 1,
+  "scenarioName": "revocacion-en-vuelo-c01",
+  "requiredScenarioState": "comprobacion-final",
+  "request": {
+    "method": "POST",
+    "urlPath": "/clientes/v1/clientes/00000000-0000-4000-8000-000000000001/consentimientos/verificaciones",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.proposito == 'PERFILAMIENTO_PRECIO')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "decision": "RECHAZADO",
+      "consentimientoId": null,
+      "vigenteHasta": null,
+      "alcancesPermitidos": [],
+      "alcancesRechazados": [
+        {
+          "alcance": "FA_PRODUCTOS_VIGENTES",
+          "causa": "ALCANCE_NO_AUTORIZADO"
+        },
+        {
+          "alcance": "FA_HISTORIAL_PAGOS_12M",
+          "causa": "ALCANCE_NO_AUTORIZADO"
+        },
+        {
+          "alcance": "FA_INGRESOS_AGREGADOS",
+          "causa": "ALCANCE_NO_AUTORIZADO"
+        },
+        {
+          "alcance": "DA_REGISTROS_PUBLICOS",
+          "causa": "ALCANCE_NO_AUTORIZADO"
+        }
+      ],
+      "causa": "REVOCADO"
+    }
+  }
+}
