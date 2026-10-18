@@ -7,10 +7,15 @@ import httpx
 from pydantic import SecretStr
 
 from adaptador_identidad.domain.verificaciones.modelos import (
+    DatosDocumento,
     RespuestaInvalida,
+    ResultadoDocumento,
     ResultadoVerificacion,
     Verificacion,
+    VerificacionDocumento,
 )
+
+PROVEEDOR = "KYC"
 
 
 class KycHttp:
@@ -43,4 +48,36 @@ class KycHttp:
                 resultado=ResultadoVerificacion(cuerpo["resultado"]), motivo=cuerpo.get("motivo")
             )
         except (ValueError, KeyError) as error:
+            raise RespuestaInvalida("JSON") from error
+
+    async def verificar_documento(
+        self, cliente_id: UUID, datos: DatosDocumento, timeout_s: float
+    ) -> VerificacionDocumento:
+        respuesta = await self._cliente.post(
+            f"{self._base_url}/v1/verificaciones/documento",
+            json={
+                "clienteId": str(cliente_id),
+                "tipoDocumento": datos.tipo_documento,
+                "numeroDocumento": datos.numero_documento,
+                "nombreCompleto": datos.nombre_completo,
+                "fechaNacimiento": datos.fecha_nacimiento.isoformat(),
+            },
+            headers={"X-Api-Key": self._api_key.get_secret_value()},
+            timeout=timeout_s,
+        )
+        if 400 <= respuesta.status_code < 500:
+            raise RespuestaInvalida("HTTP_4XX")
+        respuesta.raise_for_status()
+        try:
+            cuerpo = respuesta.json()
+            referencia = cuerpo["referencia"]
+            if not isinstance(referencia, str) or not referencia:
+                raise ValueError("referencia")
+            return VerificacionDocumento(
+                resultado=ResultadoDocumento(cuerpo["resultado"]),
+                motivo=cuerpo.get("motivo"),
+                referencia=referencia,
+                proveedor=PROVEEDOR,
+            )
+        except (ValueError, KeyError, TypeError) as error:
             raise RespuestaInvalida("JSON") from error

@@ -1,0 +1,32 @@
+{
+  "name": "kyc documento rechazado (los datos no coinciden)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/kyc/v1/verificaciones/documento",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.numeroDocumento",
+          "equalTo": "1000000002"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "resultado": "RECHAZADO",
+      "motivo": "DATOS_NO_COINCIDEN",
+      "referencia": "kyc-doc-ref-0002"
+    },
+    "fixedDelayMilliseconds": 50
+  }
+}

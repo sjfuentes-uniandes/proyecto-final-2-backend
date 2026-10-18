@@ -1,7 +1,7 @@
 from typing import Any, Protocol
 from uuid import UUID
 
-from clientes.domain.identidad.modelos import Cliente, ResultadoKyc
+from clientes.domain.identidad.modelos import Cliente, DatosCliente, ResultadoKyc
 
 
 class RepositorioClientes(Protocol):
@@ -24,6 +24,35 @@ class RepositorioClientes(Protocol):
         ...
 
     def guardar(self, cliente: Cliente) -> None: ...
+
+    def asegurar_por_documento(self, datos: DatosCliente) -> tuple[Cliente, bool]:
+        """Devuelve el cliente de ese documento y si se creó ahora. Idempotente (AC4).
+
+        Un documento ya registrado devuelve el cliente existente sin modificar sus datos.
+        """
+        ...
+
+
+class VeredictoDocumento(Protocol):
+    @property
+    def resultado(self) -> ResultadoKyc: ...
+
+    @property
+    def motivo(self) -> str | None: ...
+
+    @property
+    def referencia(self) -> str: ...
+
+    @property
+    def proveedor(self) -> str: ...
+
+
+class ConsultaVerificacionDocumental(Protocol):
+    async def verificar_documento(
+        self, cliente_id: UUID, datos: DatosCliente
+    ) -> VeredictoDocumento:
+        """Lanza IdentidadNoDisponible si el proveedor no respondió o falló."""
+        ...
 
 
 class VeredictoKyc(Protocol):

@@ -56,7 +56,9 @@ def test_error_cuenta_y_propaga_la_excepcion(telemetria: Telemetria) -> None:
     assert all("9500000" not in str(e.attributes) for e in span.events)
 
 
-@pytest.mark.parametrize("excepcion", [TimeoutError(), httpx.ReadTimeout("lento"), httpx.ConnectTimeout("sin conexión")])
+@pytest.mark.parametrize(
+    "excepcion", [TimeoutError(), httpx.ReadTimeout("lento"), httpx.ConnectTimeout("sin conexión")]
+)
 def test_timeout_se_registra_como_timeout(telemetria: Telemetria, excepcion: Exception) -> None:
     with pytest.raises(type(excepcion)), operacion("consultar_aliado"):
         raise excepcion
@@ -126,7 +128,9 @@ def test_recurso_con_servicio_y_ambiente(telemetria: Telemetria) -> None:
     assert recurso["Service"] == "servicio-prueba" and recurso["Environment"] == "pruebas"
 
 
-def test_sdk_deshabilitado_funciona_sin_exportar(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
+def test_sdk_deshabilitado_funciona_sin_exportar(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
     monkeypatch.setenv("OTEL_SDK_DISABLED", "true")
     telemetry.configurar(settings)
     with operacion("sin_exportar"):
@@ -153,7 +157,9 @@ def test_sin_endpoint_no_exporta_pero_genera_trazas(settings: Settings, capturar
     assert '"trace_id": "1-' in salida.getvalue()
 
 
-def test_medicion_por_solicitud_y_healthcheck_local(telemetria: Telemetria, settings: Settings, capturar_logs) -> None:
+def test_medicion_por_solicitud_y_healthcheck_local(
+    telemetria: Telemetria, settings: Settings, capturar_logs
+) -> None:
     app = FastAPI()
 
     @app.get("/health")
@@ -184,9 +190,15 @@ def test_medicion_por_solicitud_y_healthcheck_local(telemetria: Telemetria, sett
 
     puntos = _por_operacion(telemetria.puntos(METRICA_DURACION), "GET /socios/{socio_id}")
     assert puntos[0].count == 3  # una sola serie: la plantilla, no el identificador
-    assert _por_operacion(telemetria.puntos(METRICA_ERRORES), "GET /socios/{socio_id}")[0].value == 1
+    assert (
+        _por_operacion(telemetria.puntos(METRICA_ERRORES), "GET /socios/{socio_id}")[0].value == 1
+    )
     assert not _por_operacion(telemetria.puntos(METRICA_DURACION), "GET /health")
-    resultados = [linea["result"] for linea in telemetria.logs() if linea.get("operation") == "GET /socios/{socio_id}"]
+    resultados = [
+        linea["result"]
+        for linea in telemetria.logs()
+        if linea.get("operation") == "GET /socios/{socio_id}"
+    ]
     assert sorted(resultados) == ["error", "ok", "rechazado"]
     assert not [s for s in telemetria.lista_spans() if s.attributes.get("http.target") == "/health"]
 

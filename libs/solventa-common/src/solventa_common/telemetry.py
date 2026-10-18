@@ -64,12 +64,18 @@ class _Telemetria:
     meter_provider: metrics.MeterProvider
 
 
-def _instrumentos(tracer_provider: trace.TracerProvider, meter_provider: metrics.MeterProvider) -> _Telemetria:
+def _instrumentos(
+    tracer_provider: trace.TracerProvider, meter_provider: metrics.MeterProvider
+) -> _Telemetria:
     meter = meter_provider.get_meter("solventa")
     return _Telemetria(
         tracer=tracer_provider.get_tracer("solventa"),
-        duracion=meter.create_histogram(METRICA_DURACION, unit="ms", description="Duración de la operación"),
-        errores=meter.create_counter(METRICA_ERRORES, unit="1", description="Operaciones con error o timeout"),
+        duracion=meter.create_histogram(
+            METRICA_DURACION, unit="ms", description="Duración de la operación"
+        ),
+        errores=meter.create_counter(
+            METRICA_ERRORES, unit="1", description="Operaciones con error o timeout"
+        ),
         tracer_provider=tracer_provider,
         meter_provider=meter_provider,
     )
@@ -109,13 +115,24 @@ class _SinChequeoDeSalud(Sampler):
     def __init__(self, delegado: Sampler) -> None:
         self._delegado = delegado
 
-    def should_sample(self, parent_context, trace_id, name, kind=None, attributes=None, links=None, trace_state=None):
+    def should_sample(
+        self,
+        parent_context,
+        trace_id,
+        name,
+        kind=None,
+        attributes=None,
+        links=None,
+        trace_state=None,
+    ):
         atributos = attributes or {}
         ruta = atributos.get("url.path") or atributos.get("http.target")
         cliente = atributos.get("client.address") or atributos.get("net.peer.ip")
         if kind == SpanKind.SERVER and ruta in _RUTAS_SALUD and _es_loopback(cliente):
             return SamplingResult(Decision.DROP)
-        return self._delegado.should_sample(parent_context, trace_id, name, kind, attributes, links, trace_state)
+        return self._delegado.should_sample(
+            parent_context, trace_id, name, kind, attributes, links, trace_state
+        )
 
     def get_description(self) -> str:
         return "SinChequeoDeSalud"
@@ -140,12 +157,14 @@ def configurar(
         _estado = _instrumentos(trace.NoOpTracerProvider(), metrics.NoOpMeterProvider())
         return
 
-    recurso = Resource.create({
-        "service.name": settings.service_name,
-        "deployment.environment": settings.environment,
-        "Service": settings.service_name,
-        "Environment": settings.environment,
-    })
+    recurso = Resource.create(
+        {
+            "service.name": settings.service_name,
+            "deployment.environment": settings.environment,
+            "Service": settings.service_name,
+            "Environment": settings.environment,
+        }
+    )
     endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 
     tracer_provider = TracerProvider(
@@ -159,15 +178,22 @@ def configurar(
     elif endpoint:
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
-        tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, insecure=True)))
+        tracer_provider.add_span_processor(
+            BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, insecure=True))
+        )
 
     lectores = list(metric_readers)
     if not lectores and endpoint:
         from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
 
         # La agregación exponencial llega por OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION.
-        lectores.append(PeriodicExportingMetricReader(OTLPMetricExporter(endpoint=endpoint, insecure=True)))
-    vistas = [View(instrument_name=nombre.lower(), name=nombre) for nombre in (METRICA_DURACION, METRICA_ERRORES)]
+        lectores.append(
+            PeriodicExportingMetricReader(OTLPMetricExporter(endpoint=endpoint, insecure=True))
+        )
+    vistas = [
+        View(instrument_name=nombre.lower(), name=nombre)
+        for nombre in (METRICA_DURACION, METRICA_ERRORES)
+    ]
     meter_provider = MeterProvider(resource=recurso, metric_readers=lectores, views=vistas)
 
     if isinstance(trace.get_tracer_provider(), trace.ProxyTracerProvider):
@@ -207,7 +233,12 @@ def registrar(nombre: str, duracion_ms: float, resultado: str, **extra: Any) -> 
         "operación %s: %s",
         nombre,
         resultado,
-        extra={"operation": nombre, "result": resultado, "duration_ms": round(duracion_ms, 2), **extra},
+        extra={
+            "operation": nombre,
+            "result": resultado,
+            "duration_ms": round(duracion_ms, 2),
+            **extra,
+        },
     )
 
 
@@ -352,7 +383,9 @@ def instrumentar(
         httpx_instrumentor = HTTPXClientInstrumentor()
         if httpx_instrumentor.is_instrumented_by_opentelemetry:
             httpx_instrumentor.uninstrument()
-        httpx_instrumentor.instrument(tracer_provider=_estado.tracer_provider, meter_provider=metrics.NoOpMeterProvider())
+        httpx_instrumentor.instrument(
+            tracer_provider=_estado.tracer_provider, meter_provider=metrics.NoOpMeterProvider()
+        )
     # Correlación por fuera de todo (incluido el span del servidor y el manejador de 500):
     # Correlación -> OpenTelemetryMiddleware -> ServerErrorMiddleware -> Medición -> rutas.
     construir = app.build_middleware_stack

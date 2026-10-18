@@ -14,7 +14,7 @@ from solventa_common.resiliencia import (
     TiempoAgotado,
 )
 
-from clientes.domain.identidad.modelos import IdentidadNoDisponible, ResultadoKyc
+from clientes.domain.identidad.modelos import DatosCliente, IdentidadNoDisponible, ResultadoKyc
 
 
 class _VeredictoDto(BaseModel):
@@ -24,10 +24,23 @@ class _VeredictoDto(BaseModel):
     motivo: str | None = None
 
 
+class _VeredictoDocumentoDto(_VeredictoDto):
+    referencia: str
+    proveedor: str
+
+
 @dataclass(frozen=True, slots=True)
 class Veredicto:
     resultado: ResultadoKyc
     motivo: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class VeredictoDocumento:
+    resultado: ResultadoKyc
+    motivo: str | None
+    referencia: str
+    proveedor: str
 
 
 class AdaptadorIdentidadHttp:
@@ -69,15 +82,55 @@ class AdaptadorIdentidadHttp:
             json={"clienteId": str(cliente_id), "selfie": selfie, "pruebaDeVida": prueba_de_vida},
             timeout=timeout_s,
         )
-        # 5xx (incluye el 503/504 del adaptador) es recuperable; un 4xx es un contrato roto.
-        if respuesta.status_code in (502, 503, 504):
-            raise IdentidadNoDisponible(
-                "TIEMPO_AGOTADO" if respuesta.status_code == 504 else "ERROR"
-            )
-        if respuesta.status_code != 200:
-            raise IdentidadNoDisponible("ERROR")
+        _exigir_exito(respuesta)
         try:
             veredicto = _VeredictoDto.model_validate(respuesta.json())
         except ValueError as error:
             raise IdentidadNoDisponible("ERROR") from error
         return Veredicto(veredicto.resultado, veredicto.motivo)
+
+    async def verificar_documento(
+        self, cliente_id: UUID, datos: DatosCliente
+    ) -> VeredictoDocumento:
+        """Falla cerrado como `verificar`; el documento viaja en el cuerpo y no se registra."""
+        try:
+            return await self._proteccion.ejecutar(
+                "identidad.verificar_documento",
+                "adaptador-identidad",
+                lambda timeout_s: self._llamar_documento(cliente_id, datos, timeout_s),
+                self._timeout_ms,
+                None,
+            )
+        except TiempoAgotado as error:
+            raise IdentidadNoDisponible("TIEMPO_AGOTADO") from error
+        except DependenciaNoDisponible as error:
+            raise IdentidadNoDisponible("ERROR") from error
+
+    async def _llamar_documento(
+        self, cliente_id: UUID, datos: DatosCliente, timeout_s: float
+    ) -> VeredictoDocumento:
+        respuesta = await self._cliente.post(
+            f"{self._base_url}/v1/verificaciones/documento",
+            json={
+                "clienteId": str(cliente_id),
+                "tipoDocumento": datos.tipo_documento,
+                "numeroDocumento": datos.numero_documento,
+                "nombreCompleto": datos.nombre_completo,
+                "fechaNacimiento": datos.fecha_nacimiento.isoformat(),
+            },
+            timeout=timeout_s,
+        )
+        _exigir_exito(respuesta)
+        try:
+            dto = _VeredictoDocumentoDto.model_validate(respuesta.json())
+        except ValueError as error:
+            raise IdentidadNoDisponible("ERROR") from error
+        return VeredictoDocumento(dto.resultado, dto.motivo, dto.referencia, dto.proveedor)
+
+
+def _exigir_exito(respuesta: httpx.Response) -> None:
+    # 5xx (incluye el 503/504 del adaptador) es recuperable; un 4xx es un contrato roto.
+    if respuesta.status_code in (502, 503, 504):
+        raise IdentidadNoDisponible("TIEMPO_AGOTADO" if respuesta.status_code == 504 else "ERROR")
+    if respuesta.status_code != 200:
+        raise IdentidadNoDisponible("ERROR")

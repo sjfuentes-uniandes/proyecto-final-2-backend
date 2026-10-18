@@ -1,0 +1,32 @@
+{
+  "name": "kyc documento proveedor lento (agota el timeout)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/kyc/v1/verificaciones/documento",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.numeroDocumento",
+          "equalTo": "1000000003"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "resultado": "APROBADO",
+      "motivo": null,
+      "referencia": "kyc-doc-ref-0003"
+    },
+    "fixedDelayMilliseconds": 5000
+  }
+}

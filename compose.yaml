@@ -68,6 +68,7 @@ services:
       OTEL_PROPAGATORS: tracecontext,baggage,xray
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
       COTIZACION_URL: http://cotizacion:8080
+      CLIENTES_URL: http://clientes:8080
 
   bff-movil:
     <<: *servicio

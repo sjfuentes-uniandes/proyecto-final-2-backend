@@ -19,15 +19,25 @@ class ErrorCotizacion(Exception):
 
 
 class CotizacionCliente:
-    def __init__(self, url: str, timeout_ms: int, transporte: httpx.AsyncBaseTransport | None = None) -> None:
+    def __init__(
+        self, url: str, timeout_ms: int, transporte: httpx.AsyncBaseTransport | None = None
+    ) -> None:
         self.url = url.rstrip("/")
         self.timeout = timeout_ms / 1000
         self.transporte = transporte
 
     async def _llamar(self, metodo: str, ruta: str, actor: str, **opciones: Any) -> tuple[int, Any]:
-        encabezados = {"X-Actor-Id": actor, "X-Actor-Rol": ROL_ASESOR, **opciones.pop("headers", {})}
-        async with cliente_async(base_url=self.url, timeout=self.timeout, transport=self.transporte) as cliente:
-            respuesta = await cliente.request(metodo, f"/v1/perfiles{ruta}", headers=encabezados, **opciones)
+        encabezados = {
+            "X-Actor-Id": actor,
+            "X-Actor-Rol": ROL_ASESOR,
+            **opciones.pop("headers", {}),
+        }
+        async with cliente_async(
+            base_url=self.url, timeout=self.timeout, transport=self.transporte
+        ) as cliente:
+            respuesta = await cliente.request(
+                metodo, f"/v1/perfiles{ruta}", headers=encabezados, **opciones
+            )
         if respuesta.status_code >= 400:
             try:
                 cuerpo = respuesta.json()
@@ -36,10 +46,16 @@ class CotizacionCliente:
             raise ErrorCotizacion(respuesta.status_code, cuerpo if isinstance(cuerpo, dict) else {})
         return respuesta.status_code, respuesta.json()
 
-    async def crear(self, cuerpo: dict[str, Any], actor: str, clave: UUID) -> tuple[int, dict[str, Any]]:
-        return await self._llamar("POST", "", actor, json=cuerpo, headers={"Idempotency-Key": str(clave)})
+    async def crear(
+        self, cuerpo: dict[str, Any], actor: str, clave: UUID
+    ) -> tuple[int, dict[str, Any]]:
+        return await self._llamar(
+            "POST", "", actor, json=cuerpo, headers={"Idempotency-Key": str(clave)}
+        )
 
-    async def recalcular(self, perfil_id: UUID, actor: str, clave: UUID) -> tuple[int, dict[str, Any]]:
+    async def recalcular(
+        self, perfil_id: UUID, actor: str, clave: UUID
+    ) -> tuple[int, dict[str, Any]]:
         return await self._llamar(
             "POST", f"/{perfil_id}/recalculos", actor, headers={"Idempotency-Key": str(clave)}
         )

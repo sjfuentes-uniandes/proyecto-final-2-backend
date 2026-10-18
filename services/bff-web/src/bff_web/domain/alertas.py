@@ -73,7 +73,9 @@ def leer_catalogo(crudo: Mapping[str, Mapping[str, Any]]) -> dict[str, EntradaCa
 
 
 def leer_umbrales(crudo: Iterable[Mapping[str, Any]]) -> list[Umbral]:
-    return [Umbral(u["metrica"], u["unidad"], u["meta"], u["advertencia"], u["critica"]) for u in crudo]
+    return [
+        Umbral(u["metrica"], u["unidad"], u["meta"], u["advertencia"], u["critica"]) for u in crudo
+    ]
 
 
 def valor_observado(reason_data: str | None) -> float | None:
@@ -85,11 +87,15 @@ def valor_observado(reason_data: str | None) -> float | None:
     recientes = datos.get("recentDatapoints") or []
     if recientes:
         return float(recientes[-1])
-    evaluados = [d.get("value") for d in datos.get("evaluatedDatapoints") or [] if d.get("value") is not None]
+    evaluados = [
+        d.get("value") for d in datos.get("evaluatedDatapoints") or [] if d.get("value") is not None
+    ]
     return float(evaluados[0]) if evaluados else None
 
 
-def alerta_abierta(alarma: Mapping[str, Any], prefijo: str, catalogo: Mapping[str, EntradaCatalogo]) -> AlertaAbierta | None:
+def alerta_abierta(
+    alarma: Mapping[str, Any], prefijo: str, catalogo: Mapping[str, EntradaCatalogo]
+) -> AlertaAbierta | None:
     nombre = str(alarma["AlarmName"])
     entrada = catalogo.get(nombre.removeprefix(prefijo)) if nombre.startswith(prefijo) else None
     if entrada is None or alarma.get("StateValue") != ESTADO_ALARMA:
@@ -135,7 +141,9 @@ def resumir(
     episodios.extend((nombre, ahora - inicio, False) for nombre, inicio in inicios.items())
 
     cerrados = [duracion for _, duracion, cerrado in episodios if cerrado]
-    criticos = [duracion for nombre, duracion, _ in episodios if catalogo[nombre].severidad == "critica"]
+    criticos = [
+        duracion for nombre, duracion, _ in episodios if catalogo[nombre].severidad == "critica"
+    ]
     medio = sum(cerrados, timedelta()) / len(cerrados) if cerrados else None
     return ResumenMes(
         desde=desde,
