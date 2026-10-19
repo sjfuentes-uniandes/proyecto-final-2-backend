@@ -52,7 +52,8 @@ def crear_app(
 ) -> FastAPI:
     """App de `clientes`. Las pruebas inyectan el transporte, los repositorios y los exportadores.
 
-    Sin `repositorio` se cablea Postgres: se migra y se abre el `AsyncConnectionPool` de los
+    Sin `repositorio` se cablea Postgres: se migra, se siembran C01–C19 si
+    `CLIENTES_SEMILLA_SINTETICA` es true y se abre el `AsyncConnectionPool` de los
     consentimientos, que se cierra al apagar; el mismo repositorio atiende la verificación. Con
     `repositorio` inyectado, las rutas de consentimiento solo funcionan si también se inyecta
     `repositorio_consentimientos`, y la de verificación, `repositorio_verificaciones`.
@@ -72,6 +73,10 @@ def crear_app(
                 from clientes.adapters.outbound.postgres import RepositorioPostgres, migrar
 
                 migrar(settings.database_url)
+                if settings.semilla_sintetica:
+                    from clientes.adapters.outbound.semilla_sintetica import sembrar
+
+                    sembrar(settings.database_url)
                 repo = RepositorioPostgres(settings.database_url)
                 if repo_consentimientos is None:
                     pool = AsyncConnectionPool(

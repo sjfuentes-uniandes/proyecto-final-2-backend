@@ -1,6 +1,7 @@
 """Repositorio de modelos de riesgo en PostgreSQL. catalogo es el único escritor de su base."""
 
 import json
+import logging
 from datetime import UTC, datetime
 from importlib import resources
 from typing import Any
@@ -10,9 +11,12 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
-from catalogo.domain.reglas.errores import VersionExistente
+from catalogo.domain.reglas.errores import DefinicionInvalida, VersionExistente
 from catalogo.domain.reglas.hash import hash_canonico
 from catalogo.domain.reglas.modelo import ModeloPublicado
+from catalogo.domain.reglas.validacion import validar_definicion
+
+logger = logging.getLogger("catalogo.reglas")
 
 _PAQUETE = resources.files("catalogo.adapters.outbound")
 _LOCK = "SELECT pg_advisory_lock(hashtext('catalogo.migraciones'))"
@@ -25,6 +29,11 @@ SEMILLA_VIGENTE_DESDE = datetime(2026, 10, 1, tzinfo=UTC)
 
 _COLUMNAS = "version, producto_id, vigente_desde, definicion, hash, publicado_por"
 _INSERTAR = f"INSERT INTO modelos_riesgo ({_COLUMNAS}) VALUES (%s, %s, %s, %s, %s, %s)"
+# Semilla de QA: vigente desde el instante de la inserción, el mismo que `publicado_en`.
+_INSERTAR_AHORA = (
+    f"INSERT INTO modelos_riesgo ({_COLUMNAS}) VALUES (%s, %s, now(), %s, %s, %s) "
+    "ON CONFLICT (version) DO NOTHING"
+)
 _POR_VERSION = f"SELECT {_COLUMNAS} FROM modelos_riesgo WHERE version = %s"
 _VIGENTE = (
     f"SELECT {_COLUMNAS} FROM modelos_riesgo WHERE producto_id = %s AND vigente_desde <= %s "
@@ -64,6 +73,42 @@ def migrar(url: str) -> None:
             )
         finally:
             conexion.execute(_UNLOCK)
+
+
+def semilla_qa(nombre: str) -> tuple[str, dict[str, Any]]:
+    """Versión y definición de `semillas/qa/<nombre>.json` (`{"version": …, "definicion": …}`)."""
+    texto = _PAQUETE.joinpath("semillas", "qa", f"{nombre}.json").read_text(encoding="utf-8")
+    contenido: dict[str, Any] = json.loads(texto)
+    return contenido["version"], contenido["definicion"]
+
+
+def sembrar_qa(url: str, nombre: str) -> bool:
+    """Publica la versión de QA (D-04 a, W11 AC4) con `vigente_desde` = instante de la inserción.
+
+    Misma validación y mismo hash canónico que la API de publicación; una definición inválida
+    impide arrancar. Idempotente: si la versión ya existe no cambia nada. Devuelve si la insertó.
+    """
+    version, definicion = semilla_qa(nombre)
+    errores = validar_definicion(definicion)
+    if errores:
+        raise DefinicionInvalida(errores)
+    with psycopg.connect(url, autocommit=True) as conexion:
+        cursor = conexion.execute(
+            _INSERTAR_AHORA,
+            (
+                version,
+                definicion["productoId"],
+                Jsonb(definicion),
+                hash_canonico(definicion),
+                "semilla-qa",
+            ),
+        )
+        insertada = cursor.rowcount == 1
+    logger.info(
+        "semilla de QA del modelo de riesgo",
+        extra={"version": version, "insertada": insertada},
+    )
+    return insertada
 
 
 def _modelo(fila: dict[str, Any]) -> ModeloPublicado:

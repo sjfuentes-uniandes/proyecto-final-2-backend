@@ -27,6 +27,12 @@ enable_tracing = true
 #   kyc            = "https://api.proveedor-kyc.example"
 # }
 
+# DEF-01 (Sprint 1): clientes siembra C01–C19 al arrancar para demostrar el perfilamiento.
+# La semilla de reglas de W11 AC4 (CATALOGO_SEMILLA_QA) NO va aquí: solo en la rama qa/s1-semilla-reglas.
+service_environment = {
+  clientes = { CLIENTES_SEMILLA_SINTETICA = "true" }
+}
+
 ally_timeouts_ms = {
   open-finance   = 800
   datos-abiertos = 800

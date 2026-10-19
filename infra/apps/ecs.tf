@@ -105,6 +105,8 @@ locals {
         ALERTAS_ATENCION_MIN       = tostring(var.alert_attention_minutes)
         ALERTAS_FALSO_POSITIVO_MIN = tostring(var.false_positive_minutes)
       } : {},
+      # Último: las variables de QA del ambiente (service_environment) tienen prioridad.
+      lookup(var.service_environment, name, {}),
     )
   }
 

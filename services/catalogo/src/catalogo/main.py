@@ -37,9 +37,11 @@ def crear_app(
             if repo is None and (settings.db_host or settings.database_url_override):
                 from psycopg_pool import AsyncConnectionPool
 
-                from catalogo.adapters.outbound.modelos_pg import ModelosPg, migrar
+                from catalogo.adapters.outbound.modelos_pg import ModelosPg, migrar, sembrar_qa
 
                 migrar(settings.database_url)
+                if settings.semilla_qa:
+                    sembrar_qa(settings.database_url, settings.semilla_qa)
                 pool = AsyncConnectionPool(
                     settings.database_url,
                     min_size=1,
