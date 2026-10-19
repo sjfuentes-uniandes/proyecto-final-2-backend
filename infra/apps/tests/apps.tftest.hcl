@@ -322,6 +322,10 @@ run "todos_los_servicios" {
     condition     = local.environment["api-socios"]["QUOTA_METRIC_INTERVAL_S"] == "300"
     error_message = "api-socios publica el consumo de cuota cada 5 minutos."
   }
+  assert {
+    condition     = !contains(keys(local.environment["clientes"]), "CLIENTES_SEMILLA_SINTETICA")
+    error_message = "Sin service_environment, clientes no siembra datos sintéticos."
+  }
 }
 
 run "umbrales_configurables" {
@@ -399,6 +403,32 @@ run "despliegue_parcial" {
       toset(keys(local.alert_catalog)) == toset([for alarm in local.all_alarms : trimprefix(alarm.alarm_name, "solventa-int-")])
     )
     error_message = "El catálogo de alertas de bff-web coincide con las alarmas creadas."
+  }
+}
+
+run "variables_de_qa_por_servicio" {
+  command = plan
+
+  variables {
+    service_environment = {
+      clientes = { CLIENTES_SEMILLA_SINTETICA = "true", ENVIRONMENT = "qa-sobrescrito" }
+    }
+  }
+
+  assert {
+    condition = contains(
+      local.containers["clientes"][0].environment,
+      { name = "CLIENTES_SEMILLA_SINTETICA", value = "true" }
+    )
+    error_message = "El contenedor de clientes recibe CLIENTES_SEMILLA_SINTETICA (DEF-01)."
+  }
+  assert {
+    condition     = local.environment["clientes"]["ENVIRONMENT"] == "qa-sobrescrito"
+    error_message = "service_environment va al final del merge: tiene prioridad."
+  }
+  assert {
+    condition     = alltrue([for name, env in local.environment : !contains(keys(env), "CLIENTES_SEMILLA_SINTETICA") if name != "clientes"])
+    error_message = "La variable de QA solo llega al servicio que la declara."
   }
 }
 

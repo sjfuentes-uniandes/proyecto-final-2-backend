@@ -3,6 +3,9 @@ from pydantic_settings import SettingsConfigDict
 from solventa_common.settings import ServiceSettings
 from solventa_common.token_registro import SECRETO_LOCAL
 
+# Los clientes sintéticos nunca se siembran en un ambiente con datos reales.
+AMBIENTES_CON_SEMILLA = frozenset({"int", "local"})
+
 
 def _env(nombre: str) -> AliasChoices:
     # Acepta el nombre que entrega la infraestructura y su variante SOLVENTA_ (A6).
@@ -33,6 +36,15 @@ class Settings(ServiceSettings):
 
     # Conexiones mínimas del pool de consentimientos; el máximo es `db_pool_size` (DB_POOL_SIZE).
     db_pool_min_size: int = Field(1, ge=1, validation_alias=_env("DB_POOL_MIN_SIZE"))
+
+    # Siembra C01–C19 al arrancar (DEF-01). Solo la activa infra/envs/int/apps.tfvars.
+    semilla_sintetica: bool = Field(False, validation_alias=_env("CLIENTES_SEMILLA_SINTETICA"))
+
+    @model_validator(mode="after")
+    def _semilla_solo_en_pruebas(self) -> "Settings":
+        if self.semilla_sintetica and self.environment not in AMBIENTES_CON_SEMILLA:
+            raise ValueError("CLIENTES_SEMILLA_SINTETICA solo se permite en int o local")
+        return self
 
     @model_validator(mode="after")
     def _tamano_del_pool(self) -> "Settings":

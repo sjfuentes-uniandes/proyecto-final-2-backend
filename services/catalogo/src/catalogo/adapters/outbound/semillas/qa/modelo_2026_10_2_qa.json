@@ -1,0 +1,53 @@
+{
+  "version": "2026.10.2",
+  "definicion": {
+    "productoId": "vida-hipotecario",
+    "proposito": "PERFILAMIENTO_PRECIO",
+    "fuentes": {
+      "FA_PRODUCTOS_VIGENTES": {"tipo": "FINANZAS_ABIERTAS", "campos": ["antiguedad_productos_anios", "cuota_mensual_obligaciones", "entidades_con_deuda"]},
+      "FA_HISTORIAL_PAGOS_12M": {"tipo": "FINANZAS_ABIERTAS", "campos": ["moras_12m"]},
+      "FA_INGRESOS_AGREGADOS": {"tipo": "FINANZAS_ABIERTAS", "campos": ["ingreso_mensual_estimado"]},
+      "DA_REGISTROS_PUBLICOS": {"tipo": "DATOS_ABIERTOS", "campos": ["coincidencias_listas_restrictivas"]}
+    },
+    "declarados": ["edad", "plazo_credito_meses", "suma_asegurada"],
+    "obligatorios": ["edad", "plazo_credito_meses", "moras_12m", "cuota_mensual_obligaciones"],
+    "derivados": {
+      "relacion_cuota_ingreso": {"op": "div", "args": ["cuota_mensual_obligaciones", "ingreso_mensual_estimado"]},
+      "edad_fin_credito": {"op": "add", "args": ["edad", {"op": "div", "args": ["plazo_credito_meses", "12"]}]}
+    },
+    "factores": [
+      {"codigo": "PUNTUALIDAD_PAGOS", "fuente": "FA_HISTORIAL_PAGOS_12M", "peso": "0.30", "reglas": [
+        {"si": [["moras_12m", "==", "0"]], "contribucion": "0.90", "direccion": "REDUCE_RIESGO"},
+        {"si": [["moras_12m", "==", "1"]], "contribucion": "0.60", "direccion": "NEUTRO"},
+        {"si": [["moras_12m", "==", "2"]], "contribucion": "0.35", "direccion": "AUMENTA_LEVEMENTE"},
+        {"si": [], "contribucion": "0.10", "direccion": "AUMENTA_RIESGO"}]},
+      {"codigo": "ANTIGUEDAD_PRODUCTOS", "fuente": "FA_PRODUCTOS_VIGENTES", "peso": "0.20", "reglas": [
+        {"si": [["antiguedad_productos_anios", ">=", "5"]], "contribucion": "0.80", "direccion": "REDUCE_RIESGO"},
+        {"si": [["antiguedad_productos_anios", ">=", "2"]], "contribucion": "0.60", "direccion": "NEUTRO"},
+        {"si": [], "contribucion": "0.40", "direccion": "AUMENTA_LEVEMENTE"}]},
+      {"codigo": "RELACION_CUOTA_INGRESO", "fuente": "FA_INGRESOS_AGREGADOS", "peso": "0.18", "reglas": [
+        {"si": [["relacion_cuota_ingreso", "<=", "0.30"]], "contribucion": "0.80", "direccion": "REDUCE_RIESGO"},
+        {"si": [["relacion_cuota_ingreso", "<=", "0.40"]], "contribucion": "0.55", "direccion": "NEUTRO"},
+        {"si": [["relacion_cuota_ingreso", "<=", "0.50"]], "contribucion": "0.35", "direccion": "AUMENTA_LEVEMENTE"},
+        {"si": [], "contribucion": "0.15", "direccion": "AUMENTA_RIESGO"}]},
+      {"codigo": "EDAD_PLAZO", "fuente": "DECLARADO", "peso": "0.15", "reglas": [
+        {"si": [["edad_fin_credito", "<=", "45"]], "contribucion": "0.80", "direccion": "REDUCE_RIESGO"},
+        {"si": [["edad_fin_credito", "<=", "60"]], "contribucion": "0.50", "direccion": "NEUTRO"},
+        {"si": [["edad_fin_credito", "<=", "70"]], "contribucion": "0.30", "direccion": "AUMENTA_LEVEMENTE"},
+        {"si": [], "contribucion": "0.10", "direccion": "AUMENTA_RIESGO"}]},
+      {"codigo": "CONCENTRACION_DEUDA", "fuente": "FA_PRODUCTOS_VIGENTES", "peso": "0.10", "reglas": [
+        {"si": [["entidades_con_deuda", "<=", "1"]], "contribucion": "0.80", "direccion": "REDUCE_RIESGO"},
+        {"si": [["entidades_con_deuda", "<=", "3"]], "contribucion": "0.40", "direccion": "AUMENTA_LEVEMENTE"},
+        {"si": [], "contribucion": "0.15", "direccion": "AUMENTA_RIESGO"}]},
+      {"codigo": "LISTAS_RESTRICTIVAS", "fuente": "DA_REGISTROS_PUBLICOS", "peso": "0.07", "reglas": [
+        {"si": [["coincidencias_listas_restrictivas", "==", "0"]], "contribucion": "1.00", "direccion": "REDUCE_RIESGO"},
+        {"si": [], "contribucion": "0.00", "direccion": "AUMENTA_RIESGO"}]}
+    ],
+    "ajustes": [
+      {"codigo": "COINCIDENCIA_LISTAS_RESTRICTIVAS", "si": [["coincidencias_listas_restrictivas", ">=", "1"]],
+       "efecto": "FORZAR_NIVEL", "nivel": "ALTO"}
+    ],
+    "niveles": [{"desde": "80", "nivel": "BAJO"}, {"desde": "50", "nivel": "MEDIO"}, {"desde": "0", "nivel": "ALTO"}],
+    "confianza": {"penalizacionNoAutorizada": "0.05", "penalizacionNoObtenida": "0.15"}
+  }
+}

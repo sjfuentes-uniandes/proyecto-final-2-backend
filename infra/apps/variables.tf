@@ -131,6 +131,12 @@ variable "ally_timeouts_ms" {
   }
 }
 
+variable "service_environment" {
+  description = "Variables de entorno adicionales por servicio (sin secretos). Se aplican al final y tienen prioridad; uso temporal de QA, p. ej. la semilla de clientes sintéticos (DEF-01) o la de reglas (D-04)."
+  type        = map(map(string))
+  default     = {}
+}
+
 variable "log_retention_days" {
   type    = number
   default = 14
