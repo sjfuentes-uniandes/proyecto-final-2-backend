@@ -37,6 +37,10 @@ class Settings(ServiceSettings):
     # Otorgar escribe dato, clave de idempotencia y outbox en una transacción de `clientes`:
     # como el vínculo, tolera un arranque en frío. Si se agota, la app repite con la misma clave.
     otorgamiento_timeout_ms: int = Field(3000, ge=1)
+    # Revocar también escribe estado y outbox en una transacción de `clientes`: mismo criterio
+    # que otorgar. Si se agota, la app repite y `clientes` devuelve el mismo estado sin otro
+    # evento (idempotente por estado).
+    revocacion_timeout_ms: int = Field(3000, ge=1)
     jwks_ttl_s: int = Field(3600, ge=1)
     jwks_timeout_ms: int = Field(500, ge=1)
     jwks_refresco_min_s: int = Field(60, ge=1)

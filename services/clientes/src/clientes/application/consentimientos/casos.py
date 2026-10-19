@@ -1,4 +1,5 @@
-"""Casos de uso del consentimiento: otorgar, consultar, listar y texto vigente (HU-M08)."""
+"""Casos de uso del consentimiento: otorgar, consultar, listar y texto vigente (HU-M08); revocar
+y consultar el historial (HU-M09); verificar antes de consultar datos financieros (HU-W31)."""
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -8,6 +9,8 @@ from clientes.application.consentimientos.puertos import (
     CatalogoTextos,
     Otorgamiento,
     RepositorioConsentimientos,
+    RepositorioVerificaciones,
+    Revocacion,
 )
 from clientes.application.identidad.casos import ConsultarCliente
 from clientes.domain.consentimientos.modelos import (
@@ -26,6 +29,7 @@ from clientes.domain.consentimientos.modelos import (
     TextoNoVigente,
 )
 from clientes.domain.consentimientos.textos import TextoLegal
+from clientes.domain.consentimientos.verificacion import SolicitudVerificacion, Verificacion
 from clientes.domain.identidad.modelos import ClienteNoEncontrado
 
 
@@ -158,6 +162,66 @@ class ConsultarConsentimientos:
         except ClienteNoEncontrado:
             return []
         return await self._repositorio.listar(cliente.id)
+
+    async def listar_del_cliente(self, cliente_id: UUID) -> list[Consentimiento]:
+        """Lectura web por `clienteId` (HU-W31, ADR 0002). A diferencia de `listar`, un cliente
+        inexistente es un error: el asesor consulta un cliente concreto."""
+        cliente = await self._clientes.identidad(cliente_id)
+        return await self._repositorio.listar(cliente.id)
+
+    async def detalle_del_cliente(
+        self, cliente_id: UUID, consentimiento_id: UUID
+    ) -> Consentimiento:
+        """Uno de otro cliente, o de un cliente inexistente, es indistinguible de uno inexistente."""
+        consentimiento = await self._repositorio.obtener(cliente_id, consentimiento_id)
+        if consentimiento is None:
+            raise ConsentimientoNoEncontrado()
+        return consentimiento
+
+
+class RevocarConsentimiento:
+    def __init__(self, repositorio: RepositorioConsentimientos, clientes: ConsultarCliente) -> None:
+        self._repositorio = repositorio
+        self._clientes = clientes
+
+    async def ejecutar(
+        self, sub: str, consentimiento_id: UUID, *, correlation_id: str
+    ) -> Consentimiento:
+        """Idempotente por estado (AC3, ADR 0009): la primera vez revoca y escribe el evento; si
+        ya está `REVOCADO` o `VENCIDO`, devuelve el mismo estado sin efectos. No exige identidad
+        verificada: retirar el permiso siempre es posible. Uno ajeno es como uno inexistente."""
+        try:
+            cliente = await self._clientes.por_sub(sub)
+        except ClienteNoEncontrado as error:
+            raise ConsentimientoNoEncontrado() from error
+        consentimiento = await self._repositorio.revocar(
+            Revocacion(
+                consentimiento_id=consentimiento_id,
+                cliente_id=cliente.id,
+                actor_id=sub,
+                correlation_id=correlation_id,
+            )
+        )
+        if consentimiento is None:
+            raise ConsentimientoNoEncontrado()
+        return consentimiento
+
+
+class VerificarConsentimiento:
+    def __init__(self, repositorio: RepositorioVerificaciones) -> None:
+        self._repositorio = repositorio
+
+    async def ejecutar(
+        self, cliente_id: UUID, proposito: str, alcances: Sequence[str], *, correlation_id: str
+    ) -> Verificacion:
+        """Sin caché (ADR 0011): cada llamada lee la base y registra su decisión, también si
+        repite la anterior. Un cliente inexistente no registra nada."""
+        verificacion = await self._repositorio.verificar(
+            cliente_id, SolicitudVerificacion.crear(proposito, alcances), correlation_id
+        )
+        if verificacion is None:
+            raise ClienteNoEncontrado()
+        return verificacion
 
 
 class ConsultarTextoVigente:

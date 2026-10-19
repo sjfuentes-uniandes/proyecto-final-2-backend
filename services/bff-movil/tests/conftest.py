@@ -65,6 +65,19 @@ def consentimiento_json(**cambios: Any) -> dict[str, Any]:
     }
 
 
+def historial_json(**cambios: Any) -> dict[str, Any]:
+    """Historial sintético de un consentimiento revocado, como lo devuelve `clientes`."""
+    return {
+        "consentimientoId": str(CONSENTIMIENTO_ID),
+        "estado": "REVOCADO",
+        "hitos": [
+            {"tipo": "OTORGADO", "ocurridoEn": "2026-10-17T15:00:00Z"},
+            {"tipo": "REVOCADO", "ocurridoEn": "2026-11-02T08:15:00Z"},
+        ],
+        **cambios,
+    }
+
+
 TEXTO_VIGENTE = {
     "proposito": "PERFILAMIENTO_PRECIO",
     "idioma": "es-CO",
@@ -161,6 +174,8 @@ class Entorno:
     otorgamiento: respx.Route
     consentimientos: respx.Route
     consentimiento: respx.Route
+    revocacion: respx.Route
+    historial: respx.Route
     texto_vigente: respx.Route
     telemetria: Telemetria
     llave: rsa.RSAPrivateKey
@@ -395,6 +410,13 @@ def crear_entorno(
         consentimiento = router.get(f"{consentimientos_url}/{CONSENTIMIENTO_ID}").respond(
             200, json=consentimiento_json()
         )
+        revocacion = router.post(f"{consentimientos_url}/{CONSENTIMIENTO_ID}/revocacion").respond(
+            200,
+            json=consentimiento_json(estado="REVOCADO", revocadoEn="2026-11-02T08:15:00Z"),
+        )
+        historial = router.get(f"{consentimientos_url}/{CONSENTIMIENTO_ID}/historial").respond(
+            200, json=historial_json()
+        )
         texto_vigente = router.get(f"{CLIENTES_URL}/v1/consentimientos/textos/vigente").respond(
             200, json=TEXTO_VIGENTE
         )
@@ -425,6 +447,8 @@ def crear_entorno(
             otorgamiento=otorgamiento,
             consentimientos=consentimientos,
             consentimiento=consentimiento,
+            revocacion=revocacion,
+            historial=historial,
             texto_vigente=texto_vigente,
             telemetria=Telemetria(spans=spans, lector=lector, salida=salida),
             llave=llave_privada,

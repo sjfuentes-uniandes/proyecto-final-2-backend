@@ -1,0 +1,141 @@
+{
+  "$defs": {
+    "CausaRechazo": {
+      "description": "Causa funcional estable de un `RECHAZADO` (W31 AC2).",
+      "enum": [
+        "SIN_CONSENTIMIENTO",
+        "REVOCADO",
+        "VENCIDO",
+        "PROPOSITO_NO_AUTORIZADO"
+      ],
+      "title": "CausaRechazo",
+      "type": "string"
+    },
+    "Decision": {
+      "enum": [
+        "PERMITIDO",
+        "PERMITIDO_PARCIAL",
+        "RECHAZADO"
+      ],
+      "title": "Decision",
+      "type": "string"
+    },
+    "VerificacionConsentimientoRegistradaV1": {
+      "description": "La decisi\u00f3n de una verificaci\u00f3n (W31 AC1 y AC3). `consentimientoId` es el consentimiento\nevaluado, tambi\u00e9n si estaba revocado o vencido; nulo si no hay ninguno del prop\u00f3sito.",
+      "properties": {
+        "alcancesRechazados": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Alcancesrechazados",
+          "type": "array"
+        },
+        "alcancesSolicitados": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Alcancessolicitados",
+          "type": "array"
+        },
+        "causa": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CausaRechazo"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "clienteId": {
+          "format": "uuid",
+          "title": "Clienteid",
+          "type": "string"
+        },
+        "consentimientoId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Consentimientoid"
+        },
+        "decision": {
+          "$ref": "#/$defs/Decision"
+        },
+        "proposito": {
+          "title": "Proposito",
+          "type": "string"
+        },
+        "verificadoEn": {
+          "format": "date-time",
+          "title": "Verificadoen",
+          "type": "string"
+        }
+      },
+      "required": [
+        "clienteId",
+        "consentimientoId",
+        "proposito",
+        "alcancesSolicitados",
+        "decision",
+        "causa",
+        "alcancesRechazados",
+        "verificadoEn"
+      ],
+      "title": "VerificacionConsentimientoRegistradaV1",
+      "type": "object"
+    }
+  },
+  "description": "Sobre versionado. `aggregateId` es siempre el `clienteId` y no lleva `aggregateVersion`:\nlas verificaciones no pertenecen a la cadena de un consentimiento (ADR 0009).",
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/VerificacionConsentimientoRegistradaV1"
+    },
+    "type": {
+      "const": "VerificacionConsentimientoRegistrada",
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreVerificacionConsentimientoRegistrada",
+  "type": "object"
+}

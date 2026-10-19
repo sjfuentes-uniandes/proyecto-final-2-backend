@@ -1,8 +1,9 @@
-"""PuertoIdentidad y PuertoConsentimiento sobre el contrato propuesto de clientes
-(contracts/openapi/clientes.propuesta-cotizacion.yaml).
+"""PuertoIdentidad y PuertoConsentimiento sobre el contrato de clientes
+(contracts/openapi/clientes.yaml y el pacto contracts/pact/cotizacion-clientes.json).
 
-Mientras no exista `clientes`, la URL apunta al stub de simulador-aliados. Una respuesta fuera
-del contrato (estado o alcance desconocido) se trata como dependencia no disponible.
+Una respuesta fuera del contrato (estado o alcance desconocido) se trata como dependencia no
+disponible. Un 404 solo es "cliente no encontrado" si trae el `codigo` del contrato; uno de ruta,
+de gateway o con otro cuerpo es dependencia no disponible.
 """
 
 from collections.abc import Sequence
@@ -24,6 +25,7 @@ from cotizacion.domain.perfilamiento.modelos import (
 
 DEPENDENCIA_IDENTIDAD = "clientes.identidad"
 DEPENDENCIA_CONSENTIMIENTO = "clientes.consentimiento"
+CLIENTE_NO_ENCONTRADO = "CLIENTE_NO_ENCONTRADO"
 
 CausaConsentimiento = Literal[
     "SIN_CONSENTIMIENTO", "REVOCADO", "VENCIDO", "PROPOSITO_NO_AUTORIZADO"
@@ -71,6 +73,15 @@ def _utc(instante: datetime | None) -> datetime | None:
     return instante.astimezone(UTC)
 
 
+def _codigo(respuesta: httpx.Response) -> object:
+    """`codigo` del cuerpo de error, o None si el cuerpo no es un objeto JSON."""
+    try:
+        cuerpo = respuesta.json()
+    except ValueError:
+        return None
+    return cuerpo.get("codigo") if isinstance(cuerpo, dict) else None
+
+
 class ClientesHttp:
     def __init__(self, cliente: httpx.AsyncClient, base_url: str, timeout_ms: int) -> None:
         self._cliente = cliente
@@ -86,7 +97,7 @@ class ClientesHttp:
             )
         except httpx.HTTPError as error:
             raise DependenciaNoDisponible(dependencia) from error
-        if respuesta.status_code == 404:
+        if respuesta.status_code == 404 and _codigo(respuesta) == CLIENTE_NO_ENCONTRADO:
             raise ClienteNoEncontrado()
         if respuesta.status_code != 200:
             raise DependenciaNoDisponible(dependencia)

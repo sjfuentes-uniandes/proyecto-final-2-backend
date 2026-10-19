@@ -17,7 +17,7 @@ Formato estable de todo error de las rutas nuevas (`solventa_common.errors`):
 | `ROL_NO_AUTORIZADO` | 403 | `cotizacion`, `catalogo`, `clientes`, `bff-web`, `bff-movil` | El rol o el grupo no permite la operación; en `clientes`, `X-Actor-Rol` distinto de `CLIENTE`; en `bff-movil`, el token es de otro pool de Cognito |
 | `IDENTIDAD_NO_VERIFICADA` | 403 | `cotizacion`, `clientes`, `bff-movil` | La identidad del cliente fue rechazada; en `clientes`, otorgar un consentimiento exige identidad `VERIFICADO` (HU-M08); `bff-movil` lo reenvía tal cual |
 | `IDENTIDAD_PENDIENTE` | 409 | `cotizacion` | La verificación de identidad no terminó |
-| `CLIENTE_NO_ENCONTRADO` | 404 | `cotizacion` (y el stub de `clientes`), `clientes`, `bff-movil` | El cliente no existe; en `clientes`, también si el titular aún no inició su verificación |
+| `CLIENTE_NO_ENCONTRADO` | 404 | `cotizacion` (y el stub de `clientes`), `clientes`, `bff-movil`, `bff-web` | El cliente no existe; en `clientes`, también si el titular aún no inició su verificación; `bff-web` lo transmite de `clientes` (HU-W30 y lista de consentimientos de HU-W31) |
 | `PERFIL_NO_ENCONTRADO` | 404 | `cotizacion`, `bff-web` | El perfil no existe |
 | `PRODUCTO_NO_DISPONIBLE` | 422 | `cotizacion` | Producto distinto de `vida-hipotecario` |
 | `IDEMPOTENCIA_CONFLICTO` | 422 | `cotizacion`, `clientes`, `bff-movil` | Misma `Idempotency-Key` con otro cuerpo; en `clientes`, la clave es por cliente y se conserva 24 h (HU-M08); `bff-movil` lo reenvía tal cual |
@@ -32,7 +32,7 @@ Formato estable de todo error de las rutas nuevas (`solventa_common.errors`):
 | `FUENTE_NO_DISPONIBLE` | 503 | `adaptador-datos`, `adaptador-identidad` | Proveedor caído, 5xx o protección abierta (`detalles.motivo`, `detalles.circuito`) |
 | `TIEMPO_AGOTADO` | 504 | `adaptador-datos`, `adaptador-identidad` | El proveedor no respondió dentro del timeout efectivo |
 | `DEPENDENCIA_NO_DISPONIBLE` | 503 | `cotizacion`, `clientes` | `clientes` o `catalogo` no respondieron o violaron su contrato (`cotizacion`); `adaptador-identidad` no respondió y la verificación no terminó, es recuperable (`clientes`, `detalles.motivo`) |
-| `SERVICIO_NO_DISPONIBLE` | 503 | `bff-web`, `bff-movil` | `cotizacion` (`bff-web`) o `clientes` (`bff-movil`) no respondieron; en `bff-movil`, también cuando `clientes` responde `DEPENDENCIA_NO_DISPONIBLE`, otro 5xx o una respuesta fuera de su contrato (falla cerrado, sin `detalles`) |
+| `SERVICIO_NO_DISPONIBLE` | 503 | `bff-web`, `bff-movil` | `cotizacion` o `clientes` (`bff-web`) o `clientes` (`bff-movil`) no respondieron; en `bff-web`, en la lectura de consentimientos (HU-W31), también cuando `clientes` responde un código que la ruta no promete, cualquier 5xx o un cuerpo fuera de su contrato (falla cerrado, sin `detalles`); en `bff-movil`, también cuando `clientes` responde `DEPENDENCIA_NO_DISPONIBLE`, otro 5xx o una respuesta fuera de su contrato (falla cerrado, sin `detalles`) |
 | `NO_AUTENTICADO` | 401 | `bff-web` (`RutaB2`), `bff-movil` | `HTTPException` 401 en un router con `RutaB2` (`bff-web`) o `ErrorNegocio` tras revalidar el JWT (`bff-movil`) |
 | `NO_ENCONTRADO` | 404 | Todos | Ruta inexistente (manejador global) o `HTTPException` 404 en `RutaB2` |
 | `SERVICIO_NO_DISPONIBLE` | 503 | `bff-web` | `cotizacion` o `api-socios` no respondieron |
@@ -44,7 +44,7 @@ Formato estable de todo error de las rutas nuevas (`solventa_common.errors`):
 | `REGISTRO_CORREO_DISTINTO` | 409 | `clientes`, `bff-movil` | El registro ya se verificó con otro correo: la verificación va ligada a un correo (HU-M06) |
 | `REGISTRO_YA_VINCULADO` | 409 | `clientes`, `bff-movil` | La cuenta de ese registro ya existe, o el titular ya pertenece a otro cliente (HU-M06) |
 | `TOKEN_REGISTRO_INVALIDO` | 403 | `clientes`, `bff-movil` | El token de registro no sirve (`detalles.motivo`: `FORMATO`, `FIRMA`, `VENCIDO`, `REGISTRO`, `CORREO`, `CLIENTE`, `NO_VERIFICADO`) (HU-M06) |
-| `CONSENTIMIENTO_NO_ENCONTRADO` | 404 | `clientes`, `bff-movil` | El consentimiento no existe o es de otro cliente: no se distingue, para no revelar su existencia (HU-M08) |
+| `CONSENTIMIENTO_NO_ENCONTRADO` | 404 | `clientes`, `bff-movil`, `bff-web` | El consentimiento no existe o es de otro cliente: no se distingue, para no revelar su existencia (HU-M08). En `clientes`, también al revocar y al consultar el historial (HU-M09); revocar uno ya `REVOCADO` o `VENCIDO` no es error: responde 200 con su estado |
 | `CONSENTIMIENTO_YA_VIGENTE` | 409 | `clientes`, `bff-movil` | Ya hay un consentimiento `ACTIVO` y vigente para el propósito; para cambiar alcances o vigencia se revoca y se otorga de nuevo (`detalles.consentimientoId`, HU-M08) |
 | `VIGENCIA_INVALIDA` | 422 | `clientes`, `bff-movil` | `vigenciaMeses` no es una de las permitidas (6 o 12, ADR 0005) (HU-M08) |
 | `TEXTO_NO_VIGENTE` | 422 | `clientes`, `bff-movil` | `versionTexto` no es la del texto vigente del propósito e idioma (ADR 0005) (HU-M08) |

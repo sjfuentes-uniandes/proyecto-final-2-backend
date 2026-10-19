@@ -1,7 +1,12 @@
-"""API del consentimiento para el uso de datos (HU-M08): otorgar, listar, detalle y texto vigente.
+"""API del consentimiento para el uso de datos: otorgar, listar, detalle y texto vigente (HU-M08);
+revocar e historial (HU-M09); lectura web por `clienteId` (HU-W31).
 
 Las rutas `actual` resuelven el cliente por el `sub` del titular (ADR 0006); un consentimiento
 ajeno responde como uno inexistente (404). Solo `bff-movil` invoca estas rutas.
+
+Las de `router_web` (`/v1/clientes/{clienteId}/consentimientos`) son de solo lectura para el
+asesor del back-office (`X-Actor-Rol=ASESOR`, ADR 0002), con los mismos DTO; las invoca `bff-web`.
+Se registran después de `router`: `actual` no es un `clienteId`.
 """
 
 from datetime import datetime
@@ -13,11 +18,19 @@ from pydantic import Field
 from solventa_common import correlation
 from solventa_common.errors import ErrorNegocio
 
-from clientes.adapters.inbound.http.comun import ERRORES_ACTOR, Dto, Titular, error
+from clientes.adapters.inbound.http.comun import (
+    ERRORES_ACTOR,
+    ERRORES_ASESOR,
+    Asesor,
+    Dto,
+    Titular,
+    error,
+)
 from clientes.application.consentimientos.casos import (
     ConsultarConsentimientos,
     ConsultarTextoVigente,
     OtorgarConsentimiento,
+    RevocarConsentimiento,
 )
 from clientes.domain.consentimientos.modelos import (
     Consentimiento,
@@ -28,6 +41,7 @@ from clientes.domain.consentimientos.modelos import (
     IdentidadNoVerificada,
     SolicitudInvalida,
     TextoNoVigente,
+    TipoHito,
     VigenciaInvalida,
 )
 from clientes.domain.consentimientos.textos import TextoLegal
@@ -35,6 +49,7 @@ from clientes.domain.identidad.modelos import ClienteNoEncontrado
 
 router = APIRouter(prefix="/v1/clientes/actual/consentimientos", tags=["consentimientos"])
 router_textos = APIRouter(prefix="/v1/consentimientos/textos", tags=["consentimientos"])
+router_web = APIRouter(prefix="/v1/clientes/{clienteId}/consentimientos", tags=["consentimientos"])
 
 IDEMPOTENT_REPLAYED = "Idempotent-Replayed"
 
@@ -75,6 +90,29 @@ class ConsentimientoDto(Dto):
             otorgado_en=consentimiento.otorgado_en,
             vigente_hasta=consentimiento.vigente_hasta,
             revocado_en=consentimiento.revocado_en,
+        )
+
+
+class HitoDto(Dto):
+    tipo: TipoHito
+    ocurrido_en: datetime
+
+
+class HistorialDto(Dto):
+    """Cuándo se otorgó y, si aplica, cuándo se revocó o venció (AC4). Derivado de la fila."""
+
+    consentimiento_id: UUID
+    estado: EstadoConsentimiento
+    hitos: list[HitoDto]
+
+    @classmethod
+    def desde(cls, consentimiento: Consentimiento) -> "HistorialDto":
+        return cls(
+            consentimiento_id=consentimiento.id,
+            estado=consentimiento.estado_derivado,
+            hitos=[
+                HitoDto(tipo=h.tipo, ocurrido_en=h.ocurrido_en) for h in consentimiento.historial
+            ],
         )
 
 
@@ -224,6 +262,103 @@ async def detalle(
         raise ErrorNegocio(
             "CONSENTIMIENTO_NO_ENCONTRADO", "El consentimiento no existe", 404
         ) from falla
+
+
+NO_ENCONTRADO = error(
+    "CONSENTIMIENTO_NO_ENCONTRADO: no existe o es de otro cliente (no se distingue)"
+)
+
+
+def _no_encontrado() -> ErrorNegocio:
+    return ErrorNegocio("CONSENTIMIENTO_NO_ENCONTRADO", "El consentimiento no existe", 404)
+
+
+@router.post(
+    "/{consentimientoId}/revocacion",
+    response_model=ConsentimientoDto,
+    response_model_by_alias=True,
+    summary="Revoca un consentimiento del titular",
+    responses={**ERRORES_ACTOR, 404: NO_ENCONTRADO},
+)
+async def revocar(
+    consentimiento_id: ConsentimientoId, request: Request, sub: Titular
+) -> ConsentimientoDto:
+    """Idempotente por estado (AC3): la primera vez y las repeticiones responden 200 con el mismo
+    cuerpo. Uno `VENCIDO` responde 200 sin cambios; `revocadoEn` sale del reloj de la base."""
+    caso: RevocarConsentimiento = request.app.state.revocar_consentimiento
+    try:
+        revocado = await caso.ejecutar(
+            sub, consentimiento_id, correlation_id=correlation.obtener() or ""
+        )
+    except ConsentimientoNoEncontrado as falla:
+        raise _no_encontrado() from falla
+    return ConsentimientoDto.desde(revocado)
+
+
+@router.get(
+    "/{consentimientoId}/historial",
+    response_model=HistorialDto,
+    response_model_by_alias=True,
+    summary="Historial de un consentimiento del titular: otorgado y revocado o vencido",
+    responses={**ERRORES_ACTOR, 404: NO_ENCONTRADO},
+)
+async def historial(
+    consentimiento_id: ConsentimientoId, request: Request, sub: Titular
+) -> HistorialDto:
+    """Solo lectura: los hitos salen de la fila inmutable (ADR 0009); no hay operación que los
+    modifique."""
+    consultas: ConsultarConsentimientos = request.app.state.consultar_consentimientos
+    try:
+        return HistorialDto.desde(await consultas.detalle(sub, consentimiento_id))
+    except ConsentimientoNoEncontrado as falla:
+        raise _no_encontrado() from falla
+
+
+ClienteId = Annotated[UUID, Path(alias="clienteId")]
+
+
+@router_web.get(
+    "",
+    response_model=list[ConsentimientoDto],
+    response_model_by_alias=True,
+    summary="Consentimientos del cliente para la vista web, del más reciente al más antiguo",
+    responses={**ERRORES_ASESOR, 404: error("CLIENTE_NO_ENCONTRADO: el cliente no existe")},
+)
+async def listar_del_cliente(
+    cliente_id: ClienteId, request: Request, _asesor: Asesor
+) -> list[ConsentimientoDto]:
+    """Solo lectura (ADR 0002). El estado es el derivado al leer, con el reloj de la base
+    capturado una vez por sentencia (`VENCIDO` si ya pasó `vigenteHasta`)."""
+    consultas: ConsultarConsentimientos = request.app.state.consultar_consentimientos
+    try:
+        return [ConsentimientoDto.desde(c) for c in await consultas.listar_del_cliente(cliente_id)]
+    except ClienteNoEncontrado as falla:
+        raise ErrorNegocio("CLIENTE_NO_ENCONTRADO", "El cliente no existe", 404) from falla
+
+
+@router_web.get(
+    "/{consentimientoId}/historial",
+    response_model=HistorialDto,
+    response_model_by_alias=True,
+    summary="Historial de un consentimiento del cliente para la vista web",
+    responses={
+        **ERRORES_ASESOR,
+        404: error(
+            "CONSENTIMIENTO_NO_ENCONTRADO: no existe, es de otro cliente o el cliente no existe "
+            "(no se distingue)"
+        ),
+    },
+)
+async def historial_del_cliente(
+    cliente_id: ClienteId, consentimiento_id: ConsentimientoId, request: Request, _asesor: Asesor
+) -> HistorialDto:
+    consultas: ConsultarConsentimientos = request.app.state.consultar_consentimientos
+    try:
+        return HistorialDto.desde(
+            await consultas.detalle_del_cliente(cliente_id, consentimiento_id)
+        )
+    except ConsentimientoNoEncontrado as falla:
+        raise _no_encontrado() from falla
 
 
 @router_textos.get(

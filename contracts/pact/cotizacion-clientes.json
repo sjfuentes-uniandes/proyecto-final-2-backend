@@ -1,0 +1,616 @@
+{
+  "consumer": {
+    "name": "cotizacion"
+  },
+  "interactions": [
+    {
+      "description": "una verificación con el consentimiento revocado",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el cliente 00000000-0000-4000-8000-000000000001 revocó su consentimiento para PERFILAMIENTO_PRECIO y no tiene otro ACTIVO"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "alcances": [
+              "FA_PRODUCTOS_VIGENTES",
+              "FA_HISTORIAL_PAGOS_12M",
+              "FA_INGRESOS_AGREGADOS",
+              "DA_REGISTROS_PUBLICOS"
+            ],
+            "proposito": "PERFILAMIENTO_PRECIO"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/clientes/00000000-0000-4000-8000-000000000001/consentimientos/verificaciones"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "alcancesPermitidos": [],
+            "alcancesRechazados": [
+              {
+                "alcance": "FA_PRODUCTOS_VIGENTES",
+                "causa": "ALCANCE_NO_AUTORIZADO"
+              }
+            ],
+            "causa": "REVOCADO",
+            "consentimientoId": null,
+            "decision": "RECHAZADO",
+            "vigenteHasta": null
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.alcancesRechazados": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.alcancesRechazados[*].alcance": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(FA_PRODUCTOS_VIGENTES|FA_HISTORIAL_PAGOS_12M|FA_INGRESOS_AGREGADOS|DA_REGISTROS_PUBLICOS)$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una verificación con el consentimiento vencido",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el consentimiento del cliente 00000000-0000-4000-8000-000000000001 para PERFILAMIENTO_PRECIO llegó a su vigenteHasta y no tiene otro ACTIVO"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "alcances": [
+              "FA_PRODUCTOS_VIGENTES",
+              "FA_HISTORIAL_PAGOS_12M",
+              "FA_INGRESOS_AGREGADOS",
+              "DA_REGISTROS_PUBLICOS"
+            ],
+            "proposito": "PERFILAMIENTO_PRECIO"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/clientes/00000000-0000-4000-8000-000000000001/consentimientos/verificaciones"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "alcancesPermitidos": [],
+            "alcancesRechazados": [
+              {
+                "alcance": "FA_PRODUCTOS_VIGENTES",
+                "causa": "ALCANCE_NO_AUTORIZADO"
+              }
+            ],
+            "causa": "VENCIDO",
+            "consentimientoId": null,
+            "decision": "RECHAZADO",
+            "vigenteHasta": null
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.alcancesRechazados": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.alcancesRechazados[*].alcance": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(FA_PRODUCTOS_VIGENTES|FA_HISTORIAL_PAGOS_12M|FA_INGRESOS_AGREGADOS|DA_REGISTROS_PUBLICOS)$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una verificación con un consentimiento vigente que cubre los alcances",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el cliente 00000000-0000-4000-8000-000000000001 tiene un consentimiento ACTIVO y vigente para PERFILAMIENTO_PRECIO con los cuatro alcances"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "alcances": [
+              "FA_PRODUCTOS_VIGENTES",
+              "FA_HISTORIAL_PAGOS_12M",
+              "FA_INGRESOS_AGREGADOS",
+              "DA_REGISTROS_PUBLICOS"
+            ],
+            "proposito": "PERFILAMIENTO_PRECIO"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/clientes/00000000-0000-4000-8000-000000000001/consentimientos/verificaciones"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "alcancesPermitidos": [
+              "FA_PRODUCTOS_VIGENTES"
+            ],
+            "alcancesRechazados": [],
+            "causa": null,
+            "consentimientoId": "00000000-0000-4000-9000-000000000001",
+            "decision": "PERMITIDO",
+            "vigenteHasta": "2027-10-17T23:59:59Z"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.alcancesPermitidos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.alcancesPermitidos[*]": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(FA_PRODUCTOS_VIGENTES|FA_HISTORIAL_PAGOS_12M|FA_INGRESOS_AGREGADOS|DA_REGISTROS_PUBLICOS)$"
+                }
+              ]
+            },
+            "$.consentimientoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.vigenteHasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una verificación con un consentimiento vigente que no cubre un alcance",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el cliente 00000000-0000-4000-8000-000000000001 tiene un consentimiento ACTIVO y vigente para PERFILAMIENTO_PRECIO sin el alcance FA_INGRESOS_AGREGADOS"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "alcances": [
+              "FA_PRODUCTOS_VIGENTES",
+              "FA_HISTORIAL_PAGOS_12M",
+              "FA_INGRESOS_AGREGADOS",
+              "DA_REGISTROS_PUBLICOS"
+            ],
+            "proposito": "PERFILAMIENTO_PRECIO"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/clientes/00000000-0000-4000-8000-000000000001/consentimientos/verificaciones"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "alcancesPermitidos": [
+              "FA_PRODUCTOS_VIGENTES"
+            ],
+            "alcancesRechazados": [
+              {
+                "alcance": "FA_INGRESOS_AGREGADOS",
+                "causa": "ALCANCE_NO_AUTORIZADO"
+              }
+            ],
+            "causa": null,
+            "consentimientoId": "00000000-0000-4000-9000-000000000001",
+            "decision": "PERMITIDO_PARCIAL",
+            "vigenteHasta": "2027-10-17T23:59:59Z"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.alcancesPermitidos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.alcancesPermitidos[*]": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(FA_PRODUCTOS_VIGENTES|FA_HISTORIAL_PAGOS_12M|FA_INGRESOS_AGREGADOS|DA_REGISTROS_PUBLICOS)$"
+                }
+              ]
+            },
+            "$.alcancesRechazados": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.alcancesRechazados[*].alcance": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(FA_PRODUCTOS_VIGENTES|FA_HISTORIAL_PAGOS_12M|FA_INGRESOS_AGREGADOS|DA_REGISTROS_PUBLICOS)$"
+                }
+              ]
+            },
+            "$.consentimientoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.vigenteHasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una verificación de un cliente inexistente",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el cliente 00000000-0000-4000-8000-0000000000ff no existe"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "alcances": [
+              "FA_PRODUCTOS_VIGENTES",
+              "FA_HISTORIAL_PAGOS_12M",
+              "FA_INGRESOS_AGREGADOS",
+              "DA_REGISTROS_PUBLICOS"
+            ],
+            "proposito": "PERFILAMIENTO_PRECIO"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/clientes/00000000-0000-4000-8000-0000000000ff/consentimientos/verificaciones"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "CLIENTE_NO_ENCONTRADO",
+            "correlationId": "c0rr3l4c10n",
+            "detalles": {},
+            "mensaje": "Cliente no encontrado"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una verificación de un cliente que nunca otorgó consentimiento",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el cliente 00000000-0000-4000-8000-000000000001 existe y no tiene consentimientos"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "alcances": [
+              "FA_PRODUCTOS_VIGENTES",
+              "FA_HISTORIAL_PAGOS_12M",
+              "FA_INGRESOS_AGREGADOS",
+              "DA_REGISTROS_PUBLICOS"
+            ],
+            "proposito": "PERFILAMIENTO_PRECIO"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/clientes/00000000-0000-4000-8000-000000000001/consentimientos/verificaciones"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "alcancesPermitidos": [],
+            "alcancesRechazados": [
+              {
+                "alcance": "FA_PRODUCTOS_VIGENTES",
+                "causa": "ALCANCE_NO_AUTORIZADO"
+              }
+            ],
+            "causa": "SIN_CONSENTIMIENTO",
+            "consentimientoId": null,
+            "decision": "RECHAZADO",
+            "vigenteHasta": null
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.alcancesRechazados": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.alcancesRechazados[*].alcance": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(FA_PRODUCTOS_VIGENTES|FA_HISTORIAL_PAGOS_12M|FA_INGRESOS_AGREGADOS|DA_REGISTROS_PUBLICOS)$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una verificación para un propósito que el cliente no autorizó",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el cliente 00000000-0000-4000-8000-000000000001 solo tiene un consentimiento ACTIVO para otro propósito"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "alcances": [
+              "FA_PRODUCTOS_VIGENTES",
+              "FA_HISTORIAL_PAGOS_12M",
+              "FA_INGRESOS_AGREGADOS",
+              "DA_REGISTROS_PUBLICOS"
+            ],
+            "proposito": "PERFILAMIENTO_PRECIO"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/clientes/00000000-0000-4000-8000-000000000001/consentimientos/verificaciones"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "alcancesPermitidos": [],
+            "alcancesRechazados": [
+              {
+                "alcance": "FA_PRODUCTOS_VIGENTES",
+                "causa": "ALCANCE_NO_AUTORIZADO"
+              }
+            ],
+            "causa": "PROPOSITO_NO_AUTORIZADO",
+            "consentimientoId": null,
+            "decision": "RECHAZADO",
+            "vigenteHasta": null
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.alcancesRechazados": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.alcancesRechazados[*].alcance": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(FA_PRODUCTOS_VIGENTES|FA_HISTORIAL_PAGOS_12M|FA_INGRESOS_AGREGADOS|DA_REGISTROS_PUBLICOS)$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactRust": {
+      "ffi": "0.5.8",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    }
+  },
+  "provider": {
+    "name": "clientes"
+  }
+}

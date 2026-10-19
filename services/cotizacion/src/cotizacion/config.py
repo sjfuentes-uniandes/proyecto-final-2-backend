@@ -10,9 +10,9 @@ def _env(nombre: str) -> AliasChoices:
 class Settings(ServiceSettings):
     service_name: str = "cotizacion"
 
-    # DT-02: SOLVENTA_CLIENTES_URL (el stub) tiene prioridad sobre CLIENTES_URL.
+    # SOLVENTA_CLIENTES_URL tiene prioridad sobre CLIENTES_URL (se conserva por compatibilidad).
     clientes_url: str = Field(
-        "http://localhost:8089/clientes-stub",
+        "http://localhost:8083",
         validation_alias=AliasChoices("SOLVENTA_CLIENTES_URL", "CLIENTES_URL"),
     )
     catalogo_url: str = Field("http://localhost:8084", validation_alias=_env("CATALOGO_URL"))

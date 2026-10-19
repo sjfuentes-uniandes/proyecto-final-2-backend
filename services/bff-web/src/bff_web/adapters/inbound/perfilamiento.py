@@ -3,6 +3,10 @@ grupo asesores.
 
 Los DTO son copia de los de cotizacion (contracts/openapi/cotizacion.yaml) con los mismos
 nombres: tests/contract/test_openapi.py verifica que sus esquemas sean iguales.
+
+Las rutas del perfil transmiten lo que responde cotizacion (`response_model_exclude_unset`): un
+campo opcional que cotizacion no envía (por ejemplo, la marca de HU-W31 desde una versión
+anterior) no se rellena con su valor por omisión.
 """
 
 from datetime import date, datetime
@@ -184,6 +188,19 @@ class PerfilRespuesta(_Dto):
     duracion_ms: int
     presupuesto_ms: int
     perfil_anterior_id: UUID | None
+    # HU-W31 (aditivos, opcionales): comprobación final tras consultar las fuentes. Null si no
+    # se consultó ninguna fuente o si el perfil es anterior a la comprobación.
+    comprobacion_final: ConsentimientoDto | None = Field(
+        default=None,
+        description="Comprobación del consentimiento al terminar la consulta de las fuentes",
+    )
+    revocado_durante_perfilamiento: bool = Field(
+        default=False,
+        description=(
+            "El consentimiento dejó de estar vigente mientras se consultaban las fuentes; "
+            "lo obtenido se conserva (causa en comprobacionFinal.causa)"
+        ),
+    )
 
 
 class ResumenPerfil(_Dto):
@@ -237,6 +254,7 @@ IdPerfil = Annotated[UUID, Path(alias="perfilId")]
 @router.post(
     "",
     response_model=PerfilRespuesta,
+    response_model_exclude_unset=True,
     status_code=201,
     responses={
         200: {"model": PerfilRespuesta, "description": "Misma Idempotency-Key y mismo cuerpo"},
@@ -273,7 +291,10 @@ async def listar_perfiles(
 
 
 @router.get(
-    "/{perfilId}", response_model=PerfilRespuesta, responses={404: _error("PERFIL_NO_ENCONTRADO")}
+    "/{perfilId}",
+    response_model=PerfilRespuesta,
+    response_model_exclude_unset=True,
+    responses={404: _error("PERFIL_NO_ENCONTRADO")},
 )
 async def consultar_perfil(
     perfil_id: IdPerfil, servicio: Servicio, asesor: Actor
@@ -285,6 +306,7 @@ async def consultar_perfil(
 @router.post(
     "/{perfilId}/recalculos",
     response_model=PerfilRespuesta,
+    response_model_exclude_unset=True,
     status_code=201,
     responses={
         200: {"model": PerfilRespuesta, "description": "Misma Idempotency-Key"},
@@ -310,6 +332,7 @@ async def recalcular_perfil(
 @router.get(
     "/{perfilId}/comparacion",
     response_model=ComparacionPerfiles,
+    response_model_exclude_unset=True,
     responses={
         404: _error("PERFIL_NO_ENCONTRADO"),
         422: _error("SOLICITUD_INVALIDA o SIN_PERFIL_ANTERIOR"),

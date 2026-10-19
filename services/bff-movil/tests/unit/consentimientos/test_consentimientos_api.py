@@ -1,4 +1,5 @@
-"""Rutas /v1/consentimientos: reenvío a `clientes`, traducción de errores, auth y privacidad (HU-M08)."""
+"""Rutas /v1/consentimientos: reenvío a `clientes`, traducción de errores, auth y privacidad
+(HU-M08; revocación e historial de HU-M09)."""
 
 import asyncio
 import json
@@ -17,6 +18,8 @@ RUTAS = [
     ("GET", "/v1/consentimientos"),
     ("GET", f"/v1/consentimientos/{CONSENTIMIENTO_ID}"),
     ("GET", "/v1/consentimientos/texto-vigente"),
+    ("POST", f"/v1/consentimientos/{CONSENTIMIENTO_ID}/revocacion"),
+    ("GET", f"/v1/consentimientos/{CONSENTIMIENTO_ID}/historial"),
 ]
 
 
@@ -390,6 +393,280 @@ def test_detalle_con_un_identificador_invalido_responde_422(entorno: Entorno) ->
     assert entorno.consentimiento.call_count == 0
 
 
+# --- Revocar (HU-M09) ---------------------------------------------------------------------------
+
+REVOCAR = f"/v1/consentimientos/{CONSENTIMIENTO_ID}/revocacion"
+HISTORIAL = f"/v1/consentimientos/{CONSENTIMIENTO_ID}/historial"
+REVOCADO_EN = "2026-11-02T08:15:00Z"
+
+
+@pytest.mark.hu("M09", "AC1")
+def test_revocar_reenvia_al_titular_sin_cuerpo_ni_clave_y_responde_200(entorno: Entorno) -> None:
+    respuesta = entorno.pedir("POST", REVOCAR, encabezados={"X-Correlation-Id": CORRELACION})
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == _consentimiento(estado="REVOCADO", revocadoEn=REVOCADO_EN)
+    solicitud = entorno.revocacion.calls.last.request
+    assert solicitud.headers["X-Actor-Id"] == entorno.sub
+    assert solicitud.headers["X-Actor-Rol"] == "CLIENTE"
+    assert solicitud.headers["X-Correlation-Id"] == CORRELACION
+    # Idempotente por estado en `clientes`: el BFF no inventa una clave ni envía cuerpo.
+    assert "Idempotency-Key" not in solicitud.headers
+    assert solicitud.read() == b""
+    assert respuesta.headers["X-Correlation-Id"] == CORRELACION
+    assert _cerrada(entorno, "consentimientos.revocar") == "ok"
+
+
+def test_revocar_ignora_el_cuerpo_y_el_actor_que_mande_la_app(entorno: Entorno) -> None:
+    entorno.pedir(
+        "POST",
+        REVOCAR,
+        cuerpo={"clienteId": "ajeno", "estado": "ACTIVO"},
+        encabezados={"X-Actor-Id": "ajeno", "Idempotency-Key": CLAVE},
+    )
+
+    solicitud = entorno.revocacion.calls.last.request
+    assert solicitud.headers["X-Actor-Id"] == entorno.sub
+    assert "Idempotency-Key" not in solicitud.headers
+    assert solicitud.read() == b""
+
+
+@pytest.mark.hu("M09", "AC3")
+def test_revocar_otra_vez_pasa_el_mismo_cuerpo_en_transparencia(entorno: Entorno) -> None:
+    primera = entorno.pedir("POST", REVOCAR)
+    segunda = entorno.pedir("POST", REVOCAR)
+
+    assert (primera.status_code, segunda.status_code) == (200, 200)
+    assert segunda.json() == primera.json()
+    # Sin reintentos propios: cada petición de la app es una sola llamada a `clientes`.
+    assert entorno.revocacion.call_count == 2
+
+
+def test_revocar_un_vencido_responde_200_como_vencido_sin_reinterpretarlo(
+    entorno: Entorno,
+) -> None:
+    vencido = _consentimiento(estado="VENCIDO", revocadoEn=None)
+    entorno.revocacion.mock(return_value=httpx.Response(200, json=vencido))
+
+    respuesta = entorno.pedir("POST", REVOCAR)
+
+    assert respuesta.status_code == 200
+    assert (respuesta.json()["estado"], respuesta.json()["revocadoEn"]) == ("VENCIDO", None)
+    assert _cerrada(entorno, "consentimientos.revocar") == "ok"
+
+
+def test_revocar_ajeno_o_inexistente_responde_404(entorno: Entorno) -> None:
+    entorno.revocacion.mock(
+        return_value=httpx.Response(404, json=_error("CONSENTIMIENTO_NO_ENCONTRADO"))
+    )
+
+    respuesta = entorno.pedir("POST", REVOCAR, encabezados={"X-Correlation-Id": CORRELACION})
+
+    assert respuesta.status_code == 404
+    assert respuesta.json()["codigo"] == "CONSENTIMIENTO_NO_ENCONTRADO"
+    assert respuesta.json()["detalles"] == {}
+    assert respuesta.json()["correlationId"] == CORRELACION
+    assert _cerrada(entorno, "consentimientos.revocar") == "rechazado"
+
+
+@pytest.mark.parametrize(
+    ("falla", "resultado"),
+    [
+        ({"side_effect": httpx.ReadTimeout("sin respuesta")}, "timeout"),
+        ({"side_effect": httpx.ConnectError("caído")}, "error"),
+        ({"return_value": httpx.Response(503, json=_error("DEPENDENCIA_NO_DISPONIBLE"))}, "error"),
+        ({"return_value": httpx.Response(500, json=_error("ERROR_INTERNO"))}, "error"),
+        ({"return_value": httpx.Response(401, json=_error("ACTOR_REQUERIDO"))}, "error"),
+        ({"return_value": httpx.Response(403, json=_error("ROL_NO_AUTORIZADO"))}, "error"),
+        ({"return_value": httpx.Response(404, json=_error("NO_ENCONTRADO"))}, "error"),
+        ({"return_value": httpx.Response(404, text="no json")}, "error"),
+        ({"return_value": httpx.Response(422, json=_error("SOLICITUD_INVALIDA"))}, "error"),
+        ({"return_value": httpx.Response(201, json=_consentimiento())}, "error"),
+        ({"return_value": httpx.Response(200, text="<html>")}, "error"),
+        ({"return_value": httpx.Response(200, json={"estado": "REVOCADO"})}, "error"),
+        ({"return_value": httpx.Response(200, json=_consentimiento(estado="OTRO"))}, "error"),
+    ],
+)
+def test_una_falla_de_clientes_al_revocar_responde_503_y_falla_cerrado(
+    entorno: Entorno, falla: dict[str, Any], resultado: str
+) -> None:
+    entorno.revocacion.mock(**falla)
+
+    respuesta = entorno.pedir("POST", REVOCAR)
+
+    assert respuesta.status_code == 503
+    assert respuesta.json()["codigo"] == "SERVICIO_NO_DISPONIBLE"
+    assert respuesta.json()["detalles"] == {}
+    assert entorno.revocacion.call_count == 1
+    assert _cerrada(entorno, "consentimientos.revocar") == resultado
+
+
+def test_revocar_otro_consentimiento_viola_el_contrato_y_falla_cerrado(entorno: Entorno) -> None:
+    otro = _consentimiento(consentimientoId="00000000-0000-4000-9000-000000000002")
+    entorno.revocacion.mock(return_value=httpx.Response(200, json=otro))
+
+    assert entorno.pedir("POST", REVOCAR).status_code == 503
+
+
+def test_revocar_tiene_el_presupuesto_de_las_escrituras(entorno: Entorno) -> None:
+    entorno.pedir("POST", REVOCAR)
+
+    assert entorno.revocacion.calls.last.request.extensions["timeout"]["read"] == 3.0
+
+
+def test_clientes_lento_al_revocar_responde_503_sin_reintentar(
+    crear_entorno: Callable[..., Entorno],
+) -> None:
+    entorno = crear_entorno(revocacion_timeout_ms=50)
+    llamadas = 0
+
+    async def lenta(request: httpx.Request) -> httpx.Response:
+        nonlocal llamadas
+        llamadas += 1
+        await asyncio.sleep(0.5)
+        return httpx.Response(200, json=_consentimiento(estado="REVOCADO"))
+
+    entorno.revocacion.mock(side_effect=lenta)
+
+    respuesta = entorno.pedir("POST", REVOCAR)
+
+    assert respuesta.status_code == 503
+    assert respuesta.json()["codigo"] == "SERVICIO_NO_DISPONIBLE"
+    assert llamadas == 1
+    assert _cerrada(entorno, "consentimientos.revocar") == "timeout"
+
+
+def test_revocar_con_un_identificador_invalido_responde_422(entorno: Entorno) -> None:
+    respuesta = entorno.pedir("POST", "/v1/consentimientos/no-es-uuid/revocacion")
+
+    assert respuesta.status_code == 422
+    assert respuesta.json()["detalles"]["campos"] == ["consentimientoId"]
+    assert entorno.revocacion.call_count == 0
+
+
+# --- Historial (HU-M09) ------------------------------------------------------------------------
+
+
+@pytest.mark.hu("M09", "AC4")
+def test_historial_devuelve_cuando_se_otorgo_y_se_revoco(entorno: Entorno) -> None:
+    respuesta = entorno.pedir("GET", HISTORIAL, encabezados={"X-Correlation-Id": CORRELACION})
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == {
+        "consentimientoId": CONSENTIMIENTO_ID,
+        "estado": "REVOCADO",
+        "hitos": [
+            {"tipo": "OTORGADO", "ocurridoEn": "2026-10-17T15:00:00Z"},
+            {"tipo": "REVOCADO", "ocurridoEn": REVOCADO_EN},
+        ],
+    }
+    solicitud = entorno.historial.calls.last.request
+    assert solicitud.headers["X-Actor-Id"] == entorno.sub
+    assert solicitud.headers["X-Actor-Rol"] == "CLIENTE"
+    assert solicitud.headers["X-Correlation-Id"] == CORRELACION
+    assert solicitud.extensions["timeout"]["read"] == 0.5
+    assert _cerrada(entorno, "consentimientos.historial") == "ok"
+
+
+@pytest.mark.parametrize(
+    ("estado", "hitos"),
+    [
+        ("ACTIVO", [{"tipo": "OTORGADO", "ocurridoEn": "2026-10-17T15:00:00Z"}]),
+        (
+            "VENCIDO",
+            [
+                {"tipo": "OTORGADO", "ocurridoEn": "2026-10-17T15:00:00Z"},
+                {"tipo": "VENCIDO", "ocurridoEn": "2027-10-17T23:59:59Z"},
+            ],
+        ),
+    ],
+)
+def test_historial_de_un_activo_o_vencido_pasa_tal_cual(
+    entorno: Entorno, estado: str, hitos: list[dict[str, str]]
+) -> None:
+    cuerpo = {"consentimientoId": CONSENTIMIENTO_ID, "estado": estado, "hitos": hitos}
+    entorno.historial.mock(return_value=httpx.Response(200, json=cuerpo))
+
+    assert entorno.pedir("GET", HISTORIAL).json() == cuerpo
+
+
+def test_historial_ajeno_o_inexistente_responde_404(entorno: Entorno) -> None:
+    entorno.historial.mock(
+        return_value=httpx.Response(404, json=_error("CONSENTIMIENTO_NO_ENCONTRADO"))
+    )
+
+    respuesta = entorno.pedir("GET", HISTORIAL)
+
+    assert respuesta.status_code == 404
+    assert respuesta.json()["codigo"] == "CONSENTIMIENTO_NO_ENCONTRADO"
+    assert _cerrada(entorno, "consentimientos.historial") == "rechazado"
+
+
+@pytest.mark.parametrize(
+    ("falla", "resultado"),
+    [
+        ({"side_effect": httpx.ReadTimeout("sin respuesta")}, "timeout"),
+        ({"return_value": httpx.Response(503, json=_error("DEPENDENCIA_NO_DISPONIBLE"))}, "error"),
+        ({"return_value": httpx.Response(404, json=_error("NO_ENCONTRADO"))}, "error"),
+        ({"return_value": httpx.Response(200, json={"hitos": []})}, "error"),
+        (
+            {
+                "return_value": httpx.Response(
+                    200,
+                    json={
+                        "consentimientoId": CONSENTIMIENTO_ID,
+                        "estado": "ACTIVO",
+                        "hitos": [{"tipo": "DESCONOCIDO", "ocurridoEn": "2026-10-17T15:00:00Z"}],
+                    },
+                )
+            },
+            "error",
+        ),
+        (
+            {
+                "return_value": httpx.Response(
+                    200,
+                    json={
+                        "consentimientoId": "00000000-0000-4000-9000-000000000002",
+                        "estado": "ACTIVO",
+                        "hitos": [],
+                    },
+                )
+            },
+            "error",
+        ),
+    ],
+)
+def test_historial_con_clientes_fallando_responde_503(
+    entorno: Entorno, falla: dict[str, Any], resultado: str
+) -> None:
+    entorno.historial.mock(**falla)
+
+    respuesta = entorno.pedir("GET", HISTORIAL)
+
+    assert respuesta.status_code == 503
+    assert respuesta.json()["codigo"] == "SERVICIO_NO_DISPONIBLE"
+    assert _cerrada(entorno, "consentimientos.historial") == resultado
+
+
+def test_historial_con_un_identificador_invalido_responde_422(entorno: Entorno) -> None:
+    respuesta = entorno.pedir("GET", "/v1/consentimientos/no-es-uuid/historial")
+
+    assert respuesta.status_code == 422
+    assert entorno.historial.call_count == 0
+
+
+def test_revocar_e_historial_no_dejan_el_titular_en_logs_ni_spans(entorno: Entorno) -> None:
+    entorno.pedir("POST", REVOCAR)
+    entorno.pedir("GET", HISTORIAL)
+    entorno.revocacion.mock(side_effect=httpx.ReadTimeout("sin respuesta"))
+    entorno.pedir("POST", REVOCAR)
+
+    for texto in (entorno.telemetria.texto_logs(), entorno.telemetria.texto_spans()):
+        assert entorno.sub not in texto
+        assert REVOCADO_EN not in texto
+
+
 # --- Texto vigente ----------------------------------------------------------------------------
 
 
@@ -478,6 +755,8 @@ def test_sin_token_responde_401_sin_llamar_a_clientes(
         entorno.otorgamiento,
         entorno.consentimientos,
         entorno.consentimiento,
+        entorno.revocacion,
+        entorno.historial,
         entorno.texto_vigente,
     ):
         assert ruta_clientes.call_count == 0
@@ -497,6 +776,8 @@ def test_token_de_otro_pool_responde_403_sin_llamar_a_clientes(
     assert respuesta.json()["codigo"] == "ROL_NO_AUTORIZADO"
     assert entorno.otorgamiento.call_count == 0
     assert entorno.consentimientos.call_count == 0
+    assert entorno.revocacion.call_count == 0
+    assert entorno.historial.call_count == 0
 
 
 @pytest.mark.parametrize(("metodo", "ruta"), RUTAS)

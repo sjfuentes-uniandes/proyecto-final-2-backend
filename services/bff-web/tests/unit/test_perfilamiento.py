@@ -483,3 +483,123 @@ def test_comparacion_con_id_invalido_no_llega_a_cotizacion(cotizacion: Cotizacio
     respuesta = _comparar("no-es-uuid")
     assert (respuesta.status_code, respuesta.json()["codigo"]) == (422, "SOLICITUD_INVALIDA")
     assert cotizacion.solicitudes == []
+
+
+# --- HU-W31 · marca "revocado durante el perfilamiento" (PR 3.4): solo se transmite --------
+
+REVOCADO_EN_VUELO = {
+    **PERFIL,
+    "comprobacionFinal": {"decision": "RECHAZADO", "causa": "REVOCADO", "vigenteHasta": None},
+    "revocadoDurantePerfilamiento": True,
+}
+COMPROBADO_VIGENTE = {
+    **PERFIL,
+    "comprobacionFinal": {
+        "decision": "PERMITIDO",
+        "causa": None,
+        "vigenteHasta": "2027-10-01T00:00:00Z",
+    },
+    "revocadoDurantePerfilamiento": False,
+}
+
+
+@pytest.mark.parametrize(
+    "perfil", [REVOCADO_EN_VUELO, COMPROBADO_VIGENTE], ids=["revocado", "vigente"]
+)
+def test_crear_y_recalcular_transmiten_la_comprobacion_final(
+    cotizacion: CotizacionFalsa, perfil: dict[str, Any]
+) -> None:
+    cotizacion.respuesta = httpx.Response(201, json=perfil)
+    assert _crear().json() == perfil
+    assert _recalcular().json() == perfil
+
+
+def test_consultar_y_comparar_transmiten_la_marca(cotizacion: CotizacionFalsa) -> None:
+    actual = {**REVOCADO_EN_VUELO, "id": NUEVO_ID, "perfilAnteriorId": PERFIL_ID}
+    cotizacion.por_id = {
+        NUEVO_ID: httpx.Response(200, json=actual),
+        PERFIL_ID: httpx.Response(200, json=PERFIL),
+    }
+    consultado = TestClient(app).get(f"/v1/perfiles/{NUEVO_ID}", headers=ASESOR).json()
+    assert consultado["revocadoDurantePerfilamiento"] is True
+    assert consultado["comprobacionFinal"]["causa"] == "REVOCADO"
+    assert _comparar().json() == {"anterior": PERFIL, "actual": actual}
+
+
+def test_sin_la_marca_de_cotizacion_no_se_inventa(cotizacion: CotizacionFalsa) -> None:
+    """cotizacion N-1 no envía los campos: el BFF no responde `false` en su nombre."""
+    cuerpo = _crear().json()
+    assert not {"comprobacionFinal", "revocadoDurantePerfilamiento"} & set(cuerpo)
+
+
+# Perfil de cotizacion con null en cada campo que lo admite (C08: sin consentimiento ni fuentes).
+CON_NULOS = {
+    **PERFIL,
+    "estado": "INFORMACION_INSUFICIENTE",
+    "nivelRiesgo": None,
+    "puntaje": None,
+    "confianza": 0.0,
+    "factores": [
+        {
+            **PERFIL["factores"][0],
+            "estado": "NO_EVALUADO",
+            "contribucion": None,
+            "direccion": None,
+            "motivo": "NO_AUTORIZADO",
+        }
+    ],
+    "ajustes": [{"codigo": "X", "efecto": "SUBE", "nivel": None}],
+    "datosRequeridos": [{"campo": "moras_12m", "fuente": None, "motivo": "NO_AUTORIZADO"}],
+    "accionSugerida": "COMPLETAR_CONSENTIMIENTO",
+    "consentimiento": None,
+    "fuentes": [
+        {
+            **PERFIL["fuentes"][0],
+            "estado": "NO_AUTORIZADA",
+            "versionFuente": None,
+            "confianza": None,
+            "consultadaEn": None,
+            "duracionMs": None,
+        }
+    ],
+    "fuentesConsultadas": 0,
+    "perfilAnteriorId": None,
+}
+
+
+def _claves(valor: Any, prefijo: str = "") -> set[str]:
+    """Rutas de todas las claves, también las que valen null; los ítems de lista por índice."""
+    if isinstance(valor, dict):
+        return {f"{prefijo}.{k}" for k in valor} | {
+            r for k, v in valor.items() for r in _claves(v, f"{prefijo}.{k}")
+        }
+    if isinstance(valor, list):
+        return {r for i, v in enumerate(valor) for r in _claves(v, f"{prefijo}[{i}]")}
+    return set()
+
+
+@pytest.mark.parametrize(
+    "perfil",
+    [CON_NULOS, {**CON_NULOS, "comprobacionFinal": None, "revocadoDurantePerfilamiento": False}],
+    ids=["cotizacion-anterior-a-3.4", "cotizacion-con-3.4"],
+)
+def test_las_rutas_del_perfil_conservan_exactamente_las_claves_de_cotizacion(
+    cotizacion: CotizacionFalsa, perfil: dict[str, Any]
+) -> None:
+    """`response_model_exclude_unset` no quita claves con null ni añade las no enviadas."""
+    recalculado = {**perfil, "id": NUEVO_ID, "perfilAnteriorId": PERFIL_ID}
+    cotizacion.respuesta = httpx.Response(201, json=perfil)
+    cotizacion.por_id = {
+        PERFIL_ID: httpx.Response(200, json=perfil),
+        NUEVO_ID: httpx.Response(200, json=recalculado),
+    }
+    respuestas = {
+        "crear": (_crear(), perfil),
+        "consultar": (TestClient(app).get(f"/v1/perfiles/{PERFIL_ID}", headers=ASESOR), perfil),
+        "recalcular": (_recalcular(), perfil),
+        "comparar": (_comparar(), {"anterior": perfil, "actual": recalculado}),
+    }
+    for nombre, (respuesta, enviado) in respuestas.items():
+        assert respuesta.status_code in (200, 201), nombre
+        assert _claves(respuesta.json()) == _claves(enviado), nombre
+        assert respuesta.json() == enviado, nombre

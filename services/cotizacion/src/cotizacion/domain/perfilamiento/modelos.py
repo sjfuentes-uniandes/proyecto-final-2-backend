@@ -210,3 +210,17 @@ class Perfil:
     duracion_ms: int
     correlation_id: str
     actor_id: str
+    # Comprobación final tras la fase B (ADR 0011 §3); None si no se consultó ninguna fuente
+    # o si el perfil es anterior a la comprobación (HU-W31).
+    comprobacion_final: VerificacionConsentimiento | None = None
+
+    @property
+    def revocado_durante_perfilamiento(self) -> bool:
+        """El consentimiento dejó de estar vigente mientras se consultaban las fuentes (ADR 0004).
+
+        Lo obtenido se conserva; la marca solo deja constancia.
+        """
+        return (
+            self.comprobacion_final is not None
+            and self.comprobacion_final.decision is DecisionConsentimiento.RECHAZADO
+        )

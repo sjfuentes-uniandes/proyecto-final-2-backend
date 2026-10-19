@@ -1,11 +1,47 @@
 {
   "$defs": {
+    "ComprobacionFinalEvento": {
+      "description": "Decisi\u00f3n de la comprobaci\u00f3n final tras consultar las fuentes (HU-W31).",
+      "properties": {
+        "causa": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Causa"
+        },
+        "decision": {
+          "$ref": "#/$defs/DecisionConsentimiento"
+        }
+      },
+      "required": [
+        "decision",
+        "causa"
+      ],
+      "title": "ComprobacionFinalEvento",
+      "type": "object"
+    },
     "DatosConsentidosConsultadosV1": {
       "properties": {
         "clienteId": {
           "format": "uuid",
           "title": "Clienteid",
           "type": "string"
+        },
+        "comprobacionFinal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ComprobacionFinalEvento"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "consentimientoId": {
           "anyOf": [
@@ -34,6 +70,11 @@
         "proposito": {
           "title": "Proposito",
           "type": "string"
+        },
+        "revocadoDurantePerfilamiento": {
+          "default": false,
+          "title": "Revocadoduranteperfilamiento",
+          "type": "boolean"
         }
       },
       "required": [
@@ -45,6 +86,15 @@
       ],
       "title": "DatosConsentidosConsultadosV1",
       "type": "object"
+    },
+    "DecisionConsentimiento": {
+      "enum": [
+        "PERMITIDO",
+        "PERMITIDO_PARCIAL",
+        "RECHAZADO"
+      ],
+      "title": "DecisionConsentimiento",
+      "type": "string"
     },
     "EstadoFuente": {
       "enum": [

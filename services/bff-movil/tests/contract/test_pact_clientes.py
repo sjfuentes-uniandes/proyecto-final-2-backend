@@ -1,4 +1,5 @@
-"""Pacto consumidor `bff-movil` → proveedor `clientes`: rutas de consentimiento (HU-M08).
+"""Pacto consumidor `bff-movil` → proveedor `clientes`: rutas de consentimiento (HU-M08) y su
+revocación e historial (HU-M09).
 
 Lo genera `make test-contract SERVICE=bff-movil` en `contracts/pact/bff-movil-clientes.json`.
 Cada interacción ejercita el adaptador real (`ConsentimientosHttp`) contra el mock de Pact, de
@@ -52,7 +53,7 @@ def anyio_backend() -> str:
     return "asyncio"
 
 
-def consentimiento(estado: str = "ACTIVO") -> dict[str, object]:
+def consentimiento(estado: str = "ACTIVO", revocado_en: str | None = None) -> dict[str, object]:
     return {
         "consentimientoId": match.regex(CONSENTIMIENTO_ID, regex=UUID_RE),
         "estado": match.regex(estado, regex=r"^(ACTIVO|REVOCADO|VENCIDO)$"),
@@ -62,7 +63,7 @@ def consentimiento(estado: str = "ACTIVO") -> dict[str, object]:
         "idioma": match.like("es-CO"),
         "otorgadoEn": match.regex("2026-10-17T15:00:00Z", regex=FECHA),
         "vigenteHasta": match.regex("2027-10-17T23:59:59Z", regex=FECHA),
-        "revocadoEn": None,
+        "revocadoEn": None if revocado_en is None else match.regex(revocado_en, regex=FECHA),
     }
 
 
@@ -80,7 +81,7 @@ def _con_actor(interaccion):
 
 
 def _adaptador(url: str) -> ConsentimientosHttp:
-    return ConsentimientosHttp(correlation.cliente_async(), url, 2000, 2000)
+    return ConsentimientosHttp(correlation.cliente_async(), url, 2000, 2000, 2000)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -253,6 +254,111 @@ async def test_texto_vigente(pacto: Pact) -> None:
     assert texto.vigencia_defecto_meses in texto.vigencias_meses
 
 
+# --- Revocación e historial (HU-M09) -----------------------------------------------------------
+
+REVOCADO_EN = "2026-11-02T08:15:00Z"
+AJENO = "00000000-0000-4000-9000-0000000000ff"
+
+
+def _revocacion(pacto: Pact, descripcion: str, consentimiento_id: str = CONSENTIMIENTO_ID):
+    """Sin cuerpo ni Idempotency-Key: `clientes` es idempotente por estado."""
+    return _con_actor(
+        pacto.upon_receiving(descripcion).with_request(
+            "POST", f"{RUTA}/{consentimiento_id}/revocacion"
+        )
+    )
+
+
+async def test_revocar_un_activo(pacto: Pact) -> None:
+    (
+        _revocacion(pacto, "la revocación de un consentimiento activo")
+        .given("el titular tiene el consentimiento 00000000-0000-4000-9000-000000000001 ACTIVO")
+        .will_respond_with(200)
+        .with_body(consentimiento("REVOCADO", REVOCADO_EN), content_type="application/json")
+    )
+    with pacto.serve() as servidor:
+        revocado = await _adaptador(str(servidor.url)).revocar(SUB, UUID(CONSENTIMIENTO_ID))
+    assert revocado.estado is EstadoConsentimiento.REVOCADO
+    assert revocado.revocado_en is not None
+
+
+async def test_revocar_uno_ya_revocado(pacto: Pact) -> None:
+    (
+        _revocacion(pacto, "la repetición de una revocación")
+        .given("el titular ya revocó el consentimiento 00000000-0000-4000-9000-000000000001")
+        .will_respond_with(200)
+        .with_body(consentimiento("REVOCADO", REVOCADO_EN), content_type="application/json")
+    )
+    with pacto.serve() as servidor:
+        revocado = await _adaptador(str(servidor.url)).revocar(SUB, UUID(CONSENTIMIENTO_ID))
+    assert revocado.estado is EstadoConsentimiento.REVOCADO
+
+
+async def test_revocar_uno_vencido(pacto: Pact) -> None:
+    (
+        _revocacion(pacto, "la revocación de un consentimiento vencido")
+        .given("el consentimiento 00000000-0000-4000-9000-000000000001 del titular ya venció")
+        .will_respond_with(200)
+        .with_body(consentimiento("VENCIDO"), content_type="application/json")
+    )
+    with pacto.serve() as servidor:
+        visto = await _adaptador(str(servidor.url)).revocar(SUB, UUID(CONSENTIMIENTO_ID))
+    assert (visto.estado, visto.revocado_en) == (EstadoConsentimiento.VENCIDO, None)
+
+
+async def test_revocar_ajeno_o_inexistente(pacto: Pact) -> None:
+    (
+        _revocacion(pacto, "la revocación de un consentimiento ajeno", AJENO)
+        .given("el consentimiento 00000000-0000-4000-9000-0000000000ff es de otro cliente")
+        .will_respond_with(404)
+        .with_body(error("CONSENTIMIENTO_NO_ENCONTRADO"), content_type="application/json")
+    )
+    with pacto.serve() as servidor, pytest.raises(ConsentimientoNoEncontrado):
+        await _adaptador(str(servidor.url)).revocar(SUB, UUID(AJENO))
+
+
+async def test_historial(pacto: Pact) -> None:
+    (
+        _con_actor(
+            pacto.upon_receiving("una consulta del historial de un consentimiento revocado")
+            .given("el titular ya revocó el consentimiento 00000000-0000-4000-9000-000000000001")
+            .with_request("GET", f"{RUTA}/{CONSENTIMIENTO_ID}/historial")
+        )
+        .will_respond_with(200)
+        .with_body(
+            {
+                "consentimientoId": match.regex(CONSENTIMIENTO_ID, regex=UUID_RE),
+                "estado": match.regex("REVOCADO", regex=r"^(ACTIVO|REVOCADO|VENCIDO)$"),
+                "hitos": match.each_like(
+                    {
+                        "tipo": match.regex("OTORGADO", regex=r"^(OTORGADO|REVOCADO|VENCIDO)$"),
+                        "ocurridoEn": match.regex("2026-10-17T15:00:00Z", regex=FECHA),
+                    }
+                ),
+            },
+            content_type="application/json",
+        )
+    )
+    with pacto.serve() as servidor:
+        historial = await _adaptador(str(servidor.url)).historial(SUB, UUID(CONSENTIMIENTO_ID))
+    assert str(historial.consentimiento_id) == CONSENTIMIENTO_ID
+    assert historial.hitos
+
+
+async def test_historial_ajeno_o_inexistente(pacto: Pact) -> None:
+    (
+        _con_actor(
+            pacto.upon_receiving("una consulta del historial de un consentimiento ajeno")
+            .given("el consentimiento 00000000-0000-4000-9000-0000000000ff es de otro cliente")
+            .with_request("GET", f"{RUTA}/{AJENO}/historial")
+        )
+        .will_respond_with(404)
+        .with_body(error("CONSENTIMIENTO_NO_ENCONTRADO"), content_type="application/json")
+    )
+    with pacto.serve() as servidor, pytest.raises(ConsentimientoNoEncontrado):
+        await _adaptador(str(servidor.url)).historial(SUB, UUID(AJENO))
+
+
 def test_el_pacto_cumple_el_openapi_publicado_por_clientes() -> None:
     """Mientras `clientes` no verifique el pacto (PR propia), se coteja con su contrato: cada
     interacción existe en `contracts/openapi/clientes.yaml` y sus ejemplos validan su esquema.
@@ -263,7 +369,7 @@ def test_el_pacto_cumple_el_openapi_publicado_por_clientes() -> None:
         (PACTOS.parent / "openapi" / "clientes.yaml").read_text(encoding="utf-8")
     )
     pacto = json.loads((PACTOS / ARCHIVO).read_text(encoding="utf-8"))
-    assert len(pacto["interactions"]) == 9
+    assert len(pacto["interactions"]) == 15
     for interaccion in pacto["interactions"]:
         solicitud, respuesta = interaccion["request"], interaccion["response"]
         plantilla = next(

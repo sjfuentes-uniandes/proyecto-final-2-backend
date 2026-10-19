@@ -71,6 +71,7 @@ COLUMNAS_PERFIL = (
     "duracion_ms",
     "correlation_id",
     "actor_id",
+    "comprobacion_final",
 )
 COLUMNAS_LINAJE = (
     "perfil_id",
@@ -131,11 +132,25 @@ def _iso(instante: datetime | None) -> str | None:
     return None if instante is None else instante.isoformat()
 
 
+def _verificacion(verificacion: VerificacionConsentimiento | None) -> Jsonb | None:
+    """`consentimiento` y `comprobacion_final` comparten formato."""
+    if verificacion is None:
+        return None
+    return Jsonb(
+        {
+            "decision": verificacion.decision.value,
+            "consentimiento_id": _str(verificacion.consentimiento_id),
+            "vigente_hasta": _iso(verificacion.vigente_hasta),
+            "alcances_permitidos": sorted(a.value for a in verificacion.alcances_permitidos),
+            "causa": verificacion.causa,
+        }
+    )
+
+
 def fila_perfil(perfil: Perfil) -> dict[str, Any]:
     """Columnas de perfiles_riesgo. Los decimales del JSON van como texto (exactos)."""
     r = perfil.resultado
     declarados = perfil.datos_declarados
-    consentimiento = perfil.consentimiento
     return {
         "id": perfil.id,
         "cliente_id": perfil.cliente_id,
@@ -189,17 +204,7 @@ def fila_perfil(perfil: Perfil) -> dict[str, Any]:
             ]
         ),
         "accion_sugerida": r.accion.value if r.accion else None,
-        "consentimiento": None
-        if consentimiento is None
-        else Jsonb(
-            {
-                "decision": consentimiento.decision.value,
-                "consentimiento_id": _str(consentimiento.consentimiento_id),
-                "vigente_hasta": _iso(consentimiento.vigente_hasta),
-                "alcances_permitidos": sorted(a.value for a in consentimiento.alcances_permitidos),
-                "causa": consentimiento.causa,
-            }
-        ),
+        "consentimiento": _verificacion(perfil.consentimiento),
         "version_modelo": perfil.version_modelo,
         "hash_modelo": perfil.hash_modelo,
         "perfil_anterior_id": perfil.perfil_anterior_id,
@@ -207,6 +212,7 @@ def fila_perfil(perfil: Perfil) -> dict[str, Any]:
         "duracion_ms": perfil.duracion_ms,
         "correlation_id": perfil.correlation_id,
         "actor_id": perfil.actor_id,
+        "comprobacion_final": _verificacion(perfil.comprobacion_final),
     }
 
 
@@ -339,6 +345,7 @@ def perfil_de(fila: Mapping[str, Any], linaje: Sequence[Mapping[str, Any]]) -> P
         duracion_ms=fila["duracion_ms"],
         correlation_id=fila["correlation_id"],
         actor_id=fila["actor_id"],
+        comprobacion_final=_consentimiento(fila["comprobacion_final"]),
     )
 
 

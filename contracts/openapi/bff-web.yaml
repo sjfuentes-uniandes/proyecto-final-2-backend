@@ -1260,6 +1260,159 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/clientes/{clienteId}/consentimientos:
+    get:
+      tags:
+      - consentimientos
+      summary: Consentimientos del cliente, del más reciente al más antiguo (solo
+        lectura)
+      description: 'El estado es el que deriva clientes al leer (`VENCIDO` si ya pasó
+        `vigenteHasta`). Un
+
+        cliente sin consentimientos responde una lista vacía.'
+      operationId: listar_consentimientos_v1_clientes__clienteId__consentimientos_get
+      parameters:
+      - name: clienteId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Clienteid
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConsentimientoClienteDto'
+                title: Response Listar Consentimientos V1 Clientes  Clienteid  Consentimientos
+                  Get
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo asesores o no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: clientes no respondió o respondió
+            fuera de su contrato (falla cerrado, sin detalles)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'CLIENTE_NO_ENCONTRADO: el cliente no existe'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/clientes/{clienteId}/consentimientos/{consentimientoId}/historial:
+    get:
+      tags:
+      - consentimientos
+      summary: Historial de un consentimiento del cliente (solo lectura)
+      operationId: historial_consentimiento_v1_clientes__clienteId__consentimientos__consentimientoId__historial_get
+      parameters:
+      - name: clienteId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Clienteid
+      - name: consentimientoId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Consentimientoid
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistorialDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo asesores o no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: clientes no respondió o respondió
+            fuera de su contrato (falla cerrado, sin detalles)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'CONSENTIMIENTO_NO_ENCONTRADO: no existe, es de otro cliente
+            o el cliente no existe (no se distingue)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -1442,6 +1595,54 @@ components:
       - actual
       title: ComparacionPerfiles
       description: Perfil anterior y perfil recalculado desde él (HU-W12, D05).
+    ConsentimientoClienteDto:
+      properties:
+        consentimientoId:
+          type: string
+          format: uuid
+          title: Consentimientoid
+        estado:
+          $ref: '#/components/schemas/EstadoConsentimiento'
+        proposito:
+          type: string
+          title: Proposito
+        alcances:
+          items:
+            type: string
+          type: array
+          title: Alcances
+        versionTexto:
+          type: string
+          title: Versiontexto
+        idioma:
+          type: string
+          title: Idioma
+        otorgadoEn:
+          type: string
+          format: date-time
+          title: Otorgadoen
+        vigenteHasta:
+          type: string
+          format: date-time
+          title: Vigentehasta
+        revocadoEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Revocadoen
+      type: object
+      required:
+      - consentimientoId
+      - estado
+      - proposito
+      - alcances
+      - versionTexto
+      - idioma
+      - otorgadoEn
+      - vigenteHasta
+      - revocadoEn
+      title: ConsentimientoClienteDto
     ConsentimientoDto:
       properties:
         decision:
@@ -1639,6 +1840,13 @@ components:
       - activo
       - desactivado
       title: Estado
+    EstadoConsentimiento:
+      type: string
+      enum:
+      - ACTIVO
+      - REVOCADO
+      - VENCIDO
+      title: EstadoConsentimiento
     EstadoCuota:
       type: string
       enum:
@@ -1781,6 +1989,40 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    HistorialDto:
+      properties:
+        consentimientoId:
+          type: string
+          format: uuid
+          title: Consentimientoid
+        estado:
+          $ref: '#/components/schemas/EstadoConsentimiento'
+        hitos:
+          items:
+            $ref: '#/components/schemas/HitoDto'
+          type: array
+          title: Hitos
+      type: object
+      required:
+      - consentimientoId
+      - estado
+      - hitos
+      title: HistorialDto
+      description: Cuándo se otorgó y, si aplica, cuándo se revocó o venció (AC4).
+        Derivado de la fila.
+    HitoDto:
+      properties:
+        tipo:
+          $ref: '#/components/schemas/TipoHito'
+        ocurridoEn:
+          type: string
+          format: date-time
+          title: Ocurridoen
+      type: object
+      required:
+      - tipo
+      - ocurridoEn
+      title: HitoDto
     LimitesPlan:
       properties:
         plan:
@@ -1964,6 +2206,18 @@ components:
             format: uuid
           - type: 'null'
           title: Perfilanteriorid
+        comprobacionFinal:
+          anyOf:
+          - $ref: '#/components/schemas/ConsentimientoDto'
+          - type: 'null'
+          description: Comprobación del consentimiento al terminar la consulta de
+            las fuentes
+        revocadoDurantePerfilamiento:
+          type: boolean
+          title: Revocadoduranteperfilamiento
+          description: El consentimiento dejó de estar vigente mientras se consultaban
+            las fuentes; lo obtenido se conserva (causa en comprobacionFinal.causa)
+          default: false
       type: object
       required:
       - id
@@ -2226,6 +2480,13 @@ components:
       - DATOS_ABIERTOS
       - DECLARADO
       title: TipoFuente
+    TipoHito:
+      type: string
+      enum:
+      - OTORGADO
+      - REVOCADO
+      - VENCIDO
+      title: TipoHito
     TramoRespuesta:
       properties:
         servicio:

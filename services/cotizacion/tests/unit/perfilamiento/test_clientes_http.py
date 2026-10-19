@@ -21,7 +21,7 @@ from solventa_common import resiliencia
 pytestmark = pytest.mark.anyio
 
 CLIENTE = UUID("00000000-0000-4000-8000-000000000001")
-BASE = "http://simulador-aliados:8080/clientes-stub/"
+BASE = "http://pasarela:8080/clientes/"
 TODAS = list(Fuente)
 
 
@@ -78,9 +78,7 @@ async def test_consentimiento_permitido_con_vigencia_utc() -> None:
     assert verificacion.alcances_permitidos == frozenset(TODAS)
     (request,) = recibidas
     assert request.method == "POST"
-    assert (
-        request.url.path == f"/clientes-stub/v1/clientes/{CLIENTE}/consentimientos/verificaciones"
-    )
+    assert request.url.path == f"/clientes/v1/clientes/{CLIENTE}/consentimientos/verificaciones"
     assert json.loads(request.content) == {
         "proposito": "PERFILAMIENTO_PRECIO",
         "alcances": [str(f) for f in TODAS],
@@ -140,6 +138,72 @@ async def test_404_cliente_no_encontrado() -> None:
         await clientes.verificar(CLIENTE, PROPOSITO_PERFILAMIENTO, TODAS)
 
 
+async def test_404_con_el_codigo_basta_aunque_falten_otros_campos() -> None:
+    clientes = _clientes(lambda _: httpx.Response(404, json={"codigo": "CLIENTE_NO_ENCONTRADO"}))
+    with pytest.raises(ClienteNoEncontrado):
+        await clientes.verificar(CLIENTE, PROPOSITO_PERFILAMIENTO, TODAS)
+
+
+# Un 404 sin el `codigo` del contrato viene de una ruta, un gateway u otro servicio: no dice
+# nada del cliente y falla cerrado como cualquier otro fallo técnico.
+NO_ENCONTRADOS_AJENOS: list[httpx.Response] = [
+    httpx.Response(404),
+    httpx.Response(404, text="Not Found"),
+    httpx.Response(404, text="<html><body>404</body></html>"),
+    httpx.Response(404, content=b'{"codigo": "CLIENTE_NO_ENCONTRADO"'),
+    httpx.Response(404, json={"message": "Not Found"}),
+    httpx.Response(404, json={"codigo": "RUTA_NO_ENCONTRADA", "mensaje": "x"}),
+    httpx.Response(404, json={"codigo": "cliente_no_encontrado"}),
+    httpx.Response(404, json={"codigo": None}),
+    httpx.Response(404, json={"codigo": ["CLIENTE_NO_ENCONTRADO"]}),
+    httpx.Response(404, json=["CLIENTE_NO_ENCONTRADO"]),
+    httpx.Response(404, json=None),
+    httpx.Response(404, json="CLIENTE_NO_ENCONTRADO"),
+]
+IDS_NO_ENCONTRADOS = [
+    "vacio",
+    "texto",
+    "html",
+    "json-truncado",
+    "codigo-ausente",
+    "otro-codigo",
+    "codigo-en-minusculas",
+    "codigo-nulo",
+    "codigo-en-lista",
+    "lista",
+    "null",
+    "texto-json",
+]
+
+
+@pytest.mark.parametrize("respuesta", NO_ENCONTRADOS_AJENOS, ids=IDS_NO_ENCONTRADOS)
+async def test_404_ajeno_en_la_verificacion_es_dependencia_no_disponible(
+    respuesta: httpx.Response,
+) -> None:
+    with pytest.raises(DependenciaNoDisponible) as error:
+        await _clientes(lambda _: respuesta).verificar(CLIENTE, PROPOSITO_PERFILAMIENTO, TODAS)
+    with pytest.raises(DependenciaNoDisponible) as tecnico:
+        await _clientes(lambda _: httpx.Response(503)).verificar(
+            CLIENTE, PROPOSITO_PERFILAMIENTO, TODAS
+        )
+    assert type(error.value) is type(tecnico.value)
+    assert (error.value.dependencia, str(error.value)) == (
+        tecnico.value.dependencia,
+        str(tecnico.value),
+    )
+    assert error.value.dependencia == "clientes.consentimiento"
+
+
+@pytest.mark.parametrize("respuesta", NO_ENCONTRADOS_AJENOS, ids=IDS_NO_ENCONTRADOS)
+async def test_404_ajeno_en_la_identidad_es_dependencia_no_disponible(
+    respuesta: httpx.Response,
+) -> None:
+    """La regla vive en `_enviar`, que comparten las dos rutas."""
+    with pytest.raises(DependenciaNoDisponible) as error:
+        await _clientes(lambda _: respuesta).estado(CLIENTE)
+    assert error.value.dependencia == "clientes.identidad"
+
+
 def _lanzar(error: Exception) -> Callable[[httpx.Request], httpx.Response]:
     def manejador(_: httpx.Request) -> httpx.Response:
         raise error
@@ -195,3 +259,141 @@ async def test_estado_desconocido_de_identidad() -> None:
     with pytest.raises(DependenciaNoDisponible) as error:
         await clientes.estado(CLIENTE)
     assert error.value.dependencia == "clientes.identidad"
+
+
+# --- HU-W31 · la verificación falla cerrada -----------------------------------------------
+# Nada de esto lo produce `clientes` según su contrato (por eso no está en el pacto): es lo que
+# puede pasar en el camino. Ninguno debe dar una verificación; todos son "no vigente".
+
+FALLOS_DE_VERIFICACION: list[Callable[[httpx.Request], httpx.Response]] = [
+    _lanzar(httpx.ConnectTimeout("sin conexión a tiempo")),
+    _lanzar(httpx.WriteTimeout("lento al enviar")),
+    _lanzar(httpx.PoolTimeout("pool agotado")),
+    _lanzar(httpx.RemoteProtocolError("conexión cortada")),
+    lambda _: httpx.Response(502),
+    lambda _: httpx.Response(504),
+    lambda _: httpx.Response(401),
+    lambda _: httpx.Response(403),
+    lambda _: httpx.Response(409),
+    lambda _: httpx.Response(422),
+    lambda _: httpx.Response(201, json=_verificacion()),
+    lambda _: httpx.Response(204),
+    lambda _: httpx.Response(200, content=b""),
+    lambda _: httpx.Response(200, json=None),
+    lambda _: httpx.Response(200, json=[]),
+    lambda _: httpx.Response(200, json="PERMITIDO"),
+    lambda _: httpx.Response(200, content=b'{"decision": "PERMITIDO"'),
+]
+IDS_FALLOS = [
+    "connect-timeout",
+    "write-timeout",
+    "pool-timeout",
+    "conexion-cortada",
+    "502",
+    "504",
+    "401",
+    "403",
+    "409",
+    "422",
+    "201-con-cuerpo-valido",
+    "204",
+    "200-vacio",
+    "200-null",
+    "200-lista",
+    "200-texto",
+    "200-json-truncado",
+]
+
+FUERA_DE_CONTRATO: list[dict[str, Any]] = [
+    _verificacion(decision="permitido"),
+    _verificacion(decision=None),
+    _verificacion(causa=""),
+    _verificacion(alcancesPermitidos=None),
+    _verificacion(
+        decision="PERMITIDO_PARCIAL",
+        alcancesRechazados=[{"alcance": "FA_INGRESOS_AGREGADOS", "causa": "OTRA_CAUSA"}],
+    ),
+    _verificacion(
+        decision="PERMITIDO_PARCIAL",
+        alcancesRechazados=[{"alcance": "FA_NUEVO_ALCANCE", "causa": "ALCANCE_NO_AUTORIZADO"}],
+    ),
+    _verificacion(consentimientoId="no-es-un-uuid"),
+    _verificacion(vigenteHasta="mañana"),
+]
+IDS_FUERA = [
+    "decision-en-minusculas",
+    "decision-nula",
+    "causa-vacia",
+    "alcances-permitidos-nulos",
+    "causa-de-alcance-desconocida",
+    "alcance-rechazado-desconocido",
+    "consentimiento-no-uuid",
+    "vigencia-ilegible",
+]
+
+
+@pytest.mark.parametrize("manejador", FALLOS_DE_VERIFICACION, ids=IDS_FALLOS)
+async def test_fallo_tecnico_de_la_verificacion_es_dependencia_no_disponible(
+    manejador: Callable[[httpx.Request], httpx.Response],
+) -> None:
+    with pytest.raises(DependenciaNoDisponible) as error:
+        await _clientes(manejador).verificar(CLIENTE, PROPOSITO_PERFILAMIENTO, TODAS)
+    assert error.value.dependencia == "clientes.consentimiento"
+
+
+@pytest.mark.parametrize("cuerpo", FUERA_DE_CONTRATO, ids=IDS_FUERA)
+async def test_verificacion_fuera_de_contrato_es_dependencia_no_disponible(
+    cuerpo: dict[str, Any],
+) -> None:
+    with pytest.raises(DependenciaNoDisponible) as error:
+        await _clientes(lambda _: httpx.Response(200, json=cuerpo)).verificar(
+            CLIENTE, PROPOSITO_PERFILAMIENTO, TODAS
+        )
+    assert error.value.dependencia == "clientes.consentimiento"
+
+
+@pytest.mark.parametrize(
+    "manejador",
+    [
+        _lanzar(httpx.ReadTimeout("lento")),
+        lambda _: httpx.Response(500),
+        lambda _: httpx.Response(503),
+        lambda _: httpx.Response(200, text="<html>"),
+        lambda _: httpx.Response(200, json=_verificacion(decision="QUIZAS")),
+        lambda _: httpx.Response(200, json=_verificacion(causa="OTRA_CAUSA")),
+        lambda _: httpx.Response(404, text="Not Found"),
+    ],
+    ids=[
+        "timeout",
+        "500",
+        "503",
+        "cuerpo-no-json",
+        "decision-desconocida",
+        "causa-desconocida",
+        "404-ajeno",
+    ],
+)
+async def test_el_perfilamiento_no_consulta_fuentes_si_la_verificacion_falla(
+    escenario: Any,
+    nuevo_comando: Any,
+    manejador: Callable[[httpx.Request], httpx.Response],
+) -> None:
+    """Con el adaptador real: el fallo de `clientes` corta en la fase A, antes de las fuentes."""
+    escenario.consentimiento = _clientes(manejador)
+    with pytest.raises(DependenciaNoDisponible) as error:
+        await escenario.caso().ejecutar(nuevo_comando())
+    assert error.value.dependencia == "clientes.consentimiento"
+    assert escenario.ejecutor.llamadas == []
+    assert escenario.repo.perfiles == {}
+
+
+async def test_el_perfilamiento_sigue_viendo_el_cliente_inexistente_del_contrato(
+    escenario: Any, nuevo_comando: Any
+) -> None:
+    """El 404 con `CLIENTE_NO_ENCONTRADO` sigue siendo negocio (404 al usuario), no falla técnica."""
+    no_encontrado = {"codigo": "CLIENTE_NO_ENCONTRADO", "mensaje": "x", "correlationId": None}
+    escenario.consentimiento = _clientes(lambda _: httpx.Response(404, json=no_encontrado))
+    with pytest.raises(ClienteNoEncontrado):
+        await escenario.caso().ejecutar(nuevo_comando())
+    assert escenario.ejecutor.llamadas == []
+    assert escenario.repo.perfiles == {}

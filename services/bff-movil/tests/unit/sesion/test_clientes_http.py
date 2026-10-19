@@ -41,10 +41,10 @@ async def test_respeta_el_prefijo_de_ruta_del_servidor_de_clientes() -> None:
         recibidas.append(request)
         return httpx.Response(200, json={"clienteId": str(CLIENTE_ID), "estado": "VERIFICADO"})
 
-    adaptador = _adaptador(manejador, "http://simulador-aliados:8080/clientes-stub/")
+    adaptador = _adaptador(manejador, "http://pasarela:8080/clientes/")
     await adaptador.obtener(CLIENTE_ID, "actor-1")
 
-    assert recibidas[0].url.path == f"/clientes-stub/v1/clientes/{CLIENTE_ID}/identidad"
+    assert recibidas[0].url.path == f"/clientes/v1/clientes/{CLIENTE_ID}/identidad"
 
 
 async def test_un_404_es_cliente_no_encontrado() -> None:

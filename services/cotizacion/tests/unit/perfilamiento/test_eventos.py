@@ -98,3 +98,30 @@ def test_sin_consentimiento_el_id_es_nulo(perfil_c01: Perfil) -> None:
     for consentimiento in (rechazado, None):
         perfil = replace(perfil_c01, consentimiento=consentimiento)
         assert _json(perfil)[1]["payload"]["consentimientoId"] is None
+
+
+def test_sin_comprobacion_final_el_evento_no_lleva_marca(perfil_c01: Perfil) -> None:
+    payload = _json(perfil_c01)[1]["payload"]
+    assert (payload["comprobacionFinal"], payload["revocadoDurantePerfilamiento"]) == (None, False)
+
+
+def test_la_comprobacion_final_viaja_en_datos_consentidos_consultados(
+    perfil_c01: Perfil,
+) -> None:
+    rechazo = replace(
+        perfil_c01.consentimiento,
+        decision=DecisionConsentimiento.RECHAZADO,
+        consentimiento_id=None,
+        vigente_hasta=None,
+        alcances_permitidos=frozenset(),
+        causa="VENCIDO",
+    )
+    calculado, consultados = _json(replace(perfil_c01, comprobacion_final=rechazo))
+    assert consultados["payload"]["comprobacionFinal"] == {
+        "decision": "RECHAZADO",
+        "causa": "VENCIDO",
+    }
+    assert consultados["payload"]["revocadoDurantePerfilamiento"] is True
+    # El id del consentimiento de la fase A se conserva; PerfilRiesgoCalculado no cambia.
+    assert consultados["payload"]["consentimientoId"] == "00000000-0000-4000-9000-000000000001"
+    assert "comprobacionFinal" not in calculado["payload"]

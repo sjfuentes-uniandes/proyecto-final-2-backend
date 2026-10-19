@@ -2,11 +2,12 @@
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
 import schemathesis
-from clientes.application.consentimientos.puertos import Otorgamiento
+from clientes.application.consentimientos.puertos import Otorgamiento, Revocacion
 from clientes.config import Settings
 from clientes.domain.consentimientos.modelos import (
     ClaveIdempotenciaEnUso,
@@ -14,6 +15,13 @@ from clientes.domain.consentimientos.modelos import (
     ConsentimientoActivoExistente,
     EstadoConsentimiento,
     RegistroIdempotencia,
+    esta_vigente,
+)
+from clientes.domain.consentimientos.verificacion import (
+    LecturaVerificacion,
+    SolicitudVerificacion,
+    Verificacion,
+    decidir,
 )
 from clientes.domain.identidad.modelos import Cliente, EstadoIdentidad
 from clientes.main import crear_app
@@ -30,7 +38,7 @@ ACTOR = {"X-Actor-Id": SUB_CONTRATO, "X-Actor-Rol": "CLIENTE"}
 
 class _ConsentimientosMemoria:
     """Lo mínimo de RepositorioConsentimientos para ejercitar las rutas: un `ACTIVO` por
-    propósito y la clave de idempotencia por cliente."""
+    propósito, la clave de idempotencia por cliente y la revocación de uno vigente."""
 
     def __init__(self) -> None:
         self.consentimientos: dict[UUID, Consentimiento] = {}
@@ -89,6 +97,45 @@ class _ConsentimientosMemoria:
     async def listar(self, cliente_id: UUID) -> list[Consentimiento]:
         return [self._leer(c) for c in self.consentimientos.values() if c.cliente_id == cliente_id]
 
+    async def revocar(self, revocacion: Revocacion) -> Consentimiento | None:
+        c = self.consentimientos.get(revocacion.consentimiento_id)
+        if c is None or c.cliente_id != revocacion.cliente_id:
+            return None
+        ahora = datetime.now(UTC)
+        if esta_vigente(c.estado, c.vigente_hasta, ahora):
+            c = replace(c, estado=EstadoConsentimiento.REVOCADO, revocado_en=ahora)
+            self.consentimientos[c.id] = c
+        return self._leer(c)
+
+
+class _VerificacionesMemoria:
+    """RepositorioVerificaciones sobre los dos repositorios de arriba: el más reciente del
+    propósito y la decisión pura del dominio."""
+
+    def __init__(self, clientes: "_RepositorioMemoria", memoria: _ConsentimientosMemoria) -> None:
+        self._clientes = clientes
+        self._memoria = memoria
+
+    async def verificar(
+        self, cliente_id: UUID, solicitud: SolicitudVerificacion, correlation_id: str
+    ) -> Verificacion | None:
+        if self._clientes.obtener(cliente_id) is None:
+            return None
+        propios = [c for c in self._memoria.consentimientos.values() if c.cliente_id == cliente_id]
+        del_proposito = sorted(
+            (c for c in propios if c.proposito == solicitud.proposito),
+            key=lambda c: c.otorgado_en,
+        )
+        otros = tuple(
+            c.vigente_hasta
+            for c in propios
+            if c.proposito != solicitud.proposito and c.estado is EstadoConsentimiento.ACTIVO
+        )
+        lectura = LecturaVerificacion(
+            cliente_id, datetime.now(UTC), del_proposito[-1] if del_proposito else None, otros
+        )
+        return decidir(solicitud, lectura)
+
 
 class _RepositorioMemoria:
     def __init__(self) -> None:
@@ -145,6 +192,7 @@ app = crear_app(
     transport=httpx.MockTransport(_nominal),
     repositorio=identidad,
     repositorio_consentimientos=consentimientos,
+    repositorio_verificaciones=_VerificacionesMemoria(identidad, consentimientos),
 )
 # Arranca el lifespan una vez: crea el cliente HTTP y los casos de uso en app.state.
 _ciclo = TestClient(app)
@@ -191,3 +239,146 @@ def test_el_barrido_con_titular_llega_a_otorgar() -> None:
         headers={**ACTOR, "Idempotency-Key": str(uuid4())},
     )
     assert respuesta.status_code in (201, 409)
+
+
+def _llamar(metodo: str, ruta: str, **kwargs: object) -> Any:
+    """Llama la operación publicada y valida la respuesta contra su esquema."""
+    caso = schema[ruta][metodo].Case(headers=ACTOR, **kwargs)
+    respuesta = caso.call()
+    caso.validate_response(respuesta, excluded_checks=EXCLUIDOS)
+    return respuesta
+
+
+def test_revocar_e_historial_de_uno_propio_cumplen_el_contrato() -> None:
+    """El barrido solo ve 404 con identificadores aleatorios: aquí se revoca uno real (HU-M09)
+    y se validan las respuestas 200 de revocar (primera vez y repetición) e historial."""
+    titular = identidad.por_sub(SUB_CONTRATO)
+    assert titular is not None
+    ahora = datetime.now(UTC)
+    propio = Consentimiento(
+        id=uuid4(),
+        cliente_id=titular.id,
+        proposito="PERFILAMIENTO_PRECIO",
+        alcances=("FA_PRODUCTOS_VIGENTES",),
+        version_texto="v-contrato",
+        idioma="es-CO",
+        estado=EstadoConsentimiento.ACTIVO,
+        otorgado_en=ahora - timedelta(days=1),
+        vigente_hasta=ahora + timedelta(days=180),
+        revocado_en=None,
+        leido_en=ahora,
+    )
+    consentimientos.consentimientos[propio.id] = propio
+    ruta = "/v1/clientes/actual/consentimientos/{consentimientoId}"
+    parametros = {"consentimientoId": str(propio.id)}
+
+    primera = _llamar("POST", f"{ruta}/revocacion", path_parameters=parametros)
+    repeticion = _llamar("POST", f"{ruta}/revocacion", path_parameters=parametros)
+    historial = _llamar("GET", f"{ruta}/historial", path_parameters=parametros)
+
+    assert (primera.status_code, repeticion.status_code, historial.status_code) == (200,) * 3
+    assert primera.json()["estado"] == "REVOCADO"
+    assert repeticion.json() == primera.json()
+    assert [h["tipo"] for h in historial.json()["hitos"]] == ["OTORGADO", "REVOCADO"]
+
+
+CUATRO = [
+    "FA_PRODUCTOS_VIGENTES",
+    "FA_HISTORIAL_PAGOS_12M",
+    "FA_INGRESOS_AGREGADOS",
+    "DA_REGISTROS_PUBLICOS",
+]
+
+
+def _sembrar_cliente(*consentimientos_del_cliente: dict[str, Any]) -> UUID:
+    """Un cliente nuevo con consentimientos sembrados en memoria."""
+    cliente = Cliente(id=uuid4(), sub=f"sub-{uuid4()}", estado=EstadoIdentidad.VERIFICADO)
+    identidad.guardar(cliente)
+    ahora = datetime.now(UTC)
+    for datos in consentimientos_del_cliente:
+        c = Consentimiento(
+            id=uuid4(),
+            cliente_id=cliente.id,
+            proposito="PERFILAMIENTO_PRECIO",
+            alcances=tuple(CUATRO),
+            version_texto="v-contrato",
+            idioma="es-CO",
+            estado=EstadoConsentimiento.ACTIVO,
+            otorgado_en=ahora - timedelta(days=1),
+            vigente_hasta=ahora + timedelta(days=180),
+            revocado_en=None,
+            leido_en=ahora,
+        )
+        consentimientos.consentimientos[c.id] = replace(c, **datos)
+    return cliente.id
+
+
+def test_cada_decision_de_la_verificacion_cumple_el_contrato() -> None:
+    """El barrido solo ve 404 con clientes aleatorios: aquí se siembra cada caso y se valida la
+    respuesta 200 contra el esquema publicado (HU-W31)."""
+    ahora = datetime.now(UTC)
+    casos = {
+        "PERMITIDO": _sembrar_cliente({}),
+        "PERMITIDO_PARCIAL": _sembrar_cliente({"alcances": ("DA_REGISTROS_PUBLICOS",)}),
+        "REVOCADO": _sembrar_cliente(
+            {"estado": EstadoConsentimiento.REVOCADO, "revocado_en": ahora - timedelta(hours=1)}
+        ),
+        "VENCIDO": _sembrar_cliente({"vigente_hasta": ahora - timedelta(seconds=1)}),
+        "SIN_CONSENTIMIENTO": _sembrar_cliente(),
+        "PROPOSITO_NO_AUTORIZADO": _sembrar_cliente({"proposito": "PROPOSITO_SINTETICO"}),
+    }
+    ruta = "/v1/clientes/{clienteId}/consentimientos/verificaciones"
+    vistos = {}
+    for caso, cliente_id in casos.items():
+        respuesta = _llamar(
+            "POST",
+            ruta,
+            path_parameters={"clienteId": str(cliente_id)},
+            body={"proposito": "PERFILAMIENTO_PRECIO", "alcances": CUATRO},
+        )
+        assert respuesta.status_code == 200, respuesta.text
+        cuerpo = respuesta.json()
+        vistos[caso] = cuerpo["causa"] or cuerpo["decision"]
+
+    assert vistos == {caso: caso for caso in casos}
+
+
+ASESOR = {"X-Actor-Id": "asesor-contrato", "X-Actor-Rol": "ASESOR"}
+
+
+# Con el actor asesor, el barrido de la lectura web pasa del 401/403 y llega a la lógica: 404 con
+# clientes y consentimientos aleatorios y 422 con identificadores inválidos (HU-W31, PR 3.3).
+@schema.include(
+    path_regex=r"^/v1/clientes/\{clienteId\}/consentimientos(/\{consentimientoId\}/historial)?$"
+).parametrize()
+@settings(max_examples=40, deadline=None)
+def test_lectura_web_cumple_su_contrato_con_un_asesor(case: schemathesis.Case) -> None:
+    case.call_and_validate(headers=ASESOR, excluded_checks=EXCLUIDOS)
+
+
+def test_lectura_web_de_un_cliente_con_consentimientos_cumple_el_contrato() -> None:
+    """El barrido solo ve 404: aquí la lista y el historial responden 200 con un activo, un
+    revocado y un vencido, y se validan contra el esquema publicado."""
+    ahora = datetime.now(UTC)
+    cliente_id = _sembrar_cliente(
+        {},
+        {"estado": EstadoConsentimiento.REVOCADO, "revocado_en": ahora - timedelta(hours=1)},
+        {"vigente_hasta": ahora - timedelta(seconds=1)},
+    )
+    ruta = "/v1/clientes/{clienteId}/consentimientos"
+    parametros = {"clienteId": str(cliente_id)}
+    lista = schema[ruta]["GET"].Case(headers=ASESOR, path_parameters=parametros)
+    respuesta = lista.call()
+    lista.validate_response(respuesta, excluded_checks=EXCLUIDOS)
+    assert respuesta.status_code == 200, respuesta.text
+    assert sorted(c["estado"] for c in respuesta.json()) == ["ACTIVO", "REVOCADO", "VENCIDO"]
+
+    for consentimiento in respuesta.json():
+        caso = schema[f"{ruta}/{{consentimientoId}}/historial"]["GET"].Case(
+            headers=ASESOR,
+            path_parameters={**parametros, "consentimientoId": consentimiento["consentimientoId"]},
+        )
+        historial = caso.call()
+        caso.validate_response(historial, excluded_checks=EXCLUIDOS)
+        assert historial.status_code == 200, historial.text
+        assert historial.json()["estado"] == consentimiento["estado"]

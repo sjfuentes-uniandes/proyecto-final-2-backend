@@ -8,6 +8,7 @@ from clientes.domain.consentimientos.modelos import (
     SolicitudOtorgamiento,
 )
 from clientes.domain.consentimientos.textos import TextoLegal
+from clientes.domain.consentimientos.verificacion import SolicitudVerificacion, Verificacion
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +20,16 @@ class Otorgamiento:
     solicitud: SolicitudOtorgamiento
     clave: UUID
     huella: str
+    actor_id: str
+    correlation_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class Revocacion:
+    """Lo que `revocar` necesita: el consentimiento del cliente y quién lo revoca."""
+
+    consentimiento_id: UUID
+    cliente_id: UUID
     actor_id: str
     correlation_id: str
 
@@ -49,6 +60,27 @@ class RepositorioConsentimientos(Protocol):
 
     async def listar(self, cliente_id: UUID) -> list[Consentimiento]:
         """Del más reciente al más antiguo."""
+        ...
+
+    async def revocar(self, revocacion: Revocacion) -> Consentimiento | None:
+        """Revoca en una sola sentencia si el consentimiento está `ACTIVO` y vigente en ese
+        instante, y escribe el evento en el outbox en la misma transacción (ADR 0009).
+
+        Si no lo está (ya `REVOCADO`, `VENCIDO` o `ACTIVO` vencido sin materializar), lo devuelve
+        tal como está, sin cambios ni evento. None si no existe o es de otro cliente.
+        """
+        ...
+
+
+class RepositorioVerificaciones(Protocol):
+    """Verificación sin caché (ADR 0011): cada llamada lee la base y registra su decisión."""
+
+    async def verificar(
+        self, cliente_id: UUID, solicitud: SolicitudVerificacion, correlation_id: str
+    ) -> Verificacion | None:
+        """Lee el cliente y su consentimiento con una sola captura del reloj, decide con la
+        función pura del dominio y escribe `VerificacionConsentimientoRegistrada` en el outbox,
+        todo en una transacción. None si el cliente no existe, sin evento."""
         ...
 
 

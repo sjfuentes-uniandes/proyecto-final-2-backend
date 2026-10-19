@@ -73,6 +73,15 @@ CONSENTIMIENTO = {
     "vigenteHasta": "2027-10-17T23:59:59Z",
     "revocadoEn": None,
 }
+REVOCADO = {**CONSENTIMIENTO, "estado": "REVOCADO", "revocadoEn": "2026-11-02T08:15:00Z"}
+HISTORIAL = {
+    "consentimientoId": CONSENTIMIENTO["consentimientoId"],
+    "estado": "REVOCADO",
+    "hitos": [
+        {"tipo": "OTORGADO", "ocurridoEn": "2026-10-17T15:00:00Z"},
+        {"tipo": "REVOCADO", "ocurridoEn": "2026-11-02T08:15:00Z"},
+    ],
+}
 TEXTO = {
     "proposito": "PERFILAMIENTO_PRECIO",
     "idioma": "es-CO",
@@ -97,8 +106,13 @@ def _clientes_con_consentimientos(request: httpx.Request) -> httpx.Response:
         if request.method == "POST":
             return httpx.Response(201, json=CONSENTIMIENTO)
         return httpx.Response(200, json=[CONSENTIMIENTO])
-    if ruta == f"/v1/clientes/actual/consentimientos/{CONSENTIMIENTO['consentimientoId']}":
+    propio = f"/v1/clientes/actual/consentimientos/{CONSENTIMIENTO['consentimientoId']}"
+    if ruta == propio:
         return httpx.Response(200, json=CONSENTIMIENTO)
+    if ruta == f"{propio}/revocacion":
+        return httpx.Response(200, json=REVOCADO)
+    if ruta == f"{propio}/historial":
+        return httpx.Response(200, json=HISTORIAL)
     if ruta.startswith("/v1/clientes/actual/consentimientos/"):
         return httpx.Response(404, json={"codigo": "CONSENTIMIENTO_NO_ENCONTRADO"})
     raise httpx.ConnectError("ruta de clientes no simulada")
@@ -135,3 +149,25 @@ def test_consentimientos_cumplen_su_contrato_con_un_titular(case: schemathesis.C
         # proposito e idioma los valida `clientes` (422), cubierto en unitarias y de módulo.
         excluidos.append(negative_data_rejection)
     case.call_and_validate(headers=TITULAR, excluded_checks=excluidos)
+
+
+def _llamar(metodo: str, ruta: str, **kwargs: object) -> httpx.Response:
+    """Llama la operación publicada con el titular y valida la respuesta contra su esquema."""
+    caso = schema_titular[ruta][metodo].Case(headers=TITULAR, **kwargs)
+    respuesta = caso.call()
+    caso.validate_response(respuesta, excluded_checks=EXCLUIDOS)
+    return respuesta
+
+
+def test_revocar_e_historial_de_uno_propio_cumplen_el_contrato() -> None:
+    """El barrido casi siempre genera identificadores aleatorios (404): aquí se piden las rutas
+    con el consentimiento simulado y se validan sus 200 contra el esquema publicado (HU-M09)."""
+    ruta = "/v1/consentimientos/{consentimientoId}"
+    parametros = {"consentimientoId": CONSENTIMIENTO["consentimientoId"]}
+
+    revocado = _llamar("POST", f"{ruta}/revocacion", path_parameters=parametros)
+    historial = _llamar("GET", f"{ruta}/historial", path_parameters=parametros)
+
+    assert (revocado.status_code, historial.status_code) == (200, 200)
+    assert revocado.json() == REVOCADO
+    assert historial.json() == HISTORIAL

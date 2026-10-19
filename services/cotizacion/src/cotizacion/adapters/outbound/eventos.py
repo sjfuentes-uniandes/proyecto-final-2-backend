@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
 from cotizacion.domain.perfilamiento.modelos import (
+    DecisionConsentimiento,
     Direccion,
     EstadoFactor,
     EstadoFuente,
@@ -68,12 +69,22 @@ class FuenteConsultadaEvento(_Dto):
     consultada_en: datetime | None
 
 
+class ComprobacionFinalEvento(_Dto):
+    """Decisión de la comprobación final tras consultar las fuentes (HU-W31)."""
+
+    decision: DecisionConsentimiento
+    causa: str | None
+
+
 class DatosConsentidosConsultadosV1(_Dto):
     perfil_id: UUID
     cliente_id: UUID
     consentimiento_id: UUID | None
     proposito: str
     fuentes: list[FuenteConsultadaEvento]
+    # HU-W31 (opcionales, aditivos en v1): ausentes en los eventos anteriores a la comprobación.
+    comprobacion_final: ComprobacionFinalEvento | None = None
+    revocado_durante_perfilamiento: bool = False
 
 
 class SobreEvento[P: (PerfilRiesgoCalculadoV1, DatosConsentidosConsultadosV1)](_Dto):

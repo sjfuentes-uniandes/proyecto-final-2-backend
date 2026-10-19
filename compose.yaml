@@ -156,8 +156,8 @@ services:
       DB_HOST: postgres
       CATALOGO_URL: http://catalogo:8080
       ADAPTADOR_DATOS_URL: http://adaptador-datos:8080
-      # DT-02: identidad y consentimiento contra el stub del simulador hasta que exista clientes.
-      SOLVENTA_CLIENTES_URL: http://simulador-aliados:8080/clientes-stub
+      # Identidad y verificación del consentimiento contra clientes real (PR 3.6).
+      CLIENTES_URL: http://clientes:8080
 
   adaptador-datos:
     <<: *servicio

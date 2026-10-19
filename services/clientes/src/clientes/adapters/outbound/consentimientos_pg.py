@@ -4,7 +4,7 @@ Toda marca de tiempo sale de una única captura de `clock_timestamp()` por sente
 (`WITH t AS MATERIALIZED`): nunca `now()` ni el reloj de la aplicación.
 """
 
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -13,13 +13,19 @@ from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
 from clientes.adapters.outbound import outbox_pg
-from clientes.application.consentimientos.puertos import Otorgamiento
+from clientes.application.consentimientos.puertos import Otorgamiento, Revocacion
 from clientes.domain.consentimientos.modelos import (
     ClaveIdempotenciaEnUso,
     Consentimiento,
     ConsentimientoActivoExistente,
     EstadoConsentimiento,
     RegistroIdempotencia,
+)
+from clientes.domain.consentimientos.verificacion import (
+    LecturaVerificacion,
+    SolicitudVerificacion,
+    Verificacion,
+    decidir,
 )
 
 RETENCION_CLAVES = timedelta(hours=24)
@@ -56,6 +62,26 @@ _INSERTAR = (
     "RETURNING id, cliente_id, proposito, alcances, version_texto, idioma, estado, otorgado_en, "
     "vigente_hasta, revocado_en, otorgado_en AS ahora"
 )
+# ADR 0009: una sola sentencia y una sola captura del reloj para el SET, el WHERE y el RETURNING.
+# Un ACTIVO ya vencido sin materializar no cumple `vigente_hasta > t.ahora` y no se revoca.
+_REVOCAR = (
+    _RELOJ + "UPDATE consentimiento c SET estado = 'REVOCADO', revocado_en = t.ahora FROM t "
+    "WHERE c.id = %s AND c.cliente_id = %s AND c.estado = 'ACTIVO' AND c.vigente_hasta > t.ahora "
+    f"RETURNING {_COLUMNAS}, t.ahora"
+)
+# Verificación (ADR 0010 y 0011): una consulta y una captura del reloj. Trae el cliente (sin él no
+# hay fila: 404), el consentimiento más reciente del propósito (un ACTIVO, si existe, siempre es el
+# más reciente) y el `vigente_hasta` de los ACTIVO de otros propósitos. La vigencia no se decide en
+# SQL: la decide `esta_vigente` con `t.ahora`.
+_VERIFICAR = (
+    _RELOJ + f"SELECT cl.id AS cliente_id_consultado, {_COLUMNAS}, t.ahora, ARRAY("
+    "SELECT o.vigente_hasta FROM consentimiento o WHERE o.cliente_id = cl.id "
+    "AND o.proposito <> %(proposito)s AND o.estado = 'ACTIVO') AS otros_activos_hasta "
+    "FROM cliente cl CROSS JOIN t LEFT JOIN LATERAL ("
+    "SELECT * FROM consentimiento u WHERE u.cliente_id = cl.id AND u.proposito = %(proposito)s "
+    "ORDER BY u.otorgado_en DESC LIMIT 1) c ON true "
+    "WHERE cl.id = %(cliente)s"
+)
 _INSERTAR_CLAVE = (
     "INSERT INTO consentimiento_idempotencia "
     "(cliente_id, clave, hash_cuerpo, consentimiento_id, creado_en) VALUES (%s, %s, %s, %s, %s)"
@@ -78,9 +104,23 @@ def _consentimiento(fila: dict[str, Any]) -> Consentimiento:
     )
 
 
+def _utc(instante: datetime) -> datetime:
+    return instante.astimezone(UTC)
+
+
+def lectura_verificacion(fila: dict[str, Any]) -> LecturaVerificacion:
+    """La fila de `_VERIFICAR`; sin consentimiento del propósito, sus columnas llegan nulas."""
+    return LecturaVerificacion(
+        cliente_id=fila["cliente_id_consultado"],
+        ahora=_utc(fila["ahora"]),
+        consentimiento=_consentimiento(fila) if fila["id"] is not None else None,
+        otros_activos_hasta=tuple(_utc(h) for h in fila["otros_activos_hasta"]),
+    )
+
+
 class ConsentimientosPg:
-    """Implementa RepositorioConsentimientos. Toma una conexión del pool solo durante cada
-    operación."""
+    """Implementa RepositorioConsentimientos y RepositorioVerificaciones. Toma una conexión del
+    pool solo durante cada operación."""
 
     def __init__(self, pool: AsyncConnectionPool) -> None:
         self._pool = pool
@@ -155,3 +195,44 @@ class ConsentimientosPg:
                 raise ClaveIdempotenciaEnUso() from error
             raise
         return creado
+
+    async def revocar(self, revocacion: Revocacion) -> Consentimiento | None:
+        parametros = (revocacion.consentimiento_id, revocacion.cliente_id)
+        async with self._pool.connection() as conexion:
+            async with conexion.transaction():
+                cursor = conexion.cursor(row_factory=dict_row)
+                await cursor.execute(_REVOCAR, parametros)
+                fila = await cursor.fetchone()
+                if fila is not None:
+                    revocado = _consentimiento(fila)
+                    await outbox_pg.insertar(
+                        conexion,
+                        outbox_pg.consentimiento_revocado(
+                            revocado, revocacion.actor_id, revocacion.correlation_id
+                        ),
+                    )
+                    return revocado
+            # 0 filas: ya era final, venció o no es del cliente. Se responde con lo que hay, sin
+            # evento; dos revocaciones simultáneas producen así un solo evento.
+            cursor = conexion.cursor(row_factory=dict_row)
+            await cursor.execute(_POR_ID, parametros)
+            filas = await cursor.fetchall()
+        return _consentimiento(filas[0]) if filas else None
+
+    async def verificar(
+        self, cliente_id: UUID, solicitud: SolicitudVerificacion, correlation_id: str
+    ) -> Verificacion | None:
+        """Lectura, decisión y evento en una transacción: si el insert del outbox falla no se
+        responde ninguna decisión (falla cerrado en quien verifica)."""
+        parametros = {"cliente": cliente_id, "proposito": solicitud.proposito}
+        async with self._pool.connection() as conexion, conexion.transaction():
+            cursor = conexion.cursor(row_factory=dict_row)
+            await cursor.execute(_VERIFICAR, parametros)
+            fila = await cursor.fetchone()
+            if fila is None:
+                return None
+            verificacion = decidir(solicitud, lectura_verificacion(fila))
+            await outbox_pg.insertar(
+                conexion, outbox_pg.verificacion_registrada(verificacion, correlation_id)
+            )
+        return verificacion

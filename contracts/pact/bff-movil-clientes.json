@@ -158,6 +158,441 @@
       "type": "Synchronous/HTTP"
     },
     {
+      "description": "la repetición de una revocación",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el titular ya revocó el consentimiento 00000000-0000-4000-9000-000000000001"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/clientes/actual/consentimientos/00000000-0000-4000-9000-000000000001/revocacion"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "alcances": [
+              "FA_PRODUCTOS_VIGENTES"
+            ],
+            "consentimientoId": "00000000-0000-4000-9000-000000000001",
+            "estado": "REVOCADO",
+            "idioma": "es-CO",
+            "otorgadoEn": "2026-10-17T15:00:00Z",
+            "proposito": "PERFILAMIENTO_PRECIO",
+            "revocadoEn": "2026-11-02T08:15:00Z",
+            "versionTexto": "2026-10-17.1",
+            "vigenteHasta": "2027-10-17T23:59:59Z"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.alcances": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.consentimientoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(ACTIVO|REVOCADO|VENCIDO)$"
+                }
+              ]
+            },
+            "$.idioma": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.otorgadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.proposito": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.revocadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.versionTexto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.vigenteHasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la revocación de un consentimiento activo",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el titular tiene el consentimiento 00000000-0000-4000-9000-000000000001 ACTIVO"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/clientes/actual/consentimientos/00000000-0000-4000-9000-000000000001/revocacion"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "alcances": [
+              "FA_PRODUCTOS_VIGENTES"
+            ],
+            "consentimientoId": "00000000-0000-4000-9000-000000000001",
+            "estado": "REVOCADO",
+            "idioma": "es-CO",
+            "otorgadoEn": "2026-10-17T15:00:00Z",
+            "proposito": "PERFILAMIENTO_PRECIO",
+            "revocadoEn": "2026-11-02T08:15:00Z",
+            "versionTexto": "2026-10-17.1",
+            "vigenteHasta": "2027-10-17T23:59:59Z"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.alcances": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.consentimientoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(ACTIVO|REVOCADO|VENCIDO)$"
+                }
+              ]
+            },
+            "$.idioma": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.otorgadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.proposito": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.revocadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.versionTexto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.vigenteHasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la revocación de un consentimiento ajeno",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el consentimiento 00000000-0000-4000-9000-0000000000ff es de otro cliente"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/clientes/actual/consentimientos/00000000-0000-4000-9000-0000000000ff/revocacion"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "CONSENTIMIENTO_NO_ENCONTRADO",
+            "correlationId": "c0rr3l4c10n",
+            "detalles": {},
+            "mensaje": "Mensaje genérico"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la revocación de un consentimiento vencido",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el consentimiento 00000000-0000-4000-9000-000000000001 del titular ya venció"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/clientes/actual/consentimientos/00000000-0000-4000-9000-000000000001/revocacion"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "alcances": [
+              "FA_PRODUCTOS_VIGENTES"
+            ],
+            "consentimientoId": "00000000-0000-4000-9000-000000000001",
+            "estado": "VENCIDO",
+            "idioma": "es-CO",
+            "otorgadoEn": "2026-10-17T15:00:00Z",
+            "proposito": "PERFILAMIENTO_PRECIO",
+            "revocadoEn": null,
+            "versionTexto": "2026-10-17.1",
+            "vigenteHasta": "2027-10-17T23:59:59Z"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.alcances": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.consentimientoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(ACTIVO|REVOCADO|VENCIDO)$"
+                }
+              ]
+            },
+            "$.idioma": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.otorgadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.proposito": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.versionTexto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.vigenteHasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
       "description": "un otorgamiento cuando ya hay uno vigente",
       "pending": false,
       "providerStates": [
@@ -904,6 +1339,158 @@
                 {
                   "match": "regex",
                   "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una consulta del historial de un consentimiento ajeno",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el consentimiento 00000000-0000-4000-9000-0000000000ff es de otro cliente"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/clientes/actual/consentimientos/00000000-0000-4000-9000-0000000000ff/historial"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "CONSENTIMIENTO_NO_ENCONTRADO",
+            "correlationId": "c0rr3l4c10n",
+            "detalles": {},
+            "mensaje": "Mensaje genérico"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una consulta del historial de un consentimiento revocado",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el titular ya revocó el consentimiento 00000000-0000-4000-9000-000000000001"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/clientes/actual/consentimientos/00000000-0000-4000-9000-000000000001/historial"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "consentimientoId": "00000000-0000-4000-9000-000000000001",
+            "estado": "REVOCADO",
+            "hitos": [
+              {
+                "ocurridoEn": "2026-10-17T15:00:00Z",
+                "tipo": "OTORGADO"
+              }
+            ]
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.consentimientoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(ACTIVO|REVOCADO|VENCIDO)$"
+                }
+              ]
+            },
+            "$.hitos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.hitos[*].ocurridoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.hitos[*].tipo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(OTORGADO|REVOCADO|VENCIDO)$"
                 }
               ]
             }

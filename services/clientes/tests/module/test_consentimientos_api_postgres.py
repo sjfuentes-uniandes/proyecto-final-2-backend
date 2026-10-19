@@ -1,5 +1,5 @@
 """Pruebas de módulo de la API de consentimientos: la app real contra un Postgres real
-(HU-M08, PR 1.4).
+(HU-M08, PR 1.4; revocación e historial de HU-M09, PR 2.4).
 
 La app se ensambla como en producción (sin repositorios inyectados): migra, abre el
 `AsyncConnectionPool` en el ciclo de vida y lo cierra al apagar. Solo se sustituye el transporte
@@ -34,6 +34,9 @@ SUB = "sub-titular-a"
 OTRO_SUB = "sub-titular-b"
 EVENTOS = Path(__file__).parents[4] / "contracts" / "events"
 ESQUEMA_EVENTO = json.loads((EVENTOS / "ConsentimientoOtorgado.v1.schema.json").read_text("utf-8"))
+ESQUEMA_REVOCADO = json.loads(
+    (EVENTOS / "ConsentimientoRevocado.v1.schema.json").read_text("utf-8")
+)
 
 
 @pytest.fixture
@@ -426,3 +429,232 @@ async def test_el_pool_se_abre_con_el_tamano_configurado_y_se_cierra_al_apagar()
         assert (pool.min_size, pool.max_size, pool.closed) == (2, 3, False)
 
     assert pool.closed
+
+
+# --- Revocación e historial (HU-M09, PR 2.4) ---------------------------------------------------
+
+
+def _z(instante: datetime) -> str:
+    return instante.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+async def _otorgado(api: httpx.AsyncClient, sub: str = SUB) -> dict[str, Any]:
+    respuesta = await api.post(RUTA, json=await _cuerpo(api), headers=_con_clave(sub=sub))
+    assert respuesta.status_code == 201, respuesta.text
+    return respuesta.json()
+
+
+async def test_otorgar_revocar_y_consultar_el_historial(api: httpx.AsyncClient, base: str) -> None:
+    """AC1 y AC4 de punta a punta en `clientes` (el R8 llega en la PR 2.6): el estado, el
+    detalle, la lista y el historial coinciden con la fila, y el evento cumple su esquema."""
+    cliente_id = _titular(base)
+    otorgado = await _otorgado(api)
+    consentimiento_id = otorgado["consentimientoId"]
+
+    respuesta = await api.post(f"{RUTA}/{consentimiento_id}/revocacion", headers=_actor())
+
+    assert respuesta.status_code == 200, respuesta.text
+    revocado = respuesta.json()
+    assert revocado["estado"] == "REVOCADO"
+    ((estado, revocado_en),) = _sql(
+        base, "SELECT estado, revocado_en FROM consentimiento WHERE id = %s", (consentimiento_id,)
+    )
+    assert (estado, revocado["revocadoEn"]) == ("REVOCADO", _z(revocado_en))
+    assert (await api.get(f"{RUTA}/{consentimiento_id}", headers=_actor())).json() == revocado
+    assert (await api.get(RUTA, headers=_actor())).json() == [revocado]
+    historial = (await api.get(f"{RUTA}/{consentimiento_id}/historial", headers=_actor())).json()
+    assert historial == {
+        "consentimientoId": consentimiento_id,
+        "estado": "REVOCADO",
+        "hitos": [
+            {"tipo": "OTORGADO", "ocurridoEn": otorgado["otorgadoEn"]},
+            {"tipo": "REVOCADO", "ocurridoEn": revocado["revocadoEn"]},
+        ],
+    }
+
+    ((event_id, tipo, version, agregado, correlacion, publicado, payload, ocurrido),) = _sql(
+        base,
+        "SELECT event_id, event_type, event_version, aggregate_id, correlation_id, published_at, "
+        "payload, occurred_at FROM outbox WHERE event_type = 'ConsentimientoRevocado'",
+    )
+    assert (str(agregado), correlacion, publicado, ocurrido) == (
+        consentimiento_id,
+        CORRELACION,
+        None,
+        revocado_en,
+    )
+    assert payload == {
+        "consentimientoId": consentimiento_id,
+        "clienteId": str(cliente_id),
+        "revocadoEn": revocado_en.isoformat(),
+        "actorId": SUB,
+    }
+    Draft202012Validator(
+        ESQUEMA_REVOCADO, format_checker=Draft202012Validator.FORMAT_CHECKER
+    ).validate(
+        {
+            "eventId": str(event_id),
+            "aggregateId": str(agregado),
+            "type": tipo,
+            "version": version,
+            "occurredAt": _z(ocurrido),
+            "correlationId": correlacion,
+            "aggregateVersion": 2,  # ADR 0009: lo deriva el relay del tipo; no es columna
+            "payload": payload,
+        }
+    )
+
+
+async def test_revocar_otra_vez_responde_igual_sin_otro_evento(
+    api: httpx.AsyncClient, base: str
+) -> None:
+    """AC3: mismo estado y un solo evento."""
+    _titular(base)
+    otorgado = await _otorgado(api)
+    ruta = f"{RUTA}/{otorgado['consentimientoId']}/revocacion"
+    primera = await api.post(ruta, headers=_actor())
+    segunda = await api.post(ruta, headers=_actor())
+    assert (primera.status_code, segunda.status_code) == (200, 200)
+    assert segunda.json() == primera.json()
+    assert _sql(
+        base, "SELECT count(*) FROM outbox WHERE event_type = 'ConsentimientoRevocado'"
+    ) == [(1,)]
+
+
+async def test_revocaciones_concurrentes_por_la_api_dejan_un_solo_evento(
+    api: httpx.AsyncClient, base: str
+) -> None:
+    _titular(base)
+    otorgado = await _otorgado(api)
+    ruta = f"{RUTA}/{otorgado['consentimientoId']}/revocacion"
+    respuestas = await asyncio.gather(*(api.post(ruta, headers=_actor()) for _ in range(6)))
+    assert {r.status_code for r in respuestas} == {200}
+    assert len({r.json()["revocadoEn"] for r in respuestas}) == 1
+    assert _sql(
+        base, "SELECT count(*) FROM outbox WHERE event_type = 'ConsentimientoRevocado'"
+    ) == [(1,)]
+
+
+async def test_revocar_un_activo_vencido_responde_vencido_sin_tocar_la_fila(
+    api: httpx.AsyncClient, base: str
+) -> None:
+    cliente_id = _titular(base)
+    vencido = uuid4()
+    ahora = datetime.now(UTC)
+    _sql(
+        base,
+        "INSERT INTO consentimiento (id, cliente_id, proposito, alcances, version_texto, idioma, "
+        "estado, otorgado_en, vigente_hasta) VALUES (%s, %s, 'PERFILAMIENTO_PRECIO', "
+        "ARRAY['FA_PRODUCTOS_VIGENTES'], 'v0', 'es-CO', 'ACTIVO', %s, %s)",
+        (vencido, cliente_id, ahora - timedelta(days=400), ahora - timedelta(days=35)),
+    )
+    respuesta = await api.post(f"{RUTA}/{vencido}/revocacion", headers=_actor())
+    assert respuesta.status_code == 200
+    assert (respuesta.json()["estado"], respuesta.json()["revocadoEn"]) == ("VENCIDO", None)
+    historial = (await api.get(f"{RUTA}/{vencido}/historial", headers=_actor())).json()
+    assert [h["tipo"] for h in historial["hitos"]] == ["OTORGADO", "VENCIDO"]
+    assert _sql(base, "SELECT estado, revocado_en FROM consentimiento") == [("ACTIVO", None)]
+    assert _conteos(base) == (1, 0, 0)
+
+
+async def test_un_titular_no_revoca_ni_ve_el_historial_de_otro(
+    api: httpx.AsyncClient, base: str
+) -> None:
+    _titular(base, SUB)
+    _titular(base, OTRO_SUB)
+    ajeno = await _otorgado(api, OTRO_SUB)
+    for respuesta in (
+        await api.post(f"{RUTA}/{ajeno['consentimientoId']}/revocacion", headers=_actor()),
+        await api.get(f"{RUTA}/{ajeno['consentimientoId']}/historial", headers=_actor()),
+        await api.post(f"{RUTA}/{uuid4()}/revocacion", headers=_actor()),
+    ):
+        assert respuesta.status_code == 404
+        assert respuesta.json()["codigo"] == "CONSENTIMIENTO_NO_ENCONTRADO"
+    assert _sql(base, "SELECT estado FROM consentimiento") == [("ACTIVO",)]
+    assert _sql(
+        base, "SELECT count(*) FROM outbox WHERE event_type = 'ConsentimientoRevocado'"
+    ) == [(0,)]
+
+
+async def test_tras_revocar_se_otorga_uno_nuevo_y_la_lista_conserva_ambos(
+    api: httpx.AsyncClient, base: str
+) -> None:
+    """La lista de la Parte 1 sigue siendo un arreglo e incluye el revocado (compatibilidad N-1)."""
+    _titular(base)
+    primero = await _otorgado(api)
+    await api.post(f"{RUTA}/{primero['consentimientoId']}/revocacion", headers=_actor())
+    segundo = await _otorgado(api)
+    lista = (await api.get(RUTA, headers=_actor())).json()
+    assert [(c["consentimientoId"], c["estado"]) for c in lista] == [
+        (segundo["consentimientoId"], "ACTIVO"),
+        (primero["consentimientoId"], "REVOCADO"),
+    ]
+
+
+ASESOR = {"X-Actor-Id": "asesor-sintetico", "X-Actor-Rol": "ASESOR"}
+
+
+def _web(cliente_id: Any) -> str:
+    return f"/v1/clientes/{cliente_id}/consentimientos"
+
+
+async def test_lectura_web_deriva_el_vencido_con_el_reloj_de_la_base_sin_escribir(
+    api: httpx.AsyncClient, base: str
+) -> None:
+    """HU-W31, PR 3.3: el asesor lee por `clienteId`. Un `ACTIVO` almacenado cuyo `vigente_hasta`
+    ya pasó se lee `VENCIDO` (ADR 0009), sin materializarlo ni escribir en el outbox."""
+    cliente_id = _titular(base)
+    revocado = await _otorgado(api)
+    await api.post(f"{RUTA}/{revocado['consentimientoId']}/revocacion", headers=_actor())
+    vencido = uuid4()
+    ahora = datetime.now(UTC)
+    _sql(
+        base,
+        "INSERT INTO consentimiento (id, cliente_id, proposito, alcances, version_texto, idioma, "
+        "estado, otorgado_en, vigente_hasta) VALUES (%s, %s, 'PERFILAMIENTO_PRECIO', "
+        "ARRAY['FA_PRODUCTOS_VIGENTES'], 'v0', 'es-CO', 'ACTIVO', %s, %s)",
+        (vencido, cliente_id, ahora - timedelta(days=400), ahora - timedelta(seconds=1)),
+    )
+    antes = _conteos(base)
+
+    lista = await api.get(_web(cliente_id), headers=ASESOR)
+    historial = await api.get(f"{_web(cliente_id)}/{vencido}/historial", headers=ASESOR)
+
+    assert lista.status_code == 200, lista.text
+    assert [(c["consentimientoId"], c["estado"]) for c in lista.json()] == [
+        (revocado["consentimientoId"], "REVOCADO"),
+        (str(vencido), "VENCIDO"),
+    ]
+    assert lista.json() == (await api.get(RUTA, headers=_actor())).json()
+    assert historial.status_code == 200, historial.text
+    assert historial.json()["estado"] == "VENCIDO"
+    assert [h["tipo"] for h in historial.json()["hitos"]] == ["OTORGADO", "VENCIDO"]
+    assert _conteos(base) == antes
+    assert _sql(base, "SELECT estado FROM consentimiento WHERE id = %s", (vencido,)) == [
+        ("ACTIVO",)
+    ]
+
+
+async def test_lectura_web_aisla_clientes_y_exige_al_asesor(
+    api: httpx.AsyncClient, base: str
+) -> None:
+    cliente_id = _titular(base, SUB)
+    otro_id = _titular(base, OTRO_SUB)
+    ajeno = await _otorgado(api, OTRO_SUB)
+
+    assert (await api.get(_web(cliente_id), headers=ASESOR)).json() == []
+    assert len((await api.get(_web(otro_id), headers=ASESOR)).json()) == 1
+    for respuesta, codigo in (
+        (await api.get(_web(uuid4()), headers=ASESOR), "CLIENTE_NO_ENCONTRADO"),
+        (
+            await api.get(
+                f"{_web(cliente_id)}/{ajeno['consentimientoId']}/historial", headers=ASESOR
+            ),
+            "CONSENTIMIENTO_NO_ENCONTRADO",
+        ),
+    ):
+        assert respuesta.status_code == 404
+        assert respuesta.json()["codigo"] == codigo
+    # Un titular no lee por `clienteId`, ni siquiera el propio (ADR 0006).
+    propio = await api.get(_web(cliente_id), headers=_actor())
+    assert (propio.status_code, propio.json()["codigo"]) == (403, "ROL_NO_AUTORIZADO")

@@ -37,48 +37,22 @@ def test_mapeos_versionados_identicos_a_los_generados(subcomando: str) -> None:
 
 
 def test_escribir_reemplaza_los_anteriores(tmp_path: Path) -> None:
-    carpeta = tmp_path / "mappings" / "clientes-stub"
+    carpeta = tmp_path / "mappings" / "open-finance"
     carpeta.mkdir(parents=True)
     (carpeta / "viejo.json").write_text("{}", encoding="utf-8")
     (carpeta / ".gitkeep").write_text("", encoding="utf-8")
-    archivos = gm.generar(["clientes-stub"], CASOS)
-    gm.escribir(archivos, gm.carpetas_de(["clientes-stub"]), tmp_path)
+    archivos = gm.generar(["aliados"], CASOS)
+    gm.escribir(archivos, gm.carpetas_de(["aliados"]), tmp_path)
     assert not (carpeta / "viejo.json").exists()
     assert (carpeta / ".gitkeep").exists()
-    assert len(list(carpeta.glob("*.json"))) == len(archivos)
+    assert len(list(carpeta.glob("*.json"))) == len(
+        [r for r in archivos if r.startswith("mappings/open-finance/")]
+    )
 
 
 def test_todos_los_mapeos_son_json_validos() -> None:
     for ruta in (SIMULADOR / "mappings").rglob("*.json"):
         json.loads(ruta.read_text(encoding="utf-8"))
-
-
-def _respuesta(ruta: str) -> dict:
-    return gm.generar(["clientes-stub"], CASOS)[ruta]["response"]
-
-
-def test_stub_identidad_y_consentimiento_segun_los_casos() -> None:
-    assert len(CASOS) == 19
-    identidad = _respuesta("mappings/clientes-stub/c11-identidad.json")["jsonBody"]
-    assert identidad["estado"] == "RECHAZADO" and identidad["verificadoEn"] is None
-    c08 = _respuesta("mappings/clientes-stub/c08-consentimiento.json")["jsonBody"]
-    assert c08["decision"] == "RECHAZADO" and c08["causa"] == "REVOCADO"
-    assert c08["consentimientoId"] is None and c08["vigenteHasta"] is None
-    assert c08["alcancesPermitidos"] == []
-    c02 = _respuesta("mappings/clientes-stub/c02-consentimiento.json")["jsonBody"]
-    assert c02["vigenteHasta"] == gm.VIGENTE_HASTA
-    assert c02["alcancesRechazados"] == [
-        {"alcance": "FA_INGRESOS_AGREGADOS", "causa": "ALCANCE_NO_AUTORIZADO"}
-    ]
-
-
-def test_stub_respaldo_404_con_menor_prioridad() -> None:
-    respaldos = [m for r, m in gm.generar(["clientes-stub"], CASOS).items() if "no-encontrado" in r]
-    assert len(respaldos) == 2
-    for mapeo in respaldos:
-        assert mapeo["priority"] == gm.PRIORIDAD_RESPALDO
-        assert mapeo["response"]["status"] == 404
-        assert mapeo["response"]["jsonBody"]["codigo"] == "CLIENTE_NO_ENCONTRADO"
 
 
 def test_main_escribe_las_carpetas_del_subcomando(monkeypatch: pytest.MonkeyPatch) -> None:

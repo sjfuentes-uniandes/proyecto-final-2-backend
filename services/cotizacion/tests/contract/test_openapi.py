@@ -43,3 +43,51 @@ def test_contrato_de_perfiles() -> None:
         "calculadoEn",
         "perfilAnteriorId",
     }
+
+
+# Obligatorios de PerfilRespuesta antes de HU-W31: los campos nuevos no pueden entrar aquí.
+OBLIGATORIOS_V1 = [
+    "id",
+    "clienteId",
+    "productoId",
+    "estado",
+    "nivelRiesgo",
+    "puntaje",
+    "confianza",
+    "factores",
+    "ajustes",
+    "datosRequeridos",
+    "accionSugerida",
+    "consentimiento",
+    "fuentes",
+    "fuentesConsultadas",
+    "fuentesDeclaradas",
+    "versionModelo",
+    "calculadoEn",
+    "duracionMs",
+    "presupuestoMs",
+    "perfilAnteriorId",
+]
+
+
+def test_hu_w31_la_marca_de_revocacion_es_aditiva_y_opcional() -> None:
+    esquemas = app.openapi()["components"]["schemas"]
+    perfil = esquemas["PerfilRespuesta"]
+    assert perfil["required"] == OBLIGATORIOS_V1
+    comprobacion = perfil["properties"]["comprobacionFinal"]
+    assert comprobacion["anyOf"] == [
+        {"$ref": "#/components/schemas/ConsentimientoDto"},
+        {"type": "null"},
+    ]
+    marca = perfil["properties"]["revocadoDurantePerfilamiento"]
+    assert (marca["type"], marca["default"]) == ("boolean", False)
+    # Sin valores de enumeración nuevos: la comprobación reutiliza DecisionConsentimiento.
+    assert esquemas["DecisionConsentimiento"]["enum"] == [
+        "PERMITIDO",
+        "PERMITIDO_PARCIAL",
+        "RECHAZADO",
+    ]
+    # ResumenPerfil (listados) no cambia en esta PR.
+    assert not {"comprobacionFinal", "revocadoDurantePerfilamiento"} & set(
+        esquemas["ResumenPerfil"]["properties"]
+    )

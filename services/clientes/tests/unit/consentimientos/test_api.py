@@ -1,4 +1,5 @@
-"""API de consentimientos con repositorios en memoria (HU-M08: AC1, AC3, AC4 y aislamiento)."""
+"""API de consentimientos con repositorios en memoria (HU-M08: AC1, AC3, AC4 y aislamiento;
+HU-M09: AC1, AC3, AC4)."""
 
 from collections.abc import Callable, Iterator
 from dataclasses import replace
@@ -345,6 +346,158 @@ def test_el_cliente_sale_del_token_nunca_del_cuerpo(
     assert respuesta.status_code == 201
     (creado,) = consentimientos.consentimientos.values()
     assert creado.cliente_id == propio.id
+
+
+def _revocar(api: TestClient, consentimiento_id: str, sub: str = SUB) -> httpx.Response:
+    return api.post(f"{RUTA}/{consentimiento_id}/revocacion", headers=actor(sub))
+
+
+def _revocados(consentimientos: Any) -> list[dict[str, Any]]:
+    return [e for e in consentimientos.eventos if e["tipo"] == "ConsentimientoRevocado"]
+
+
+def test_revocar_responde_200_con_el_consentimiento_revocado(
+    api: TestClient, titular: Any, consentimientos: Any, reloj: Any
+) -> None:
+    """HU-M09 AC1: estado REVOCADO con la fecha efectiva; el resto del comprobante no cambia."""
+    titular()
+    creado = api.post(RUTA, json=CUERPO, headers=con_clave()).json()
+    reloj.avanzar(timedelta(hours=2))
+    respuesta = _revocar(api, creado["consentimientoId"])
+    assert respuesta.status_code == 200, respuesta.text
+    revocado = respuesta.json()
+    assert revocado["estado"] == "REVOCADO"
+    assert revocado["revocadoEn"] == reloj.ahora.isoformat().replace("+00:00", "Z")
+    assert {k: v for k, v in revocado.items() if k not in ("estado", "revocadoEn")} == {
+        k: v for k, v in creado.items() if k not in ("estado", "revocadoEn")
+    }
+    assert api.get(f"{RUTA}/{creado['consentimientoId']}", headers=actor()).json() == revocado
+    assert len(_revocados(consentimientos)) == 1
+
+
+def test_revocar_otra_vez_responde_el_mismo_cuerpo_sin_otro_evento(
+    api: TestClient, titular: Any, consentimientos: Any, reloj: Any
+) -> None:
+    """HU-M09 AC3: idempotente por estado, sin Idempotency-Key."""
+    titular()
+    creado = api.post(RUTA, json=CUERPO, headers=con_clave()).json()
+    primera = _revocar(api, creado["consentimientoId"])
+    reloj.avanzar(timedelta(minutes=1))
+    segunda = _revocar(api, creado["consentimientoId"])
+    assert (primera.status_code, segunda.status_code) == (200, 200)
+    assert segunda.json() == primera.json()
+    assert len(_revocados(consentimientos)) == 1
+
+
+def test_revocar_un_vencido_responde_200_como_vencido(
+    api: TestClient, titular: Any, consentimientos: Any, reloj: Any
+) -> None:
+    titular()
+    creado = api.post(RUTA, json={**CUERPO, "vigenciaMeses": 6}, headers=con_clave()).json()
+    reloj.avanzar(timedelta(days=200))
+    respuesta = _revocar(api, creado["consentimientoId"])
+    assert respuesta.status_code == 200
+    assert (respuesta.json()["estado"], respuesta.json()["revocadoEn"]) == ("VENCIDO", None)
+    assert _revocados(consentimientos) == []
+
+
+def test_404_revocar_ajeno_o_inexistente_o_sin_cliente(
+    api: TestClient, titular: Any, consentimientos: Any
+) -> None:
+    titular(OTRO_SUB)
+    ajeno = api.post(RUTA, json=CUERPO, headers=con_clave(sub=OTRO_SUB)).json()
+    sin_cliente = _revocar(api, ajeno["consentimientoId"])
+    titular(SUB)
+    respuestas = [_revocar(api, ajeno["consentimientoId"]), _revocar(api, str(uuid4()))]
+    for respuesta in [sin_cliente, *respuestas]:
+        _error(respuesta, 404, "CONSENTIMIENTO_NO_ENCONTRADO")
+    assert respuestas[0].json()["mensaje"] == respuestas[1].json()["mensaje"]
+    assert api.get(RUTA, headers=actor(OTRO_SUB)).json()[0]["estado"] == "ACTIVO"
+    assert _revocados(consentimientos) == []
+
+
+def test_revocar_exige_al_actor_cliente_y_un_id_valido(api: TestClient) -> None:
+    ruta = f"{RUTA}/{uuid4()}/revocacion"
+    _error(api.post(ruta), 401, "ACTOR_REQUERIDO")
+    _error(
+        api.post(ruta, headers={"X-Actor-Id": SUB, "X-Actor-Rol": "ASESOR"}),
+        403,
+        "ROL_NO_AUTORIZADO",
+    )
+    _error(api.post(f"{RUTA}/no-es-uuid/revocacion", headers=actor()), 422, "SOLICITUD_INVALIDA")
+
+
+def test_historial_de_un_activo_y_de_un_revocado(api: TestClient, titular: Any, reloj: Any) -> None:
+    """HU-M09 AC4: el titular ve cuándo se otorgó y cuándo se revocó."""
+    titular()
+    creado = api.post(RUTA, json=CUERPO, headers=con_clave()).json()
+    ruta = f"{RUTA}/{creado['consentimientoId']}/historial"
+    antes = api.get(ruta, headers=actor())
+    assert antes.status_code == 200, antes.text
+    assert antes.json() == {
+        "consentimientoId": creado["consentimientoId"],
+        "estado": "ACTIVO",
+        "hitos": [{"tipo": "OTORGADO", "ocurridoEn": creado["otorgadoEn"]}],
+    }
+    reloj.avanzar(timedelta(days=1))
+    revocado = _revocar(api, creado["consentimientoId"]).json()
+    despues = api.get(ruta, headers=actor()).json()
+    assert despues == {
+        "consentimientoId": creado["consentimientoId"],
+        "estado": "REVOCADO",
+        "hitos": [
+            {"tipo": "OTORGADO", "ocurridoEn": creado["otorgadoEn"]},
+            {"tipo": "REVOCADO", "ocurridoEn": revocado["revocadoEn"]},
+        ],
+    }
+
+
+def test_historial_de_un_vencido(api: TestClient, titular: Any, reloj: Any) -> None:
+    titular()
+    creado = api.post(RUTA, json={**CUERPO, "vigenciaMeses": 6}, headers=con_clave()).json()
+    reloj.avanzar(timedelta(days=200))
+    cuerpo = api.get(f"{RUTA}/{creado['consentimientoId']}/historial", headers=actor()).json()
+    assert cuerpo["estado"] == "VENCIDO"
+    assert cuerpo["hitos"] == [
+        {"tipo": "OTORGADO", "ocurridoEn": creado["otorgadoEn"]},
+        {"tipo": "VENCIDO", "ocurridoEn": creado["vigenteHasta"]},
+    ]
+
+
+def test_404_historial_ajeno_inexistente_o_sin_cliente(api: TestClient, titular: Any) -> None:
+    _error(
+        api.get(f"{RUTA}/{uuid4()}/historial", headers=actor()), 404, "CONSENTIMIENTO_NO_ENCONTRADO"
+    )
+    titular(SUB)
+    titular(OTRO_SUB)
+    ajeno = api.post(RUTA, json=CUERPO, headers=con_clave(sub=OTRO_SUB)).json()
+    for consentimiento_id in (ajeno["consentimientoId"], str(uuid4())):
+        _error(
+            api.get(f"{RUTA}/{consentimiento_id}/historial", headers=actor()),
+            404,
+            "CONSENTIMIENTO_NO_ENCONTRADO",
+        )
+
+
+def test_la_lista_sigue_siendo_un_arreglo_e_incluye_revocados_y_vencidos(
+    api: TestClient, titular: Any, reloj: Any
+) -> None:
+    """Compatibilidad N-1: la forma de la lista de la Parte 1 no cambia."""
+    titular()
+    vencido = api.post(RUTA, json={**CUERPO, "vigenciaMeses": 6}, headers=con_clave()).json()
+    reloj.avanzar(timedelta(days=200))
+    revocado = api.post(RUTA, json=CUERPO, headers=con_clave()).json()
+    _revocar(api, revocado["consentimientoId"])
+    reloj.avanzar(timedelta(seconds=1))
+    activo = api.post(RUTA, json=CUERPO, headers=con_clave()).json()
+    lista = api.get(RUTA, headers=actor()).json()
+    assert isinstance(lista, list)
+    assert [(c["consentimientoId"], c["estado"]) for c in lista] == [
+        (activo["consentimientoId"], "ACTIVO"),
+        (revocado["consentimientoId"], "REVOCADO"),
+        (vencido["consentimientoId"], "VENCIDO"),
+    ]
+    assert all(set(c) == set(activo) for c in lista)
 
 
 def test_texto_vigente(api: TestClient) -> None:

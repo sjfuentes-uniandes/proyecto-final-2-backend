@@ -6,7 +6,7 @@ import io
 import json
 import logging
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -376,6 +376,10 @@ class Escenario:
     repo: RepositorioPerfilesMemoria
     reloj: RelojFijo
     config: ConfigPerfilamiento
+    # Comprobación final tras la fase B (HU-W31, ADR 0011 §3): vigente por omisión.
+    comprobacion: ConsentimientoFalso = field(
+        default_factory=lambda: ConsentimientoFalso(verificacion())
+    )
 
     def caso(self) -> CrearPerfil:
         return CrearPerfil(
@@ -387,6 +391,7 @@ class Escenario:
             repo=self.repo,
             reloj=self.reloj,
             config=self.config,
+            comprobacion=self.comprobacion,
         )
 
 
