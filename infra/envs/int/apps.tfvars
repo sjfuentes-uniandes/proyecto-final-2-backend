@@ -14,9 +14,13 @@ paused = false
 
 cpu_target = 60
 
-# service_overrides = {
-#   cotizacion = { cpu = 512, memory = 1024, max = 5 }
-# }
+# Recorrido de perfilamiento (DEF-03): con 0,25 vCPU, Fargate limita la CPU en ráfagas y
+# las cuatro fuentes en paralelo superan su presupuesto de 300 ms.
+service_overrides = {
+  simulador-aliados = { cpu = 1024, memory = 2048 }
+  adaptador-datos   = { cpu = 512, memory = 1024 }
+  cotizacion        = { cpu = 512, memory = 1024 }
+}
 
 enable_tracing = true
 
