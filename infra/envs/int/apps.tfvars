@@ -35,6 +35,12 @@ enable_tracing = true
 # La semilla de reglas de W11 AC4 (CATALOGO_SEMILLA_QA) NO va aquí: solo en la rama qa/s1-semilla-reglas.
 service_environment = {
   clientes = { CLIENTES_SEMILLA_SINTETICA = "true" }
+  # DEF-03: en int cada salto por Service Connect suma 60–100 ms y una fuente pasa por dos
+  # (cotizacion → adaptador-datos → simulador). Presupuestos con margen, sin pasar el corte de 700 ms.
+  cotizacion = {
+    SOLVENTA_FUENTE_TIMEOUT_MS      = "600"
+    SOLVENTA_DEPENDENCIA_TIMEOUT_MS = "300"
+  }
 }
 
 ally_timeouts_ms = {
