@@ -9,13 +9,19 @@ updates:
   - package-ecosystem: docker
     directories:
       - /services/adaptador-datos
+      - /services/adaptador-firma
       - /services/adaptador-identidad
+      - /services/adaptador-pagos
       - /services/api-socios
       - /services/auditoria
+      - /services/avisos
       - /services/bff-movil
       - /services/bff-web
       - /services/catalogo
       - /services/clientes
+      - /services/consulta
       - /services/cotizacion
+      - /services/dinero
+      - /services/polizas
       - /services/simulador-aliados
     schedule: { interval: weekly }
