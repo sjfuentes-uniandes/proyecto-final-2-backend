@@ -66,3 +66,15 @@ resource "aws_vpc_security_group_ingress_rule" "database" {
   to_port                      = 5432
   description                  = each.key
 }
+
+# Caché (cache_enabled en platform): solo las tareas de los servicios con
+# `cache = true` llegan a Valkey por TLS.
+resource "aws_vpc_security_group_ingress_rule" "cache" {
+  for_each                     = local.p.cache.enabled ? { for name, service in local.deployed : name => service if service.cache } : {}
+  security_group_id            = local.p.cache.security_group_id
+  referenced_security_group_id = aws_security_group.service[each.key].id
+  ip_protocol                  = "tcp"
+  from_port                    = 6379
+  to_port                      = 6379
+  description                  = each.key
+}

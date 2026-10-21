@@ -12,6 +12,13 @@ locals {
   # Capacidades que no se derivan del catálogo.
   audit_writers  = ["auditoria"]
   partner_admins = ["api-socios"]
+  # HU-W17: solo polizas escribe documentos de póliza. Lo leen quienes firman las
+  # URL prefirmadas: polizas al emitir (portal) y consulta en la billetera móvil
+  # (HU-M10), porque bff-movil no llama a polizas. Ningún BFF accede al bucket.
+  document_writers = ["polizas"]
+  document_readers = ["polizas", "consulta"]
+  # HU-W05: presupuesto de latencia por operación (LATENCY_BUDGET_MS).
+  latency_budget_readers = ["cotizacion"]
   # HU-M06: firma el token de registro con el secreto de la plataforma.
   registro_token_issuers = ["clientes"]
   # HU-W27: pantalla Operación › Trazas del portal (consulta X-Ray por correlationId).
@@ -126,6 +133,14 @@ locals {
         { Effect = "Allow", Action = ["s3:PutObject", "s3:GetObject", "s3:GetObjectVersion"], Resource = ["${local.p.audit_bucket.arn}/*"] },
         { Effect = "Allow", Action = ["s3:ListBucket"], Resource = [local.p.audit_bucket.arn] },
       ] : [],
+      # Documentos de póliza: escritura cifrada (la política del bucket exige el
+      # encabezado de cifrado) y lectura para firmar URL prefirmadas.
+      contains(local.document_writers, name) ? [
+        { Effect = "Allow", Action = ["s3:PutObject"], Resource = ["${local.p.policy_documents_bucket.arn}/*"] },
+      ] : [],
+      contains(local.document_readers, name) ? [
+        { Effect = "Allow", Action = ["s3:GetObject", "s3:GetObjectVersion"], Resource = ["${local.p.policy_documents_bucket.arn}/*"] },
+      ] : [],
       # HU-W01/HU-W02: alta, desactivación y cuota de socios en tiempo de ejecución.
       contains(local.partner_admins, name) ? [
         {
@@ -167,8 +182,8 @@ locals {
           Condition = { StringEquals = { "cloudwatch:namespace" = "Solventa/Socios" } }
         },
       ] : [],
-      # Clave de la plataforma para mensajería y auditoría cifradas.
-      local.p.kms_key_arn != null && (service.publishes || length(service.consumes) > 0 || contains(local.audit_writers, name)) ? [
+      # Clave de la plataforma para mensajería, auditoría y documentos cifrados.
+      local.p.kms_key_arn != null && (service.publishes || length(service.consumes) > 0 || contains(local.audit_writers, name) || contains(local.document_writers, name) || contains(local.document_readers, name)) ? [
         { Effect = "Allow", Action = ["kms:Decrypt", "kms:GenerateDataKey"], Resource = [local.p.kms_key_arn] },
       ] : [],
     )

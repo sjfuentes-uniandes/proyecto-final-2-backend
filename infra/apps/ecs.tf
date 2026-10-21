@@ -85,6 +85,13 @@ locals {
         "ALLY_${upper(replace(ally, "-", "_"))}_TIMEOUT_MS" = tostring(lookup(var.ally_timeouts_ms, ally, 1000))
       }]...),
       contains(local.audit_writers, name) ? { AUDIT_BUCKET = local.p.audit_bucket.name } : {},
+      contains(local.document_writers, name) || contains(local.document_readers, name) ? {
+        POLIZAS_BUCKET     = local.p.policy_documents_bucket.name
+        POLIZAS_BUCKET_SSE = local.p.policy_documents_bucket.sse
+      } : {},
+      # Cache-Aside: vacía con cache_enabled = false; el servicio lee de RDS.
+      service.cache ? { CACHE_URL = local.p.cache.url } : {},
+      contains(local.latency_budget_readers, name) ? { LATENCY_BUDGET_MS = jsonencode(var.latency_budget_ms) } : {},
       contains(local.partner_admins, name) ? {
         PARTNERS_USER_POOL_ID    = local.p.cognito.partners_pool_id
         PARTNERS_TOKEN_URL       = local.p.cognito.partners_token_url
