@@ -20,7 +20,7 @@ export ENV AWS_REGION AUTO_APPROVE SERVICES
 .PHONY: infra-ayuda infra-bootstrap infra-plataforma infra-bases infra-imagenes \
 	infra-aplicaciones infra-microservicios infra-desplegar infra-destruir \
 	infra-pausar infra-reanudar infra-plan infra-salidas infra-validar infra-probar \
-	infra-probar-alerta infra-usuario-admin
+	infra-probar-sprint2 infra-probar-alerta infra-usuario-admin
 
 infra-ayuda: ## Lista los targets de la plataforma
 	@grep -hE '^infra-[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{ printf "  %-22s %s\n", $$1, $$2 }'
@@ -57,6 +57,9 @@ infra-destruir: ## Elimina el ambiente completo (apps y luego platform)
 infra-probar: ## Smoke test del ambiente desplegado (SMOKE_ALERTA=1 prueba el correo de alertas)
 	@$(PLATAFORMA_SCRIPTS)/smoke.sh
 
+infra-probar-sprint2: ## HU-S02: /health de los 6 servicios nuevos, enrutamiento de OfertaAceptada y DLQ con alarma
+	@$(PLATAFORMA_SCRIPTS)/smoke-sprint2.sh
+
 infra-probar-alerta: ## HU-W28 AC4: activa y recupera la alarma del perfilamiento con una métrica sintética (NIVEL=critica|advertencia)
 	@$(PLATAFORMA_SCRIPTS)/probar-alerta.sh
 
@@ -79,7 +82,7 @@ infra-salidas: ## URLs de APIs, portal, Cognito y tablero del ambiente
 	  $(TF) -chdir=infra/platform output cognito && tf_init apps && \
 	  $(TF) -chdir=infra/apps output dashboard_url 2>/dev/null || true
 
-infra-validar: ## fmt, validate y pruebas de Terraform (sin AWS)
+infra-validar: ## fmt, validate, pruebas de Terraform y Trivy sin críticos (sin AWS; TRIVY=0 omite Trivy)
 	@for root in bootstrap platform apps; do \
 	  echo "== $$root"; \
 	  $(TF) -chdir=infra/$$root init -backend=false -input=false >/dev/null && \
@@ -87,3 +90,4 @@ infra-validar: ## fmt, validate y pruebas de Terraform (sin AWS)
 	  $(TF) -chdir=infra/$$root validate -no-color || exit 1; \
 	  if [ -d infra/$$root/tests ]; then $(TF) -chdir=infra/$$root test -no-color || exit 1; fi; \
 	done
+	@$(PLATAFORMA_SCRIPTS)/seguridad.sh

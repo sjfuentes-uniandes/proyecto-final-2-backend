@@ -22,20 +22,28 @@ else
   echo "Sin recursos en el estado de apps."
 fi
 
-log "2/5 Vaciando el bucket de auditoría (Object Lock en modo GOVERNANCE)"
+# empty_bucket <bucket> [opciones de delete-objects]: borra todas las versiones.
+empty_bucket() {
+  local bucket="$1" batch
+  shift
+  aws s3api head-bucket --bucket "${bucket}" >/dev/null 2>&1 || return 0
+  while :; do
+    batch=$(aws s3api list-object-versions --bucket "${bucket}" --max-items 500 \
+      --query '{Objects: [Versions[].{Key:Key,VersionId:VersionId}, DeleteMarkers[].{Key:Key,VersionId:VersionId}][] | [?Key]}' \
+      --output json 2>/dev/null || echo '{"Objects":[]}')
+    [ "$(jq '.Objects | length' <<<"${batch}")" -gt 0 ] || break
+    aws s3api delete-objects --bucket "${bucket}" "$@" \
+      --delete "$(jq -c '{Objects: .Objects, Quiet: true}' <<<"${batch}")" >/dev/null
+  done
+}
+
+log "2/5 Vaciando los buckets de auditoría (Object Lock en modo GOVERNANCE) y de pólizas"
 tf_init platform
 if state_has_resources platform; then
-  bucket=$(platform_output platform | jq -r '.audit_bucket.name')
-  if aws s3api head-bucket --bucket "${bucket}" >/dev/null 2>&1; then
-    while :; do
-      batch=$(aws s3api list-object-versions --bucket "${bucket}" --max-items 500 \
-        --query '{Objects: [Versions[].{Key:Key,VersionId:VersionId}, DeleteMarkers[].{Key:Key,VersionId:VersionId}][] | [?Key]}' \
-        --output json 2>/dev/null || echo '{"Objects":[]}')
-      [ "$(jq '.Objects | length' <<<"${batch}")" -gt 0 ] || break
-      aws s3api delete-objects --bucket "${bucket}" --bypass-governance-retention \
-        --delete "$(jq -c '{Objects: .Objects, Quiet: true}' <<<"${batch}")" >/dev/null
-    done
-  fi
+  empty_bucket "$(platform_output platform | jq -r '.audit_bucket.name')" --bypass-governance-retention
+  # Con policy_documents_force_destroy = false, destroy no borra un bucket con versiones.
+  documents=$(platform_output platform | jq -r '.policy_documents_bucket.name // empty')
+  [ -z "${documents}" ] || empty_bucket "${documents}"
 
   # force_delete del estado puede ser false (repositorios creados antes de
   # activarlo): se borran las imágenes para que destroy no dependa de ello.

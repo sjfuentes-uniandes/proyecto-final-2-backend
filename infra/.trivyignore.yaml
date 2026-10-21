@@ -1,0 +1,24 @@
+# Excepciones del escaneo de Terraform (scripts/plataforma/seguridad.sh, make infra-validar).
+# Cada excepción se limita a archivos concretos y justifica por qué el riesgo está cubierto.
+# Rutas relativas a infra/.
+misconfigurations:
+  # Listeners HTTP del ALB interno. El ALB no es público (internal = true) y solo
+  # acepta tráfico del grupo de seguridad del VPC Link; TLS termina en API Gateway
+  # (HTTPS + WAF, mTLS opcional para socios). Llevar TLS hasta el ALB exige un
+  # certificado de ACM con dominio propio (custom_domain), fuera del perfil de int.
+  - id: AVD-AWS-0054
+    paths:
+      - "platform/edge.tf"
+    statement: "ALB interno detrás de API Gateway + VPC Link; TLS termina en el borde."
+
+  # Salida a 0.0.0.0/0 de la NAT instance, de la tarea db-bootstrap y de las tareas
+  # de los servicios. Las subredes son privadas (solo salen por la NAT) y la salida
+  # es necesaria para ECR, public.ecr.aws (ADOT, psql), Secrets Manager, SNS/SQS,
+  # X-Ray, Cognito y los aliados externos, cuyos rangos de IP no son fijos. Nadie en
+  # Internet puede abrir conexiones hacia las tareas (sin reglas de entrada públicas).
+  - id: AVD-AWS-0104
+    paths:
+      - "platform/network.tf"
+      - "platform/compute.tf"
+      - "apps/network.tf"
+    statement: "Salida de subredes privadas por NAT hacia APIs de AWS y aliados sin IP fija."
