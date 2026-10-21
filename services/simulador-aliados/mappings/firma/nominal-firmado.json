@@ -1,0 +1,32 @@
+{
+  "name": "firma firma electrónica (nominal)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/firma/v1/firmas",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.documentoId",
+          "equalTo": "doc-sintetico-firmado"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "estado": "FIRMADO",
+      "firmaId": "FIR-SINT-0001",
+      "selloTiempo": "2026-01-01T00:00:00Z"
+    },
+    "fixedDelayMilliseconds": 50
+  }
+}

@@ -80,6 +80,18 @@ locals {
 
   healthy_target_services = { for name, service in local.deployed : name => service if service.listener_port != null && !var.paused }
 
+  # --- Sprint 2 (HU-S02) ---------------------------------------------------------------
+  # Degradación por proveedor (HU-W06): llamadas fallidas / llamadas, sumando las
+  # operaciones del proveedor. Existe aunque el adaptador no esté desplegado.
+  provider_alarms = {
+    for provider, config in var.provider_operations : "proveedor-${provider}-degradado" => {
+      provider = provider, service = config.service, operations = config.operations, severity = "critica"
+      title    = "Proveedor ${provider} degradado: más del ${var.provider_error_percent} % de llamadas fallidas"
+    }
+  }
+  # Saga de contratación: aceptaciones sin recaudar o recaudos sin emitir.
+  pending_collection_queues = [for name in ["dinero-aceptaciones", "polizas-recaudos"] : name if contains(keys(local.p.queues), name)]
+
   dashboard_link = { tipo = "tablero", url = local.dashboard_url }
 
   # Severidad, título, unidad y enlace de cada alarma, sin el prefijo del
@@ -95,6 +107,11 @@ locals {
     { for key, a in local.saturation_alarms : key => { severidad = "advertencia", titulo = a.title, unidad = "%", enlace = local.dashboard_link } },
     { for name, queue in local.p.queues : "cola-${name}-atraso" => { severidad = "advertencia", titulo = "Atraso en la cola ${name}", unidad = "s", enlace = { tipo = "cola", url = local.queue_console[name].main } } },
     { for name, queue in local.p.queues : "cola-${name}-dlq" => { severidad = "informativa", titulo = "Mensajes en la cola de descarte de ${name}", unidad = "mensajes", enlace = { tipo = "cola", url = local.queue_console[name].dlq } } },
+    { for key, a in local.provider_alarms : key => { severidad = a.severity, titulo = a.title, unidad = "%", enlace = { tipo = "traza" } } },
+    length(local.pending_collection_queues) == 0 ? {} : {
+      "recaudos-pendientes" = { severidad = "critica", titulo = "Recaudos o emisiones pendientes por más de ${var.pending_collection_age_seconds} s", unidad = "s", enlace = { tipo = "cola", url = local.queue_console[local.pending_collection_queues[0]].main } }
+    },
+    { "avisos-push-fallos" = { severidad = "advertencia", titulo = "Avisos push fallidos en avisos", unidad = "envios", enlace = { tipo = "traza" } } },
     {
       "rds-cpu"            = { severidad = "advertencia", titulo = "CPU de la base de datos sobre ${var.cpu_alarm_percent} %", unidad = "%", enlace = local.dashboard_link }
       "rds-almacenamiento" = { severidad = "critica", titulo = "Base de datos con menos de 2 GiB libres", unidad = "bytes", enlace = local.dashboard_link }
@@ -337,6 +354,107 @@ resource "aws_cloudwatch_metric_alarm" "dlq" {
   dimensions          = { QueueName = each.value.dlq_name }
 }
 
+# --- Sprint 2: proveedores, Saga de contratación y avisos ---------------------------
+# Proporción de errores por proveedor: SUM(OperationErrors) / SUM(SampleCount de
+# OperationDuration) de las operaciones de var.provider_operations, con las
+# dimensiones Environment, Service y Operation (contracts/operaciones.md).
+resource "aws_cloudwatch_metric_alarm" "provider_degradation" {
+  for_each            = local.provider_alarms
+  alarm_name          = "${local.prefix}-${each.key}"
+  alarm_description   = "[${local.p.environment}] ${local.severity_label[each.value.severity]} - Proveedor ${each.value.provider} (${each.value.service}): llamadas fallidas > ${var.provider_error_percent} % en ${join(", ", each.value.operations)}. Tablero: ${local.dashboard_url}"
+  comparison_operator = "GreaterThanThreshold"
+  threshold           = var.provider_error_percent
+  evaluation_periods  = local.alarm_common.evaluation_periods
+  datapoints_to_alarm = local.alarm_common.datapoints_to_alarm
+  treat_missing_data  = "notBreaching"
+
+  dynamic "metric_query" {
+    for_each = each.value.operations
+    content {
+      id = "e${metric_query.key}"
+      metric {
+        namespace   = var.metrics_namespace
+        metric_name = "OperationErrors"
+        period      = local.alarm_common.period
+        stat        = "Sum"
+        dimensions  = { Environment = local.p.environment, Service = each.value.service, Operation = metric_query.value }
+      }
+    }
+  }
+  dynamic "metric_query" {
+    for_each = each.value.operations
+    content {
+      id = "t${metric_query.key}"
+      metric {
+        namespace   = var.metrics_namespace
+        metric_name = "OperationDuration"
+        period      = local.alarm_common.period
+        stat        = "SampleCount"
+        dimensions  = { Environment = local.p.environment, Service = each.value.service, Operation = metric_query.value }
+      }
+    }
+  }
+  metric_query {
+    id         = "errores"
+    expression = join(" + ", [for index, _ in each.value.operations : "FILL(e${index}, 0)"])
+  }
+  metric_query {
+    id         = "total"
+    expression = join(" + ", [for index, _ in each.value.operations : "FILL(t${index}, 0)"])
+  }
+  metric_query {
+    id          = "tasa"
+    expression  = "IF(total > 0, 100 * errores / total, 0)"
+    label       = "Llamadas fallidas a ${each.value.provider} (%)"
+    return_data = true
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "pending_collections" {
+  count               = length(local.pending_collection_queues) > 0 ? 1 : 0
+  alarm_name          = "${local.prefix}-recaudos-pendientes"
+  alarm_description   = "[${local.p.environment}] CRÍTICA - Saga de contratación: mensaje más antiguo de ${join(" o ", local.pending_collection_queues)} > ${var.pending_collection_age_seconds} s. Tablero: ${local.dashboard_url}"
+  comparison_operator = "GreaterThanThreshold"
+  threshold           = var.pending_collection_age_seconds
+  evaluation_periods  = local.alarm_common.evaluation_periods
+  datapoints_to_alarm = local.alarm_common.datapoints_to_alarm
+  treat_missing_data  = "notBreaching"
+
+  dynamic "metric_query" {
+    for_each = local.pending_collection_queues
+    content {
+      id = "a${metric_query.key}"
+      metric {
+        namespace   = "AWS/SQS"
+        metric_name = "ApproximateAgeOfOldestMessage"
+        period      = local.alarm_common.period
+        stat        = "Maximum"
+        dimensions  = { QueueName = local.p.queues[metric_query.value].name }
+      }
+    }
+  }
+  metric_query {
+    id          = "antiguedad"
+    expression  = "MAX([${join(", ", [for index, _ in local.pending_collection_queues : "a${index}"])}])"
+    label       = "Antigüedad del recaudo pendiente (s)"
+    return_data = true
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "push_failures" {
+  alarm_name          = "${local.prefix}-avisos-push-fallos"
+  alarm_description   = "[${local.p.environment}] ADVERTENCIA - avisos: ${var.push_failure_count} o más envíos push fallidos (aviso.push) en 5 minutos. Tablero: ${local.dashboard_url}"
+  namespace           = var.metrics_namespace
+  metric_name         = "OperationErrors"
+  statistic           = "Sum"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = var.push_failure_count
+  period              = 300
+  evaluation_periods  = 1
+  treat_missing_data  = "notBreaching"
+  dimensions          = { Environment = local.p.environment, Service = "avisos", Operation = "aviso.push" }
+}
+
 # --- Base de datos --------------------------------------------------------------------
 resource "aws_cloudwatch_metric_alarm" "database_cpu" {
   alarm_name          = "${local.prefix}-rds-cpu"
@@ -379,6 +497,9 @@ locals {
     values(aws_cloudwatch_metric_alarm.saturation),
     values(aws_cloudwatch_metric_alarm.queue_age),
     values(aws_cloudwatch_metric_alarm.dlq),
+    values(aws_cloudwatch_metric_alarm.provider_degradation),
+    aws_cloudwatch_metric_alarm.pending_collections,
+    [aws_cloudwatch_metric_alarm.push_failures],
     [aws_cloudwatch_metric_alarm.database_cpu, aws_cloudwatch_metric_alarm.database_storage],
   )
 }

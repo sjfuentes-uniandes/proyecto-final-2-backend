@@ -1,13 +1,13 @@
 # Plataforma Solventa en AWS
 
-Infraestructura para ejecutar en AWS las 13 historias de la columna **Ready** del backlog. Se basa en el modelo de despliegue (`docs/arquitectura/modelo_despliegue.puml`, `diagrama_despliegue_ecs_fargate.puml`), en la Entrega 8 de arquitectura (componentes, conectores y patrones).
+Infraestructura para ejecutar en AWS las 13 historias de la columna **Ready** del backlog y, desde HU-S02, los servicios, datos, colas, secretos, almacenamiento y alarmas del Sprint 2 (cotización, contratación, emisión y consulta; sección [Sprint 2](#sprint-2-hu-s02)). Se basa en el modelo de despliegue (`docs/arquitectura/modelo_despliegue.puml`, `diagrama_despliegue_ecs_fargate.puml`), en la Entrega 8 de arquitectura (componentes, conectores y patrones).
 
 | Raíz | Qué crea | Depende de |
 | --- | --- | --- |
-| `infra/platform/` | Red en 2 zonas, NAT instance (o NAT Gateway), KMS opcional, ECR, RDS PostgreSQL con base y usuario por servicio, clúster ECS y Service Connect, SNS/SQS/DLQ, S3 de auditoría con Object Lock, Cognito, ALB interno + VPC Link v2 + API Gateway REST + WAF, CloudFront para el portal y tópico de alertas | Nada |
+| `infra/platform/` | Red en 2 zonas, NAT instance (o NAT Gateway), KMS opcional, ECR, RDS PostgreSQL con base y usuario por servicio, clúster ECS y Service Connect, SNS/SQS/DLQ, S3 de auditoría con Object Lock, S3 de documentos de póliza, caché ElastiCache (Valkey, opcional), Cognito, ALB interno + VPC Link v2 + API Gateway REST + WAF, CloudFront para el portal y tópico de alertas | Nada |
 | `infra/apps/` | Por cada servicio con imagen publicada: roles IAM, grupos de seguridad, tareas Fargate con colector ADOT, servicios ECS en capas, autoescalado, alarmas y tablero | Estado de `platform` e imágenes en ECR |
 
-El catálogo de servicios vive en un solo lugar: `infra/platform/catalog.tf`. Allí se declaran nivel, puerto del listener del ALB, base de datos, dependencias síncronas, eventos, colas y aliados. `apps` lo recibe por el output `platform`.
+El catálogo de servicios vive en un solo lugar: `infra/platform/catalog.tf`. Allí se declaran nivel, puerto del listener del ALB, base de datos, uso de la caché, dependencias síncronas, eventos, colas y aliados. `apps` lo recibe por el output `platform`.
 
 ## Arquitectura desplegada
 
@@ -19,14 +19,18 @@ Socio ──HTTPS (+mTLS opc.)──► WAF ─► API Gateway "socios" ──�
                                           VPC Link v2 ─► ALB interno (8081/8082/8083)
                                                               ▼
  ┌──────────────────────── ECS Fargate · subredes privadas zonas A y B ────────────────────────┐
- │ bff-web   bff-movil   api-socios          ◄─ capa de acceso                                  │
- │ clientes  catalogo    cotizacion          ◄─ núcleo (REST interno por ECS Service Connect)   │
- │ adaptador-datos  adaptador-identidad      ◄─ adaptadores aislados por aliado (vía NAT)       │
- │ auditoria (worker SQS)   simulador-aliados (WireMock, integración)                           │
+ │ bff-web   bff-movil   api-socios                      ◄─ capa de acceso                      │
+ │ clientes  catalogo  cotizacion  polizas  dinero       ◄─ núcleo (REST interno, Service Connect)│
+ │ consulta (proyección CQRS)                            ◄─ lecturas rápidas de pólizas          │
+ │ adaptador-datos  adaptador-identidad                  ◄─ adaptadores aislados por aliado      │
+ │ adaptador-pagos  adaptador-firma (firma y push)          (salida por NAT)                     │
+ │ auditoria, avisos (workers SQS)   simulador-aliados (WireMock, integración)                  │
  └──────────────────────────────────────────────────────────────────────────────────────────────┘
-        │ SQL/TLS                    │ Outbox ─► SNS ─► SQS (+DLQ)        │ HTTPS
-        ▼                            ▼                                    ▼
- RDS PostgreSQL (base por servicio)  auditoria / consentimientos-cotizacion  S3 auditoría (Object Lock)
+        │ SQL/TLS        │ TLS            │ Outbox ─► SNS ─► SQS por consumidor (+DLQ)   │ HTTPS
+        ▼                ▼                ▼                                              ▼
+ RDS PostgreSQL     ElastiCache Valkey   auditoria, consentimientos-cotizacion,     S3 auditoría (Object Lock)
+ (base por servicio) (catalogo,           dinero-aceptaciones, polizas-recaudos,     S3 documentos de póliza
+                     cotizacion, consulta) consulta-proyeccion, avisos              (URL prefirmadas)
  Secrets Manager + KMS · CloudWatch (logs, EMF, alarmas → SNS alertas) · X-Ray (ADOT)
 ```
 
@@ -48,6 +52,8 @@ Socio ──HTTPS (+mTLS opc.)──► WAF ─► API Gateway "socios" ──�
 | **HU-M08** Registro de autorización | `clientes` + Outbox → SNS → SQS `auditoria` → worker `auditoria` → S3 con Object Lock (versionado, KMS, solo TLS). |
 | **HU-M09** Revocación de consentimiento | Igual que HU-M08, más la cola `consentimientos-cotizacion`. |
 
+**Sprint 2 (HU-S02):** HU-W03 a HU-W06 (cotización, caché y presupuesto de latencia), HU-W13 a HU-W17 (suscripción, aceptación, recaudo, firma y emisión), HU-W18, HU-M10 y HU-M11 (consulta y avisos). Detalle en la sección [Sprint 2](#sprint-2-hu-s02).
+
 Transversal (ARQ-001/002/003): tareas repartidas en dos zonas con rebalanceo, circuito de despliegue con rollback, Service Connect, autoescalado (APIs por CPU y workers por profundidad de cola), RDS Multi-AZ con `high_availability = true`, cifrado con KMS y secretos fuera de las imágenes.
 
 ## Decisiones y costos (perfil por defecto: capa gratuita)
@@ -62,14 +68,17 @@ Ninguna configuración con ECS Fargate es 100 % gratuita, porque **Fargate no ti
 | Tareas | 0,25 vCPU / 1 GB, **todas en FARGATE_SPOT** | Sin capa gratuita | ~3,2 USD/mes por tarea (~10,6 en FARGATE) |
 | Cifrado | Claves administradas por AWS (`use_customer_managed_key = false`) | 0 USD | 0 USD (1 USD/mes con clave propia) |
 | WAF | Web ACL mínimo: límite por IP + reglas comunes de AWS | Sin capa gratuita | ~7 USD/mes |
-| Secrets Manager | 8 secretos (bases, aliados y maestro de RDS) | 30 días de prueba | ~3,2 USD/mes |
-| Alarmas CloudWatch | ~67 con los 10 servicios (~93 métricas: metric math cobra cada métrica) | 10 métricas gratis | ~8 USD/mes |
+| Secrets Manager | 16 secretos (8 bases, 6 aliados, maestro de RDS y token de registro) | 30 días de prueba | ~6,4 USD/mes |
+| Caché (Sprint 2) | ElastiCache Valkey `cache.t3.micro`, un nodo (`cache_enabled`) | 750 h/mes: 0 USD | ~10 USD/mes |
+| Alarmas CloudWatch | ~101 con los 16 servicios (~146 métricas: metric math cobra cada métrica) | 10 métricas gratis | ~14 USD/mes |
 | API Gateway, Cognito (usuarios), CloudFront, S3, SNS, SQS, ECR, X-Ray | Volumen de pruebas | Dentro de la capa gratuita | Centavos |
 
-Estimado con los 10 servicios encendidos 24/7:
-- **Con capa gratuita: ≈ 45 USD/mes**, casi todo Fargate Spot y WAF.
-- **Pausado (`paused = true` en apps): ≈ 13 USD/mes.** Pausar lleva todas las tareas a 0 sin destruir nada; también se puede detener RDS hasta 7 días (`aws rds stop-db-instance`).
-- **Sin capa gratuita: ≈ 88 USD/mes encendido y ≈ 57 USD/mes pausado.**
+Estimado con los 16 servicios encendidos 24/7 (los 10 del Sprint 1 + 6 de HU-S02):
+- **Con capa gratuita: ≈ 73 USD/mes**, casi todo Fargate Spot y WAF (con los 10 del Sprint 1 eran ≈ 45).
+- **Pausado (`paused = true` en apps): ≈ 22 USD/mes.** Pausar lleva todas las tareas a 0 sin destruir nada; también se puede detener RDS hasta 7 días (`aws rds stop-db-instance`). La caché sigue encendida: `cache_enabled = false` en `platform.tfvars` la elimina.
+- **Sin capa gratuita: ≈ 126 USD/mes encendido y ≈ 76 USD/mes pausado.**
+
+El delta de HU-S02 está en [Costo del Sprint 2](#costo-del-delta-del-sprint-2).
 
 En las cuentas creadas después del 15-jul-2025 (plan gratuito con créditos), estos costos se descuentan de los créditos del plan (hasta 200 USD durante 6 meses). Los clientes OAuth de socios (`client_credentials`) tienen un cobro propio en Cognito: revisar su precio antes de crear muchos socios.
 
@@ -99,7 +108,110 @@ La NAT solo permite conexiones que salen desde la VPC: nadie en Internet puede a
 - **API Gateway REST en lugar de HTTP API:** los planes de uso, las API keys y WAF solo existen en REST. REST se integra en privado con el **ALB** mediante un **VPC Link v2** (`integration_target`). El ALB tiene un listener por servicio de acceso (8081 `bff-web`, 8082 `bff-movil`, 8083 `api-socios`) y solo acepta tráfico del grupo de seguridad del VPC Link.
 - **Dos APIs** (`canales` y `socios`): el mTLS aplica a todo un dominio. Separarlos permite exigir certificado solo a los socios y desactivar el endpoint `execute-api` del API de socios cuando existe dominio propio.
 - **Endpoints de interfaz:** opcionales (`interface_endpoints`, ~7 USD/mes cada uno por zona). El endpoint *gateway* de S3 es gratuito y siempre se crea, así que las capas de ECR y la auditoría no pasan por la NAT.
-- **Caché de catálogo (ElastiCache)**, **proyección CQRS**, **Saga** y **evidencias de siniestros** no se crean porque ninguna historia en Ready los usa. El catálogo permite agregarlos después.
+- **Caché de catálogo (ElastiCache)**, **proyección CQRS** y **Saga** se crean desde HU-S02 (sección [Sprint 2](#sprint-2-hu-s02)). **Evidencias de siniestros** no se crea porque ninguna historia del Sprint 2 la usa.
+
+## Sprint 2 (HU-S02)
+
+Todo se declara en el catálogo (`local.catalog`, `local.queues`, `local.allies`), así que ECR, la base por servicio (tarea `db-bootstrap`), las colas con su DLQ, los secretos, IAM, ECS, el autoescalado y las alarmas salen de los mecanismos del Sprint 1, sin recursos manuales.
+
+### Servicios
+
+| Servicio | `tier` | Base | Caché | Publica | Consume | Llama a | Aliados | Escala por |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `polizas` | `nucleo` | Sí | — | Sí | `polizas-recaudos` | `adaptador-firma` | — | CPU |
+| `dinero` | `nucleo` | Sí | — | Sí | `dinero-aceptaciones` | `adaptador-pagos` | — | CPU |
+| `adaptador-pagos` | `adaptador` | — | — | — | — | `simulador-aliados` | `pagos` | CPU |
+| `adaptador-firma` | `adaptador` | — | — | — | — | `simulador-aliados` | `firma`, `push` | CPU |
+| `consulta` | `proyeccion` (nuevo) | Sí | Sí | — | `consulta-proyeccion` | — | — | CPU (responde lecturas síncronas con meta p95) |
+| `avisos` | `worker` | Sí (Inbox y tokens de dispositivo) | — | — | `avisos` | `adaptador-firma` | — | Profundidad de su cola |
+
+Llamadas nuevas de los BFF: `bff-web` → `polizas`, `consulta`; `bff-movil` → `consulta`, `avisos`. `catalogo` y `cotizacion` pasan a `cache = true`.
+
+**Decisiones contra los diagramas (`docs/arquitectura`):**
+- `dinero` → `adaptador-pagos`: `modelo_despliegue.puml` (`RecaudosIndemnizaciones --> ConexionPagos`).
+- `polizas` → `adaptador-firma`: `diagrama_componentes_responsabilidades.puml` (`Polizas -> Adaptadores : firma y aviso`) y `modelo_concurrencia.puml` ("(4) Pólizas inicia la saga de recaudo, firma y emisión"). En `modelo_despliegue.puml` quien llama a `ConexionFirma` es la Saga (`EmisionAvisos`), que vive en `polizas`.
+- Push por `adaptador-firma`: el adaptador "Firma electrónica y notificaciones" (`ConexionFirma`) atiende a ambos proveedores, por eso guarda los secretos `firma` y `push`, y `avisos` (la parte de avisos de `EmisionAvisos`) lo invoca. `avisos` no tiene credenciales de aliados.
+- No se agregan llamadas que los diagramas muestran y la historia no pide (`bff-movil` → `polizas`, `api-socios` → `polizas`, `cotizacion` → `polizas`, `polizas` → `dinero`): la Saga usa eventos (`OfertaAceptada`, `Recaudo*`). Se agregan al catálogo cuando su historia las necesite.
+
+**Capas de Service Connect:** con estas llamadas, `consulta` queda en la capa 0; los adaptadores nuevos en la 1; `polizas`, `dinero` y `avisos` en la 2. `bff-movil` sigue en la 3 y `bff-web` en la 5, así que **ningún servicio del Sprint 1 cambia de `module.layer_N` ni se recrea** (assert en `infra/apps/tests/apps.tftest.hcl`).
+
+### Colas y eventos
+
+Cada consumidor tiene su cola, filtrada por el atributo `eventType`, su DLQ (redrive tras 5 recepciones, retención de 14 días) y sus alarmas de atraso y DLQ. Ninguna cola se comparte.
+
+| Cola | Consumidor | Filtro `eventType` | `visibility_timeout` |
+| --- | --- | --- | --- |
+| `auditoria` | `auditoria` | Ninguno: recibe todo | 60 s |
+| `consentimientos-cotizacion` | `cotizacion` | Prefijo `Consentimiento` | 30 s |
+| `dinero-aceptaciones` | `dinero` | `OfertaAceptada` | 60 s |
+| `polizas-recaudos` | `polizas` | Prefijo `Recaudo` (`RecaudoConfirmado`; `RecaudoRechazado` para compensar la Saga) | 120 s (firma y documento) |
+| `consulta-proyeccion` | `consulta` | Prefijos `Poliza` (`PolizaEmitida` y los cambios de la póliza) y `Siniestro` (sin productores todavía) | 30 s |
+| `avisos` | `avisos` | `PolizaEmitida`, `RecaudoConfirmado` | 60 s |
+
+Recorrido: `OfertaAceptada` → `dinero` cobra por `adaptador-pagos` → `RecaudoConfirmado` → `polizas` firma por `adaptador-firma`, guarda el documento y publica `PolizaEmitida` → `consulta` actualiza la vista y `avisos` notifica. Un mensaje que agota los reintentos queda en `<prefijo>-<cola>-dlq` y abre la alarma `<prefijo>-cola-<cola>-dlq`.
+
+### Aliados y mínimo privilegio
+
+| Recurso | Quién accede | Cómo se garantiza |
+| --- | --- | --- |
+| Secreto `pagos` | Solo `adaptador-pagos` | Rol de ejecución: `secretsmanager:GetSecretValue` solo sobre los secretos de sus `allies` |
+| Secretos `firma` y `push` | Solo `adaptador-firma` | Igual |
+| Bucket de documentos de póliza | Escribe solo `polizas` (`document_writers`: `s3:PutObject`); leen `polizas` y `consulta` (`document_readers`: `s3:GetObject`, `GetObjectVersion`) para firmar URL prefirmadas | Rol de tarea; nadie tiene `DeleteObject`. `polizas` entrega la URL al emitir (portal); `consulta`, en la billetera móvil (HU-M10), porque `bff-movil` no llama a `polizas`. Ningún BFF accede al bucket |
+| Bases `polizas`, `dinero`, `consulta`, `avisos` | Cada servicio a la suya | Usuario y secreto propios (`db-bootstrap`), `REVOKE ALL ... FROM PUBLIC` |
+| Caché | `catalogo`, `cotizacion`, `consulta` | Grupo de seguridad de la caché sin reglas en `platform`; `apps` agrega una regla 6379 por servicio con `cache = true` |
+
+### Bucket de documentos de póliza
+
+`<prefijo>-polizas-<cuenta>` (`infra/platform/storage.tf`): versionado (las versiones anteriores expiran a los `policy_documents_noncurrent_days`, 90), cifrado SSE-S3 (SSE-KMS con `use_customer_managed_key`), bloqueo de acceso público, `BucketOwnerEnforced` y una política que **niega** transporte sin TLS (`aws:SecureTransport = false`), TLS anterior a 1.2, `PutObject` sin el encabezado `x-amz-server-side-encryption` y `PutObject` con otro cifrado. La lectura es por URL prefirmada (válidas mientras lo sean las credenciales del rol que firma; usar vencimientos cortos). `policy_documents_force_destroy = true` en `int` permite destruir el ambiente con documentos.
+
+### Caché ElastiCache
+
+`infra/platform/cache.tf`: un nodo Valkey 8 `cache.t3.micro` (`cache_node_type`), sin réplica, en las subredes de base de datos (sin ruta a Internet), con TLS obligatorio (`transit_encryption_mode = "required"`) y cifrado en reposo. Sin auth token: no hay secreto que guardar en el estado y el acceso lo restringe el grupo de seguridad. `cache_enabled = false` no crea ningún recurso de ElastiCache y deja `CACHE_URL` vacía: los servicios deben funcionar contra RDS (Cache-Aside).
+
+| Opción | Costo mensual | Por qué no |
+| --- | --- | --- |
+| **Nodo `cache.t3.micro`** (elegida) | 0 USD con capa gratuita (750 h); ~10 USD sin ella | — |
+| Valkey Serverless | ≥ ~6 USD (100 MB mínimos) + ECPU, sin capa gratuita | Más cara con la capa gratuita y exige clientes con cluster mode |
+| Nodo `cache.t4g.micro` | ~9 USD | Puede no entrar en la capa gratuita |
+
+Si el nodo cae, la caché se pierde y los servicios leen de RDS; no hay datos que no estén en una base.
+
+### Tiempos por ambiente (`apps.tfvars`)
+
+- `ally_timeouts_ms`: `pagos` 5000, `firma` 5000 y `push` 2000 ms (además de los del Sprint 1). Llegan como `ALLY_<ALIADO>_TIMEOUT_MS`.
+- `latency_budget_ms`: presupuesto por operación, en JSON en `LATENCY_BUDGET_MS` (solo `cotizacion`, HU-W05). En `int`: `{"cotizacion": 700}`, el corte del recorrido de DEF-03.
+- `latency_targets` de `int`: `emision` pasa a `Service=polizas` y `consulta` a `Service=consulta`, sus dueños en el Sprint 2.
+
+### Alarmas y tablero
+
+| Alarma | Métrica | Umbral (`apps.tfvars`) | Severidad |
+| --- | --- | --- | --- |
+| `<prefijo>-proveedor-<aliado>-degradado` (uno por aliado: `open-finance`, `datos-abiertos`, `kyc`, `pagos`, `firma`, `push`) | `100 × Σ OperationErrors / Σ SampleCount(OperationDuration)` de las operaciones del aliado (`provider_operations`; ver `contracts/operaciones.md`). La usará HU-W06 | `provider_error_percent` (20 %) en 3 de 5 periodos de 60 s | Crítica |
+| `<prefijo>-recaudos-pendientes` | `MAX(ApproximateAgeOfOldestMessage)` de `dinero-aceptaciones` y `polizas-recaudos` | `pending_collection_age_seconds` (900 s) | Crítica |
+| `<prefijo>-avisos-push-fallos` | `Sum(OperationErrors)` de `avisos`/`aviso.push` en 5 min | `push_failure_count` (5) | Advertencia |
+| `<prefijo>-cola-<cola>-atraso` y `-dlq` de las 4 colas nuevas | Mecanismo existente sobre `local.p.queues` | `queue_age_alarm_seconds`; DLQ > 0 | Advertencia; informativa |
+| Tasa de error, CPU y memoria de los 6 servicios | Mecanismo existente sobre los servicios desplegados | Los del Sprint 1 | — |
+
+Todas existen aunque el servicio no esté desplegado y, sin datos, quedan en OK. Llegan al correo por EventBridge y a la pantalla Operación › Alertas (`ALERTAS_CATALOGO`). El tablero `solventa-<ambiente>` suma dos filas: **Contratación** (p95 y errores de `polizas`, `dinero` y sus adaptadores, antigüedad y DLQ de la Saga y estado de las alarmas nuevas) y **Consulta** (p95 de `consulta` y `avisos` con la meta de consulta, colas de proyección y avisos, y aciertos, fallos y CPU de la caché cuando está habilitada).
+
+### Costo del delta del Sprint 2
+
+| Componente | Con capa gratuita | Sin capa gratuita |
+| --- | --- | --- |
+| 6 tareas FARGATE_SPOT de 0,25 vCPU / 1 GB | ~19 USD | ~19 USD |
+| ElastiCache `cache.t3.micro` (Valkey) | 0 USD | ~10 USD |
+| Secrets Manager: 4 bases y 3 aliados | ~2,8 USD | ~2,8 USD |
+| Alarmas: 34 nuevas (~53 métricas) | ~5,3 USD | ~5,3 USD |
+| S3 de pólizas, 4 colas + 4 DLQ, 6 repositorios ECR, logs | < 1 USD | < 1 USD |
+| **Total del delta** | **≈ 28 USD/mes** | **≈ 38 USD/mes** |
+
+Pausado (`paused = true`), el delta baja a ≈ 9 USD/mes (≈ 19 sin capa gratuita) porque solo quedan secretos, alarmas y la caché. Son estimaciones con precios de `us-east-1`; confirmarlas en la calculadora de AWS.
+
+### Seguridad del Sprint 2
+
+- **IAM:** el rol de ejecución de cada servicio solo lee los secretos de su base y de sus `allies`; el rol de tarea agrega `s3:PutObject` solo a `polizas` y `s3:GetObject` solo a `polizas` y `consulta`, ambos sobre `<bucket>/*`. Sin `DeleteObject`, `ListBucket` ni comodines de recurso nuevos. Con clave propia, solo esos servicios reciben `kms:Decrypt`/`GenerateDataKey` para los documentos.
+- **Estado y variables:** los secretos de aliados son marcadores (`CAMBIAR`, con `ignore_changes`); la caché no tiene auth token; `apps.tfvars` y `platform.tfvars` no tienen secretos. Las contraseñas de las bases nuevas salen de `random_password`, como las del Sprint 1, y por eso **sí** quedan en el estado de `platform` (cifrado en S3).
+- **Trivy:** sin hallazgos CRITICAL ni HIGH en los recursos nuevos (ver [Validación sin desplegar](#validación-sin-desplegar)).
 
 ## Despliegue
 
@@ -126,6 +238,9 @@ make infra-destruir ENV=int       # todo el ambiente
 | `SQS_<COLA>_URL` | Consumidores | Por ejemplo `SQS_AUDITORIA_URL` |
 | `ALLY_<ALIADO>_URL`, `ALLY_<ALIADO>_TIMEOUT_MS`, `ALLY_<ALIADO>_CREDENTIALS` | Adaptadores | Endpoint, timeout y JSON de credenciales |
 | `AUDIT_BUCKET` | auditoria | Bucket con Object Lock |
+| `POLIZAS_BUCKET`, `POLIZAS_BUCKET_SSE` | polizas, consulta (`document_writers`/`document_readers`) | Bucket de documentos de póliza y el cifrado que su política exige al escribir (`ServerSideEncryption` en `PutObject`: `AES256`, o `aws:kms` con clave propia). `polizas` escribe; `polizas` y `consulta` firman URL prefirmadas de lectura |
+| `CACHE_URL` | Con `cache = true` en el catálogo: catalogo, cotizacion, consulta | `rediss://<nodo>:6379` (TLS obligatorio, sin contraseña: el acceso lo limita el grupo de seguridad). **Vacía** con `cache_enabled = false`: el servicio lee de RDS |
+| `LATENCY_BUDGET_MS` | cotizacion (`latency_budget_readers`) | JSON operación → ms desde `latency_budget_ms` en `apps.tfvars`, por ejemplo `{"cotizacion":700}` (HU-W05) |
 | `PARTNERS_USER_POOL_ID`, `PARTNERS_API_ID`, `PARTNERS_USAGE_PLANS`, `PARTNERS_TOKEN_URL` | api-socios | Alta de socios, cambio de plan y consumo. `PARTNERS_USAGE_PLANS` (JSON plan → id del plan de uso) define qué planes se pueden asignar en el ambiente |
 | `JWT_ISSUERS` | Acceso | Emisores válidos para revalidar el token (defensa en profundidad) |
 | `QUOTA_METRIC_INTERVAL_S` | api-socios | Cada cuánto publica `PartnerQuotaUsage` (`partner_quota_interval_seconds`, 300; 0 = no publica) |
@@ -134,7 +249,7 @@ make infra-destruir ENV=int       # todo el ambiente
 
 **Encabezados que agrega API Gateway** a partir del token validado (sobrescriben lo que envíe el cliente): `X-Authenticated-Sub` (canales), `X-Authenticated-Issuer` y `X-Authenticated-Groups` (portal web, grupos de Cognito), `X-Partner-Client-Id`, `X-Partner-Scopes` y `X-Partner-Key-Id` (socios). `api-socios` responde 403 cuando el permiso requerido no está en `X-Partner-Scopes` (HU-W01 AC4).
 
-**Eventos:** el relay del Outbox publica en SNS con el atributo de mensaje `eventType` (`String`), por ejemplo `ConsentimientoOtorgado`, `ConsentimientoRevocado` o `IdentidadVerificada`. El cuerpo es el sobre del evento con `eventId`, que los consumidores usan para la idempotencia. La cola `auditoria` recibe todos los eventos; `consentimientos-cotizacion` recibe solo los `Consentimiento*`.
+**Eventos:** el relay del Outbox publica en SNS con el atributo de mensaje `eventType` (`String`), por ejemplo `ConsentimientoOtorgado`, `ConsentimientoRevocado` o `IdentidadVerificada`. El cuerpo es el sobre del evento con `eventId`, que los consumidores usan para la idempotencia. La cola `auditoria` recibe todos los eventos; `consentimientos-cotizacion` recibe solo los `Consentimiento*`. Las colas del Sprint 2 están en [Colas y eventos](#colas-y-eventos). Un evento sin `eventType` solo llega a `auditoria`.
 
 **Métricas** (usadas por alarmas y tablero): espacio de nombres `Solventa`, dimensiones `Environment`, `Service` y `Operation`. Los servicios publican con OpenTelemetry:
 - `OperationDuration`: histograma en ms. `OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION` ya lo configura como exponencial, lo que permite calcular p95.
@@ -168,4 +283,6 @@ El script publica `OperationDuration` sintético con las dimensiones de la alarm
 
 ## Validación sin desplegar
 
-`make infra-validar` ejecuta `fmt`, `validate` y `terraform test` (plan completo con proveedores simulados, sin credenciales) de `bootstrap`, `platform` y `apps`.
+`make infra-validar` ejecuta `fmt`, `validate` y `terraform test` (plan completo con proveedores simulados, sin credenciales) de `bootstrap`, `platform` y `apps`, y luego Trivy (`scripts/plataforma/seguridad.sh`): informa los hallazgos HIGH y falla con cualquier CRITICAL que no esté justificado en `infra/.trivyignore.yaml`. Usa `trivy` del PATH o la imagen `aquasec/trivy` con Docker; `TRIVY=0` lo omite.
+
+Excepciones vigentes (todas del Sprint 1, justificadas en el archivo): listeners HTTP del ALB interno (TLS termina en API Gateway) y salida a `0.0.0.0/0` desde subredes privadas por la NAT. Hallazgos HIGH que se aceptan por costo: buckets del portal y del estado sin clave KMS propia (`use_customer_managed_key = false`) y CloudFront del portal sin WAF propio (la API sí lo tiene). Trivy no evalúa los recursos de `apps` que dependen del estado remoto (`for_each` sobre `local.deployed`); su revisión es la de [Seguridad](#seguridad-del-sprint-2).

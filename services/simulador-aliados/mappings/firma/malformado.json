@@ -1,0 +1,28 @@
+{
+  "name": "firma respuesta malformada (JSON inválido)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/firma/v1/firmas",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.documentoId",
+          "equalTo": "doc-sintetico-malformado"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"estado\": ",
+    "fixedDelayMilliseconds": 50
+  }
+}

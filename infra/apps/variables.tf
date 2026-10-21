@@ -122,12 +122,27 @@ variable "ally_endpoints" {
 }
 
 variable "ally_timeouts_ms" {
-  description = "Timeout individual por aliado (HU-W05, HU-W06, HU-W12)."
+  description = "Timeout individual por aliado (HU-W05, HU-W06, HU-W12, HU-W16, HU-W17, HU-M11)."
   type        = map(number)
   default = {
     open-finance   = 800
     datos-abiertos = 800
     kyc            = 3000
+    pagos          = 5000
+    firma          = 5000
+    push           = 2000
+  }
+}
+
+variable "latency_budget_ms" {
+  description = "Presupuesto de latencia por operación (ms). Llega en JSON como LATENCY_BUDGET_MS a los servicios de latency_budget_readers (HU-W05)."
+  type        = map(number)
+  default = {
+    cotizacion = 700
+  }
+  validation {
+    condition     = contains(keys(var.latency_budget_ms), "cotizacion") && alltrue([for ms in values(var.latency_budget_ms) : ms > 0])
+    error_message = "Incluya al menos la operación cotizacion, con presupuestos mayores que 0 ms."
   }
 }
 
@@ -274,4 +289,43 @@ variable "memory_alarm_percent" {
 variable "queue_age_alarm_seconds" {
   type    = number
   default = 300
+}
+
+# --- Sprint 2 (HU-S02): proveedores, Saga de contratación y avisos --------------
+variable "provider_operations" {
+  description = "Operaciones (contracts/operaciones.md) que miden la llamada a cada proveedor. La alarma de degradación usa OperationErrors / SampleCount(OperationDuration) de todas ellas (HU-W06)."
+  type = map(object({
+    service    = string
+    operations = list(string)
+  }))
+  default = {
+    open-finance   = { service = "adaptador-datos", operations = ["consulta.FA_PRODUCTOS_VIGENTES", "consulta.FA_HISTORIAL_PAGOS_12M", "consulta.FA_INGRESOS_AGREGADOS"] }
+    datos-abiertos = { service = "adaptador-datos", operations = ["consulta.DA_REGISTROS_PUBLICOS"] }
+    kyc            = { service = "adaptador-identidad", operations = ["verificacion.kyc"] }
+    pagos          = { service = "adaptador-pagos", operations = ["cobro.pagos"] }
+    firma          = { service = "adaptador-firma", operations = ["firma.documento"] }
+    push           = { service = "adaptador-firma", operations = ["notificacion.push"] }
+  }
+  validation {
+    condition     = alltrue([for provider in values(var.provider_operations) : length(provider.operations) >= 1 && length(provider.operations) <= 5])
+    error_message = "Cada proveedor tiene entre 1 y 5 operaciones (una alarma admite hasta 10 métricas)."
+  }
+}
+
+variable "provider_error_percent" {
+  description = "Proporción de llamadas fallidas a un proveedor (%) que lo marca como degradado."
+  type        = number
+  default     = 20
+}
+
+variable "pending_collection_age_seconds" {
+  description = "Antigüedad máxima (s) de una aceptación sin recaudar o de un recaudo sin emitir (dinero-aceptaciones, polizas-recaudos)."
+  type        = number
+  default     = 900
+}
+
+variable "push_failure_count" {
+  description = "Envíos push fallidos de avisos (operación aviso.push) en 5 minutos que abren la alerta."
+  type        = number
+  default     = 5
 }

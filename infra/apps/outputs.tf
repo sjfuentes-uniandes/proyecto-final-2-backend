@@ -42,6 +42,8 @@ output "metric_contract" {
     metrics       = { OperationDuration = "Milliseconds (histograma exponencial)", OperationErrors = "Count" }
     profiling     = { service = "cotizacion", operation = "perfilamiento", p95_threshold_ms = var.profiling_p95_ms }
     partner_quota = { namespace = "Solventa/Socios", metric = "PartnerQuotaUsage", dimensions = ["Environment", "Partner"], unit = "Percent" }
+    # HU-W06: proveedor degradado = OperationErrors / SampleCount(OperationDuration) de sus operaciones.
+    provider_degradation = { operations = var.provider_operations, threshold_percent = var.provider_error_percent }
   }
 }
 

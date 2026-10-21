@@ -54,7 +54,7 @@ infra-desplegar: ## Todo el ambiente en orden (pasos 1 a 4)
 infra-destruir: ## Elimina el ambiente completo (apps y luego platform)
 	@$(PLATAFORMA_SCRIPTS)/destroy.sh
 
-infra-probar: ## Smoke test del ambiente desplegado (SMOKE_ALERTA=1 prueba el correo de alertas)
+infra-probar: ## Smoke test del ambiente, Sprint 2 incluido (SMOKE_ALERTA=1 prueba el correo; SMOKE_DLQ=0 omite la DLQ)
 	@$(PLATAFORMA_SCRIPTS)/smoke.sh
 
 infra-probar-alerta: ## HU-W28 AC4: activa y recupera la alarma del perfilamiento con una métrica sintética (NIVEL=critica|advertencia)
@@ -79,7 +79,7 @@ infra-salidas: ## URLs de APIs, portal, Cognito y tablero del ambiente
 	  $(TF) -chdir=infra/platform output cognito && tf_init apps && \
 	  $(TF) -chdir=infra/apps output dashboard_url 2>/dev/null || true
 
-infra-validar: ## fmt, validate y pruebas de Terraform (sin AWS)
+infra-validar: ## fmt, validate, pruebas de Terraform y Trivy sin críticos (sin AWS; TRIVY=0 omite Trivy)
 	@for root in bootstrap platform apps; do \
 	  echo "== $$root"; \
 	  $(TF) -chdir=infra/$$root init -backend=false -input=false >/dev/null && \
@@ -87,3 +87,4 @@ infra-validar: ## fmt, validate y pruebas de Terraform (sin AWS)
 	  $(TF) -chdir=infra/$$root validate -no-color || exit 1; \
 	  if [ -d infra/$$root/tests ]; then $(TF) -chdir=infra/$$root test -no-color || exit 1; fi; \
 	done
+	@$(PLATAFORMA_SCRIPTS)/seguridad.sh

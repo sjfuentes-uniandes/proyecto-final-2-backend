@@ -1,0 +1,17 @@
+{
+  "name": "push ruta no cubierta",
+  "priority": 10,
+  "request": {
+    "method": "ANY",
+    "urlPathPattern": "/push/.*"
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "error": "token_no_reconocido"
+    }
+  }
+}

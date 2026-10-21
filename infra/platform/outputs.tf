@@ -42,7 +42,17 @@ output "platform" {
     events_topic_arn = aws_sns_topic.business_events.arn
     alerts_topic_arn = aws_sns_topic.alerts.arn
     audit_bucket     = { name = aws_s3_bucket.audit.id, arn = aws_s3_bucket.audit.arn }
-    allies           = { for name, secret in aws_secretsmanager_secret.ally : name => { secret_arn = secret.arn } }
+    # Documentos de póliza (HU-W17): sse es el valor que exige la política del bucket al escribir.
+    policy_documents_bucket = { name = aws_s3_bucket.policy_documents.id, arn = aws_s3_bucket.policy_documents.arn, sse = local.audit_sse }
+    # Caché (cache_enabled): url vacía y sin grupo de seguridad cuando está deshabilitada.
+    cache = {
+      enabled           = var.cache_enabled
+      url               = local.cache_url
+      security_group_id = try(aws_security_group.cache[0].id, null)
+      cluster_ids       = try(tolist(aws_elasticache_replication_group.cache[0].member_clusters), [])
+      services          = sort(tolist(local.cache_services))
+    }
+    allies = { for name, secret in aws_secretsmanager_secret.ally : name => { secret_arn = secret.arn } }
     # Secreto con el que `clientes` firma el token de registro y valida el Lambda pre sign-up (HU-M06).
     registro = { token_secret_arn = aws_secretsmanager_secret.registro_token.arn }
     cognito = {

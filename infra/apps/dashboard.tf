@@ -16,6 +16,19 @@ locals {
   log_sources     = join(" | ", [for group in local.log_groups : "SOURCE '${group}'"])
   row             = 6 # desplazamiento de las filas de infraestructura bajo las de operación
 
+  # Filas del Sprint 2 (HU-S02), bajo las de infraestructura.
+  contracting_row      = 46 + local.row
+  query_row            = local.contracting_row + 10
+  contracting_services = ["polizas", "dinero", "adaptador-pagos", "adaptador-firma"]
+  query_services       = ["consulta", "avisos"]
+  contracting_queues   = [for name in ["dinero-aceptaciones", "polizas-recaudos"] : name if contains(keys(local.p.queues), name)]
+  query_queues         = [for name in ["consulta-proyeccion", "avisos"] : name if contains(keys(local.p.queues), name)]
+  services_filter      = { for group, names in { contratacion = local.contracting_services, consulta = local.query_services } : group => "(${join(" OR ", [for name in names : "Service=\"${name}\""])})" }
+  sprint2_alarm_arns = [
+    for name in concat(keys(local.provider_alarms), length(local.pending_collection_queues) > 0 ? ["recaudos-pendientes"] : [], ["avisos-push-fallos"]) :
+    "arn:${local.partition}:cloudwatch:${local.p.region}:${local.p.account_id}:alarm:${local.prefix}-${name}"
+  ]
+
   dashboard_variables = [{
     type         = "pattern"
     pattern      = local.env_filter
@@ -163,7 +176,78 @@ locals {
         view   = "table"
         query  = "${local.log_sources} | fields @timestamp, service, operation, result, duration_ms, correlation_id | filter result = 'error' or status >= 500 | sort @timestamp desc | limit 100"
       }
-    }]
+    }],
+    # --- Contratación: suscripción, Saga de recaudo, firma y emisión (HU-W13 a HU-W17)
+    [
+      {
+        type       = "text", x = 0, y = local.contracting_row, width = 24, height = 1
+        properties = { markdown = "### Contratación · ${join(", ", local.contracting_services)} · colas ${join(", ", local.contracting_queues)}" }
+      },
+      {
+        type = "metric", x = 0, y = local.contracting_row + 1, width = 8, height = 6
+        properties = {
+          title   = "Contratación: p95 por operación (ms)", region = local.p.region, period = 60, stat = "p95"
+          metrics = [[{ expression = "SEARCH('{${local.ns},Environment,Operation,Service} MetricName=\"OperationDuration\" ${local.env_filter} ${local.services_filter.contratacion}', 'p95', 60)", id = "p95c" }]]
+        }
+      },
+      {
+        type = "metric", x = 8, y = local.contracting_row + 1, width = 8, height = 6
+        properties = {
+          title   = "Contratación: errores por operación", region = local.p.region, period = 60, stat = "Sum"
+          metrics = [[{ expression = "SEARCH('{${local.ns},Environment,Operation,Service} MetricName=\"OperationErrors\" ${local.env_filter} ${local.services_filter.contratacion}', 'Sum', 60)", id = "errc" }]]
+        }
+      },
+      {
+        type = "metric", x = 16, y = local.contracting_row + 1, width = 8, height = 6
+        properties = {
+          title = "Saga: antigüedad (s) y DLQ", region = local.p.region, period = 60, stat = "Maximum"
+          metrics = concat(
+            [for name in local.contracting_queues : ["AWS/SQS", "ApproximateAgeOfOldestMessage", "QueueName", local.p.queues[name].name]],
+            [for name in local.contracting_queues : ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", local.p.queues[name].dlq_name, { yAxis = "right" }]]
+          )
+        }
+      },
+      {
+        type       = "alarm", x = 0, y = local.contracting_row + 7, width = 24, height = 3
+        properties = { title = "Proveedores, recaudos pendientes y avisos push", alarms = local.sprint2_alarm_arns }
+      },
+    ],
+    # --- Consulta: proyección CQRS, billetera y avisos (HU-W18, HU-M10, HU-M11) ------
+    [
+      {
+        type       = "text", x = 0, y = local.query_row, width = 24, height = 1
+        properties = { markdown = "### Consulta · ${join(", ", local.query_services)} · colas ${join(", ", local.query_queues)} · caché ${local.p.cache.enabled ? "habilitada" : "deshabilitada (lecturas a RDS)"}" }
+      },
+      {
+        type = "metric", x = 0, y = local.query_row + 1, width = 8, height = 6
+        properties = {
+          title       = "Consulta: p95 por operación (ms)", region = local.p.region, period = 60, stat = "p95"
+          metrics     = [[{ expression = "SEARCH('{${local.ns},Environment,Operation,Service} MetricName=\"OperationDuration\" ${local.env_filter} ${local.services_filter.consulta}', 'p95', 60)", id = "p95q" }]]
+          annotations = { horizontal = [for slo in local.latency_slos : { label = slo.label, value = slo.target_ms } if contains(local.query_services, slo.service)] }
+        }
+      },
+      {
+        type = "metric", x = 8, y = local.query_row + 1, width = 8, height = 6
+        properties = {
+          title = "Proyección y avisos: antigüedad (s) y DLQ", region = local.p.region, period = 60, stat = "Maximum"
+          metrics = concat(
+            [for name in local.query_queues : ["AWS/SQS", "ApproximateAgeOfOldestMessage", "QueueName", local.p.queues[name].name]],
+            [for name in local.query_queues : ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", local.p.queues[name].dlq_name, { yAxis = "right" }]]
+          )
+        }
+      },
+    ],
+    local.p.cache.enabled ? [{
+      type = "metric", x = 16, y = local.query_row + 1, width = 8, height = 6
+      properties = {
+        title = "Caché: aciertos, fallos y CPU", region = local.p.region, period = 60, stat = "Sum"
+        metrics = concat(
+          [for id in local.p.cache.cluster_ids : ["AWS/ElastiCache", "CacheHits", "CacheClusterId", id]],
+          [for id in local.p.cache.cluster_ids : ["AWS/ElastiCache", "CacheMisses", "CacheClusterId", id]],
+          [for id in local.p.cache.cluster_ids : ["AWS/ElastiCache", "EngineCPUUtilization", "CacheClusterId", id, { stat = "Average", yAxis = "right" }]]
+        )
+      }
+    }] : []
   )
 }
 

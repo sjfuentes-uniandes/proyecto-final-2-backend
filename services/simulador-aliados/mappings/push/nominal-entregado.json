@@ -1,0 +1,31 @@
+{
+  "name": "push notificaciones push (nominal)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/push/v1/envios",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.tokenDispositivo",
+          "equalTo": "token-sintetico-entregado"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "estado": "ENVIADO",
+      "envioId": "PUSH-SINT-0001"
+    },
+    "fixedDelayMilliseconds": 50
+  }
+}

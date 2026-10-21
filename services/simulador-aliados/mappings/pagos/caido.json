@@ -1,0 +1,33 @@
+{
+  "name": "pagos proveedor caído (error recuperable)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/pagos/v1/cobros",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.referencia",
+          "equalTo": "pago-sintetico-caido"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      },
+      "Idempotency-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "error": "unavailable"
+    },
+    "fixedDelayMilliseconds": 50
+  }
+}

@@ -8,7 +8,7 @@ vpc_cidr    = "10.60.0.0/16"
 # Perfil por defecto orientado a la capa gratuita: RDS db.t4g.micro Single-AZ,
 # ALB, NAT instance t3.micro, WAF mínimo y claves administradas por AWS. Las
 # tareas ECS se reparten igualmente entre las zonas A y B.
-high_availability        = false # true = RDS Multi-AZ (y NAT Gateway por zona si egress_mode = "nat_gateway")
+high_availability        = false          # true = RDS Multi-AZ (y NAT Gateway por zona si egress_mode = "nat_gateway")
 egress_mode              = "nat_instance" # "nat_gateway" = administrado, ~33 USD/mes por zona
 nat_instance_type        = "t3.micro"
 use_customer_managed_key = false # true = clave KMS propia (~1 USD/mes)
@@ -22,6 +22,14 @@ postgres_version  = "16"
 
 audit_retention_days = 30
 audit_lock_mode      = "GOVERNANCE"
+
+# Documentos de póliza (HU-W17): en int se pueden destruir con objetos.
+policy_documents_force_destroy   = true
+policy_documents_noncurrent_days = 90
+
+# Caché Valkey de catalogo, cotizacion y consulta. false = sin ElastiCache (lecturas a RDS).
+cache_enabled   = true
+cache_node_type = "cache.t3.micro" # capa gratuita de ElastiCache (750 h/mes)
 
 # WAF siempre activo (~7 USD/mes: Web ACL + 2 reglas). Solicitudes por IP en 5 min.
 waf_rate_limit = 2000

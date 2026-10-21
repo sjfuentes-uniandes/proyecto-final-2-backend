@@ -34,16 +34,22 @@ override_data {
         cluster              = { id = "arn:aws:ecs:us-east-1:123456789012:cluster/solventa-int", arn = "arn:aws:ecs:us-east-1:123456789012:cluster/solventa-int", name = "solventa-int" }
         namespace_arn        = "arn:aws:servicediscovery:us-east-1:123456789012:namespace/ns-1"
         catalog = {
-          "bff-web"             = { tier = "acceso", listener_port = 8081, database = false, publishes = false, calls = ["clientes", "cotizacion", "api-socios"], consumes = [], allies = [], stories = [], discoverable = false, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/bff-web", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/bff-web", name = "solventa-int/bff-web" } }
-          "bff-movil"           = { tier = "acceso", listener_port = 8082, database = false, publishes = false, calls = ["clientes"], consumes = [], allies = [], stories = [], discoverable = false, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/bff-movil", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/bff-movil", name = "solventa-int/bff-movil" } }
-          "api-socios"          = { tier = "acceso", listener_port = 8083, database = true, publishes = true, calls = ["cotizacion"], consumes = [], allies = [], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/api-socios", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/api-socios", name = "solventa-int/api-socios" } }
-          "clientes"            = { tier = "nucleo", listener_port = null, database = true, publishes = true, calls = ["adaptador-identidad"], consumes = [], allies = [], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/clientes", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/clientes", name = "solventa-int/clientes" } }
-          "catalogo"            = { tier = "nucleo", listener_port = null, database = true, publishes = false, calls = [], consumes = [], allies = [], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/catalogo", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/catalogo", name = "solventa-int/catalogo" } }
-          "cotizacion"          = { tier = "nucleo", listener_port = null, database = true, publishes = true, calls = ["catalogo", "clientes", "adaptador-datos"], consumes = ["consentimientos-cotizacion"], allies = [], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/cotizacion", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/cotizacion", name = "solventa-int/cotizacion" } }
-          "adaptador-datos"     = { tier = "adaptador", listener_port = null, database = false, publishes = false, calls = ["simulador-aliados"], consumes = [], allies = ["open-finance", "datos-abiertos"], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/adaptador-datos", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/adaptador-datos", name = "solventa-int/adaptador-datos" } }
-          "adaptador-identidad" = { tier = "adaptador", listener_port = null, database = false, publishes = false, calls = ["simulador-aliados"], consumes = [], allies = ["kyc"], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/adaptador-identidad", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/adaptador-identidad", name = "solventa-int/adaptador-identidad" } }
-          "auditoria"           = { tier = "worker", listener_port = null, database = false, publishes = false, calls = [], consumes = ["auditoria"], allies = [], stories = [], discoverable = false, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/auditoria", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/auditoria", name = "solventa-int/auditoria" } }
-          "simulador-aliados"   = { tier = "soporte", listener_port = null, database = false, publishes = false, calls = [], consumes = [], allies = [], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/simulador-aliados", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/simulador-aliados", name = "solventa-int/simulador-aliados" } }
+          "bff-web"             = { tier = "acceso", listener_port = 8081, database = false, publishes = false, cache = false, calls = ["clientes", "cotizacion", "api-socios", "polizas", "consulta"], consumes = [], allies = [], stories = [], discoverable = false, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/bff-web", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/bff-web", name = "solventa-int/bff-web" } }
+          "bff-movil"           = { tier = "acceso", listener_port = 8082, database = false, publishes = false, cache = false, calls = ["clientes", "consulta", "avisos"], consumes = [], allies = [], stories = [], discoverable = false, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/bff-movil", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/bff-movil", name = "solventa-int/bff-movil" } }
+          "api-socios"          = { tier = "acceso", listener_port = 8083, database = true, publishes = true, cache = false, calls = ["cotizacion"], consumes = [], allies = [], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/api-socios", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/api-socios", name = "solventa-int/api-socios" } }
+          "clientes"            = { tier = "nucleo", listener_port = null, database = true, publishes = true, cache = false, calls = ["adaptador-identidad"], consumes = [], allies = [], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/clientes", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/clientes", name = "solventa-int/clientes" } }
+          "catalogo"            = { tier = "nucleo", listener_port = null, database = true, publishes = false, cache = true, calls = [], consumes = [], allies = [], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/catalogo", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/catalogo", name = "solventa-int/catalogo" } }
+          "cotizacion"          = { tier = "nucleo", listener_port = null, database = true, publishes = true, cache = true, calls = ["catalogo", "clientes", "adaptador-datos"], consumes = ["consentimientos-cotizacion"], allies = [], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/cotizacion", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/cotizacion", name = "solventa-int/cotizacion" } }
+          "adaptador-datos"     = { tier = "adaptador", listener_port = null, database = false, publishes = false, cache = false, calls = ["simulador-aliados"], consumes = [], allies = ["open-finance", "datos-abiertos"], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/adaptador-datos", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/adaptador-datos", name = "solventa-int/adaptador-datos" } }
+          "adaptador-identidad" = { tier = "adaptador", listener_port = null, database = false, publishes = false, cache = false, calls = ["simulador-aliados"], consumes = [], allies = ["kyc"], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/adaptador-identidad", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/adaptador-identidad", name = "solventa-int/adaptador-identidad" } }
+          "polizas"             = { tier = "nucleo", listener_port = null, database = true, publishes = true, cache = false, calls = ["adaptador-firma"], consumes = ["polizas-recaudos"], allies = [], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/polizas", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/polizas", name = "solventa-int/polizas" } }
+          "dinero"              = { tier = "nucleo", listener_port = null, database = true, publishes = true, cache = false, calls = ["adaptador-pagos"], consumes = ["dinero-aceptaciones"], allies = [], stories = [], discoverable = false, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/dinero", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/dinero", name = "solventa-int/dinero" } }
+          "adaptador-pagos"     = { tier = "adaptador", listener_port = null, database = false, publishes = false, cache = false, calls = ["simulador-aliados"], consumes = [], allies = ["pagos"], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/adaptador-pagos", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/adaptador-pagos", name = "solventa-int/adaptador-pagos" } }
+          "adaptador-firma"     = { tier = "adaptador", listener_port = null, database = false, publishes = false, cache = false, calls = ["simulador-aliados"], consumes = [], allies = ["firma", "push"], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/adaptador-firma", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/adaptador-firma", name = "solventa-int/adaptador-firma" } }
+          "consulta"            = { tier = "proyeccion", listener_port = null, database = true, publishes = false, cache = true, calls = [], consumes = ["consulta-proyeccion"], allies = [], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/consulta", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/consulta", name = "solventa-int/consulta" } }
+          "avisos"              = { tier = "worker", listener_port = null, database = true, publishes = false, cache = false, calls = ["adaptador-firma"], consumes = ["avisos"], allies = [], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/avisos", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/avisos", name = "solventa-int/avisos" } }
+          "auditoria"           = { tier = "worker", listener_port = null, database = false, publishes = false, cache = false, calls = [], consumes = ["auditoria"], allies = [], stories = [], discoverable = false, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/auditoria", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/auditoria", name = "solventa-int/auditoria" } }
+          "simulador-aliados"   = { tier = "soporte", listener_port = null, database = false, publishes = false, cache = false, calls = [], consumes = [], allies = [], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/simulador-aliados", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/simulador-aliados", name = "solventa-int/simulador-aliados" } }
         }
         database = {
           host              = "solventa-int.abc.us-east-1.rds.amazonaws.com"
@@ -52,12 +58,16 @@ override_data {
           instance_class    = "db.t4g.micro"
           multi_az          = false
           security_group_id = "sg-db"
-          names             = { "api-socios" = "api_socios", clientes = "clientes", catalogo = "catalogo", cotizacion = "cotizacion" }
+          names             = { "api-socios" = "api_socios", clientes = "clientes", catalogo = "catalogo", cotizacion = "cotizacion", polizas = "polizas", dinero = "dinero", consulta = "consulta", avisos = "avisos" }
           secrets = {
             "api-socios" = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/db/api-socios"
             clientes     = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/db/clientes"
             catalogo     = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/db/catalogo"
             cotizacion   = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/db/cotizacion"
+            polizas      = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/db/polizas"
+            dinero       = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/db/dinero"
+            consulta     = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/db/consulta"
+            avisos       = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/db/avisos"
           }
         }
         target_groups = {
@@ -69,14 +79,23 @@ override_data {
         queues = {
           auditoria                  = { arn = "arn:aws:sqs:us-east-1:123456789012:solventa-int-auditoria", url = "https://sqs.us-east-1.amazonaws.com/123456789012/solventa-int-auditoria", name = "solventa-int-auditoria", dlq_arn = "arn:aws:sqs:us-east-1:123456789012:solventa-int-auditoria-dlq", dlq_name = "solventa-int-auditoria-dlq" }
           consentimientos-cotizacion = { arn = "arn:aws:sqs:us-east-1:123456789012:solventa-int-consentimientos-cotizacion", url = "https://sqs.us-east-1.amazonaws.com/123456789012/solventa-int-consentimientos-cotizacion", name = "solventa-int-consentimientos-cotizacion", dlq_arn = "arn:aws:sqs:us-east-1:123456789012:solventa-int-consentimientos-cotizacion-dlq", dlq_name = "solventa-int-consentimientos-cotizacion-dlq" }
+          dinero-aceptaciones        = { arn = "arn:aws:sqs:us-east-1:123456789012:solventa-int-dinero-aceptaciones", url = "https://sqs.us-east-1.amazonaws.com/123456789012/solventa-int-dinero-aceptaciones", name = "solventa-int-dinero-aceptaciones", dlq_arn = "arn:aws:sqs:us-east-1:123456789012:solventa-int-dinero-aceptaciones-dlq", dlq_name = "solventa-int-dinero-aceptaciones-dlq" }
+          polizas-recaudos           = { arn = "arn:aws:sqs:us-east-1:123456789012:solventa-int-polizas-recaudos", url = "https://sqs.us-east-1.amazonaws.com/123456789012/solventa-int-polizas-recaudos", name = "solventa-int-polizas-recaudos", dlq_arn = "arn:aws:sqs:us-east-1:123456789012:solventa-int-polizas-recaudos-dlq", dlq_name = "solventa-int-polizas-recaudos-dlq" }
+          consulta-proyeccion        = { arn = "arn:aws:sqs:us-east-1:123456789012:solventa-int-consulta-proyeccion", url = "https://sqs.us-east-1.amazonaws.com/123456789012/solventa-int-consulta-proyeccion", name = "solventa-int-consulta-proyeccion", dlq_arn = "arn:aws:sqs:us-east-1:123456789012:solventa-int-consulta-proyeccion-dlq", dlq_name = "solventa-int-consulta-proyeccion-dlq" }
+          avisos                     = { arn = "arn:aws:sqs:us-east-1:123456789012:solventa-int-avisos", url = "https://sqs.us-east-1.amazonaws.com/123456789012/solventa-int-avisos", name = "solventa-int-avisos", dlq_arn = "arn:aws:sqs:us-east-1:123456789012:solventa-int-avisos-dlq", dlq_name = "solventa-int-avisos-dlq" }
         }
-        events_topic_arn = "arn:aws:sns:us-east-1:123456789012:solventa-int-eventos-negocio"
-        alerts_topic_arn = "arn:aws:sns:us-east-1:123456789012:solventa-int-alertas"
-        audit_bucket     = { name = "solventa-int-auditoria-123456789012", arn = "arn:aws:s3:::solventa-int-auditoria-123456789012" }
+        events_topic_arn        = "arn:aws:sns:us-east-1:123456789012:solventa-int-eventos-negocio"
+        alerts_topic_arn        = "arn:aws:sns:us-east-1:123456789012:solventa-int-alertas"
+        audit_bucket            = { name = "solventa-int-auditoria-123456789012", arn = "arn:aws:s3:::solventa-int-auditoria-123456789012" }
+        policy_documents_bucket = { name = "solventa-int-polizas-123456789012", arn = "arn:aws:s3:::solventa-int-polizas-123456789012", sse = "AES256" }
+        cache                   = { enabled = true, url = "rediss://solventa-int-cache.abc.cache.amazonaws.com:6379", security_group_id = "sg-cache", cluster_ids = ["solventa-int-cache-001"], services = ["catalogo", "consulta", "cotizacion"] }
         allies = {
           open-finance   = { secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/aliados/open-finance" }
           datos-abiertos = { secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/aliados/datos-abiertos" }
           kyc            = { secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/aliados/kyc" }
+          pagos          = { secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/aliados/pagos" }
+          firma          = { secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/aliados/firma" }
+          push           = { secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/aliados/push" }
         }
         registro = { token_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/registro/token" }
         cognito = {
@@ -116,6 +135,12 @@ variables {
     "adaptador-identidad" = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
     "auditoria"           = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
     "simulador-aliados"   = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    "polizas"             = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    "dinero"              = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    "adaptador-pagos"     = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    "adaptador-firma"     = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    "consulta"            = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    "avisos"              = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
   }
 }
 
@@ -123,10 +148,13 @@ run "todos_los_servicios" {
   command = plan
 
   assert {
+    # HU-S02: los servicios nuevos no cambian la capa de bff-web (5) ni la de bff-movil (3),
+    # así que sus servicios ECS no se recrean (module.layer_N conserva la dirección).
     condition = local.depth == {
-      "simulador-aliados" = 0, auditoria = 0, catalogo = 0
-      "adaptador-datos"   = 1, "adaptador-identidad" = 1
-      clientes            = 2, "bff-movil" = 3, cotizacion = 3
+      "simulador-aliados" = 0, auditoria = 0, catalogo = 0, consulta = 0
+      "adaptador-datos"   = 1, "adaptador-identidad" = 1, "adaptador-pagos" = 1, "adaptador-firma" = 1
+      clientes            = 2, polizas = 2, dinero = 2, avisos = 2
+      "bff-movil"         = 3, cotizacion = 3
       "api-socios"        = 4, "bff-web" = 5
     }
     error_message = "Las capas de Service Connect deben crear primero a los servicios invocados."
@@ -155,11 +183,11 @@ run "todos_los_servicios" {
     error_message = "Cotización debe recibir su cola y las URLs de sus dependencias."
   }
   assert {
-    condition     = length(aws_appautoscaling_policy.backlog) == 1 && contains(keys(aws_appautoscaling_policy.backlog), "auditoria")
-    error_message = "Solo los workers escalan por profundidad de cola."
+    condition     = toset(keys(aws_appautoscaling_policy.backlog)) == toset(["auditoria", "avisos"]) && alltrue([for name in ["polizas", "dinero", "consulta", "adaptador-pagos", "adaptador-firma"] : contains(keys(aws_appautoscaling_policy.cpu), name)])
+    error_message = "Solo los workers escalan por profundidad de cola; los demás servicios nuevos, por CPU."
   }
   assert {
-    condition     = length(aws_vpc_security_group_ingress_rule.database) == 4
+    condition     = toset(keys(aws_vpc_security_group_ingress_rule.database)) == toset(["api-socios", "clientes", "catalogo", "cotizacion", "polizas", "dinero", "consulta", "avisos"])
     error_message = "Solo los servicios con base llegan a PostgreSQL."
   }
   assert {
@@ -196,7 +224,7 @@ run "todos_los_servicios" {
     condition = (
       length([for widget in local.widgets : widget if try(widget.properties.title, "") == "Tasa de error (%)"]) == 1 &&
       contains([for value in local.dashboard_variables[0].values : value.label], "cotizacion") &&
-      length(local.dashboard_variables[0].values) == 11
+      length(local.dashboard_variables[0].values) == 17
     )
     error_message = "El tablero debe mostrar la tasa de error y filtrar por cada servicio desplegado (AC3)."
   }
@@ -325,6 +353,148 @@ run "todos_los_servicios" {
   assert {
     condition     = !contains(keys(local.environment["clientes"]), "CLIENTES_SEMILLA_SINTETICA")
     error_message = "Sin service_environment, clientes no siembra datos sintéticos."
+  }
+}
+
+# HU-S02: servicios, IAM mínimo, variables, caché, alarmas y tablero del Sprint 2.
+run "sprint2" {
+  command = plan
+
+  # La política de ejecución incluye el ARN de los log groups: se conoce en el plan.
+  override_resource {
+    target          = aws_cloudwatch_log_group.service
+    override_during = plan
+    values          = { arn = "arn:aws:logs:us-east-1:123456789012:log-group:servicio" }
+  }
+  override_resource {
+    target          = aws_cloudwatch_log_group.proxy
+    override_during = plan
+    values          = { arn = "arn:aws:logs:us-east-1:123456789012:log-group:proxy" }
+  }
+
+  assert {
+    condition = alltrue([
+      for name in ["polizas", "dinero", "adaptador-pagos", "adaptador-firma", "consulta", "avisos"] :
+      contains(keys(local.ecs_services), name) && contains(keys(aws_iam_role.execution), name) && contains(keys(aws_iam_role.task), name) &&
+      aws_cloudwatch_log_group.service[name].name == "/ecs/solventa-int/${name}" && contains(keys(aws_appautoscaling_target.service), name) &&
+      contains(keys(aws_cloudwatch_metric_alarm.error_rate), "${name}-errores-critica") && contains(keys(aws_cloudwatch_metric_alarm.saturation), "${name}-cpu")
+    ])
+    error_message = "AC1: cada servicio nuevo tiene servicio ECS, roles, logs, autoescalado y alarmas."
+  }
+  assert {
+    condition = alltrue([
+      for name, statements in local.task_statements :
+      strcontains(jsonencode(statements), "secretsmanager:") == false &&
+      contains(flatten([for s in jsondecode(aws_iam_role_policy.execution[name].policy).Statement : s.Resource]), "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/aliados/pagos") == (name == "adaptador-pagos") &&
+      contains(flatten([for s in jsondecode(aws_iam_role_policy.execution[name].policy).Statement : s.Resource]), "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/aliados/firma") == (name == "adaptador-firma") &&
+      contains(flatten([for s in jsondecode(aws_iam_role_policy.execution[name].policy).Statement : s.Resource]), "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/aliados/push") == (name == "adaptador-firma")
+    ])
+    error_message = "AC3: solo adaptador-pagos lee el secreto pagos y solo adaptador-firma los de firma y push."
+  }
+  assert {
+    condition = alltrue([
+      for name in keys(local.deployed) : alltrue([
+        for db, secret in {
+          polizas = "solventa-int/db/polizas", dinero = "solventa-int/db/dinero", consulta = "solventa-int/db/consulta", avisos = "solventa-int/db/avisos"
+        } : contains(flatten([for s in jsondecode(aws_iam_role_policy.execution[name].policy).Statement : s.Resource]), "arn:aws:secretsmanager:us-east-1:123456789012:secret:${secret}") == (name == db)
+      ])
+    ]) && local.environment["polizas"]["DB_NAME"] == "polizas" && local.environment["consulta"]["DB_NAME"] == "consulta"
+    error_message = "AC3: cada servicio nuevo lee solo las credenciales de su propia base."
+  }
+  assert {
+    condition = alltrue([
+      for name, statements in local.task_statements :
+      contains(flatten([for s in statements : s.Action if contains(s.Resource, "arn:aws:s3:::solventa-int-polizas-123456789012/*")]), "s3:PutObject") == (name == "polizas") &&
+      contains(flatten([for s in statements : s.Action if contains(s.Resource, "arn:aws:s3:::solventa-int-polizas-123456789012/*")]), "s3:GetObject") == contains(["polizas", "consulta"], name) &&
+      !contains(flatten([for s in statements : s.Action if contains(s.Resource, "arn:aws:s3:::solventa-int-polizas-123456789012/*")]), "s3:DeleteObject")
+    ])
+    error_message = "AC3: solo polizas escribe documentos de póliza; polizas y consulta los leen para firmar URL prefirmadas; nadie los borra."
+  }
+  assert {
+    condition = alltrue([
+      for name, env in local.environment :
+      (lookup(env, "POLIZAS_BUCKET", "") == "solventa-int-polizas-123456789012") == contains(["polizas", "consulta"], name) &&
+      (lookup(env, "POLIZAS_BUCKET_SSE", "") == "AES256") == contains(["polizas", "consulta"], name) &&
+      (lookup(env, "CACHE_URL", null) == "rediss://solventa-int-cache.abc.cache.amazonaws.com:6379") == contains(["catalogo", "cotizacion", "consulta"], name) &&
+      contains(keys(env), "LATENCY_BUDGET_MS") == (name == "cotizacion")
+    ]) && jsondecode(local.environment["cotizacion"]["LATENCY_BUDGET_MS"]) == { cotizacion = 700 }
+    error_message = "POLIZAS_BUCKET, CACHE_URL y LATENCY_BUDGET_MS solo llegan a los servicios que los usan."
+  }
+  assert {
+    condition = (
+      toset(keys(aws_vpc_security_group_ingress_rule.cache)) == toset(["catalogo", "cotizacion", "consulta"]) &&
+      alltrue([for rule in aws_vpc_security_group_ingress_rule.cache : rule.security_group_id == "sg-cache" && rule.from_port == 6379 && rule.to_port == 6379])
+    )
+    error_message = "La caché solo admite a catalogo, cotizacion y consulta."
+  }
+  assert {
+    condition = (
+      local.environment["adaptador-pagos"]["ALLY_PAGOS_TIMEOUT_MS"] == "5000" && local.environment["adaptador-pagos"]["ALLY_PAGOS_URL"] == "http://simulador-aliados:8080/pagos" &&
+      local.environment["adaptador-firma"]["ALLY_FIRMA_TIMEOUT_MS"] == "5000" && local.environment["adaptador-firma"]["ALLY_PUSH_TIMEOUT_MS"] == "2000" &&
+      local.environment["polizas"]["ADAPTADOR_FIRMA_URL"] == "http://adaptador-firma:8080" && local.environment["dinero"]["ADAPTADOR_PAGOS_URL"] == "http://adaptador-pagos:8080" &&
+      local.environment["avisos"]["ADAPTADOR_FIRMA_URL"] == "http://adaptador-firma:8080" &&
+      local.environment["bff-web"]["POLIZAS_URL"] == "http://polizas:8080" && local.environment["bff-web"]["CONSULTA_URL"] == "http://consulta:8080" &&
+      local.environment["bff-movil"]["CONSULTA_URL"] == "http://consulta:8080" && local.environment["bff-movil"]["AVISOS_URL"] == "http://avisos:8080" &&
+      local.environment["dinero"]["SQS_DINERO_ACEPTACIONES_URL"] == "https://sqs.us-east-1.amazonaws.com/123456789012/solventa-int-dinero-aceptaciones" &&
+      local.environment["polizas"]["SQS_POLIZAS_RECAUDOS_URL"] != "" && local.environment["consulta"]["SQS_CONSULTA_PROYECCION_URL"] != "" && local.environment["avisos"]["SQS_AVISOS_URL"] != "" &&
+      local.environment["polizas"]["EVENTS_TOPIC_ARN"] != "" && local.environment["dinero"]["OUTBOX_ENABLED"] == "true" && !contains(keys(local.environment["consulta"]), "EVENTS_TOPIC_ARN")
+    )
+    error_message = "Timeouts de aliados, URLs de Service Connect, colas y Outbox de los servicios nuevos."
+  }
+  assert {
+    condition = alltrue([
+      for link in ["bff-web-polizas", "bff-web-consulta", "bff-movil-consulta", "bff-movil-avisos", "dinero-adaptador-pagos", "polizas-adaptador-firma", "avisos-adaptador-firma"] :
+      contains(keys(local.service_links), link)
+    ]) && !contains(keys(local.service_links), "bff-movil-polizas") && !contains(keys(local.service_links), "polizas-adaptador-pagos")
+    error_message = "Solo los enlaces del Sprint 2 declarados en el catálogo."
+  }
+  assert {
+    condition = alltrue([
+      for name in ["dinero-aceptaciones", "polizas-recaudos", "consulta-proyeccion", "avisos"] :
+      aws_cloudwatch_metric_alarm.dlq[name].dimensions.QueueName == "solventa-int-${name}-dlq" && aws_cloudwatch_metric_alarm.dlq[name].threshold == 0 &&
+      aws_cloudwatch_metric_alarm.queue_age[name].dimensions.QueueName == "solventa-int-${name}"
+    ])
+    error_message = "AC2: la DLQ de cada cola nueva tiene alarma (mecanismo existente)."
+  }
+  assert {
+    condition = (
+      toset(keys(aws_cloudwatch_metric_alarm.provider_degradation)) == toset([for p in ["open-finance", "datos-abiertos", "kyc", "pagos", "firma", "push"] : "proveedor-${p}-degradado"]) &&
+      one([for q in aws_cloudwatch_metric_alarm.provider_degradation["proveedor-open-finance-degradado"].metric_query : q.expression if q.id == "errores"]) == "FILL(e0, 0) + FILL(e1, 0) + FILL(e2, 0)" &&
+      one([for q in aws_cloudwatch_metric_alarm.provider_degradation["proveedor-open-finance-degradado"].metric_query : q.expression if q.return_data == true]) == "IF(total > 0, 100 * errores / total, 0)" &&
+      toset([for q in aws_cloudwatch_metric_alarm.provider_degradation["proveedor-open-finance-degradado"].metric_query : q.metric[0].dimensions.Operation if length(q.metric) > 0]) == toset(["consulta.FA_PRODUCTOS_VIGENTES", "consulta.FA_HISTORIAL_PAGOS_12M", "consulta.FA_INGRESOS_AGREGADOS"]) &&
+      toset([for q in aws_cloudwatch_metric_alarm.provider_degradation["proveedor-pagos-degradado"].metric_query : "${q.metric[0].metric_name}/${q.metric[0].stat}/${q.metric[0].dimensions.Service}/${q.metric[0].dimensions.Operation}" if length(q.metric) > 0]) == toset(["OperationErrors/Sum/adaptador-pagos/cobro.pagos", "OperationDuration/SampleCount/adaptador-pagos/cobro.pagos"]) &&
+      aws_cloudwatch_metric_alarm.provider_degradation["proveedor-push-degradado"].threshold == 20 &&
+      aws_cloudwatch_metric_alarm.provider_degradation["proveedor-firma-degradado"].treat_missing_data == "notBreaching"
+    )
+    error_message = "Degradación por proveedor = OperationErrors / SampleCount(OperationDuration) de sus operaciones (HU-W06)."
+  }
+  assert {
+    condition = (
+      one(aws_cloudwatch_metric_alarm.pending_collections).threshold == 900 &&
+      one([for q in one(aws_cloudwatch_metric_alarm.pending_collections).metric_query : q.expression if q.return_data == true]) == "MAX([a0, a1])" &&
+      toset([for q in one(aws_cloudwatch_metric_alarm.pending_collections).metric_query : q.metric[0].dimensions.QueueName if length(q.metric) > 0]) == toset(["solventa-int-dinero-aceptaciones", "solventa-int-polizas-recaudos"]) &&
+      aws_cloudwatch_metric_alarm.push_failures.dimensions == tomap({ Environment = "int", Service = "avisos", Operation = "aviso.push" }) &&
+      aws_cloudwatch_metric_alarm.push_failures.threshold == 5 && aws_cloudwatch_metric_alarm.push_failures.comparison_operator == "GreaterThanOrEqualToThreshold"
+    )
+    error_message = "Alarmas de recaudos pendientes (antigüedad de la Saga) y de fallos de push de avisos."
+  }
+  assert {
+    condition = (
+      toset(keys(local.alert_catalog)) == toset([for alarm in local.all_alarms : trimprefix(alarm.alarm_name, "solventa-int-")]) &&
+      jsondecode(local.environment["bff-web"]["ALERTAS_CATALOGO"])["recaudos-pendientes"].severidad == "critica" &&
+      jsondecode(local.environment["bff-web"]["ALERTAS_CATALOGO"])["cola-dinero-aceptaciones-dlq"].severidad == "informativa"
+    )
+    error_message = "bff-web conoce las alarmas nuevas (pantalla Operación › Alertas)."
+  }
+  assert {
+    condition = (
+      length([for w in local.widgets : w if w.type == "text" && startswith(w.properties.markdown, "### Contratación")]) == 1 &&
+      length([for w in local.widgets : w if w.type == "text" && startswith(w.properties.markdown, "### Consulta")]) == 1 &&
+      contains(one([for w in local.widgets : w.properties.alarms if w.type == "alarm"]), "arn:aws:cloudwatch:us-east-1:123456789012:alarm:solventa-int-proveedor-pagos-degradado") &&
+      length([for w in local.widgets : w if try(w.properties.title, "") == "Caché: aciertos, fallos y CPU"]) == 1 &&
+      alltrue([for w in local.widgets : w.y + w.height <= 200])
+    )
+    error_message = "El tablero tiene las filas Contratación y Consulta (con la caché habilitada)."
   }
 }
 

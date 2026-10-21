@@ -31,6 +31,14 @@ ally_timeouts_ms = {
   open-finance   = 800
   datos-abiertos = 800
   kyc            = 3000
+  pagos          = 5000
+  firma          = 5000
+  push           = 2000
+}
+
+# Presupuesto de latencia por operación (LATENCY_BUDGET_MS, HU-W05).
+latency_budget_ms = {
+  cotizacion = 700
 }
 
 # Umbrales de alertas (HU-W28).

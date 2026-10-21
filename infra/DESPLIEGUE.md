@@ -67,7 +67,7 @@ cp -r infra/envs/int infra/envs/qa
 make infra-desplegar ENV=qa
 ```
 
-**Secretos de aliados:** Terraform crea los secretos `solventa-<ambiente>/aliados/{kyc,open-finance,datos-abiertos}` con un valor de marcador. Mientras no se carguen las credenciales reales, los adaptadores usan `simulador-aliados`. Para cargarlas, después del paso 1:
+**Secretos de aliados:** Terraform crea los secretos `solventa-<ambiente>/aliados/{kyc,open-finance,datos-abiertos,pagos,firma,push}` con un valor de marcador. Mientras no se carguen las credenciales reales, los adaptadores usan `simulador-aliados`. Para cargarlas, después del paso 1:
 
 ```bash
 aws secretsmanager put-secret-value --secret-id solventa-int/aliados/kyc \
@@ -117,7 +117,7 @@ Ejecuta en orden los cuatro pasos de la sección 1:
 | `make infra-plan` | Ver los cambios de ambas raíces sin aplicar |
 | `make infra-pausar` / `make infra-reanudar` | Llevar todos los servicios a 0 tareas o volver a las réplicas configuradas |
 | `make infra-salidas` | URLs de los APIs, portal, Cognito y tablero |
-| `make infra-probar` | Prueba rápida del ambiente desplegado (sección 5.1) |
+| `make infra-probar` | Prueba del ambiente desplegado, incluido el Sprint 2: servicios, enrutamiento de eventos y DLQ (secciones 5.1 y 5.3) |
 | `make infra-probar-alerta` | Activa y recupera la alarma del perfilamiento con una métrica sintética (sección 5.2) |
 
 ### 5.1 Prueba rápida del ambiente
@@ -140,11 +140,12 @@ make infra-probar ENV=int                                           # SMOKE_ALER
 | Socio de prueba: token `client_credentials` | Cognito entrega el token | Pool de socios, dominio y servidor de recursos |
 | Socio con token, sin API key | 401/403 | Plan de uso por API key (HU-W02) |
 | Socio con token y API key | 200 desde `api-socios` | Recorrido completo: WAF → API Gateway → VPC Link v2 → ALB → ECS |
+| Sprint 2: servicios nuevos, `OfertaAceptada` y DLQ | Ver sección 5.3 (`SMOKE_DLQ=0` omite la DLQ, ~6–10 min) | AC1 y AC2 de HU-S02 |
 | `SMOKE_ALERTA=1` | Llega el correo de prueba | Tópico de alertas y suscripción confirmada (HU-W28). La prueba de las alarmas es la sección 5.2 |
 
 - **Socios de prueba:** la prueba usa `socio-a`, definido en `infra/envs/int/platform.tfvars`. En `int`, `socio-a` y `socio-b` usan el plan `prueba` (5 solicitudes al día): si las pruebas de HU-W02 agotaron su cuota, el paso 4 responde 429 hasta las 00:00 UTC o hasta reponerla con `aws apigateway update-usage --usage-plan-id <prueba> --key-id <api_key_id> --patch-operations op=replace,path=/remaining,value=5` (`terraform -chdir=infra/platform output -json partners` muestra `api_key_id`).
 - **Dominio de Cognito:** puede tardar unos minutos en responder después del primer `infra-plataforma`. Si falla solo el token, repetir.
-- **Más servicios:** para cubrir los demás, agregarlos a `SERVICES`. Sin `SERVICES`, se construyen los 10 del catálogo.
+- **Más servicios:** para cubrir los demás, agregarlos a `SERVICES`. Sin `SERVICES`, se construyen los 16 del catálogo.
 
 ### 5.2 Probar las alertas (HU-W28)
 
@@ -187,6 +188,32 @@ Alertas abiertas: https://<portal>/operacion/alertas
 
 El de recuperación es igual con `RECUPERADA` en lugar de `ALARMA`. Mientras la alarma está abierta aparece en el portal, en **Operación › Alertas**.
 
+### 5.3 Humo extendido del Sprint 2 (HU-S02)
+
+Despliegue del Sprint 2 en un ambiente destruido (todo con los mismos targets y workflows; los servicios nuevos solo tienen `/health` hasta que sus dueños implementen la lógica):
+
+```bash
+make infra-plataforma ENV=int     # catálogo, colas, secretos pagos/firma/push, bucket de pólizas, caché
+make infra-bases ENV=int          # bases polizas, dinero, consulta y avisos (idempotente)
+make infra-imagenes ENV=int       # los 16 servicios con Dockerfile
+make infra-aplicaciones ENV=int   # servicios ECS, IAM, alarmas y tablero
+make infra-probar ENV=int         # humo completo: Sprint 1 y Sprint 2
+```
+
+O todo en uno: `make infra-desplegar ENV=int`, o el workflow **Infra - Desplegar** con alcance `completo`. Para agregar el Sprint 2 a un ambiente ya desplegado basta con `make infra-plataforma`, `make infra-bases` y `make infra-microservicios SERVICES=polizas,dinero,adaptador-pagos,adaptador-firma,consulta,avisos`: ningún servicio existente cambia de capa de Service Connect, y `apps.sh` reinicia `bff-web` y `bff-movil` para que descubran a los nuevos.
+
+`make infra-probar` (y el paso "Prueba rápida" del workflow **Infra - Desplegar**) ejecuta, después de los chequeos de la sección 5.1:
+
+| Paso de `infra-probar` | Esperado | Qué valida |
+| --- | --- | --- |
+| 6. Servicios | `polizas`, `dinero`, `adaptador-pagos`, `adaptador-firma`, `consulta` y `avisos` con tareas corriendo = deseadas y todas `HEALTHY` (el healthcheck del contenedor llama a `GET /health`). Los que no tienen imagen publicada se omiten | Imagen, roles, secretos de su base y de sus aliados, red, logs (AC1) |
+| 7. Enrutamiento | Un `OfertaAceptada` sintético (`"sintetico": true`) publicado en el tópico de negocio llega a `dinero-aceptaciones` y a ninguna otra cola salvo `auditoria`, que recibe todo. El mensaje se borra de `dinero-aceptaciones` al verificarlo | Filtros por `eventType` (AC2) |
+| 8. DLQ | Un mensaje envenenado en `SMOKE_DLQ_COLA` (`avisos` por defecto) se recibe sin borrarse hasta agotar `maxReceiveCount`; SQS lo mueve a la DLQ y `<prefijo>-cola-<cola>-dlq` pasa a ALARM (hasta `SMOKE_ESPERA_ALARMA_S`, 600 s). Después se borra de la DLQ y la alarma vuelve a OK en unos minutos | Redrive y alarma de la DLQ (AC2) |
+
+- **Variables:** `SMOKE_DLQ_COLA`, `SMOKE_ESPERA_RUTA_S` (60), `SMOKE_ESPERA_ALARMA_S` (600) y `SMOKE_DLQ=0` para omitir el paso 8. El paso 8 tarda ~6–10 min por la alarma de la DLQ (periodo de 300 s); con `SMOKE_DLQ=0` la prueba completa dura ~1–2 min.
+- **Con consumidores reales:** el paso 8 compite con el consumidor de `SMOKE_DLQ_COLA`. Si este borra mensajes inválidos, el envenenado no llega a la DLQ: elegir una cola cuyo consumidor reintente los errores o no esté desplegado. La auditoría (Object Lock) conserva el `OfertaAceptada` sintético, marcado con `"sintetico": true`.
+- **Correos:** la alarma de la DLQ envía un correo de ALARMA y otro de RECUPERADA (HU-W28).
+
 ### Imágenes de los microservicios
 
 - **Convención:** `services/<servicio>/Dockerfile`, construido con contexto en la raíz del repo para que la imagen incluya `libs/`. El nombre de la carpeta debe coincidir con el del catálogo (`bff-web`, `clientes`, `adaptador-identidad`…). Con `SRC_DIR=otra/carpeta` se usa otra raíz.
@@ -213,14 +240,15 @@ AUTO_APPROVE=1 make infra-destruir ENV=int  # sin pregunta (CI)
 | Orden | Qué pasa |
 | --- | --- |
 | 1 | Destruye `apps` (servicios, IAM, alarmas, reglas de alertas de EventBridge, tablero). |
-| 2 | Vacía el bucket de auditoría saltando la retención GOVERNANCE de Object Lock. Con `audit_lock_mode = "COMPLIANCE"`, AWS no permite borrar antes del vencimiento y la destrucción de ese bucket falla. |
+| 2 | Vacía el bucket de auditoría saltando la retención GOVERNANCE de Object Lock y el de documentos de póliza (todas las versiones). Con `audit_lock_mode = "COMPLIANCE"`, AWS no permite borrar antes del vencimiento y la destrucción de ese bucket falla. |
 | 3 | Borra todas las imágenes de los repositorios ECR del ambiente, así la destrucción no depende de que el estado tenga `force_delete = true`. |
-| 4 | Destruye `platform`: RDS sin snapshot final, repositorios ECR, Cognito, colas, NAT, ALB, API Gateway, WAF y VPC. |
+| 4 | Destruye `platform`: RDS sin snapshot final, caché ElastiCache, repositorios ECR, Cognito, colas, NAT, ALB, API Gateway, WAF y VPC. |
 
 - **Idempotencia:** si una raíz ya no tiene recursos, se omite.
 - **Lo que se conserva:** el bucket de estado y el rol de GitHub (bootstrap).
 - **Recrear:** volver a ejecutar `make infra-desplegar`; las imágenes se reconstruyen porque ECR se borró con el ambiente. Después hay que crear de nuevo el primer administrador y publicar el portal (sección 6.1).
-- **Datos:** la base de datos, los usuarios de Cognito y la auditoría **se pierden**. Exportar lo necesario antes de destruir.
+- **Datos:** la base de datos, los usuarios de Cognito, la auditoría y los documentos de póliza **se pierden**. Exportar lo necesario antes de destruir.
+- **Reproducibilidad:** después de recrear, `make infra-plan` no debe mostrar cambios en ninguna raíz (HU-S02).
 
 ### 6.1 Volver a levantar el ambiente después de destruirlo
 
@@ -276,7 +304,7 @@ No se guardan llaves de AWS en GitHub: los workflows obtienen credenciales tempo
 | **Infra - Desplegar** (`infra-desplegar.yml`) | Manual | Alcance `completo`, `plataforma`, `bases`, `aplicaciones` o `microservicios` (con la lista `servicios`). Por cada raíz (`platform`, `apps`) calcula el plan, lo publica en el resumen, pide la aprobación del environment y aplica ese plan guardado; sin cambios no pide aprobación. En `completo` hay dos aprobaciones (plataforma y aplicaciones) y `construir_imagenes` decide si se publican imágenes antes del plan de `apps`. Deja las URLs en el resumen de la ejecución. |
 | **Infra - Imágenes a ECR** (`infra-imagenes.yml`) | Manual | Build y push de los servicios indicados (o todos los que tienen Dockerfile), sin desplegar. |
 | **Infra - Destruir** (`infra-destruir.yml`) | Manual | Exige escribir `destruir <ambiente>`. Ejecuta `make infra-destruir`. |
-| **Infra - Validar** (`infra-validar.yml`) | Pull requests que tocan `infra/` o los scripts | `fmt`, `validate` y `terraform test` de las tres raíces, más `shellcheck`. No usa AWS. |
+| **Infra - Validar** (`infra-validar.yml`) | Pull requests que tocan `infra/` o los scripts | `fmt`, `validate` y `terraform test` de las tres raíces, Trivy (falla con hallazgos CRITICAL no justificados en `infra/.trivyignore.yaml`) y `shellcheck`. No usa AWS. |
 | **E2E (N3)** (`e2e.yml`) | Manual | `pytest tests/e2e` contra el ambiente indicado (filtro `-k` opcional). Lee las salidas de `infra/platform` y llama a las APIs públicas; no cambia la infraestructura. Falla si falta configuración, en vez de omitir las pruebas. |
 
 Los workflows de un mismo ambiente comparten un grupo de concurrencia, así que no se ejecutan dos a la vez. Además, el estado remoto tiene bloqueo.
@@ -361,10 +389,13 @@ unset CLAVE
 | Una tarea no alcanza a otro servicio | El invocado se creó después que el llamador y la autodetección no aplicó. Ejecutar `aws ecs update-service --force-new-deployment` sobre el llamador. |
 | `aws_api_gateway_account` en conflicto | La configuración de logs de API Gateway es única por región y cuenta. Si otra pila la administra, quitar ese recurso de una de las dos. |
 | No se puede destruir la auditoría | `audit_lock_mode = "COMPLIANCE"`: esperar el vencimiento de la retención. |
+| `AccessDenied` al escribir un documento de póliza | La política del bucket exige `ServerSideEncryption` igual a `POLIZAS_BUCKET_SSE` en cada `PutObject`, TLS 1.2+ y solo `polizas` tiene `s3:PutObject`. |
+| Un servicio no conecta con la caché | `CACHE_URL` usa `rediss://` (TLS obligatorio); el cliente debe habilitar TLS. Solo `catalogo`, `cotizacion` y `consulta` pasan el grupo de seguridad. Con `cache_enabled = false`, `CACHE_URL` está vacía y el servicio debe leer de RDS. |
+| `make infra-validar` falla en Trivy | Corregir el hallazgo CRITICAL o, si el riesgo está cubierto, justificarlo en `infra/.trivyignore.yaml` limitado a su archivo. Sin Docker ni `trivy`, `TRIVY=0` lo omite en local (la CI lo ejecuta siempre). |
 
 ## 9. Validación sin AWS
 
 ```bash
-make infra-validar                      # fmt, validate y pruebas con proveedores simulados
+make infra-validar                      # fmt, validate, pruebas con proveedores simulados y Trivy
 shellcheck -x -P scripts/plataforma scripts/plataforma/*.sh
 ```

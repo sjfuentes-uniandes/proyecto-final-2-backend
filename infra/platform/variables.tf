@@ -112,6 +112,35 @@ variable "audit_retention_days" {
   default     = 30
 }
 
+variable "policy_documents_force_destroy" {
+  description = "true permite destruir el bucket de documentos de póliza con objetos (ambientes de prueba). false en producción."
+  type        = bool
+  default     = true
+}
+
+variable "policy_documents_noncurrent_days" {
+  description = "Días que se conservan las versiones anteriores de un documento de póliza."
+  type        = number
+  default     = 90
+}
+
+variable "cache_enabled" {
+  description = "Caché ElastiCache (Valkey) para catalogo, cotizacion y consulta. false: sin recursos y los servicios leen de RDS."
+  type        = bool
+  default     = true
+}
+
+variable "cache_node_type" {
+  description = "Nodo de la caché. cache.t3.micro entra en la capa gratuita de ElastiCache (750 h/mes)."
+  type        = string
+  default     = "cache.t3.micro"
+}
+
+variable "cache_engine_version" {
+  type    = string
+  default = "8.0"
+}
+
 variable "audit_lock_mode" {
   description = "GOVERNANCE permite destruir el ambiente con permisos especiales; COMPLIANCE impide borrar antes del vencimiento."
   type        = string

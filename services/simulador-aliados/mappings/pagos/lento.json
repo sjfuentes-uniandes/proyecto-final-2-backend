@@ -1,0 +1,35 @@
+{
+  "name": "pagos proveedor lento (supera el timeout de 5 s)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/pagos/v1/cobros",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.referencia",
+          "equalTo": "pago-sintetico-lento"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      },
+      "Idempotency-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "estado": "APROBADO",
+      "transaccionId": "TX-SINT-0001",
+      "motivo": null
+    },
+    "fixedDelayMilliseconds": 8000
+  }
+}

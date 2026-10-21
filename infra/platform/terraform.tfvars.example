@@ -21,6 +21,11 @@ postgres_version  = "16"
 audit_retention_days = 30
 audit_lock_mode      = "GOVERNANCE"
 
+# Documentos de póliza y caché Valkey (HU-S02).
+policy_documents_force_destroy = true
+cache_enabled                  = true
+cache_node_type                = "cache.t3.micro"
+
 # WAF siempre activo (~7 USD/mes: Web ACL + 2 reglas). Solicitudes por IP en 5 min.
 waf_rate_limit = 2000
 

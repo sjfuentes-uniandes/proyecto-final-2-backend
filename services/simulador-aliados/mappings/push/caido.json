@@ -1,0 +1,30 @@
+{
+  "name": "push proveedor caído (error recuperable)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/push/v1/envios",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.tokenDispositivo",
+          "equalTo": "token-sintetico-caido"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "error": "unavailable"
+    },
+    "fixedDelayMilliseconds": 50
+  }
+}

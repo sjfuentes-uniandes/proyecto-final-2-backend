@@ -1,7 +1,8 @@
 name: Infra - Validar
 
 # Sin credenciales de AWS: formato, validación y pruebas de Terraform con
-# proveedores simulados, y shellcheck de los scripts de despliegue.
+# proveedores simulados, Trivy (falla con hallazgos CRITICAL sin justificar en
+# infra/.trivyignore.yaml) y shellcheck de los scripts de despliegue.
 on:
   pull_request:
     paths:
@@ -10,6 +11,7 @@ on:
       - "infra/apps/**"
       - "infra/envs/**"
       - "infra/lambdas/**"
+      - "infra/.trivyignore.yaml"
       - "libs/solventa-common/src/solventa_common/token_registro.py"
       - "infra/plataforma.mk"
       - "scripts/plataforma/**"
@@ -33,7 +35,8 @@ jobs:
           terraform_version: "~1.16"
           terraform_wrapper: false
 
-      - name: Terraform (fmt, validate, test)
+      # Trivy corre con la imagen aquasec/trivy (Docker del runner).
+      - name: Terraform (fmt, validate, test) y Trivy
         run: make infra-validar
 
       - uses: ./.github/actions/preparar-python

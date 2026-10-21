@@ -105,7 +105,7 @@ run "minimo_costo" {
     error_message = "Solo los servicios de acceso se publican en el ALB."
   }
   assert {
-    condition     = toset(keys(aws_secretsmanager_secret.service_db)) == toset(["api-socios", "clientes", "catalogo", "cotizacion"])
+    condition     = toset(keys(aws_secretsmanager_secret.service_db)) == toset(["api-socios", "clientes", "catalogo", "cotizacion", "polizas", "dinero", "consulta", "avisos"])
     error_message = "Cada servicio con base debe tener su propio secreto."
   }
   assert {
@@ -207,6 +207,160 @@ run "minimo_costo" {
   assert {
     condition     = aws_api_gateway_method.proxy["movil"].authorization == "COGNITO_USER_POOLS"
     error_message = "El resto de /movil sigue exigiendo token de Cognito."
+  }
+}
+
+# HU-S02: servicios, colas, aliados, documentos de póliza y caché del Sprint 2.
+run "sprint2" {
+  command = plan
+
+  override_resource {
+    target          = aws_s3_bucket.policy_documents
+    override_during = plan
+    values          = { id = "solventa-int-polizas-123456789012", arn = "arn:aws:s3:::solventa-int-polizas-123456789012" }
+  }
+  override_resource {
+    target          = aws_elasticache_replication_group.cache
+    override_during = plan
+    values          = { primary_endpoint_address = "solventa-int-cache.abc.cache.amazonaws.com" }
+  }
+  override_resource {
+    target          = aws_sqs_queue.dlq
+    override_during = plan
+    values          = { arn = "arn:aws:sqs:us-east-1:123456789012:dlq" }
+  }
+
+  assert {
+    condition = alltrue([
+      for name in ["polizas", "dinero", "adaptador-pagos", "adaptador-firma", "consulta", "avisos"] :
+      contains(keys(aws_ecr_repository.service), name) && aws_ecr_repository.service[name].name == "solventa-int/${name}"
+    ])
+    error_message = "AC1: cada servicio nuevo tiene su repositorio ECR."
+  }
+  assert {
+    condition = alltrue([
+      for name in ["polizas", "dinero", "consulta", "avisos"] :
+      strcontains(local.db_bootstrap_script, "role=${name}") && contains(keys(aws_secretsmanager_secret.service_db), name)
+    ]) && !contains(keys(aws_secretsmanager_secret.service_db), "adaptador-pagos") && !contains(keys(aws_secretsmanager_secret.service_db), "adaptador-firma")
+    error_message = "AC1: polizas, dinero, consulta y avisos tienen base y usuario propios; los adaptadores no."
+  }
+  assert {
+    condition = alltrue([
+      for event, queues in {
+        OfertaAceptada         = ["auditoria", "dinero-aceptaciones"]
+        RecaudoConfirmado      = ["auditoria", "polizas-recaudos", "avisos"]
+        RecaudoRechazado       = ["auditoria", "polizas-recaudos"]
+        PolizaEmitida          = ["auditoria", "consulta-proyeccion", "avisos"]
+        ConsentimientoRevocado = ["auditoria", "consentimientos-cotizacion"]
+        } : toset(queues) == toset([
+          for name, subscription in aws_sns_topic_subscription.queue : name
+          if subscription.filter_policy == null || anytrue([
+            for rule in try(jsondecode(subscription.filter_policy).eventType, []) : try(startswith(event, rule.prefix), rule == event)
+          ])
+      ])
+    ])
+    error_message = "AC2: cada evento llega solo a las colas cuyo filtro de eventType lo admite (OfertaAceptada solo a dinero-aceptaciones y a la auditoría)."
+  }
+  assert {
+    condition = alltrue([
+      for name in ["dinero-aceptaciones", "polizas-recaudos", "consulta-proyeccion", "avisos"] :
+      aws_sqs_queue.dlq[name].name == "solventa-int-${name}-dlq" &&
+      aws_sqs_queue.dlq[name].message_retention_seconds == 1209600 &&
+      jsondecode(aws_sqs_queue.main[name].redrive_policy).maxReceiveCount == 5 &&
+      aws_sqs_queue.main[name].sqs_managed_sse_enabled &&
+      aws_sns_topic_subscription.queue[name].raw_message_delivery
+    ])
+    error_message = "AC2: cada cola nueva tiene su DLQ con redrive tras 5 recepciones y está cifrada."
+  }
+  assert {
+    condition     = toset(keys(aws_secretsmanager_secret.ally)) == toset(["open-finance", "datos-abiertos", "kyc", "pagos", "firma", "push"]) && aws_secretsmanager_secret.ally["pagos"].name == "solventa-int/aliados/pagos"
+    error_message = "Secretos de aliados pagos, firma y push (con valor de marcador, fuera del estado)."
+  }
+  assert {
+    condition = (
+      local.catalog["adaptador-pagos"].allies == ["pagos"] &&
+      local.catalog["adaptador-firma"].allies == ["firma", "push"] &&
+      length([for name, service in local.catalog : name if contains(service.allies, "pagos")]) == 1 &&
+      length([for name, service in local.catalog : name if contains(service.allies, "push")]) == 1
+    )
+    error_message = "AC3: solo adaptador-pagos usa el secreto pagos y solo adaptador-firma los de firma y push."
+  }
+  assert {
+    condition = (
+      local.catalog["bff-web"].calls == ["clientes", "cotizacion", "api-socios", "polizas", "consulta"] &&
+      local.catalog["bff-movil"].calls == ["clientes", "consulta", "avisos"] &&
+      local.catalog["dinero"].calls == ["adaptador-pagos"] && local.catalog["polizas"].calls == ["adaptador-firma"] &&
+      alltrue([for name in ["polizas", "consulta", "avisos", "adaptador-pagos", "adaptador-firma"] : contains(local.discoverable, name)]) &&
+      !contains(local.discoverable, "dinero")
+    )
+    error_message = "Llamadas del Sprint 2 y anuncio en Service Connect solo de los servicios invocados."
+  }
+  assert {
+    condition = (
+      aws_s3_bucket_versioning.policy_documents.versioning_configuration[0].status == "Enabled" &&
+      one(one(aws_s3_bucket_server_side_encryption_configuration.policy_documents.rule).apply_server_side_encryption_by_default).sse_algorithm == "AES256" &&
+      aws_s3_bucket_public_access_block.policy_documents.block_public_acls && aws_s3_bucket_public_access_block.policy_documents.block_public_policy &&
+      aws_s3_bucket_public_access_block.policy_documents.ignore_public_acls && aws_s3_bucket_public_access_block.policy_documents.restrict_public_buckets &&
+      aws_s3_bucket_ownership_controls.policy_documents.rule[0].object_ownership == "BucketOwnerEnforced"
+    )
+    error_message = "AC3: el bucket de pólizas es versionado, cifrado y sin acceso público."
+  }
+  assert {
+    condition = (
+      contains(jsondecode(aws_s3_bucket_policy.policy_documents.policy).Statement, {
+        Sid       = "DenyInsecureTransport", Effect = "Deny", Principal = "*", Action = "s3:*"
+        Resource  = ["arn:aws:s3:::solventa-int-polizas-123456789012", "arn:aws:s3:::solventa-int-polizas-123456789012/*"]
+        Condition = { Bool = { "aws:SecureTransport" = "false" } }
+      }) &&
+      contains(jsondecode(aws_s3_bucket_policy.policy_documents.policy).Statement, {
+        Sid       = "DenyUnencryptedWrites", Effect = "Deny", Principal = "*", Action = "s3:PutObject"
+        Resource  = "arn:aws:s3:::solventa-int-polizas-123456789012/*"
+        Condition = { Null = { "s3:x-amz-server-side-encryption" = "true" } }
+      }) &&
+      contains(jsondecode(aws_s3_bucket_policy.policy_documents.policy).Statement, {
+        Sid       = "DenyOtherEncryption", Effect = "Deny", Principal = "*", Action = "s3:PutObject"
+        Resource  = "arn:aws:s3:::solventa-int-polizas-123456789012/*"
+        Condition = { StringNotEquals = { "s3:x-amz-server-side-encryption" = "AES256" }, Null = { "s3:x-amz-server-side-encryption" = "false" } }
+      }) &&
+      alltrue([for statement in jsondecode(aws_s3_bucket_policy.policy_documents.policy).Statement : statement.Effect == "Deny"])
+    )
+    error_message = "AC3: la política del bucket niega transporte sin TLS y escrituras sin cifrar, y no concede acceso."
+  }
+  assert {
+    condition = (
+      length(aws_elasticache_replication_group.cache) == 1 &&
+      aws_elasticache_replication_group.cache[0].engine == "valkey" &&
+      aws_elasticache_replication_group.cache[0].node_type == "cache.t3.micro" &&
+      aws_elasticache_replication_group.cache[0].num_cache_clusters == 1 &&
+      aws_elasticache_replication_group.cache[0].transit_encryption_enabled &&
+      aws_elasticache_replication_group.cache[0].transit_encryption_mode == "required" &&
+      aws_elasticache_replication_group.cache[0].at_rest_encryption_enabled == "true" &&
+      aws_elasticache_replication_group.cache[0].auth_token == null &&
+      local.cache_url == "rediss://solventa-int-cache.abc.cache.amazonaws.com:6379" &&
+      local.cache_services == toset(["catalogo", "cotizacion", "consulta"])
+    )
+    error_message = "Caché privada Valkey cifrada en tránsito y en reposo para catalogo, cotizacion y consulta."
+  }
+  assert {
+    condition     = output.platform.cache.enabled && output.platform.cache.url == "rediss://solventa-int-cache.abc.cache.amazonaws.com:6379" && output.platform.policy_documents_bucket.sse == "AES256"
+    error_message = "El contrato hacia apps incluye la caché y el bucket de pólizas."
+  }
+}
+
+run "sin_cache" {
+  command = plan
+
+  variables {
+    cache_enabled = false
+  }
+
+  assert {
+    condition = (
+      length(aws_elasticache_replication_group.cache) == 0 && length(aws_elasticache_subnet_group.cache) == 0 &&
+      length(aws_security_group.cache) == 0 && local.cache_url == "" &&
+      output.platform.cache.url == "" && output.platform.cache.security_group_id == null && !output.platform.cache.enabled
+    )
+    error_message = "cache_enabled = false: sin recursos de ElastiCache y con la URL vacía."
   }
 }
 
