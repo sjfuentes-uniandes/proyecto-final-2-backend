@@ -1,0 +1,17 @@
+{
+  "name": "firma ruta no cubierta",
+  "priority": 10,
+  "request": {
+    "method": "ANY",
+    "urlPathPattern": "/firma/.*"
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "error": "documento_no_reconocido"
+    }
+  }
+}

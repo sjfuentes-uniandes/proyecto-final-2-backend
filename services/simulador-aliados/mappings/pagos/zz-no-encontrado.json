@@ -1,0 +1,17 @@
+{
+  "name": "pagos ruta no cubierta",
+  "priority": 10,
+  "request": {
+    "method": "ANY",
+    "urlPathPattern": "/pagos/.*"
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "error": "referencia_no_reconocida"
+    }
+  }
+}

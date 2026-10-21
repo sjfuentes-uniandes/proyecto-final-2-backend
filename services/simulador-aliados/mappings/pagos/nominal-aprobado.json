@@ -1,0 +1,35 @@
+{
+  "name": "pagos pasarela de pagos (nominal)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/pagos/v1/cobros",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.referencia",
+          "equalTo": "pago-sintetico-aprobado"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      },
+      "Idempotency-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "estado": "APROBADO",
+      "transaccionId": "TX-SINT-0001",
+      "motivo": null
+    },
+    "fixedDelayMilliseconds": 50
+  }
+}

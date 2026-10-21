@@ -1,0 +1,31 @@
+{
+  "name": "pagos respuesta malformada (JSON inválido)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/pagos/v1/cobros",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.referencia",
+          "equalTo": "pago-sintetico-malformado"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      },
+      "Idempotency-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"estado\": ",
+    "fixedDelayMilliseconds": 50
+  }
+}

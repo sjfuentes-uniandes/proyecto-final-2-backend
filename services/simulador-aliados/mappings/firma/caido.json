@@ -1,0 +1,30 @@
+{
+  "name": "firma proveedor caído (error recuperable)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/firma/v1/firmas",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.documentoId",
+          "equalTo": "doc-sintetico-caido"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "error": "unavailable"
+    },
+    "fixedDelayMilliseconds": 50
+  }
+}

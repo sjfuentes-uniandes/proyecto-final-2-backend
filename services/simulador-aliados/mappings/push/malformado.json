@@ -1,0 +1,28 @@
+{
+  "name": "push respuesta malformada (JSON inválido)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/push/v1/envios",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.tokenDispositivo",
+          "equalTo": "token-sintetico-malformado"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"estado\": ",
+    "fixedDelayMilliseconds": 50
+  }
+}
