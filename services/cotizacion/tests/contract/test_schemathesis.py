@@ -1,4 +1,4 @@
-"""Schemathesis 4 contra la app con los puertos en fakes (C01 nominal y reloj fijo)."""
+"""Schemathesis 4 contra la app con los puertos en fakes (C01 nominal y reloj fijo); incluye\nlas rutas de la cotización (HU-W03)."""
 
 from collections.abc import Iterator
 from typing import Any
@@ -14,7 +14,7 @@ from schemathesis.specs.openapi.checks import response_schema_conformance
 
 
 @pytest.fixture
-def esquema(escenario: Any, perfil_c01: Any) -> Iterator[Any]:
+def esquema(escenario: Any, escenario_cotizacion: Any, perfil_c01: Any) -> Iterator[Any]:
     escenario.repo.perfiles[perfil_c01.id] = perfil_c01
     puertos = Puertos(
         identidad=escenario.identidad,
@@ -23,6 +23,9 @@ def esquema(escenario: Any, perfil_c01: Any) -> Iterator[Any]:
         ejecutor=escenario.ejecutor,
         perfiles=escenario.repo,
         reloj=escenario.reloj,
+        # HU-W03: producto y reglas de la semilla y cotizaciones en memoria.
+        productos=escenario_cotizacion.productos,
+        cotizaciones=escenario_cotizacion.repo,
     )
     app = crear_app(Settings(), puertos=puertos)
     # El lifespan crea los casos de uso en app.state.

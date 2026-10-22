@@ -91,3 +91,26 @@ def test_hu_w31_la_marca_de_revocacion_es_aditiva_y_opcional() -> None:
     assert not {"comprobacionFinal", "revocadoDurantePerfilamiento"} & set(
         esquemas["ResumenPerfil"]["properties"]
     )
+
+
+def test_hu_w03_contrato_de_cotizaciones() -> None:
+    rutas = app.openapi()["paths"]
+    cotizar = rutas["/v1/cotizaciones"]["post"]
+    assert set(cotizar["responses"]) == {"200", "201", "401", "403", "404", "422", "503"}
+    encabezados = {p["name"]: p["required"] for p in cotizar["parameters"] if p["in"] == "header"}
+    assert encabezados == {"X-Actor-Id": False, "X-Actor-Rol": False, "Idempotency-Key": True}
+    leer = rutas["/v1/cotizaciones/{cotizacionId}"]["get"]
+    assert set(leer["responses"]) == {"200", "401", "403", "404", "422"}
+    condiciones = rutas["/v1/productos/{productoId}/condiciones"]["get"]
+    assert set(condiciones["responses"]) == {"200", "401", "403", "404", "422", "503"}
+    esquemas = app.openapi()["components"]["schemas"]
+    respuesta = esquemas["CotizacionRespuesta"]["properties"]
+    # Minimización: ni el hash de las reglas ni la fecha de nacimiento.
+    assert not {"hashReglas", "fechaNacimiento", "datosAsegurado"} & set(respuesta)
+    # Montos como texto decimal, nunca number (float).
+    assert respuesta["primaTotal"]["type"] == "string"
+    desglose = esquemas["DesglosePrimaDto"]["properties"]
+    assert all(desglose[c]["type"] == "string" for c in ("primaBase", "subtotal", "primaTotal"))
+    # El perfil y el socio son opcionales (0..1 en el modelo de dominio); el cliente no.
+    solicitud = esquemas["SolicitudCotizacion"]
+    assert set(solicitud["required"]) == {"clienteId", "productoId", "datosAsegurado"}
