@@ -121,7 +121,8 @@ def test_catalogo_llena_e_invalida_la_cache(base: str, valkey: str) -> None:
 
     directo = redis.Redis.from_url(valkey)
     directo.set(clave_producto("vida-hipotecario"), b"viejo")
-    settings = Settings(SOLVENTA_DATABASE_URL=base, CACHE_URL=valkey)
+    # Holgura para la primera conexión en la CI: con 50 ms la caché se omitiría en silencio.
+    settings = Settings(SOLVENTA_DATABASE_URL=base, CACHE_URL=valkey, cache_timeout_ms=2000)
     with TestClient(crear_app(settings)) as api:
         # Al arrancar invalidó lo que había (el despliegue pudo cambiar la semilla).
         assert directo.get(clave_producto("vida-hipotecario")) is None

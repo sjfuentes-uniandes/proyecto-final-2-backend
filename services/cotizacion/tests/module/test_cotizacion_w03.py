@@ -259,14 +259,18 @@ def test_cotizacion_lee_la_cache_que_llena_catalogo(
     from catalogo.config import Settings as SettingsCatalogo
     from catalogo.main import crear_app as crear_catalogo
 
-    settings = SettingsCatalogo(SOLVENTA_DATABASE_URL=bases.catalogo, CACHE_URL=valkey)
+    # La primera operación abre la conexión: 50 ms (producción) no alcanzan en la CI y la caché
+    # se omitiría en silencio. Aquí se prueba el contrato de claves, no la latencia.
+    settings = SettingsCatalogo(
+        SOLVENTA_DATABASE_URL=bases.catalogo, CACHE_URL=valkey, cache_timeout_ms=2000
+    )
     with servir_app(crear_catalogo(settings)) as url:
         httpx.get(f"{url}/v1/productos/vida-hipotecario", timeout=10).raise_for_status()
         httpx.get(
             f"{url}/v1/productos/vida-hipotecario/reglas-prima/vigente", timeout=10
         ).raise_for_status()
     # catalogo detenido: solo queda la caché.
-    app = cotizacion(CATALOGO_URL=url, CACHE_URL=valkey)
+    app = cotizacion(CATALOGO_URL=url, CACHE_URL=valkey, cache_timeout_ms=2000)
     respuesta = cotizar(app, cuerpo())
     assert respuesta.status_code == 201, respuesta.text
     paso = next(p for p in respuesta.json()["pasos"] if p["codigo"] == "CATALOGO_Y_REGLAS")
