@@ -1,0 +1,163 @@
+{
+  "$defs": {
+    "DecisionSuscripcionRegistradaV1": {
+      "description": "Auditor\u00eda de la decisi\u00f3n: sin montos ni datos personales.",
+      "properties": {
+        "actorId": {
+          "title": "Actorid",
+          "type": "string"
+        },
+        "clienteId": {
+          "format": "uuid",
+          "title": "Clienteid",
+          "type": "string"
+        },
+        "cotizacionId": {
+          "format": "uuid",
+          "title": "Cotizacionid",
+          "type": "string"
+        },
+        "decididaEn": {
+          "format": "date-time",
+          "title": "Decididaen",
+          "type": "string"
+        },
+        "decisionId": {
+          "format": "uuid",
+          "title": "Decisionid",
+          "type": "string"
+        },
+        "hashInsumos": {
+          "title": "Hashinsumos",
+          "type": "string"
+        },
+        "hashReglas": {
+          "title": "Hashreglas",
+          "type": "string"
+        },
+        "ofertaId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ofertaid"
+        },
+        "productoId": {
+          "title": "Productoid",
+          "type": "string"
+        },
+        "reglaDeterminante": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Regladeterminante"
+        },
+        "reglasNoCumplidas": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reglasnocumplidas",
+          "type": "array"
+        },
+        "resultado": {
+          "$ref": "#/$defs/ResultadoDecision"
+        },
+        "tipo": {
+          "$ref": "#/$defs/TipoDecision"
+        },
+        "versionReglas": {
+          "title": "Versionreglas",
+          "type": "string"
+        }
+      },
+      "required": [
+        "decisionId",
+        "cotizacionId",
+        "ofertaId",
+        "clienteId",
+        "productoId",
+        "resultado",
+        "tipo",
+        "reglaDeterminante",
+        "reglasNoCumplidas",
+        "versionReglas",
+        "hashReglas",
+        "hashInsumos",
+        "actorId",
+        "decididaEn"
+      ],
+      "title": "DecisionSuscripcionRegistradaV1",
+      "type": "object"
+    },
+    "ResultadoDecision": {
+      "enum": [
+        "APROBADA",
+        "RECHAZADA",
+        "REVISION_REQUERIDA"
+      ],
+      "title": "ResultadoDecision",
+      "type": "string"
+    },
+    "TipoDecision": {
+      "enum": [
+        "AUTOMATICA"
+      ],
+      "title": "TipoDecision",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/DecisionSuscripcionRegistradaV1"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreEvento[DecisionSuscripcionRegistradaV1]",
+  "type": "object"
+}
