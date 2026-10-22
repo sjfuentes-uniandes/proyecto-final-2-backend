@@ -38,7 +38,13 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 show_error_codes = true
 # Layout src/ del workspace: los módulos se nombran desde estas raíces.
-mypy_path = ["libs/solventa-common/src", "services/clientes/src", "services/bff-movil/src"]
+# HU-W13: catalogo también, para `make typecheck SERVICE=catalogo` (fuera de la CI, ADR 0008).
+mypy_path = [
+  "libs/solventa-common/src",
+  "services/clientes/src",
+  "services/bff-movil/src",
+  "services/catalogo/src",
+]
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
