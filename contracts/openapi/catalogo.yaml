@@ -146,6 +146,127 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/productos/{productoId}:
+    get:
+      tags:
+      - productos
+      summary: Producto
+      description: El producto con su estado, su vigencia y sus coberturas.
+      operationId: producto_v1_productos__productoId__get
+      parameters:
+      - name: productoId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-z0-9-]{1,64}$
+          title: Productoid
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductoRespuesta'
+        '404':
+          description: PRODUCTO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/productos/{productoId}/reglas-prima/vigente:
+    get:
+      tags:
+      - productos
+      summary: Reglas Vigentes
+      description: Las reglas de prima del producto con el mayor vigenteDesde ≤ fecha.
+      operationId: reglas_vigentes_v1_productos__productoId__reglas_prima_vigente_get
+      parameters:
+      - name: productoId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-z0-9-]{1,64}$
+          title: Productoid
+      - name: fecha
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          description: Instante ISO-8601 con zona; por defecto, ahora
+          title: Fecha
+        description: Instante ISO-8601 con zona; por defecto, ahora
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReglasPrimaRespuesta'
+        '404':
+          description: PRODUCTO_NO_ENCONTRADO o REGLAS_NO_VIGENTES (ninguna vigente
+            en la fecha)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/productos/{productoId}/reglas-prima/{version}:
+    get:
+      tags:
+      - productos
+      summary: Reglas Por Version
+      description: Una versión publicada de las reglas; las versiones no cambian nunca.
+      operationId: reglas_por_version_v1_productos__productoId__reglas_prima__version__get
+      parameters:
+      - name: productoId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-z0-9-]{1,64}$
+          title: Productoid
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^\d{4}\.\d{2}\.\d+$
+          title: Version
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReglasPrimaRespuesta'
+        '404':
+          description: PRODUCTO_NO_ENCONTRADO o REGLAS_NO_VIGENTES (no existe la versión)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -201,6 +322,23 @@ components:
       - efecto
       - nivel
       title: Ajuste
+    CoberturaDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        nombre:
+          type: string
+          title: Nombre
+        obligatoria:
+          type: boolean
+          title: Obligatoria
+      type: object
+      required:
+      - codigo
+      - nombre
+      - obligatoria
+      title: CoberturaDto
     Confianza:
       properties:
         penalizacionNoAutorizada:
@@ -354,6 +492,64 @@ components:
       - niveles
       - confianza
       title: DefinicionModelo
+    DefinicionReglasPrima:
+      properties:
+        productoId:
+          type: string
+          title: Productoid
+        moneda:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Moneda
+        periodicidad:
+          type: string
+          enum:
+          - MENSUAL
+          - ANUAL
+          title: Periodicidad
+        tasaBase:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Tasabase
+        factoresNivel:
+          $ref: '#/components/schemas/FactoresNivel'
+        factoresVariables:
+          items:
+            $ref: '#/components/schemas/FactorVariable'
+          type: array
+          title: Factoresvariables
+        recargos:
+          items:
+            $ref: '#/components/schemas/Recargo'
+          type: array
+          title: Recargos
+        primaMinima:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Primaminima
+        primaMaxima:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Primamaxima
+        redondeo:
+          $ref: '#/components/schemas/Redondeo'
+        limites:
+          $ref: '#/components/schemas/Limites'
+      additionalProperties: false
+      type: object
+      required:
+      - productoId
+      - moneda
+      - periodicidad
+      - tasaBase
+      - factoresNivel
+      - factoresVariables
+      - recargos
+      - primaMinima
+      - primaMaxima
+      - redondeo
+      - limites
+      title: DefinicionReglasPrima
     ErrorDto:
       properties:
         codigo:
@@ -378,6 +574,12 @@ components:
       - correlationId
       - detalles
       title: ErrorDto
+    EstadoProducto:
+      type: string
+      enum:
+      - ACTIVO
+      - INACTIVO
+      title: EstadoProducto
     Expresion-Input:
       properties:
         op:
@@ -449,6 +651,69 @@ components:
       - peso
       - reglas
       title: Factor
+    FactorVariable:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        variable:
+          type: string
+          title: Variable
+        tramos:
+          items:
+            $ref: '#/components/schemas/Tramo'
+          type: array
+          title: Tramos
+      additionalProperties: false
+      type: object
+      required:
+      - codigo
+      - variable
+      - tramos
+      title: FactorVariable
+    FactoresNivel:
+      properties:
+        BAJO:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Bajo
+        MEDIO:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Medio
+        ALTO:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Alto
+        SIN_PERFIL:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Sin Perfil
+      additionalProperties: false
+      type: object
+      required:
+      - BAJO
+      - MEDIO
+      - ALTO
+      - SIN_PERFIL
+      title: FactoresNivel
+      description: Factor por nivel de riesgo del perfil; SIN_PERFIL se aplica cuando
+        no hay nivel.
+    Limites:
+      properties:
+        sumaAsegurada:
+          $ref: '#/components/schemas/Rango'
+        plazoCreditoMeses:
+          $ref: '#/components/schemas/Rango'
+        edad:
+          $ref: '#/components/schemas/Rango'
+      additionalProperties: false
+      type: object
+      required:
+      - sumaAsegurada
+      - plazoCreditoMeses
+      - edad
+      title: Limites
     ModeloRiesgoRespuesta:
       properties:
         version:
@@ -474,6 +739,110 @@ components:
       - hash
       - definicion
       title: ModeloRiesgoRespuesta
+    ProductoRespuesta:
+      properties:
+        id:
+          type: string
+          title: Id
+        version:
+          type: string
+          title: Version
+        nombre:
+          type: string
+          title: Nombre
+        ramo:
+          type: string
+          title: Ramo
+        pais:
+          type: string
+          title: Pais
+        moneda:
+          type: string
+          title: Moneda
+        estado:
+          $ref: '#/components/schemas/EstadoProducto'
+        vigenteDesde:
+          type: string
+          format: date-time
+          title: Vigentedesde
+        vigenteHasta:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Vigentehasta
+        coberturas:
+          items:
+            $ref: '#/components/schemas/CoberturaDto'
+          type: array
+          title: Coberturas
+      type: object
+      required:
+      - id
+      - version
+      - nombre
+      - ramo
+      - pais
+      - moneda
+      - estado
+      - vigenteDesde
+      - vigenteHasta
+      - coberturas
+      title: ProductoRespuesta
+    Rango:
+      properties:
+        minimo:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Minimo
+        maximo:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Maximo
+      additionalProperties: false
+      type: object
+      required:
+      - minimo
+      - maximo
+      title: Rango
+    Recargo:
+      properties:
+        cobertura:
+          type: string
+          title: Cobertura
+        tasa:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Tasa
+      additionalProperties: false
+      type: object
+      required:
+      - cobertura
+      - tasa
+      title: Recargo
+      description: 'Recargo de una cobertura opcional: `tasa` × prima ajustada.'
+    Redondeo:
+      properties:
+        escala:
+          type: integer
+          maximum: 6.0
+          minimum: -6.0
+          title: Escala
+        modo:
+          type: string
+          enum:
+          - ROUND_HALF_EVEN
+          - ROUND_HALF_UP
+          - ROUND_HALF_DOWN
+          - ROUND_UP
+          - ROUND_DOWN
+          title: Modo
+      additionalProperties: false
+      type: object
+      required:
+      - escala
+      - modo
+      title: Redondeo
     Regla:
       properties:
         si:
@@ -514,6 +883,31 @@ components:
       - contribucion
       - direccion
       title: Regla
+    ReglasPrimaRespuesta:
+      properties:
+        productoId:
+          type: string
+          title: Productoid
+        version:
+          type: string
+          title: Version
+        vigenteDesde:
+          type: string
+          format: date-time
+          title: Vigentedesde
+        hash:
+          type: string
+          title: Hash
+        definicion:
+          $ref: '#/components/schemas/DefinicionReglasPrima'
+      type: object
+      required:
+      - productoId
+      - version
+      - vigenteDesde
+      - hash
+      - definicion
+      title: ReglasPrimaRespuesta
     SolicitudPublicacion:
       properties:
         version:
@@ -537,6 +931,26 @@ components:
       - vigenteDesde
       - definicion
       title: SolicitudPublicacion
+    Tramo:
+      properties:
+        hasta:
+          anyOf:
+          - type: string
+            pattern: ^-?\d+(\.\d+)?$
+          - type: 'null'
+          title: Hasta
+        factor:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Factor
+      additionalProperties: false
+      type: object
+      required:
+      - hasta
+      - factor
+      title: Tramo
+      description: Factor para los valores ≤ `hasta`; el último tramo es abierto (`hasta`
+        nulo).
     UmbralNivel:
       properties:
         desde:

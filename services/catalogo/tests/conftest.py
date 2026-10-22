@@ -5,7 +5,9 @@ from importlib.resources import files
 from typing import Any
 
 import pytest
+from catalogo.adapters.outbound.productos_pg import semillas
 from catalogo.config import Settings
+from catalogo.domain.productos.producto import Producto, ReglasPrima
 from catalogo.domain.reglas.errores import VersionExistente
 from catalogo.domain.reglas.hash import hash_canonico
 from catalogo.domain.reglas.modelo import ModeloPublicado
@@ -81,8 +83,45 @@ def repositorio(modelo_candidato: ModeloPublicado) -> RepositorioMemoria:
     return repo
 
 
+class ProductosMemoria:
+    """RepositorioProductos con la semilla de HU-W03 (vida-hipotecario y vida-hipotecario-2025)."""
+
+    def __init__(self) -> None:
+        self.productos: dict[str, Producto] = {}
+        self.reglas: list[ReglasPrima] = []
+        for producto, reglas in semillas():
+            self.productos[producto.id] = producto
+            self.reglas.extend(
+                ReglasPrima(producto.id, v, desde, d, hash_canonico(d), "migracion")
+                for v, desde, d in reglas
+            )
+
+    async def producto(self, producto_id: str) -> Producto | None:
+        return self.productos.get(producto_id)
+
+    async def reglas_vigentes(self, producto_id: str, en: datetime) -> ReglasPrima | None:
+        candidatas = [
+            r for r in self.reglas if r.producto_id == producto_id and r.vigente_desde <= en
+        ]
+        return max(candidatas, key=lambda r: r.vigente_desde, default=None)
+
+    async def reglas_por_version(self, producto_id: str, version: str) -> ReglasPrima | None:
+        return next(
+            (r for r in self.reglas if r.producto_id == producto_id and r.version == version),
+            None,
+        )
+
+
 @pytest.fixture
-def api(repositorio: RepositorioMemoria, reloj: RelojFijo) -> Iterator[TestClient]:
-    """App con el repositorio en memoria y el reloj fijo, con su lifespan arrancado."""
-    with TestClient(crear_app(Settings(), repositorio=repositorio, reloj=reloj)) as cliente:
+def productos_repo() -> ProductosMemoria:
+    return ProductosMemoria()
+
+
+@pytest.fixture
+def api(
+    repositorio: RepositorioMemoria, productos_repo: ProductosMemoria, reloj: RelojFijo
+) -> Iterator[TestClient]:
+    """App con los repositorios en memoria y el reloj fijo, con su lifespan arrancado."""
+    app = crear_app(Settings(), repositorio=repositorio, productos_repo=productos_repo, reloj=reloj)
+    with TestClient(app) as cliente:
         yield cliente

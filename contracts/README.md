@@ -23,6 +23,9 @@ Contratos que publica el backend para sus consumidores (web, móvil, socios y ot
 | `events/ConsentimientoOtorgado.v1.schema.json` | Evento `ConsentimientoOtorgado` v1 del outbox de `clientes` (HU-M08); `aggregateVersion` es opcional y vale 1 | Por confirmar (responsable de `clientes`) | `uv run python -m clientes.adapters.outbound.eventos` (desde la raíz) |
 | `events/ConsentimientoRevocado.v1.schema.json` | Evento `ConsentimientoRevocado` v1 del outbox de `clientes` (HU-M09); `aggregateVersion` es opcional y vale 2 | Por confirmar (responsable de `clientes`) | `uv run python -m clientes.adapters.outbound.eventos` (desde la raíz) |
 | `events/VerificacionConsentimientoRegistrada.v1.schema.json` | Evento `VerificacionConsentimientoRegistrada` v1 del outbox de `clientes` (HU-W31): una fila por verificación; `aggregateId` = `clienteId`, sin `aggregateVersion`; solo para `auditoria` (sin consumidor hasta la PR 2.2 y el mapeo de la 3.3) | Por confirmar (responsable de `clientes`) | `uv run python -m clientes.adapters.outbound.eventos` (desde la raíz) |
+| `openapi/catalogo.yaml` | API interna de `catalogo`: `/v1/modelos-riesgo` (HU-W11) y `/v1/productos/{productoId}`, `.../reglas-prima/vigente?fecha=` y `.../reglas-prima/{version}` (HU-W03). La consume `cotizacion` | @capbmaster (modelos); HU-W03 (productos) | Ver [Regenerar un contrato](#regenerar-un-contrato) |
+| `openapi/cotizacion.yaml` | API interna de `cotizacion`: `/v1/perfiles` (HU-W10 a HU-W31) y, desde HU-W03, `POST /v1/cotizaciones`, `GET /v1/cotizaciones/{cotizacionId}` y `GET /v1/productos/{productoId}/condiciones` (actores `ASESOR` y `SOCIO`). `bff-web` copia sus DTO y `tests/contract/test_openapi.py` de `bff-web` verifica que sean iguales. El contrato público del socio es de HU-W04 | Por confirmar (responsable de `cotizacion`) | Ver [Regenerar un contrato](#regenerar-un-contrato) |
+| `modelos/reglas-prima.v1.schema.json` | Esquema de la definición de las reglas de prima (HU-W03): tasa base, factores por nivel (`BAJO`, `MEDIO`, `ALTO`, `SIN_PERFIL`) y por variable, recargos por cobertura opcional, prima mínima y máxima, redondeo (escala y modo) y límites. Decimales como texto. `cotizacion` tiene una copia (`DefinicionReglasPrimaCotizacion`) y CT-W03-01 verifica que sea igual | HU-W03 | `uv run python -m catalogo.adapters.inbound.http.esquema_prima > contracts/modelos/reglas-prima.v1.schema.json` |
 | `alcances-perfilamiento.json` | Propósito, alcances (fuentes), tipo, textos es-CO / en-US y campos canónicos | @capbmaster | A mano |
 | `datos-sinteticos/clientes-perfilamiento.json` | Clientes sintéticos C01–C19: identidad, consentimiento, datos declarados, comportamiento del simulador y resultado esperado | @capbmaster | A mano. Después de cambiarlo, regenerar los mapeos de los aliados: `python services/simulador-aliados/scripts/generar_mapeos.py todo`. Las pruebas de módulo de `cotizacion` siembran `clientes` real desde este archivo (`services/cotizacion/tests/module/conftest.py`); `test_clientes_real_decide_lo_que_dicen_los_datos_sinteticos` (`make test-module SERVICE=cotizacion`) falla si la siembra no reproduce un caso |
 | `codigos-error.md` | Códigos de error estables | Todos | A mano |
@@ -56,7 +59,31 @@ uv run python -c "import yaml; from bff_movil.main import app; open('contracts/o
 uv run python -c "import yaml; from api_socios.main import app; open('contracts/openapi/api-socios.yaml', 'w').write(yaml.safe_dump(app.openapi(), sort_keys=False, allow_unicode=True))"
 ```
 
+```bash
+uv run python -c "import yaml; from catalogo.main import app; open('contracts/openapi/catalogo.yaml', 'w').write(yaml.safe_dump(app.openapi(), sort_keys=False, allow_unicode=True))"
+```
+
+```bash
+uv run python -c "import yaml; from cotizacion.main import app; open('contracts/openapi/cotizacion.yaml', 'w').write(yaml.safe_dump(app.openapi(), sort_keys=False, allow_unicode=True))"
+```
+
+Después de cambiar `cotizacion.yaml`, regenerar también `bff-web.yaml` si cambiaron los DTO que copia (cotizaciones y perfiles).
+
 Después de cambiar `adaptador-datos.yaml`, avisar a `cotizacion` (usa `AdaptadorDatosHttp`). Después de cambiar `bff-web.yaml`, sincronizar el frontend con `scripts/sync-contracts.sh <ref>`.
+
+## Caché de catálogo (HU-W03)
+
+Contrato entre `catalogo` (escribe e invalida) y `cotizacion` (solo lee), según los diagramas de componentes, despliegue e información. Valkey de HU-S02 (`CACHE_URL`, `rediss://`). El valor de cada clave es el JSON exacto que respondería la API de `catalogo` (`ProductoRespuesta` o `ReglasPrimaRespuesta` de `openapi/catalogo.yaml`); `services/catalogo/tests/contract/test_esquema_prima.py` lo verifica.
+
+| Clave | Valor | Vida | Cuándo la escribe `catalogo` |
+| --- | --- | --- | --- |
+| `catalogo:v1:producto:{productoId}` | `ProductoRespuesta` | `SOLVENTA_CACHE_TTL_S` (60 s) | Al leer el producto de su base sin encontrarlo en la caché |
+| `catalogo:v1:reglas-prima:{productoId}:vigente` | `ReglasPrimaRespuesta` de las reglas vigentes **ahora** | 60 s | Al resolver las reglas vigentes para una fecha a menos de 60 s de ahora (una consulta histórica no la toca) |
+| `catalogo:v1:reglas-prima:{productoId}:version:{version}` | `ReglasPrimaRespuesta` | 24 h | Al leer una versión cerrada (no cambia nunca) |
+
+- **Invalidación:** al arrancar, `catalogo` borra el producto y sus reglas vigentes de cada producto de la semilla (un despliegue nuevo no deja datos viejos más de lo que tarda en arrancar). Un cambio de reglas es una versión nueva: la clave `vigente` se renueva en ≤ 60 s.
+- **Lectura en `cotizacion`:** usa las reglas guardadas solo si su `vigenteDesde` ≤ la fecha de la cotización; un valor fuera del contrato o una falla de Valkey (timeout de 50 ms, circuito) es un fallo de caché y va a `catalogo` por HTTP. Sin `CACHE_URL`, una caché TTL en memoria por réplica.
+- **Prefijo `v1`:** si cambia la forma del valor, se cambia el prefijo en ambos servicios a la vez.
 
 ## Datos sintéticos
 

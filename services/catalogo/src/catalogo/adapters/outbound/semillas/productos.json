@@ -1,0 +1,36 @@
+[
+  {
+    "id": "vida-hipotecario",
+    "version": "2026.09.1",
+    "nombre": "Vida deudor hipotecario",
+    "ramo": "VIDA_HIPOTECARIO",
+    "pais": "CO",
+    "moneda": "COP",
+    "estado": "ACTIVO",
+    "vigenteDesde": "2026-09-01T00:00:00Z",
+    "vigenteHasta": null,
+    "coberturas": [
+      {"codigo": "MUERTE", "nombre": "Muerte por cualquier causa", "obligatoria": true},
+      {"codigo": "INCAPACIDAD_TOTAL_PERMANENTE", "nombre": "Incapacidad total y permanente", "obligatoria": true},
+      {"codigo": "ENFERMEDADES_GRAVES", "nombre": "Enfermedades graves", "obligatoria": false},
+      {"codigo": "AUXILIO_FUNERARIO", "nombre": "Auxilio funerario", "obligatoria": false}
+    ],
+    "reglas": [{"version": "2026.09.1", "vigenteDesde": "2026-09-01T00:00:00Z", "archivo": "reglas_prima_2026_09_1.json"}]
+  },
+  {
+    "id": "vida-hipotecario-2025",
+    "version": "2025.01.1",
+    "nombre": "Vida deudor hipotecario (2025, cerrado)",
+    "ramo": "VIDA_HIPOTECARIO",
+    "pais": "CO",
+    "moneda": "COP",
+    "estado": "ACTIVO",
+    "vigenteDesde": "2025-01-01T00:00:00Z",
+    "vigenteHasta": "2026-09-01T00:00:00Z",
+    "coberturas": [
+      {"codigo": "MUERTE", "nombre": "Muerte por cualquier causa", "obligatoria": true},
+      {"codigo": "INCAPACIDAD_TOTAL_PERMANENTE", "nombre": "Incapacidad total y permanente", "obligatoria": true}
+    ],
+    "reglas": [{"version": "2025.01.1", "vigenteDesde": "2025-01-01T00:00:00Z", "archivo": "reglas_prima_2025_01_1.json"}]
+  }
+]

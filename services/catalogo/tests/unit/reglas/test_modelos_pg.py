@@ -44,9 +44,14 @@ def test_migrar_bloquea_aplica_los_sql_siembra_y_libera(monkeypatch: pytest.Monk
     assert conexion.argumentos == {"url": "postgresql://u@h/catalogo", "autocommit": True}
     assert "pg_advisory_lock(hashtext('catalogo.migraciones'))" in sentencias[0]
     assert "CREATE TABLE IF NOT EXISTS modelos_riesgo" in sentencias[1]
-    assert "ON CONFLICT (version) DO NOTHING" in sentencias[2]
+    # HU-W03: la migración de productos va después, en el mismo candado.
+    assert "CREATE TABLE IF NOT EXISTS productos" in sentencias[2]
+    assert "INSERT INTO modelos_riesgo" in sentencias[3]
+    assert "ON CONFLICT (version) DO NOTHING" in sentencias[3]
+    assert any("INSERT INTO productos" in s for s in sentencias[4:-1])
+    assert any("INSERT INTO reglas_prima" in s for s in sentencias[4:-1])
     assert "pg_advisory_unlock" in sentencias[-1]
-    version, producto, desde, definicion, hash_, actor = conexion.sentencias[2][1]
+    version, producto, desde, definicion, hash_, actor = conexion.sentencias[3][1]
     assert (version, producto, desde, actor) == (
         "2026.10.1",
         "vida-hipotecario",

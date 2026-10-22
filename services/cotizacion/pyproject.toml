@@ -9,6 +9,7 @@ dependencies = [
     "psycopg[binary,pool]>=3.2",
     "alembic>=1.14",
     "solventa-common",
+    "redis>=5.2",
 ]
 
 [tool.uv.sources]

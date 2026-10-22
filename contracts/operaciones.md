@@ -24,12 +24,17 @@ Nombres de `Operation` en `OperationDuration` y `OperationErrors` (`solventa_com
 | `consentimientos.historial` | `bff-movil` | Caso de uso `ConsultarConsentimientos` (HU-M09) | `ok`, `timeout`, `error`, `rechazado` (no encontrado o ajeno) |
 | `consentimientos.texto_vigente` | `bff-movil` | Caso de uso `ConsultarTextoVigente` (HU-M08) | `ok`, `timeout`, `error`, `rechazado` (propósito o idioma no soportados) |
 | `modelo_riesgo.publicar`, `modelo_riesgo.consultar` | `catalogo` | Casos de uso del modelo | — |
+| `producto.consultar`, `reglas_prima.consultar` | `catalogo` | Consulta del producto y de sus reglas de prima (HU-W03) | `ok`, `rechazado` (inexistente o sin reglas vigentes), `error` |
+| `cotizacion.dependencia.catalogo.producto`, `cotizacion.dependencia.catalogo.reglas_prima`, `cotizacion.dependencia.clientes.identidad`, `cotizacion.dependencia.perfil` | `cotizacion` | Cada dependencia del cálculo de la prima (HU-W03); el "no existe" de una dependencia que respondió es `ok` | `ok`, `timeout`, `error` |
+| `cotizacion.consultar` | `cotizacion` | Lectura de una cotización (HU-W03) | `ok`, `rechazado` (inexistente o de otro socio) |
+| `cotizacion.condiciones` | `cotizacion` | Condiciones del producto para el formulario del portal (HU-W03) | `ok`, `rechazado` (tabla de decisión), `error` |
+| `cache.leer`, `cache.escribir`, `cache.borrar` | `catalogo`, `cotizacion` | Cache-Aside sobre Valkey (`solventa_common.cache`, HU-W03). Una falla nunca se propaga: el servicio va a su fuente de verdad | `ok`, `vacio` (lectura sin la clave), `timeout`, `error` |
 | `habilitar_socio`, `listar_socios`, `consultar_socio`, `desactivar_socio` | `api-socios` | Administración de socios (HU-W01) | `ok`, `error` |
 | `autenticar_socio` | `api-socios` | Verificación del socio tras el borde (HU-W01 AC2) | `ok`, `rechazado` |
 | `cambiar_plan_socio`, `consultar_consumo_socio`, `listar_planes` | `api-socios` | Plan de uso y consumo de la cuota por socio (HU-W02) | `ok`, `error` |
 | `medir_cuota_socios` | `api-socios` | Porcentaje de la cuota de cada socio activo para `PartnerQuotaUsage` (HU-W28) | `ok`, `error` |
 | `consultar_alertas` | `bff-web` | Alertas abiertas, umbrales y resumen del mes (HU-W28) | `ok`, `error` |
-| `cotizacion` | `cotizacion` | Prevista: meta p95 de `latency_targets` en `int` (HU-W28). Sin datos, su alarma queda en OK | — |
+| `cotizacion` | `cotizacion` | Caso de uso `calcular_prima` (HU-W03): de la solicitud a la cotización persistida. Meta p95 de 250 ms en `latency_targets` de `int` (HU-W28) | `ok`, `rechazado` (4xx: tabla de decisión, datos, perfil, idempotencia o rol), `error` / `timeout` (5xx) |
 | `emision` | `polizas` | Prevista (HU-W17): emisión de la póliza tras el recaudo. Meta p95 de `latency_targets` en `int` | `ok`, `error`, `timeout`, `rechazado` |
 | `consulta` | `consulta` | Prevista (HU-W18, HU-M10): lectura de la proyección. Meta p95 de `latency_targets` en `int` | `ok`, `error`, `rechazado` (no encontrada o ajena) |
 | `cobro.pagos` | `adaptador-pagos` | Prevista (HU-W16): llamada a la pasarela de pagos (aliado `pagos`) | `ok`, `timeout`, `error`, `rechazado` (pago rechazado por el proveedor) |
@@ -38,6 +43,8 @@ Nombres de `Operation` en `OperationDuration` y `OperationErrors` (`solventa_com
 | `aviso.push` | `avisos` | Prevista (HU-M11): envío de un aviso a un dispositivo (llamada a `adaptador-firma`) | `ok`, `timeout`, `error`, `rechazado` |
 
 `<FUENTE>` ∈ {`FA_PRODUCTOS_VIGENTES`, `FA_HISTORIAL_PAGOS_12M`, `FA_INGRESOS_AGREGADOS`, `DA_REGISTROS_PUBLICOS`}.
+
+**Log de cierre de la cotización (HU-W03):** `logger.info("cotizacion calculada", extra={"cotizacion_id": …, "producto_id": …, "version_reglas": …, "perfil_id": …, "dependencias": [{"nombre": …, "ms": …, "resultado": …}]})`, solo identificadores: ni montos, ni edad, ni fecha de nacimiento.
 
 **Log de cierre del perfilamiento:** `logger.info("perfil calculado", extra={"perfil_id": …, "estado": …, "dependencias": [{"nombre": …, "ms": …, "resultado": …}]})`, dentro de la `operacion`. Las dependencias van en una **lista** para que `sanitizar` no redacte valores por el nombre de la clave.
 

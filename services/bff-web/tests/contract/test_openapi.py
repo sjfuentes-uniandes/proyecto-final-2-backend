@@ -88,6 +88,45 @@ def test_dto_de_perfilamiento_iguales_a_cotizacion() -> None:
         assert propios[nombre] == de_cotizacion[nombre], nombre
 
 
+# HU-W03: el BFF publica los mismos esquemas que cotizacion para /v1/cotizaciones y las
+# condiciones del producto.
+ESQUEMAS_COTIZACION = (
+    "SolicitudCotizacion",
+    "DatosAseguradoDto",
+    "CotizacionRespuesta",
+    "CoberturaProductoDto",
+    "FactorPrimaDto",
+    "RecargoPrimaDto",
+    "DesglosePrimaDto",
+    "EntradasPrimaDto",
+    "PasoCotizacionDto",
+    "OrigenDato",
+    "EstadoCotizacion",
+    "CondicionesProducto",
+    "LimitesDto",
+    "RangoDto",
+)
+
+
+def test_dto_de_cotizacion_iguales_a_cotizacion() -> None:
+    propios = app.openapi()["components"]["schemas"]
+    de_cotizacion = yaml.safe_load(COTIZACION.read_text(encoding="utf-8"))["components"]["schemas"]
+    for nombre in ESQUEMAS_COTIZACION:
+        assert propios[nombre] == de_cotizacion[nombre], nombre
+
+
+def test_contrato_de_cotizaciones() -> None:
+    rutas = app.openapi()["paths"]
+    cotizar = rutas["/v1/cotizaciones"]["post"]
+    assert set(cotizar["responses"]) == {"200", "201", "401", "403", "404", "422", "503"}
+    encabezados = {p["name"] for p in cotizar["parameters"] if p["in"] == "header"}
+    assert "Idempotency-Key" in encabezados
+    leer = rutas["/v1/cotizaciones/{cotizacionId}"]["get"]
+    assert set(leer["responses"]) == {"200", "401", "403", "404", "422", "503"}
+    condiciones = rutas["/v1/productos/{productoId}/condiciones"]["get"]
+    assert set(condiciones["responses"]) == {"200", "401", "403", "404", "422", "503"}
+
+
 CLIENTES = CONTRATO.parent / "clientes.yaml"
 # HU-W30: el BFF publica los mismos esquemas que clientes para /v1/clientes.
 ESQUEMAS_CLIENTES = ("SolicitudAltaCliente", "ClienteDto", "EstadoIdentidad")

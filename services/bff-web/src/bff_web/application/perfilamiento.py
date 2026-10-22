@@ -22,13 +22,14 @@ SIN_PERFIL_ANTERIOR = "SIN_PERFIL_ANTERIOR"
 _REENVIADOS_5XX = {503}
 
 
-def _servicio_no_disponible() -> ErrorNegocio:
-    return ErrorNegocio(
-        SERVICIO_NO_DISPONIBLE, "El servicio de perfilamiento no está disponible", 503
-    )
+MENSAJE_NO_DISPONIBLE = "El servicio de perfilamiento no está disponible"
 
 
-async def _proteger[T](llamada: Awaitable[T]) -> T:
+def _servicio_no_disponible(mensaje: str = MENSAJE_NO_DISPONIBLE) -> ErrorNegocio:
+    return ErrorNegocio(SERVICIO_NO_DISPONIBLE, mensaje, 503)
+
+
+async def _proteger[T](llamada: Awaitable[T], mensaje: str = MENSAJE_NO_DISPONIBLE) -> T:
     try:
         return await llamada
     except ErrorCotizacion as error:
@@ -41,9 +42,9 @@ async def _proteger[T](llamada: Awaitable[T]) -> T:
                 error.status,
                 detalles if isinstance(detalles, dict) else {},
             ) from error
-        raise _servicio_no_disponible() from error
+        raise _servicio_no_disponible(mensaje) from error
     except httpx.HTTPError as error:
-        raise _servicio_no_disponible() from error
+        raise _servicio_no_disponible(mensaje) from error
 
 
 def comparar(anterior: dict[str, Any], actual: dict[str, Any]) -> dict[str, Any]:

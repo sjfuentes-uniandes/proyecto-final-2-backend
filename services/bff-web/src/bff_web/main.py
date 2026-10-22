@@ -5,6 +5,7 @@ from solventa_common.telemetry import instrumentar
 from bff_web.adapters.inbound import (
     clientes,
     consentimientos,
+    cotizaciones,
     operacion,
     perfilamiento,
     socios,
@@ -28,6 +29,9 @@ app.include_router(operacion.router)
 app.include_router(usuarios.router)
 app.include_router(socios.router)
 app.include_router(perfilamiento.router)
+# HU-W03: cálculo de la prima (cotizacion).
+app.include_router(cotizaciones.router)
+app.include_router(cotizaciones.router_productos)
 app.include_router(clientes.router)
 app.include_router(consentimientos.router)
 

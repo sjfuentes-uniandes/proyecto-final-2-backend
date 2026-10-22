@@ -1,4 +1,4 @@
-"""Schemathesis 4 contra la app con el repositorio en memoria y el reloj fijo."""
+"""Schemathesis 4 contra la app con los repositorios en memoria y el reloj fijo (incluye\n/v1/productos de HU-W03)."""
 
 from collections.abc import Iterator
 from typing import Any
@@ -14,8 +14,8 @@ from schemathesis.specs.openapi.checks import response_schema_conformance
 
 
 @pytest.fixture
-def esquema(repositorio: Any, reloj: Any) -> Iterator[Any]:
-    app = crear_app(Settings(), repositorio=repositorio, reloj=reloj)
+def esquema(repositorio: Any, productos_repo: Any, reloj: Any) -> Iterator[Any]:
+    app = crear_app(Settings(), repositorio=repositorio, productos_repo=productos_repo, reloj=reloj)
     # El lifespan crea los casos de uso en app.state.
     with TestClient(app):
         yield schemathesis.openapi.from_asgi("/openapi.json", app)

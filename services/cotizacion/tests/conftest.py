@@ -429,3 +429,180 @@ def nuevo_comando() -> Any:
 @pytest.fixture
 def verificacion_de() -> Any:
     return verificacion
+
+
+# --- HU-W03: producto, reglas de prima y cotizaciones ---------------------------------------
+
+SEMILLAS_CATALOGO = SEMILLA.parent
+SOCIO = "SOC-000001"
+
+
+def producto_semilla(producto_id: str = "vida-hipotecario", **cambios: Any) -> Any:
+    """El producto de `catalogo/.../semillas/productos.json` convertido como lo hace el adaptador."""
+    from cotizacion.adapters.outbound.productos_catalogo import ProductoDto, a_producto
+
+    entradas = json.loads((SEMILLAS_CATALOGO / "productos.json").read_text(encoding="utf-8"))
+    entrada = next(e for e in entradas if e["id"] == producto_id)
+    return replace(a_producto(ProductoDto.model_validate(entrada)), **cambios)
+
+
+def reglas_semilla(producto_id: str = "vida-hipotecario", **cambios: Any) -> Any:
+    """Las reglas vigentes de la semilla (con su hash canónico), como las entrega catalogo."""
+    import hashlib
+
+    from cotizacion.adapters.outbound.productos_catalogo import ReglasPrimaDto, a_reglas
+
+    entradas = json.loads((SEMILLAS_CATALOGO / "productos.json").read_text(encoding="utf-8"))
+    regla = next(e for e in entradas if e["id"] == producto_id)["reglas"][0]
+    definicion = json.loads((SEMILLAS_CATALOGO / regla["archivo"]).read_text(encoding="utf-8"))
+    canonico = json.dumps(definicion, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    dto = ReglasPrimaDto.model_validate(
+        {
+            "productoId": producto_id,
+            "version": regla["version"],
+            "vigenteDesde": regla["vigenteDesde"],
+            "hash": "sha256:" + hashlib.sha256(canonico.encode()).hexdigest(),
+            "definicion": definicion,
+        }
+    )
+    return replace(a_reglas(dto), **cambios)
+
+
+class ProductosFalsos:
+    """PuertoProductos: catálogo con la semilla; `errores[producto_id]` lanza al pedirlo."""
+
+    def __init__(self) -> None:
+        from cotizacion.application.cotizacion.puertos import OrigenDato
+
+        self.origen = OrigenDato.CATALOGO
+        self.productos = {
+            p: producto_semilla(p) for p in ("vida-hipotecario", "vida-hipotecario-2025")
+        }
+        self.reglas = {p: reglas_semilla(p) for p in self.productos}
+        self.errores_producto: dict[str, BaseException] = {}
+        self.errores_reglas: dict[str, BaseException] = {}
+        self.demora_s = 0.0
+        self.llamadas: list[tuple[str, Any]] = []
+
+    async def producto(self, producto_id: str) -> Any:
+        from cotizacion.application.cotizacion.puertos import Resuelto
+        from cotizacion.domain.cotizacion.errores import ProductoNoEncontrado
+
+        self.llamadas.append(("producto", producto_id))
+        if self.demora_s:
+            await asyncio.sleep(self.demora_s)
+        if producto_id in self.errores_producto:
+            raise self.errores_producto[producto_id]
+        if producto_id not in self.productos:
+            raise ProductoNoEncontrado()
+        return Resuelto(self.productos[producto_id], self.origen)
+
+    async def reglas_vigentes(self, producto_id: str, en: datetime) -> Any:
+        from cotizacion.application.cotizacion.puertos import Resuelto
+        from cotizacion.domain.cotizacion.errores import ProductoNoEncontrado, ReglasNoVigentes
+
+        self.llamadas.append(("reglas", (producto_id, en)))
+        if producto_id in self.errores_reglas:
+            raise self.errores_reglas[producto_id]
+        if producto_id not in self.productos:
+            raise ProductoNoEncontrado()
+        reglas = self.reglas.get(producto_id)
+        if reglas is None or reglas.vigente_desde > en:
+            raise ReglasNoVigentes()
+        return Resuelto(reglas, self.origen)
+
+
+class RepositorioCotizacionesMemoria:
+    def __init__(self) -> None:
+        self.cotizaciones: dict[UUID, Any] = {}
+        self.errores_al_guardar: list[Exception] = []
+
+    async def por_idempotencia(self, actor_id: str, clave: UUID) -> Any:
+        return next(
+            (
+                c
+                for c in self.cotizaciones.values()
+                if c.actor.id == actor_id and c.idempotency_key == clave
+            ),
+            None,
+        )
+
+    async def guardar(self, cotizacion: Any) -> None:
+        if self.errores_al_guardar:
+            raise self.errores_al_guardar.pop(0)
+        if await self.por_idempotencia(cotizacion.actor.id, cotizacion.idempotency_key):
+            raise ConflictoIdempotencia()
+        self.cotizaciones[cotizacion.id] = cotizacion
+
+    async def por_id(self, cotizacion_id: UUID) -> Any:
+        return self.cotizaciones.get(cotizacion_id)
+
+
+@dataclass
+class EscenarioCotizacion:
+    productos: ProductosFalsos
+    identidad: IdentidadFalsa
+    perfiles: RepositorioPerfilesMemoria
+    repo: RepositorioCotizacionesMemoria
+    reloj: RelojFijo
+
+    def caso(self, dependencia_timeout_ms: int = 150) -> Any:
+        from cotizacion.application.cotizacion.calcular_prima import (
+            CalcularPrima,
+            ConfigCotizacion,
+        )
+
+        return CalcularPrima(
+            productos=self.productos,
+            identidad=self.identidad,
+            perfiles=self.perfiles,
+            repo=self.repo,
+            reloj=self.reloj,
+            config=ConfigCotizacion(dependencia_timeout_ms=dependencia_timeout_ms),
+        )
+
+
+@pytest.fixture
+def escenario_cotizacion(perfil_c01: Perfil) -> EscenarioCotizacion:
+    """C01 en 2026-10-15: producto y reglas de la semilla, cliente verificado y su perfil."""
+    perfiles = RepositorioPerfilesMemoria()
+    perfiles.perfiles[perfil_c01.id] = perfil_c01
+    return EscenarioCotizacion(
+        productos=ProductosFalsos(),
+        identidad=IdentidadFalsa(EstadoIdentidad.VERIFICADO),
+        perfiles=perfiles,
+        repo=RepositorioCotizacionesMemoria(),
+        reloj=RelojFijo(),
+    )
+
+
+def comando_cotizacion(**cambios: Any) -> Any:
+    """C01 sin perfil, como asesor, con las dos coberturas obligatorias."""
+    from cotizacion.application.cotizacion.calcular_prima import ComandoCotizacion
+    from cotizacion.domain.cotizacion.modelos import Actor, RolActor
+
+    base = ComandoCotizacion(
+        cliente_id=CLIENTE_C01,
+        producto_id="vida-hipotecario",
+        fecha_nacimiento=date(1990, 4, 18),
+        plazo_credito_meses=180,
+        suma_asegurada=Decimal(180000000),
+        coberturas_opcionales=(),
+        perfil_id=None,
+        socio_id=None,
+        idempotency_key=UUID("00000000-0000-4000-c000-000000000001"),
+        actor=Actor("asesor-sintetico", RolActor.ASESOR),
+        correlation_id="corr-w03",
+    )
+    return replace(base, **cambios)
+
+
+@pytest.fixture
+def nueva_cotizacion() -> Any:
+    return comando_cotizacion
+
+
+@pytest.fixture
+def semilla_w03() -> Any:
+    """(producto_semilla, reglas_semilla): fábricas del producto y las reglas de la semilla."""
+    return producto_semilla, reglas_semilla
