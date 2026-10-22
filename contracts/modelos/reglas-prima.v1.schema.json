@@ -1,0 +1,258 @@
+{
+  "$defs": {
+    "FactorVariable": {
+      "additionalProperties": false,
+      "properties": {
+        "codigo": {
+          "title": "Codigo",
+          "type": "string"
+        },
+        "tramos": {
+          "items": {
+            "$ref": "#/$defs/Tramo"
+          },
+          "title": "Tramos",
+          "type": "array"
+        },
+        "variable": {
+          "title": "Variable",
+          "type": "string"
+        }
+      },
+      "required": [
+        "codigo",
+        "variable",
+        "tramos"
+      ],
+      "title": "FactorVariable",
+      "type": "object"
+    },
+    "FactoresNivel": {
+      "additionalProperties": false,
+      "description": "Factor por nivel de riesgo del perfil; SIN_PERFIL se aplica cuando no hay nivel.",
+      "properties": {
+        "ALTO": {
+          "pattern": "^-?\\d+(\\.\\d+)?$",
+          "title": "Alto",
+          "type": "string"
+        },
+        "BAJO": {
+          "pattern": "^-?\\d+(\\.\\d+)?$",
+          "title": "Bajo",
+          "type": "string"
+        },
+        "MEDIO": {
+          "pattern": "^-?\\d+(\\.\\d+)?$",
+          "title": "Medio",
+          "type": "string"
+        },
+        "SIN_PERFIL": {
+          "pattern": "^-?\\d+(\\.\\d+)?$",
+          "title": "Sin Perfil",
+          "type": "string"
+        }
+      },
+      "required": [
+        "BAJO",
+        "MEDIO",
+        "ALTO",
+        "SIN_PERFIL"
+      ],
+      "title": "FactoresNivel",
+      "type": "object"
+    },
+    "Limites": {
+      "additionalProperties": false,
+      "properties": {
+        "edad": {
+          "$ref": "#/$defs/Rango"
+        },
+        "plazoCreditoMeses": {
+          "$ref": "#/$defs/Rango"
+        },
+        "sumaAsegurada": {
+          "$ref": "#/$defs/Rango"
+        }
+      },
+      "required": [
+        "sumaAsegurada",
+        "plazoCreditoMeses",
+        "edad"
+      ],
+      "title": "Limites",
+      "type": "object"
+    },
+    "Rango": {
+      "additionalProperties": false,
+      "properties": {
+        "maximo": {
+          "pattern": "^-?\\d+(\\.\\d+)?$",
+          "title": "Maximo",
+          "type": "string"
+        },
+        "minimo": {
+          "pattern": "^-?\\d+(\\.\\d+)?$",
+          "title": "Minimo",
+          "type": "string"
+        }
+      },
+      "required": [
+        "minimo",
+        "maximo"
+      ],
+      "title": "Rango",
+      "type": "object"
+    },
+    "Recargo": {
+      "additionalProperties": false,
+      "description": "Recargo de una cobertura opcional: `tasa` \u00d7 prima ajustada.",
+      "properties": {
+        "cobertura": {
+          "title": "Cobertura",
+          "type": "string"
+        },
+        "tasa": {
+          "pattern": "^-?\\d+(\\.\\d+)?$",
+          "title": "Tasa",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cobertura",
+        "tasa"
+      ],
+      "title": "Recargo",
+      "type": "object"
+    },
+    "Redondeo": {
+      "additionalProperties": false,
+      "properties": {
+        "escala": {
+          "maximum": 6,
+          "minimum": -6,
+          "title": "Escala",
+          "type": "integer"
+        },
+        "modo": {
+          "enum": [
+            "ROUND_HALF_EVEN",
+            "ROUND_HALF_UP",
+            "ROUND_HALF_DOWN",
+            "ROUND_UP",
+            "ROUND_DOWN"
+          ],
+          "title": "Modo",
+          "type": "string"
+        }
+      },
+      "required": [
+        "escala",
+        "modo"
+      ],
+      "title": "Redondeo",
+      "type": "object"
+    },
+    "Tramo": {
+      "additionalProperties": false,
+      "description": "Factor para los valores \u2264 `hasta`; el \u00faltimo tramo es abierto (`hasta` nulo).",
+      "properties": {
+        "factor": {
+          "pattern": "^-?\\d+(\\.\\d+)?$",
+          "title": "Factor",
+          "type": "string"
+        },
+        "hasta": {
+          "anyOf": [
+            {
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Hasta"
+        }
+      },
+      "required": [
+        "hasta",
+        "factor"
+      ],
+      "title": "Tramo",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "factoresNivel": {
+      "$ref": "#/$defs/FactoresNivel"
+    },
+    "factoresVariables": {
+      "items": {
+        "$ref": "#/$defs/FactorVariable"
+      },
+      "title": "Factoresvariables",
+      "type": "array"
+    },
+    "limites": {
+      "$ref": "#/$defs/Limites"
+    },
+    "moneda": {
+      "pattern": "^[A-Z]{3}$",
+      "title": "Moneda",
+      "type": "string"
+    },
+    "periodicidad": {
+      "enum": [
+        "MENSUAL",
+        "ANUAL"
+      ],
+      "title": "Periodicidad",
+      "type": "string"
+    },
+    "primaMaxima": {
+      "pattern": "^-?\\d+(\\.\\d+)?$",
+      "title": "Primamaxima",
+      "type": "string"
+    },
+    "primaMinima": {
+      "pattern": "^-?\\d+(\\.\\d+)?$",
+      "title": "Primaminima",
+      "type": "string"
+    },
+    "productoId": {
+      "title": "Productoid",
+      "type": "string"
+    },
+    "recargos": {
+      "items": {
+        "$ref": "#/$defs/Recargo"
+      },
+      "title": "Recargos",
+      "type": "array"
+    },
+    "redondeo": {
+      "$ref": "#/$defs/Redondeo"
+    },
+    "tasaBase": {
+      "pattern": "^-?\\d+(\\.\\d+)?$",
+      "title": "Tasabase",
+      "type": "string"
+    }
+  },
+  "required": [
+    "productoId",
+    "moneda",
+    "periodicidad",
+    "tasaBase",
+    "factoresNivel",
+    "factoresVariables",
+    "recargos",
+    "primaMinima",
+    "primaMaxima",
+    "redondeo",
+    "limites"
+  ],
+  "title": "DefinicionReglasPrima",
+  "type": "object"
+}

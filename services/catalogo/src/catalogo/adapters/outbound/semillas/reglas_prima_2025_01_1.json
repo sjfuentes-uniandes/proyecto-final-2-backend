@@ -1,0 +1,21 @@
+{
+  "productoId": "vida-hipotecario-2025",
+  "moneda": "COP",
+  "periodicidad": "MENSUAL",
+  "tasaBase": "0.00045",
+  "factoresNivel": {"BAJO": "1.00", "MEDIO": "1.00", "ALTO": "1.00", "SIN_PERFIL": "1.00"},
+  "factoresVariables": [
+    {"codigo": "EDAD", "variable": "edad", "tramos": [
+      {"hasta": "44", "factor": "1.00"},
+      {"hasta": null, "factor": "1.60"}]}
+  ],
+  "recargos": [],
+  "primaMinima": "15000",
+  "primaMaxima": "2500000",
+  "redondeo": {"escala": 0, "modo": "ROUND_HALF_EVEN"},
+  "limites": {
+    "sumaAsegurada": {"minimo": "10000000", "maximo": "800000000"},
+    "plazoCreditoMeses": {"minimo": "12", "maximo": "300"},
+    "edad": {"minimo": "18", "maximo": "65"}
+  }
+}

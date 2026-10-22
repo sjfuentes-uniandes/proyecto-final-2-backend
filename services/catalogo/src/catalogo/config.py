@@ -13,5 +13,12 @@ class Settings(ServiceSettings):
         validation_alias=AliasChoices("CATALOGO_SEMILLA_QA", "SOLVENTA_CATALOGO_SEMILLA_QA"),
     )
 
+    # Cache-Aside de productos y reglas de prima (HU-S02, HU-W03). Sin CACHE_URL, sin caché.
+    cache_url: str | None = Field(
+        None, validation_alias=AliasChoices("CACHE_URL", "SOLVENTA_CACHE_URL"), repr=False
+    )
+    cache_ttl_s: int = Field(60, ge=0)
+    cache_timeout_ms: int = Field(50, ge=1)
+
 
 settings = Settings()

@@ -11,6 +11,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
+from catalogo.adapters.outbound import productos_pg
 from catalogo.domain.reglas.errores import DefinicionInvalida, VersionExistente
 from catalogo.domain.reglas.hash import hash_canonico
 from catalogo.domain.reglas.modelo import ModeloPublicado
@@ -48,7 +49,10 @@ def definicion_semilla() -> dict[str, Any]:
 
 
 def migrar(url: str) -> None:
-    """Aplica los .sql en orden y siembra el modelo candidato. Idempotente y serializado."""
+    """Aplica los .sql en orden y siembra el modelo candidato y los productos (HU-W03).
+
+    Idempotente y serializado.
+    """
     archivos = sorted(
         (f for f in _PAQUETE.joinpath("migraciones").iterdir() if f.name.endswith(".sql")),
         key=lambda f: f.name,
@@ -71,6 +75,7 @@ def migrar(url: str) -> None:
                     "migracion",
                 ),
             )
+            productos_pg.sembrar(conexion)
         finally:
             conexion.execute(_UNLOCK)
 
