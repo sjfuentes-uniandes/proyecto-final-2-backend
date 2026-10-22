@@ -5,12 +5,14 @@ from importlib.resources import files
 from typing import Any
 
 import pytest
+from catalogo.adapters.outbound import reglas_suscripcion_pg
 from catalogo.adapters.outbound.productos_pg import semillas
 from catalogo.config import Settings
 from catalogo.domain.productos.producto import Producto, ReglasPrima
 from catalogo.domain.reglas.errores import VersionExistente
 from catalogo.domain.reglas.hash import hash_canonico
 from catalogo.domain.reglas.modelo import ModeloPublicado
+from catalogo.domain.suscripcion.reglas import ReglasSuscripcion
 from catalogo.main import crear_app
 from fastapi.testclient import TestClient
 
@@ -117,11 +119,47 @@ def productos_repo() -> ProductosMemoria:
     return ProductosMemoria()
 
 
+class ReglasSuscripcionMemoria:
+    """RepositorioReglasSuscripcion con la semilla de HU-W13 (vida-hipotecario 2026.10.1)."""
+
+    def __init__(self) -> None:
+        self.reglas = [
+            ReglasSuscripcion(p, v, desde, d, hash_canonico(d), "migracion")
+            for p, v, desde, d in reglas_suscripcion_pg.semillas()
+        ]
+
+    async def vigentes(self, producto_id: str, en: datetime) -> ReglasSuscripcion | None:
+        candidatas = [
+            r for r in self.reglas if r.producto_id == producto_id and r.vigente_desde <= en
+        ]
+        return max(candidatas, key=lambda r: r.vigente_desde, default=None)
+
+    async def por_version(self, producto_id: str, version: str) -> ReglasSuscripcion | None:
+        return next(
+            (r for r in self.reglas if r.producto_id == producto_id and r.version == version),
+            None,
+        )
+
+
+@pytest.fixture
+def reglas_suscripcion_repo() -> ReglasSuscripcionMemoria:
+    return ReglasSuscripcionMemoria()
+
+
 @pytest.fixture
 def api(
-    repositorio: RepositorioMemoria, productos_repo: ProductosMemoria, reloj: RelojFijo
+    repositorio: RepositorioMemoria,
+    productos_repo: ProductosMemoria,
+    reglas_suscripcion_repo: ReglasSuscripcionMemoria,
+    reloj: RelojFijo,
 ) -> Iterator[TestClient]:
     """App con los repositorios en memoria y el reloj fijo, con su lifespan arrancado."""
-    app = crear_app(Settings(), repositorio=repositorio, productos_repo=productos_repo, reloj=reloj)
+    app = crear_app(
+        Settings(),
+        repositorio=repositorio,
+        productos_repo=productos_repo,
+        reglas_suscripcion_repo=reglas_suscripcion_repo,
+        reloj=reloj,
+    )
     with TestClient(app) as cliente:
         yield cliente
