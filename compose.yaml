@@ -159,6 +159,27 @@ services:
       # Identidad y verificación del consentimiento contra clientes real (PR 3.6).
       CLIENTES_URL: http://clientes:8080
 
+  # HU-W13: suscripción automática. Consulta a cotizacion (insumos) y a catalogo (reglas).
+  polizas:
+    <<: *servicio
+    build: { context: ., dockerfile: services/polizas/Dockerfile }
+    ports: ["8088:8080"]
+    depends_on:
+      postgres: { condition: service_started }
+      localstack: { condition: service_started }
+      otel-collector: { condition: service_started }
+      cotizacion: { condition: service_started }
+      catalogo: { condition: service_started }
+    # El ancla define environment: se repiten sus variables junto con las propias.
+    environment:
+      SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_PROPAGATORS: tracecontext,baggage,xray
+      OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
+      DB_HOST: postgres
+      COTIZACION_URL: http://cotizacion:8080
+      CATALOGO_URL: http://catalogo:8080
+
   adaptador-datos:
     <<: *servicio
     build: { context: ., dockerfile: services/adaptador-datos/Dockerfile }

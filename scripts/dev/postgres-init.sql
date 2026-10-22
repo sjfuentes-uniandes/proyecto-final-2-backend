@@ -4,3 +4,4 @@ CREATE DATABASE api_socios;
 CREATE DATABASE clientes;
 CREATE DATABASE catalogo;
 CREATE DATABASE cotizacion;
+CREATE DATABASE polizas;
