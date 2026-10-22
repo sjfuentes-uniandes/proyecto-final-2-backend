@@ -162,6 +162,13 @@ class CotizacionRespuesta(_Dto):
         default_factory=list,
         description="Pasos del cálculo con su duración; vacío al leer o al repetir la clave",
     )
+    # HU-W13 (DS2-20): aditivo y opcional, copia del campo de cotizacion.
+    vigente_hasta: datetime | None = Field(
+        default=None,
+        description=(
+            "Fin de la vigencia de la oferta (UTC): vigente si ahora < vigenteHasta (DS2-20, HU-W13)"
+        ),
+    )
 
 
 class RangoDto(_Dto):
