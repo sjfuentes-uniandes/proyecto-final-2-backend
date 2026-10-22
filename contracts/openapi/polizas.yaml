@@ -1,0 +1,1020 @@
+openapi: 3.1.0
+info:
+  title: polizas
+  version: 0.1.0
+paths:
+  /v1/suscripciones:
+    post:
+      tags:
+      - suscripciones
+      summary: Solicitar
+      description: Evalúa las reglas de suscripción vigentes sobre la oferta y registra
+        la decisión.
+      operationId: solicitar_v1_suscripciones_post
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Idempotency-Key
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudSuscripcion'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionSuscripcion'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: ROL_NO_AUTORIZADO (rol distinto de ASESOR) o IDENTIDAD_NO_VERIFICADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '200':
+          description: Misma Idempotency-Key, o la cotización ya tenía una decisión
+            (DS2-05)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionSuscripcion'
+        '404':
+          description: COTIZACION_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: OFERTA_VENCIDA (detalles.accion = NUEVA_COTIZACION) o IDENTIDAD_PENDIENTE;
+            no se crea decisión
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA, IDEMPOTENCIA_CONFLICTO o REGLAS_NO_VIGENTES
+            (el producto no tiene reglas de suscripción vigentes)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia: cotizacion
+            o catalogo)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+    get:
+      tags:
+      - suscripciones
+      summary: Buscar Por Cotizacion
+      description: La decisión de una cotización, si existe (ASESOR o SUSCRIPTOR).
+      operationId: buscar_por_cotizacion_v1_suscripciones_get
+      parameters:
+      - name: cotizacionId
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cotizacionid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaDecisiones'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol no permite la operación'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/suscripciones/bandeja:
+    get:
+      tags:
+      - suscripciones
+      summary: Bandeja
+      description: 'Casos REVISION_REQUERIDA del más antiguo al más reciente (solo
+        SUSCRIPTOR). `q` busca por
+
+        código de decisión o por el inicio del identificador de la cotización.'
+      operationId: bandeja_v1_suscripciones_bandeja_get
+      parameters:
+      - name: productoId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^[a-z0-9-]{1,64}$
+          - type: 'null'
+          title: Productoid
+      - name: motivo
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/MotivoCliente'
+          - type: 'null'
+          title: Motivo
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 64
+          - type: 'null'
+          title: Q
+      - name: limite
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limite
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Cursor
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BandejaSuscripcion'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol no permite la operación'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/suscripciones/resumen:
+    get:
+      tags:
+      - suscripciones
+      summary: Resumen
+      description: Indicadores de la bandeja (DS2-14) en [desde, hasta) (solo SUSCRIPTOR).
+      operationId: resumen_v1_suscripciones_resumen_get
+      parameters:
+      - name: desde
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+          description: Inicio (incluido), ISO-8601 con zona
+          title: Desde
+        description: Inicio (incluido), ISO-8601 con zona
+      - name: hasta
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+          description: Fin (excluido), ISO-8601 con zona
+          title: Hasta
+        description: Fin (excluido), ISO-8601 con zona
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumenBandeja'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol no permite la operación'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (también si desde ≥ hasta)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/suscripciones/{decisionId}:
+    get:
+      tags:
+      - suscripciones
+      summary: Consultar
+      description: Una decisión registrada; no cambia nunca (ASESOR o SUSCRIPTOR,
+        DS2-07).
+      operationId: consultar_v1_suscripciones__decisionId__get
+      parameters:
+      - name: decisionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Decisionid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionSuscripcion'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol no permite la operación'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: DECISION_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/suscripciones/{decisionId}/reconstruccion:
+    get:
+      tags:
+      - suscripciones
+      summary: Reconstruir
+      description: Reevalúa los insumos guardados con la versión de reglas guardada
+        y compara.
+      operationId: reconstruir_v1_suscripciones__decisionId__reconstruccion_get
+      parameters:
+      - name: decisionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Decisionid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReconstruccionDecision'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol no permite la operación'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: DECISION_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia: catalogo)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+components:
+  schemas:
+    BandejaSuscripcion:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/CasoBandeja'
+          type: array
+          title: Items
+          description: Del más antiguo al más reciente
+        siguienteCursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Siguientecursor
+        total:
+          type: integer
+          title: Total
+          description: Casos en revisión que cumplen los filtros
+      type: object
+      required:
+      - items
+      - siguienteCursor
+      - total
+      title: BandejaSuscripcion
+    CampoRegla:
+      type: string
+      enum:
+      - edad
+      - suma_asegurada
+      - plazo_credito_meses
+      - nivel_riesgo
+      - confianza_perfil
+      - coincidencias_listas_restrictivas
+      title: CampoRegla
+    CasoBandeja:
+      properties:
+        decisionId:
+          type: string
+          format: uuid
+          title: Decisionid
+        codigo:
+          type: string
+          title: Codigo
+        cotizacionId:
+          type: string
+          format: uuid
+          title: Cotizacionid
+        cotizacionCodigo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cotizacioncodigo
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        productoId:
+          type: string
+          title: Productoid
+        moneda:
+          type: string
+          title: Moneda
+        sumaAsegurada:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Sumaasegurada
+        motivos:
+          items:
+            $ref: '#/components/schemas/MotivoCliente'
+          type: array
+          title: Motivos
+        reglasNoCumplidas:
+          items:
+            type: string
+          type: array
+          title: Reglasnocumplidas
+          description: Códigos de las reglas NO_CUMPLE o NO_EVALUABLE, por orden
+        decididaEn:
+          type: string
+          format: date-time
+          title: Decididaen
+        antiguedadMinutos:
+          type: integer
+          title: Antiguedadminutos
+      type: object
+      required:
+      - decisionId
+      - codigo
+      - cotizacionId
+      - cotizacionCodigo
+      - clienteId
+      - productoId
+      - moneda
+      - sumaAsegurada
+      - motivos
+      - reglasNoCumplidas
+      - decididaEn
+      - antiguedadMinutos
+      title: CasoBandeja
+    CoberturaProductoDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        nombre:
+          type: string
+          title: Nombre
+        obligatoria:
+          type: boolean
+          title: Obligatoria
+      type: object
+      required:
+      - codigo
+      - nombre
+      - obligatoria
+      title: CoberturaProductoDto
+    CondicionesOfertaDto:
+      properties:
+        socioId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Socioid
+        versionProducto:
+          type: string
+          title: Versionproducto
+        moneda:
+          type: string
+          title: Moneda
+        periodicidad:
+          type: string
+          title: Periodicidad
+        primaTotal:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Primatotal
+        versionReglasPrima:
+          type: string
+          title: Versionreglasprima
+        huellaCalculo:
+          type: string
+          title: Huellacalculo
+        coberturas:
+          items:
+            $ref: '#/components/schemas/CoberturaProductoDto'
+          type: array
+          title: Coberturas
+        sumaAsegurada:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Sumaasegurada
+        plazoCreditoMeses:
+          type: integer
+          title: Plazocreditomeses
+        calculadoEn:
+          type: string
+          format: date-time
+          title: Calculadoen
+        vigenteHasta:
+          type: string
+          format: date-time
+          title: Vigentehasta
+      type: object
+      required:
+      - socioId
+      - versionProducto
+      - moneda
+      - periodicidad
+      - primaTotal
+      - versionReglasPrima
+      - huellaCalculo
+      - coberturas
+      - sumaAsegurada
+      - plazoCreditoMeses
+      - calculadoEn
+      - vigenteHasta
+      title: CondicionesOfertaDto
+      description: Instantánea de la oferta al decidir (DS2-10), sin datos del perfil
+        ni la edad.
+    ContextoCasoDto:
+      properties:
+        nivelRiesgo:
+          anyOf:
+          - $ref: '#/components/schemas/NivelRiesgo'
+          - type: 'null'
+        confianza:
+          anyOf:
+          - type: string
+            pattern: ^-?\d+(\.\d+)?$
+          - type: 'null'
+          title: Confianza
+        fuentesConsultadas:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Fuentesconsultadas
+        fuentesDeclaradas:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Fuentesdeclaradas
+      type: object
+      required:
+      - nivelRiesgo
+      - confianza
+      - fuentesConsultadas
+      - fuentesDeclaradas
+      title: ContextoCasoDto
+      description: Contexto del perfil para la revisión (E04); null en cada campo
+        si no hubo perfil.
+    DecisionSuscripcion:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        codigo:
+          type: string
+          pattern: ^DEC-\d{4}-\d{6}$
+          title: Codigo
+        cotizacionId:
+          type: string
+          format: uuid
+          title: Cotizacionid
+        ofertaId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Ofertaid
+          description: Null hasta HU-W04
+        cotizacionCodigo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cotizacioncodigo
+          description: Null hasta HU-W04 (CF-S2-10)
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        productoId:
+          type: string
+          title: Productoid
+        resultado:
+          $ref: '#/components/schemas/ResultadoDecision'
+        tipo:
+          $ref: '#/components/schemas/TipoDecision'
+        reglasEvaluadas:
+          items:
+            $ref: '#/components/schemas/ReglaEvaluadaDto'
+          type: array
+          title: Reglasevaluadas
+        reglaDeterminante:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Regladeterminante
+          description: Primera regla EXCLUYENTE incumplida (RECHAZADA); null en otro
+            caso
+        motivos:
+          items:
+            $ref: '#/components/schemas/MotivoCliente'
+          type: array
+          title: Motivos
+        versionReglas:
+          type: string
+          title: Versionreglas
+        hashReglas:
+          type: string
+          title: Hashreglas
+        condiciones:
+          $ref: '#/components/schemas/CondicionesOfertaDto'
+        contexto:
+          $ref: '#/components/schemas/ContextoCasoDto'
+        admiteExcepcion:
+          type: boolean
+          title: Admiteexcepcion
+          description: Siempre false en el Sprint 2 (DS2-08)
+        decididaEn:
+          type: string
+          format: date-time
+          title: Decididaen
+        duracionMs:
+          type: integer
+          title: Duracionms
+      type: object
+      required:
+      - id
+      - codigo
+      - cotizacionId
+      - ofertaId
+      - cotizacionCodigo
+      - clienteId
+      - productoId
+      - resultado
+      - tipo
+      - reglasEvaluadas
+      - reglaDeterminante
+      - motivos
+      - versionReglas
+      - hashReglas
+      - condiciones
+      - contexto
+      - admiteExcepcion
+      - decididaEn
+      - duracionMs
+      title: DecisionSuscripcion
+    ErrorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        mensaje:
+          type: string
+          title: Mensaje
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          type: object
+          title: Detalles
+      type: object
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
+    ListaDecisiones:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ResumenDecision'
+          type: array
+          title: Items
+          description: '0 o 1 elemento: una decisión por cotización'
+      type: object
+      required:
+      - items
+      title: ListaDecisiones
+    MotivoCliente:
+      type: string
+      enum:
+      - EDAD_FUERA_DE_RANGO
+      - PLAZO_FUERA_DE_RANGO
+      - SUMA_REQUIERE_REVISION
+      - PERFIL_REQUIERE_REVISION
+      - NO_ELEGIBLE
+      title: MotivoCliente
+    NivelRiesgo:
+      type: string
+      enum:
+      - BAJO
+      - MEDIO
+      - ALTO
+      title: NivelRiesgo
+    OperadorRegla:
+      type: string
+      enum:
+      - '>='
+      - <=
+      - ==
+      - '!='
+      - entre
+      - en
+      title: OperadorRegla
+    ReconstruccionDecision:
+      properties:
+        coincide:
+          type: boolean
+          title: Coincide
+        resultadoOriginal:
+          $ref: '#/components/schemas/ResultadoDecision'
+        resultadoReconstruido:
+          $ref: '#/components/schemas/ResultadoDecision'
+        versionReglas:
+          type: string
+          title: Versionreglas
+        hashReglas:
+          type: string
+          title: Hashreglas
+      type: object
+      required:
+      - coincide
+      - resultadoOriginal
+      - resultadoReconstruido
+      - versionReglas
+      - hashReglas
+      title: ReconstruccionDecision
+    ReglaEvaluadaDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        orden:
+          type: integer
+          title: Orden
+        tipo:
+          $ref: '#/components/schemas/TipoRegla'
+        descripcion:
+          type: string
+          title: Descripcion
+        campo:
+          $ref: '#/components/schemas/CampoRegla'
+        operador:
+          $ref: '#/components/schemas/OperadorRegla'
+        valor:
+          anyOf:
+          - type: string
+          - items:
+              type: string
+            type: array
+          title: Valor
+        valorCaso:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Valorcaso
+          description: Valor del caso como texto; null si no es evaluable o si la
+            regla es RESERVADA y el actor no es SUSCRIPTOR (DS2-07)
+        resultado:
+          $ref: '#/components/schemas/ResultadoRegla'
+        visibilidad:
+          $ref: '#/components/schemas/Visibilidad'
+        reservada:
+          type: boolean
+          title: Reservada
+          description: true si se ocultó valorCaso al actor (DS2-07)
+      type: object
+      required:
+      - codigo
+      - orden
+      - tipo
+      - descripcion
+      - campo
+      - operador
+      - valor
+      - valorCaso
+      - resultado
+      - visibilidad
+      - reservada
+      title: ReglaEvaluadaDto
+    ResultadoDecision:
+      type: string
+      enum:
+      - APROBADA
+      - RECHAZADA
+      - REVISION_REQUERIDA
+      title: ResultadoDecision
+    ResultadoRegla:
+      type: string
+      enum:
+      - CUMPLE
+      - NO_CUMPLE
+      - NO_EVALUABLE
+      title: ResultadoRegla
+    ResumenBandeja:
+      properties:
+        desde:
+          type: string
+          format: date-time
+          title: Desde
+        hasta:
+          type: string
+          format: date-time
+          title: Hasta
+        resueltasAutomaticamente:
+          type: integer
+          title: Resueltasautomaticamente
+        enviadasARevision:
+          type: integer
+          title: Enviadasarevision
+        total:
+          type: integer
+          title: Total
+        tiempoMedioDecisionMs:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Tiempomediodecisionms
+        fueraDelCompromiso:
+          type: integer
+          title: Fueradelcompromiso
+          description: Casos en revisión con antigüedad mayor que el compromiso (de
+            cualquier día)
+        compromisoRevisionHoras:
+          type: integer
+          title: Compromisorevisionhoras
+      type: object
+      required:
+      - desde
+      - hasta
+      - resueltasAutomaticamente
+      - enviadasARevision
+      - total
+      - tiempoMedioDecisionMs
+      - fueraDelCompromiso
+      - compromisoRevisionHoras
+      title: ResumenBandeja
+      description: Indicadores de E01 (DS2-14) en [desde, hasta).
+    ResumenDecision:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        codigo:
+          type: string
+          title: Codigo
+        cotizacionId:
+          type: string
+          format: uuid
+          title: Cotizacionid
+        resultado:
+          $ref: '#/components/schemas/ResultadoDecision'
+        versionReglas:
+          type: string
+          title: Versionreglas
+        decididaEn:
+          type: string
+          format: date-time
+          title: Decididaen
+      type: object
+      required:
+      - id
+      - codigo
+      - cotizacionId
+      - resultado
+      - versionReglas
+      - decididaEn
+      title: ResumenDecision
+    SolicitudSuscripcion:
+      properties:
+        cotizacionId:
+          type: string
+          format: uuid
+          title: Cotizacionid
+      type: object
+      required:
+      - cotizacionId
+      title: SolicitudSuscripcion
+    TipoDecision:
+      type: string
+      enum:
+      - AUTOMATICA
+      title: TipoDecision
+    TipoRegla:
+      type: string
+      enum:
+      - EXCLUYENTE
+      - REVISION
+      title: TipoRegla
+    Visibilidad:
+      type: string
+      enum:
+      - EXPLICABLE
+      - RESERVADA
+      title: Visibilidad
