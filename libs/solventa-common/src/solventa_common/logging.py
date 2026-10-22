@@ -45,6 +45,9 @@ _FRAGMENTOS_SENSIBLES = (
     "saldo",
     "tarjeta",
     "card",
+    # HU-W03: datos del asegurado en la cotización (los logs llevan solo identificadores).
+    "nacimiento",
+    "sumaasegurada",
 )
 _CLAVES_SENSIBLES = {"pin", "cvv", "otp", "jwt"}
 

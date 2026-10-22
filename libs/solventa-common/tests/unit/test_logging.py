@@ -56,6 +56,10 @@ TOKEN = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjMifQ.firma-del-token"
         "pin",
         "cvv",
         "contraseña",
+        "fecha_nacimiento",
+        "fechaNacimiento",
+        "suma_asegurada",
+        "sumaAsegurada",
     ],
 )
 def test_claves_sensibles(clave: str) -> None:
@@ -63,7 +67,18 @@ def test_claves_sensibles(clave: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "clave", ["operation", "service", "status", "correlation_id", "socio_id", "producto", "opinion"]
+    "clave",
+    [
+        "operation",
+        "service",
+        "status",
+        "correlation_id",
+        "socio_id",
+        "producto",
+        "opinion",
+        "cotizacion_id",
+        "version_reglas",
+    ],
 )
 def test_claves_normales(clave: str) -> None:
     assert not es_clave_sensible(clave)
