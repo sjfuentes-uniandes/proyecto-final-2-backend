@@ -1,0 +1,544 @@
+{
+  "consumer": {
+    "name": "polizas"
+  },
+  "interactions": [
+    {
+      "description": "los insumos de una cotización con perfil calculado",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "existe la cotización S01 de un cliente verificado con su perfil CALCULADO"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "sub-asesor-pacto"
+          ],
+          "X-Actor-Rol": [
+            "ASESOR"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/cotizaciones/00000000-0000-4000-a000-000000000001/insumos-suscripcion"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "calculadoEn": "2026-10-22T14:00:00Z",
+            "clienteId": "00000000-0000-4000-8000-000000000001",
+            "coberturas": [
+              {
+                "codigo": "MUERTE",
+                "nombre": "Muerte por cualquier causa",
+                "obligatoria": true
+              }
+            ],
+            "codigo": null,
+            "coincidenciasListasRestrictivas": 0,
+            "cotizacionId": "00000000-0000-4000-a000-000000000001",
+            "edad": 36,
+            "estadoIdentidad": "VERIFICADO",
+            "huellaCalculo": "sha256:ac7438e86cb85ebd90f4d0abb235f9a28f112e1ec0b7995156f3d5e868d315f8",
+            "moneda": "COP",
+            "ofertaId": null,
+            "perfil": {
+              "confianza": "0.92",
+              "estado": "CALCULADO",
+              "fuentesConsultadas": 4,
+              "fuentesDeclaradas": 4,
+              "id": "00000000-0000-4000-b000-000000000001",
+              "nivelRiesgo": "BAJO"
+            },
+            "periodicidad": "MENSUAL",
+            "plazoCreditoMeses": 180,
+            "primaTotal": "64638",
+            "productoId": "vida-hipotecario",
+            "socioId": null,
+            "sumaAsegurada": "180000000",
+            "versionProducto": "2026.09.1",
+            "versionReglasPrima": "2026.09.1",
+            "vigenteHasta": "2026-10-26T14:00:00Z"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.calculadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.clienteId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.coberturas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.coincidenciasListasRestrictivas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.cotizacionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.edad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.estadoIdentidad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(VERIFICADO|PENDIENTE|RECHAZADO)$"
+                }
+              ]
+            },
+            "$.huellaCalculo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.moneda": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z]{3}$"
+                }
+              ]
+            },
+            "$.perfil.confianza": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.perfil.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(CALCULADO|DEGRADADO|INFORMACION_INSUFICIENTE)$"
+                }
+              ]
+            },
+            "$.perfil.fuentesConsultadas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.perfil.fuentesDeclaradas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.perfil.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.perfil.nivelRiesgo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(BAJO|MEDIO|ALTO)$"
+                }
+              ]
+            },
+            "$.periodicidad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.plazoCreditoMeses": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.primaTotal": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.productoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.sumaAsegurada": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.versionProducto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.versionReglasPrima": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.vigenteHasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "los insumos de una cotización inexistente",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "la cotización 00000000-0000-4000-a000-0000000000ff no existe"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "sub-asesor-pacto"
+          ],
+          "X-Actor-Rol": [
+            "ASESOR"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/cotizaciones/00000000-0000-4000-a000-0000000000ff/insumos-suscripcion"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "COTIZACION_NO_ENCONTRADA",
+            "mensaje": "La cotización no existe"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "los insumos de una cotización sin perfil",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "existe la cotización S08 de un cliente verificado, calculada sin perfil"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "sub-asesor-pacto"
+          ],
+          "X-Actor-Rol": [
+            "ASESOR"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/cotizaciones/00000000-0000-4000-a000-000000000008/insumos-suscripcion"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "calculadoEn": "2026-10-22T14:00:00Z",
+            "clienteId": "00000000-0000-4000-8000-000000000006",
+            "coberturas": [
+              {
+                "codigo": "MUERTE",
+                "nombre": "Muerte por cualquier causa",
+                "obligatoria": true
+              }
+            ],
+            "codigo": null,
+            "coincidenciasListasRestrictivas": null,
+            "cotizacionId": "00000000-0000-4000-a000-000000000008",
+            "edad": 36,
+            "estadoIdentidad": "VERIFICADO",
+            "huellaCalculo": "sha256:33829b0e034a02f2b827bc9267740addd593bdcb2a8750a137c7358a17e3b8e3",
+            "moneda": "COP",
+            "ofertaId": null,
+            "perfil": null,
+            "periodicidad": "MENSUAL",
+            "plazoCreditoMeses": 180,
+            "primaTotal": "82593",
+            "productoId": "vida-hipotecario",
+            "socioId": null,
+            "sumaAsegurada": "180000000",
+            "versionProducto": "2026.09.1",
+            "versionReglasPrima": "2026.09.1",
+            "vigenteHasta": "2026-10-26T14:00:00Z"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.calculadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.clienteId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.coberturas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.cotizacionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.edad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.estadoIdentidad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(VERIFICADO|PENDIENTE|RECHAZADO)$"
+                }
+              ]
+            },
+            "$.huellaCalculo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.moneda": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z]{3}$"
+                }
+              ]
+            },
+            "$.periodicidad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.plazoCreditoMeses": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.primaTotal": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.productoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.sumaAsegurada": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.versionProducto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.versionReglasPrima": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.vigenteHasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactRust": {
+      "ffi": "0.5.8",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    }
+  },
+  "provider": {
+    "name": "cotizacion"
+  }
+}
