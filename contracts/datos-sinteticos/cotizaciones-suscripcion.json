@@ -1,0 +1,769 @@
+{
+  "descripcion": "Cotizaciones sintéticas para la suscripción automática (HU-W13). `insumos` es la respuesta de GET /v1/cotizaciones/{cotizacionId}/insumos-suscripcion que usan los dobles de polizas con el reloj `ahoraDeReferencia`; `cotizacion` dice cómo crearla en local sobre el cliente sintético `cliente` (clientes-perfilamiento.json); `local` dice si el caso se reproduce con la pila local. 100 % sintético",
+  "ahoraDeReferencia": "2026-10-22T15:00:00Z",
+  "reglas": {
+    "productoId": "vida-hipotecario",
+    "version": "2026.10.1"
+  },
+  "casos": [
+    {
+      "id": "S01",
+      "nombre": "aprobada",
+      "mockup": "E02",
+      "cliente": "C01",
+      "cotizacion": {
+        "productoId": "vida-hipotecario",
+        "datosAsegurado": {
+          "fechaNacimiento": "1990-04-18",
+          "plazoCreditoMeses": 180,
+          "sumaAsegurada": 180000000
+        },
+        "coberturasOpcionales": [],
+        "conPerfil": true
+      },
+      "insumos": {
+        "cotizacionId": "00000000-0000-4000-a000-000000000001",
+        "ofertaId": null,
+        "codigo": null,
+        "clienteId": "00000000-0000-4000-8000-000000000001",
+        "estadoIdentidad": "VERIFICADO",
+        "socioId": null,
+        "productoId": "vida-hipotecario",
+        "versionProducto": "2026.09.1",
+        "moneda": "COP",
+        "periodicidad": "MENSUAL",
+        "primaTotal": "64638",
+        "versionReglasPrima": "2026.09.1",
+        "huellaCalculo": "sha256:ac7438e86cb85ebd90f4d0abb235f9a28f112e1ec0b7995156f3d5e868d315f8",
+        "coberturas": [
+          {
+            "codigo": "MUERTE",
+            "nombre": "Muerte por cualquier causa",
+            "obligatoria": true
+          },
+          {
+            "codigo": "INCAPACIDAD_TOTAL_PERMANENTE",
+            "nombre": "Incapacidad total y permanente",
+            "obligatoria": true
+          }
+        ],
+        "sumaAsegurada": "180000000",
+        "plazoCreditoMeses": 180,
+        "edad": 36,
+        "calculadoEn": "2026-10-22T14:00:00Z",
+        "vigenteHasta": "2026-10-26T14:00:00Z",
+        "perfil": {
+          "id": "00000000-0000-4000-b000-000000000001",
+          "estado": "CALCULADO",
+          "nivelRiesgo": "BAJO",
+          "confianza": "0.92",
+          "fuentesConsultadas": 4,
+          "fuentesDeclaradas": 4
+        },
+        "coincidenciasListasRestrictivas": 0
+      },
+      "esperado": {
+        "http": 201,
+        "resultado": "APROBADA",
+        "reglaDeterminante": null,
+        "motivos": [],
+        "reglas": {
+          "SUS-001": "CUMPLE",
+          "SUS-004": "CUMPLE",
+          "SUS-007": "CUMPLE",
+          "SUS-011": "CUMPLE",
+          "SUS-015": "CUMPLE",
+          "SUS-019": "CUMPLE"
+        }
+      },
+      "local": "Reproducible: perfil y cotización de C01 con estos datos declarados"
+    },
+    {
+      "id": "S02",
+      "nombre": "rechazada por edad (68 años, CF-S2-09)",
+      "mockup": "E03",
+      "cliente": "C04",
+      "cotizacion": {
+        "productoId": "vida-hipotecario",
+        "datosAsegurado": {
+          "fechaNacimiento": "1958-03-10",
+          "plazoCreditoMeses": 180,
+          "sumaAsegurada": 90000000
+        },
+        "coberturasOpcionales": [],
+        "conPerfil": true
+      },
+      "insumos": {
+        "cotizacionId": "00000000-0000-4000-a000-000000000002",
+        "ofertaId": null,
+        "codigo": null,
+        "clienteId": "00000000-0000-4000-8000-000000000004",
+        "estadoIdentidad": "VERIFICADO",
+        "socioId": null,
+        "productoId": "vida-hipotecario",
+        "versionProducto": "2026.09.1",
+        "moneda": "COP",
+        "periodicidad": "MENSUAL",
+        "primaTotal": "83160",
+        "versionReglasPrima": "2026.09.1",
+        "huellaCalculo": "sha256:bbe97d17449c6e005ff7bd18e03aa67b690bb365d0d1d6fca22879aeba7ad488",
+        "coberturas": [
+          {
+            "codigo": "MUERTE",
+            "nombre": "Muerte por cualquier causa",
+            "obligatoria": true
+          },
+          {
+            "codigo": "INCAPACIDAD_TOTAL_PERMANENTE",
+            "nombre": "Incapacidad total y permanente",
+            "obligatoria": true
+          }
+        ],
+        "sumaAsegurada": "90000000",
+        "plazoCreditoMeses": 180,
+        "edad": 68,
+        "calculadoEn": "2026-10-22T14:00:00Z",
+        "vigenteHasta": "2026-10-26T14:00:00Z",
+        "perfil": {
+          "id": "00000000-0000-4000-b000-000000000002",
+          "estado": "CALCULADO",
+          "nivelRiesgo": "MEDIO",
+          "confianza": "0.92",
+          "fuentesConsultadas": 4,
+          "fuentesDeclaradas": 4
+        },
+        "coincidenciasListasRestrictivas": 0
+      },
+      "esperado": {
+        "http": 201,
+        "resultado": "RECHAZADA",
+        "reglaDeterminante": "SUS-001",
+        "motivos": [
+          "EDAD_FUERA_DE_RANGO"
+        ],
+        "reglas": {
+          "SUS-001": "NO_CUMPLE",
+          "SUS-004": "CUMPLE",
+          "SUS-007": "CUMPLE",
+          "SUS-011": "CUMPLE",
+          "SUS-015": "CUMPLE",
+          "SUS-019": "CUMPLE"
+        }
+      },
+      "local": "Reproducible: el nivel y la confianza reales los calcula el perfil; el resultado no depende de ellos"
+    },
+    {
+      "id": "S03",
+      "nombre": "rechazada por plazo (300 meses)",
+      "mockup": null,
+      "cliente": "C02",
+      "cotizacion": {
+        "productoId": "vida-hipotecario",
+        "datosAsegurado": {
+          "fechaNacimiento": "1990-04-18",
+          "plazoCreditoMeses": 300,
+          "sumaAsegurada": 180000000
+        },
+        "coberturasOpcionales": [],
+        "conPerfil": true
+      },
+      "insumos": {
+        "cotizacionId": "00000000-0000-4000-a000-000000000003",
+        "ofertaId": null,
+        "codigo": null,
+        "clienteId": "00000000-0000-4000-8000-000000000002",
+        "estadoIdentidad": "VERIFICADO",
+        "socioId": null,
+        "productoId": "vida-hipotecario",
+        "versionProducto": "2026.09.1",
+        "moneda": "COP",
+        "periodicidad": "MENSUAL",
+        "primaTotal": "69809",
+        "versionReglasPrima": "2026.09.1",
+        "huellaCalculo": "sha256:217c48f2b7fdd352d11b386e3f9682b50b87bcbd22304387d84e4265eb8ce978",
+        "coberturas": [
+          {
+            "codigo": "MUERTE",
+            "nombre": "Muerte por cualquier causa",
+            "obligatoria": true
+          },
+          {
+            "codigo": "INCAPACIDAD_TOTAL_PERMANENTE",
+            "nombre": "Incapacidad total y permanente",
+            "obligatoria": true
+          }
+        ],
+        "sumaAsegurada": "180000000",
+        "plazoCreditoMeses": 300,
+        "edad": 36,
+        "calculadoEn": "2026-10-22T14:00:00Z",
+        "vigenteHasta": "2026-10-26T14:00:00Z",
+        "perfil": {
+          "id": "00000000-0000-4000-b000-000000000003",
+          "estado": "CALCULADO",
+          "nivelRiesgo": "BAJO",
+          "confianza": "0.87",
+          "fuentesConsultadas": 3,
+          "fuentesDeclaradas": 4
+        },
+        "coincidenciasListasRestrictivas": 0
+      },
+      "esperado": {
+        "http": 201,
+        "resultado": "RECHAZADA",
+        "reglaDeterminante": "SUS-019",
+        "motivos": [
+          "PLAZO_FUERA_DE_RANGO"
+        ],
+        "reglas": {
+          "SUS-001": "CUMPLE",
+          "SUS-004": "CUMPLE",
+          "SUS-007": "CUMPLE",
+          "SUS-011": "CUMPLE",
+          "SUS-015": "CUMPLE",
+          "SUS-019": "NO_CUMPLE"
+        }
+      },
+      "local": "Reproducible: el resultado no depende del nivel ni de la confianza"
+    },
+    {
+      "id": "S04",
+      "nombre": "rechazada por listas restrictivas (regla RESERVADA)",
+      "mockup": null,
+      "cliente": "C14",
+      "cotizacion": {
+        "productoId": "vida-hipotecario",
+        "datosAsegurado": {
+          "fechaNacimiento": "1990-04-18",
+          "plazoCreditoMeses": 180,
+          "sumaAsegurada": 180000000
+        },
+        "coberturasOpcionales": [],
+        "conPerfil": true
+      },
+      "insumos": {
+        "cotizacionId": "00000000-0000-4000-a000-000000000004",
+        "ofertaId": null,
+        "codigo": null,
+        "clienteId": "00000000-0000-4000-8000-00000000000e",
+        "estadoIdentidad": "VERIFICADO",
+        "socioId": null,
+        "productoId": "vida-hipotecario",
+        "versionProducto": "2026.09.1",
+        "moneda": "COP",
+        "periodicidad": "MENSUAL",
+        "primaTotal": "93366",
+        "versionReglasPrima": "2026.09.1",
+        "huellaCalculo": "sha256:3491f905b529783de4a51ec9e0b7926fc07bf9a82c3a5a31340ef8ed33d974ff",
+        "coberturas": [
+          {
+            "codigo": "MUERTE",
+            "nombre": "Muerte por cualquier causa",
+            "obligatoria": true
+          },
+          {
+            "codigo": "INCAPACIDAD_TOTAL_PERMANENTE",
+            "nombre": "Incapacidad total y permanente",
+            "obligatoria": true
+          }
+        ],
+        "sumaAsegurada": "180000000",
+        "plazoCreditoMeses": 180,
+        "edad": 36,
+        "calculadoEn": "2026-10-22T14:00:00Z",
+        "vigenteHasta": "2026-10-26T14:00:00Z",
+        "perfil": {
+          "id": "00000000-0000-4000-b000-000000000004",
+          "estado": "CALCULADO",
+          "nivelRiesgo": "ALTO",
+          "confianza": "0.92",
+          "fuentesConsultadas": 4,
+          "fuentesDeclaradas": 4
+        },
+        "coincidenciasListasRestrictivas": 1
+      },
+      "esperado": {
+        "http": 201,
+        "resultado": "RECHAZADA",
+        "reglaDeterminante": "SUS-015",
+        "motivos": [
+          "NO_ELEGIBLE"
+        ],
+        "reglas": {
+          "SUS-001": "CUMPLE",
+          "SUS-004": "CUMPLE",
+          "SUS-007": "NO_CUMPLE",
+          "SUS-011": "CUMPLE",
+          "SUS-015": "NO_CUMPLE",
+          "SUS-019": "CUMPLE"
+        }
+      },
+      "local": "Reproducible: C14 tiene una coincidencia en DA_REGISTROS_PUBLICOS"
+    },
+    {
+      "id": "S05",
+      "nombre": "revisión por suma y confianza (620.000.000 y 0,61)",
+      "mockup": "E04",
+      "cliente": "C15",
+      "cotizacion": {
+        "productoId": "vida-hipotecario",
+        "datosAsegurado": {
+          "fechaNacimiento": "1968-05-02",
+          "plazoCreditoMeses": 180,
+          "sumaAsegurada": 620000000
+        },
+        "coberturasOpcionales": [],
+        "conPerfil": true
+      },
+      "insumos": {
+        "cotizacionId": "00000000-0000-4000-a000-000000000005",
+        "ofertaId": null,
+        "codigo": null,
+        "clienteId": "00000000-0000-4000-8000-00000000000f",
+        "estadoIdentidad": "VERIFICADO",
+        "socioId": null,
+        "productoId": "vida-hipotecario",
+        "versionProducto": "2026.09.1",
+        "moneda": "COP",
+        "periodicidad": "MENSUAL",
+        "primaTotal": "403620",
+        "versionReglasPrima": "2026.09.1",
+        "huellaCalculo": "sha256:39a6c3d9fd987246f99377af29b499c7e6ce5f1c10893aad7f4b88db9a0bb089",
+        "coberturas": [
+          {
+            "codigo": "MUERTE",
+            "nombre": "Muerte por cualquier causa",
+            "obligatoria": true
+          },
+          {
+            "codigo": "INCAPACIDAD_TOTAL_PERMANENTE",
+            "nombre": "Incapacidad total y permanente",
+            "obligatoria": true
+          }
+        ],
+        "sumaAsegurada": "620000000",
+        "plazoCreditoMeses": 180,
+        "edad": 58,
+        "calculadoEn": "2026-10-22T14:00:00Z",
+        "vigenteHasta": "2026-10-26T14:00:00Z",
+        "perfil": {
+          "id": "00000000-0000-4000-b000-000000000005",
+          "estado": "DEGRADADO",
+          "nivelRiesgo": "MEDIO",
+          "confianza": "0.61",
+          "fuentesConsultadas": 3,
+          "fuentesDeclaradas": 4
+        },
+        "coincidenciasListasRestrictivas": 0
+      },
+      "esperado": {
+        "http": 201,
+        "resultado": "REVISION_REQUERIDA",
+        "reglaDeterminante": null,
+        "motivos": [
+          "SUMA_REQUIERE_REVISION",
+          "PERFIL_REQUIERE_REVISION"
+        ],
+        "reglas": {
+          "SUS-001": "CUMPLE",
+          "SUS-004": "NO_CUMPLE",
+          "SUS-007": "CUMPLE",
+          "SUS-011": "NO_CUMPLE",
+          "SUS-015": "CUMPLE",
+          "SUS-019": "CUMPLE"
+        }
+      },
+      "local": "Solo con dobles (N1/N2): ningún cliente de clientes-perfilamiento.json produce una confianza menor que 0,70 con un nivel calculado. En local, ver S06"
+    },
+    {
+      "id": "S06",
+      "nombre": "revisión por suma (620.000.000)",
+      "mockup": "E04",
+      "cliente": "C15",
+      "cotizacion": {
+        "productoId": "vida-hipotecario",
+        "datosAsegurado": {
+          "fechaNacimiento": "1990-04-18",
+          "plazoCreditoMeses": 180,
+          "sumaAsegurada": 620000000
+        },
+        "coberturasOpcionales": [],
+        "conPerfil": true
+      },
+      "insumos": {
+        "cotizacionId": "00000000-0000-4000-a000-000000000006",
+        "ofertaId": null,
+        "codigo": null,
+        "clienteId": "00000000-0000-4000-8000-00000000000f",
+        "estadoIdentidad": "VERIFICADO",
+        "socioId": null,
+        "productoId": "vida-hipotecario",
+        "versionProducto": "2026.09.1",
+        "moneda": "COP",
+        "periodicidad": "MENSUAL",
+        "primaTotal": "247380",
+        "versionReglasPrima": "2026.09.1",
+        "huellaCalculo": "sha256:3193b0ffb09ae1f36c3b2f81378664a58c5213f0cc4a496c85a9ed53d1358120",
+        "coberturas": [
+          {
+            "codigo": "MUERTE",
+            "nombre": "Muerte por cualquier causa",
+            "obligatoria": true
+          },
+          {
+            "codigo": "INCAPACIDAD_TOTAL_PERMANENTE",
+            "nombre": "Incapacidad total y permanente",
+            "obligatoria": true
+          }
+        ],
+        "sumaAsegurada": "620000000",
+        "plazoCreditoMeses": 180,
+        "edad": 36,
+        "calculadoEn": "2026-10-22T14:00:00Z",
+        "vigenteHasta": "2026-10-26T14:00:00Z",
+        "perfil": {
+          "id": "00000000-0000-4000-b000-000000000006",
+          "estado": "CALCULADO",
+          "nivelRiesgo": "MEDIO",
+          "confianza": "0.92",
+          "fuentesConsultadas": 4,
+          "fuentesDeclaradas": 4
+        },
+        "coincidenciasListasRestrictivas": 0
+      },
+      "esperado": {
+        "http": 201,
+        "resultado": "REVISION_REQUERIDA",
+        "reglaDeterminante": null,
+        "motivos": [
+          "SUMA_REQUIERE_REVISION"
+        ],
+        "reglas": {
+          "SUS-001": "CUMPLE",
+          "SUS-004": "NO_CUMPLE",
+          "SUS-007": "CUMPLE",
+          "SUS-011": "CUMPLE",
+          "SUS-015": "CUMPLE",
+          "SUS-019": "CUMPLE"
+        }
+      },
+      "local": "Reproducible: la suma no cambia el perfil de C15 (MEDIO, 0,92)"
+    },
+    {
+      "id": "S07",
+      "nombre": "revisión por perfil INFORMACION_INSUFICIENTE",
+      "mockup": null,
+      "cliente": "C03",
+      "cotizacion": {
+        "productoId": "vida-hipotecario",
+        "datosAsegurado": {
+          "fechaNacimiento": "1990-04-18",
+          "plazoCreditoMeses": 180,
+          "sumaAsegurada": 180000000
+        },
+        "coberturasOpcionales": [],
+        "conPerfil": true
+      },
+      "insumos": {
+        "cotizacionId": "00000000-0000-4000-a000-000000000007",
+        "ofertaId": null,
+        "codigo": null,
+        "clienteId": "00000000-0000-4000-8000-000000000003",
+        "estadoIdentidad": "VERIFICADO",
+        "socioId": null,
+        "productoId": "vida-hipotecario",
+        "versionProducto": "2026.09.1",
+        "moneda": "COP",
+        "periodicidad": "MENSUAL",
+        "primaTotal": "82593",
+        "versionReglasPrima": "2026.09.1",
+        "huellaCalculo": "sha256:4fc42779a8a8ca2784f04df7e66710c6317ba4bc1fa2ba97f0439dd8005ab060",
+        "coberturas": [
+          {
+            "codigo": "MUERTE",
+            "nombre": "Muerte por cualquier causa",
+            "obligatoria": true
+          },
+          {
+            "codigo": "INCAPACIDAD_TOTAL_PERMANENTE",
+            "nombre": "Incapacidad total y permanente",
+            "obligatoria": true
+          }
+        ],
+        "sumaAsegurada": "180000000",
+        "plazoCreditoMeses": 180,
+        "edad": 36,
+        "calculadoEn": "2026-10-22T14:00:00Z",
+        "vigenteHasta": "2026-10-26T14:00:00Z",
+        "perfil": {
+          "id": "00000000-0000-4000-b000-000000000007",
+          "estado": "INFORMACION_INSUFICIENTE",
+          "nivelRiesgo": null,
+          "confianza": "0.92",
+          "fuentesConsultadas": 4,
+          "fuentesDeclaradas": 4
+        },
+        "coincidenciasListasRestrictivas": 0
+      },
+      "esperado": {
+        "http": 201,
+        "resultado": "REVISION_REQUERIDA",
+        "reglaDeterminante": null,
+        "motivos": [
+          "PERFIL_REQUIERE_REVISION"
+        ],
+        "reglas": {
+          "SUS-001": "CUMPLE",
+          "SUS-004": "CUMPLE",
+          "SUS-007": "NO_EVALUABLE",
+          "SUS-011": "CUMPLE",
+          "SUS-015": "CUMPLE",
+          "SUS-019": "CUMPLE"
+        }
+      },
+      "local": "Reproducible: el perfil de C03 no tiene nivel (falta moras_12m)"
+    },
+    {
+      "id": "S08",
+      "nombre": "revisión sin perfil",
+      "mockup": null,
+      "cliente": "C06",
+      "cotizacion": {
+        "productoId": "vida-hipotecario",
+        "datosAsegurado": {
+          "fechaNacimiento": "1990-04-18",
+          "plazoCreditoMeses": 180,
+          "sumaAsegurada": 180000000
+        },
+        "coberturasOpcionales": [],
+        "conPerfil": false
+      },
+      "insumos": {
+        "cotizacionId": "00000000-0000-4000-a000-000000000008",
+        "ofertaId": null,
+        "codigo": null,
+        "clienteId": "00000000-0000-4000-8000-000000000006",
+        "estadoIdentidad": "VERIFICADO",
+        "socioId": null,
+        "productoId": "vida-hipotecario",
+        "versionProducto": "2026.09.1",
+        "moneda": "COP",
+        "periodicidad": "MENSUAL",
+        "primaTotal": "82593",
+        "versionReglasPrima": "2026.09.1",
+        "huellaCalculo": "sha256:33829b0e034a02f2b827bc9267740addd593bdcb2a8750a137c7358a17e3b8e3",
+        "coberturas": [
+          {
+            "codigo": "MUERTE",
+            "nombre": "Muerte por cualquier causa",
+            "obligatoria": true
+          },
+          {
+            "codigo": "INCAPACIDAD_TOTAL_PERMANENTE",
+            "nombre": "Incapacidad total y permanente",
+            "obligatoria": true
+          }
+        ],
+        "sumaAsegurada": "180000000",
+        "plazoCreditoMeses": 180,
+        "edad": 36,
+        "calculadoEn": "2026-10-22T14:00:00Z",
+        "vigenteHasta": "2026-10-26T14:00:00Z",
+        "perfil": null,
+        "coincidenciasListasRestrictivas": null
+      },
+      "esperado": {
+        "http": 201,
+        "resultado": "REVISION_REQUERIDA",
+        "reglaDeterminante": null,
+        "motivos": [
+          "PERFIL_REQUIERE_REVISION"
+        ],
+        "reglas": {
+          "SUS-001": "CUMPLE",
+          "SUS-004": "CUMPLE",
+          "SUS-007": "NO_EVALUABLE",
+          "SUS-011": "NO_EVALUABLE",
+          "SUS-015": "NO_EVALUABLE",
+          "SUS-019": "CUMPLE"
+        }
+      },
+      "local": "Reproducible: cotización sin perfilId. SUS-015 (EXCLUYENTE) no evaluable enruta a revisión (DS2-06) y, por ser RESERVADA, no agrega motivo"
+    },
+    {
+      "id": "S09",
+      "nombre": "oferta vencida",
+      "mockup": null,
+      "cliente": "C01",
+      "cotizacion": {
+        "productoId": "vida-hipotecario",
+        "datosAsegurado": {
+          "fechaNacimiento": "1990-04-18",
+          "plazoCreditoMeses": 180,
+          "sumaAsegurada": 180000000
+        },
+        "coberturasOpcionales": [],
+        "conPerfil": true
+      },
+      "insumos": {
+        "cotizacionId": "00000000-0000-4000-a000-000000000009",
+        "ofertaId": null,
+        "codigo": null,
+        "clienteId": "00000000-0000-4000-8000-000000000001",
+        "estadoIdentidad": "VERIFICADO",
+        "socioId": null,
+        "productoId": "vida-hipotecario",
+        "versionProducto": "2026.09.1",
+        "moneda": "COP",
+        "periodicidad": "MENSUAL",
+        "primaTotal": "64638",
+        "versionReglasPrima": "2026.09.1",
+        "huellaCalculo": "sha256:7e0b7c84ed21fedc47889318cf2e1c23471964b7e930fc5b25d39b17aba28fdd",
+        "coberturas": [
+          {
+            "codigo": "MUERTE",
+            "nombre": "Muerte por cualquier causa",
+            "obligatoria": true
+          },
+          {
+            "codigo": "INCAPACIDAD_TOTAL_PERMANENTE",
+            "nombre": "Incapacidad total y permanente",
+            "obligatoria": true
+          }
+        ],
+        "sumaAsegurada": "180000000",
+        "plazoCreditoMeses": 180,
+        "edad": 36,
+        "calculadoEn": "2026-10-18T13:00:00Z",
+        "vigenteHasta": "2026-10-22T13:00:00Z",
+        "perfil": {
+          "id": "00000000-0000-4000-b000-000000000009",
+          "estado": "CALCULADO",
+          "nivelRiesgo": "BAJO",
+          "confianza": "0.92",
+          "fuentesConsultadas": 4,
+          "fuentesDeclaradas": 4
+        },
+        "coincidenciasListasRestrictivas": 0
+      },
+      "esperado": {
+        "http": 409,
+        "codigo": "OFERTA_VENCIDA",
+        "detalles": {
+          "accion": "NUEVA_COTIZACION"
+        }
+      },
+      "local": "En local, con cotizacion arrancado con SOLVENTA_OFERTA_VIGENCIA_HORAS=0 (toda cotización nace vencida) o con el reloj de las pruebas"
+    },
+    {
+      "id": "S10",
+      "nombre": "identidad no verificada",
+      "mockup": null,
+      "cliente": "C11",
+      "cotizacion": {
+        "productoId": "vida-hipotecario",
+        "datosAsegurado": {
+          "fechaNacimiento": "1990-04-18",
+          "plazoCreditoMeses": 180,
+          "sumaAsegurada": 180000000
+        },
+        "coberturasOpcionales": [],
+        "conPerfil": false
+      },
+      "insumos": {
+        "cotizacionId": "00000000-0000-4000-a000-000000000010",
+        "ofertaId": null,
+        "codigo": null,
+        "clienteId": "00000000-0000-4000-8000-00000000000b",
+        "estadoIdentidad": "RECHAZADO",
+        "socioId": null,
+        "productoId": "vida-hipotecario",
+        "versionProducto": "2026.09.1",
+        "moneda": "COP",
+        "periodicidad": "MENSUAL",
+        "primaTotal": "82593",
+        "versionReglasPrima": "2026.09.1",
+        "huellaCalculo": "sha256:3d16e90141e88e7233af1668dcb0613d6715b4ab3d1f10e6c36c5ca3cf412c6d",
+        "coberturas": [
+          {
+            "codigo": "MUERTE",
+            "nombre": "Muerte por cualquier causa",
+            "obligatoria": true
+          },
+          {
+            "codigo": "INCAPACIDAD_TOTAL_PERMANENTE",
+            "nombre": "Incapacidad total y permanente",
+            "obligatoria": true
+          }
+        ],
+        "sumaAsegurada": "180000000",
+        "plazoCreditoMeses": 180,
+        "edad": 36,
+        "calculadoEn": "2026-10-22T14:00:00Z",
+        "vigenteHasta": "2026-10-26T14:00:00Z",
+        "perfil": null,
+        "coincidenciasListasRestrictivas": null
+      },
+      "esperado": {
+        "http": 403,
+        "codigo": "IDENTIDAD_NO_VERIFICADA"
+      },
+      "local": "Reproducible: C11 tiene identidad RECHAZADO; se cotiza sin perfil"
+    },
+    {
+      "id": "S11",
+      "nombre": "identidad pendiente",
+      "mockup": null,
+      "cliente": "C12",
+      "cotizacion": {
+        "productoId": "vida-hipotecario",
+        "datosAsegurado": {
+          "fechaNacimiento": "1990-04-18",
+          "plazoCreditoMeses": 180,
+          "sumaAsegurada": 180000000
+        },
+        "coberturasOpcionales": [],
+        "conPerfil": false
+      },
+      "insumos": {
+        "cotizacionId": "00000000-0000-4000-a000-000000000011",
+        "ofertaId": null,
+        "codigo": null,
+        "clienteId": "00000000-0000-4000-8000-00000000000c",
+        "estadoIdentidad": "PENDIENTE",
+        "socioId": null,
+        "productoId": "vida-hipotecario",
+        "versionProducto": "2026.09.1",
+        "moneda": "COP",
+        "periodicidad": "MENSUAL",
+        "primaTotal": "82593",
+        "versionReglasPrima": "2026.09.1",
+        "huellaCalculo": "sha256:4a1bcaec718f10edcd2589d26c9e45749796ef518f01ed7beae92ded6083d89b",
+        "coberturas": [
+          {
+            "codigo": "MUERTE",
+            "nombre": "Muerte por cualquier causa",
+            "obligatoria": true
+          },
+          {
+            "codigo": "INCAPACIDAD_TOTAL_PERMANENTE",
+            "nombre": "Incapacidad total y permanente",
+            "obligatoria": true
+          }
+        ],
+        "sumaAsegurada": "180000000",
+        "plazoCreditoMeses": 180,
+        "edad": 36,
+        "calculadoEn": "2026-10-22T14:00:00Z",
+        "vigenteHasta": "2026-10-26T14:00:00Z",
+        "perfil": null,
+        "coincidenciasListasRestrictivas": null
+      },
+      "esperado": {
+        "http": 409,
+        "codigo": "IDENTIDAD_PENDIENTE"
+      },
+      "local": "Reproducible: C12 tiene identidad PENDIENTE; se cotiza sin perfil"
+    }
+  ]
+}
