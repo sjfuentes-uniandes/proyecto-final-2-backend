@@ -80,7 +80,8 @@ CanalesAPI -down-> Siniestros : REST\nreportar y seguir
 
 Cotizacion -left-> Clientes : REST\nvalida consentimiento
 Cotizacion -left-> Catalogo : REST\nconsulta reglas vigentes
-Cotizacion -down-> Polizas : REST\nenvía oferta aceptada
+Polizas -up-> Cotizacion : REST\nconsulta insumos de la oferta
+Polizas -up-> Catalogo : REST\nconsulta reglas de suscripción
 Polizas -right-> Dinero : REST\nsolicita recaudo idempotente
 Siniestros -right-> Dinero : REST\nsolicita indemnización idempotente
 
