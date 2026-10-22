@@ -38,8 +38,9 @@ jobs:
       matrix:
         servicio: ${{ fromJson(needs.cambios.outputs.servicios) }}
     env:
-      # Imágenes de Docker Hub que usan las pruebas de módulo y el build del simulador.
-      IMAGENES_DOCKER: ${{ contains(fromJson('["adaptador-datos","simulador-aliados","adaptador-identidad"]'), matrix.servicio) && 'wiremock/wiremock:3.9.2' || (matrix.servicio == 'cotizacion' && 'postgres:16 wiremock/wiremock:3.9.2' || (contains(fromJson('["api-socios","catalogo","clientes"]'), matrix.servicio) && 'postgres:16' || '')) }}
+      # Imágenes de Docker Hub que usan las pruebas de módulo y el build del simulador. Valkey:
+      # Cache-Aside de catalogo y cotizacion (HU-W03), la versión de ElastiCache en int.
+      IMAGENES_DOCKER: ${{ contains(fromJson('["adaptador-datos","simulador-aliados","adaptador-identidad"]'), matrix.servicio) && 'wiremock/wiremock:3.9.2' || (matrix.servicio == 'cotizacion' && 'postgres:16 wiremock/wiremock:3.9.2 valkey/valkey:8.0.2-alpine' || (matrix.servicio == 'catalogo' && 'postgres:16 valkey/valkey:8.0.2-alpine' || (contains(fromJson('["api-socios","clientes"]'), matrix.servicio) && 'postgres:16' || ''))) }}
       # El runner es efímero y las fixtures detienen sus contenedores: Ryuk (otra imagen de
       # Docker Hub) no hace falta en la CI.
       TESTCONTAINERS_RYUK_DISABLED: "true"

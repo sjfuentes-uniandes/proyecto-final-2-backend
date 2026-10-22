@@ -16,6 +16,11 @@
 #   8. Un mensaje envenenado en SMOKE_DLQ_COLA (avisos) se recibe sin borrarse hasta
 #      agotar maxReceiveCount, SQS lo mueve a la DLQ y su alarma pasa a ALARM.
 #      Tarda ~6-10 min; SMOKE_DLQ=0 lo omite.
+#   HU-W03:
+#   9. Caché de catálogo: el grupo de replicación de Valkey está "available" y la
+#      definición de tarea de catalogo y cotizacion lleva CACHE_URL (catalogo la llena y
+#      la invalida; cotizacion solo la lee). Con cache_enabled = false se omite.
+#      La prima de punta a punta es N3: make test-e2e (tests/e2e/test_hu_w03_r1_prima.py).
 # Variables: SMOKE_DLQ_COLA, SMOKE_ESPERA_RUTA_S (60), SMOKE_ESPERA_ALARMA_S (600).
 # Los mensajes sintéticos llevan "sintetico": true; la auditoría (Object Lock) los conserva.
 # Sale con 1 si algún chequeo falla.
@@ -233,6 +238,28 @@ else
   else
     ko "el mensaje envenenado no llegó a la DLQ de ${SMOKE_DLQ_COLA} (¿un consumidor lo borró?)"
   fi
+fi
+
+log "9. Caché de catálogo y reglas (HU-W03)"
+cache=$(jq -c '.cache' <<<"${platform}")
+if [ "$(jq -r '.enabled' <<<"${cache}")" != "true" ]; then
+  skip "cache_enabled = false: catalogo y cotizacion leen sin caché."
+else
+  status=$(aws elasticache describe-replication-groups --replication-group-id "${prefix}-cache" \
+    --query 'ReplicationGroups[0].Status' --output text 2>/dev/null || echo "inexistente")
+  check "$(is "${status}" '^available$')" "${prefix}-cache: available" "${prefix}-cache: ${status} (esperado available)"
+  for service in catalogo cotizacion; do
+    task_definition=$(jq -r --arg s "${service}" '.[$s].task_definition // empty' <<<"${deployed}")
+    if [ -z "${task_definition}" ]; then
+      skip "${service}: no está desplegado."
+      continue
+    fi
+    # SC2016: literal JMESPath.
+    # shellcheck disable=SC2016
+    url=$(aws ecs describe-task-definition --task-definition "${task_definition}" \
+      --query 'taskDefinition.containerDefinitions[].environment[] | [?name==`CACHE_URL`].value | [0]' --output text)
+    check "$(is "${url}" '^rediss://')" "${service}: CACHE_URL con TLS" "${service}: CACHE_URL '${url}' (esperado rediss://...)"
+  done
 fi
 
 log "Resultado: ${pass} OK, ${fail} con falla"
