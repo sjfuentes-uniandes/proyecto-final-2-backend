@@ -1049,6 +1049,228 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/cotizaciones:
+    post:
+      tags:
+      - cotizaciones
+      summary: Cotizar
+      description: Calcula la prima con el producto y las reglas vigentes (paso 3,
+        "Calculando tu oferta").
+      operationId: cotizar_v1_cotizaciones_post
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Idempotency-Key
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudCotizacion'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CotizacionRespuesta'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo asesores o no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA, IDEMPOTENCIA_CONFLICTO, PRODUCTO_NO_ENCONTRADO,
+            PRODUCTO_INACTIVO, PRODUCTO_FUERA_DE_VIGENCIA, REGLAS_NO_VIGENTES, DATOS_FUERA_DE_RANGO,
+            COBERTURA_NO_DISPONIBLE o PERFIL_NO_CORRESPONDE (detalles.campos, sin
+            valores)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '200':
+          description: Misma Idempotency-Key y mismo cuerpo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CotizacionRespuesta'
+        '404':
+          description: CLIENTE_NO_ENCONTRADO o PERFIL_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/cotizaciones/{cotizacionId}:
+    get:
+      tags:
+      - cotizaciones
+      summary: Consultar Cotizacion
+      description: Una cotización calculada; no cambia nunca.
+      operationId: consultar_cotizacion_v1_cotizaciones__cotizacionId__get
+      parameters:
+      - name: cotizacionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cotizacionid
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CotizacionRespuesta'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo asesores o no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: COTIZACION_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/productos/{productoId}/condiciones:
+    get:
+      tags:
+      - cotizaciones
+      summary: Condiciones Producto
+      description: Coberturas, versiones y límites del producto vigente (mockups 1
+        y 2).
+      operationId: condiciones_producto_v1_productos__productoId__condiciones_get
+      parameters:
+      - name: productoId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-z0-9-]{1,64}$
+          title: Productoid
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CondicionesProducto'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo asesores o no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA, PRODUCTO_INACTIVO, PRODUCTO_FUERA_DE_VIGENCIA
+            o REGLAS_NO_VIGENTES
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: PRODUCTO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /v1/clientes:
     post:
       tags:
@@ -1583,6 +1805,23 @@ components:
       title: ClienteDto
       description: Estado del cliente y traza de la verificación. No incluye PII ni
         el motivo del proveedor.
+    CoberturaProductoDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        nombre:
+          type: string
+          title: Nombre
+        obligatoria:
+          type: boolean
+          title: Obligatoria
+      type: object
+      required:
+      - codigo
+      - nombre
+      - obligatoria
+      title: CoberturaProductoDto
     ComparacionPerfiles:
       properties:
         anterior:
@@ -1595,6 +1834,59 @@ components:
       - actual
       title: ComparacionPerfiles
       description: Perfil anterior y perfil recalculado desde él (HU-W12, D05).
+    CondicionesProducto:
+      properties:
+        productoId:
+          type: string
+          title: Productoid
+        nombre:
+          type: string
+          title: Nombre
+        ramo:
+          type: string
+          title: Ramo
+        pais:
+          type: string
+          title: Pais
+        moneda:
+          type: string
+          title: Moneda
+        versionProducto:
+          type: string
+          title: Versionproducto
+        versionReglas:
+          type: string
+          title: Versionreglas
+        periodicidad:
+          type: string
+          title: Periodicidad
+        vigenteHasta:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Vigentehasta
+        coberturas:
+          items:
+            $ref: '#/components/schemas/CoberturaProductoDto'
+          type: array
+          title: Coberturas
+        limites:
+          $ref: '#/components/schemas/LimitesDto'
+      type: object
+      required:
+      - productoId
+      - nombre
+      - ramo
+      - pais
+      - moneda
+      - versionProducto
+      - versionReglas
+      - periodicidad
+      - vigenteHasta
+      - coberturas
+      - limites
+      title: CondicionesProducto
     ConsentimientoClienteDto:
       properties:
         consentimientoId:
@@ -1727,6 +2019,98 @@ components:
       - servicios_externos
       - ambiente
       title: ContextoRespuesta
+    CotizacionRespuesta:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        socioId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Socioid
+        productoId:
+          type: string
+          title: Productoid
+        versionProducto:
+          type: string
+          title: Versionproducto
+        moneda:
+          type: string
+          title: Moneda
+        periodicidad:
+          type: string
+          title: Periodicidad
+        versionReglas:
+          type: string
+          title: Versionreglas
+        perfilId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Perfilid
+        estado:
+          $ref: '#/components/schemas/EstadoCotizacion'
+        coberturas:
+          items:
+            $ref: '#/components/schemas/CoberturaProductoDto'
+          type: array
+          title: Coberturas
+        entradas:
+          $ref: '#/components/schemas/EntradasPrimaDto'
+        desglose:
+          $ref: '#/components/schemas/DesglosePrimaDto'
+        primaTotal:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Primatotal
+        huellaCalculo:
+          type: string
+          title: Huellacalculo
+        calculadoEn:
+          type: string
+          format: date-time
+          title: Calculadoen
+        duracionMs:
+          type: integer
+          title: Duracionms
+        presupuestoMs:
+          type: integer
+          title: Presupuestoms
+        pasos:
+          items:
+            $ref: '#/components/schemas/PasoCotizacionDto'
+          type: array
+          title: Pasos
+          description: Pasos del cálculo con su duración; vacío al leer o al repetir
+            la clave
+      type: object
+      required:
+      - id
+      - clienteId
+      - socioId
+      - productoId
+      - versionProducto
+      - moneda
+      - periodicidad
+      - versionReglas
+      - perfilId
+      - estado
+      - coberturas
+      - entradas
+      - desglose
+      - primaTotal
+      - huellaCalculo
+      - calculadoEn
+      - duracionMs
+      - presupuestoMs
+      title: CotizacionRespuesta
     DatoRequeridoDto:
       properties:
         campo:
@@ -1744,6 +2128,30 @@ components:
       - fuente
       - motivo
       title: DatoRequeridoDto
+    DatosAseguradoDto:
+      properties:
+        fechaNacimiento:
+          type: string
+          format: date
+          title: Fechanacimiento
+        plazoCreditoMeses:
+          type: integer
+          maximum: 600.0
+          minimum: 1.0
+          title: Plazocreditomeses
+        sumaAsegurada:
+          type: integer
+          maximum: 1000000000000.0
+          minimum: 0.0
+          title: Sumaasegurada
+      type: object
+      required:
+      - fechaNacimiento
+      - plazoCreditoMeses
+      - sumaAsegurada
+      title: DatosAseguradoDto
+      description: Los límites del producto los aplican sus reglas (DATOS_FUERA_DE_RANGO);
+        aquí solo la forma.
     DatosDeclaradosDto:
       properties:
         fechaNacimiento:
@@ -1773,6 +2181,48 @@ components:
       - PERMITIDO_PARCIAL
       - RECHAZADO
       title: DecisionConsentimiento
+    DesglosePrimaDto:
+      properties:
+        primaBase:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Primabase
+        factores:
+          items:
+            $ref: '#/components/schemas/FactorPrimaDto'
+          type: array
+          title: Factores
+        primaAjustada:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Primaajustada
+        recargos:
+          items:
+            $ref: '#/components/schemas/RecargoPrimaDto'
+          type: array
+          title: Recargos
+        subtotal:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Subtotal
+        ajusteLimite:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Ajustelimite
+        primaTotal:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Primatotal
+      type: object
+      required:
+      - primaBase
+      - factores
+      - primaAjustada
+      - recargos
+      - subtotal
+      - ajusteLimite
+      - primaTotal
+      title: DesglosePrimaDto
     Direccion:
       type: string
       enum:
@@ -1810,6 +2260,35 @@ components:
       required:
       - tipo
       title: EnlaceRespuesta
+    EntradasPrimaDto:
+      properties:
+        sumaAsegurada:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Sumaasegurada
+        plazoCreditoMeses:
+          type: integer
+          title: Plazocreditomeses
+        edad:
+          type: integer
+          title: Edad
+        nivelRiesgo:
+          anyOf:
+          - $ref: '#/components/schemas/NivelRiesgo'
+          - type: 'null'
+        coberturasOpcionales:
+          items:
+            type: string
+          type: array
+          title: Coberturasopcionales
+      type: object
+      required:
+      - sumaAsegurada
+      - plazoCreditoMeses
+      - edad
+      - nivelRiesgo
+      - coberturasOpcionales
+      title: EntradasPrimaDto
     ErrorDto:
       properties:
         codigo:
@@ -1847,6 +2326,11 @@ components:
       - REVOCADO
       - VENCIDO
       title: EstadoConsentimiento
+    EstadoCotizacion:
+      type: string
+      enum:
+      - CALCULADA
+      title: EstadoCotizacion
     EstadoCuota:
       type: string
       enum:
@@ -1920,6 +2404,24 @@ components:
       - direccion
       - motivo
       title: FactorDto
+    FactorPrimaDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        valor:
+          type: string
+          title: Valor
+        factor:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Factor
+      type: object
+      required:
+      - codigo
+      - valor
+      - factor
+      title: FactorPrimaDto
     Fuente:
       type: string
       enum:
@@ -2023,6 +2525,20 @@ components:
       - tipo
       - ocurridoEn
       title: HitoDto
+    LimitesDto:
+      properties:
+        sumaAsegurada:
+          $ref: '#/components/schemas/RangoDto'
+        plazoCreditoMeses:
+          $ref: '#/components/schemas/RangoDto'
+        edad:
+          $ref: '#/components/schemas/RangoDto'
+      type: object
+      required:
+      - sumaAsegurada
+      - plazoCreditoMeses
+      - edad
+      title: LimitesDto
     LimitesPlan:
       properties:
         plan:
@@ -2126,6 +2642,33 @@ components:
       - nombre
       - grupos
       title: NuevoUsuarioSolicitud
+    OrigenDato:
+      type: string
+      enum:
+      - CACHE
+      - MEMORIA
+      - CATALOGO
+      title: OrigenDato
+      description: De dónde salió el producto o las reglas (paso "Catálogo y reglas"
+        del portal).
+    PasoCotizacionDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        duracionMs:
+          type: integer
+          title: Duracionms
+        origen:
+          anyOf:
+          - $ref: '#/components/schemas/OrigenDato'
+          - type: 'null'
+      type: object
+      required:
+      - codigo
+      - duracionMs
+      - origen
+      title: PasoCotizacionDto
     PerfilRespuesta:
       properties:
         id:
@@ -2263,6 +2806,40 @@ components:
       - estandar
       - prueba
       title: Plan
+    RangoDto:
+      properties:
+        minimo:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Minimo
+        maximo:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Maximo
+      type: object
+      required:
+      - minimo
+      - maximo
+      title: RangoDto
+    RecargoPrimaDto:
+      properties:
+        cobertura:
+          type: string
+          title: Cobertura
+        tasa:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Tasa
+        valor:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Valor
+      type: object
+      required:
+      - cobertura
+      - tasa
+      - valor
+      title: RecargoPrimaDto
     ResumenPerfil:
       properties:
         id:
@@ -2455,6 +3032,45 @@ components:
       - nombreCompleto
       - fechaNacimiento
       title: SolicitudAltaCliente
+    SolicitudCotizacion:
+      properties:
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        productoId:
+          type: string
+          pattern: ^[a-z0-9-]{1,64}$
+          title: Productoid
+        datosAsegurado:
+          $ref: '#/components/schemas/DatosAseguradoDto'
+        coberturasOpcionales:
+          items:
+            type: string
+            pattern: ^[A-Z0-9_]{1,64}$
+          type: array
+          maxItems: 20
+          title: Coberturasopcionales
+        perfilId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Perfilid
+          description: Perfil de riesgo que sustenta la cotización (0..1); solo ASESOR
+        socioId:
+          anyOf:
+          - type: string
+            pattern: ^SOC-\d{6}$
+          - type: 'null'
+          title: Socioid
+          description: Canal de venta (0..1). Con X-Actor-Rol SOCIO es el propio socio
+      type: object
+      required:
+      - clienteId
+      - productoId
+      - datosAsegurado
+      title: SolicitudCotizacion
     SolicitudPerfil:
       properties:
         clienteId:
