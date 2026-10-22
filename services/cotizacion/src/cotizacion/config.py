@@ -28,6 +28,9 @@ class Settings(ServiceSettings):
     # portal, y caché del producto y las reglas. Con CACHE_URL se lee Valkey (lo llena catalogo);
     # sin ella, caché en memoria de catalogo_cache_ttl_s (0 = sin caché).
     cotizacion_presupuesto_ms: int = Field(250, ge=1)
+    # HU-W13 (DS2-20): vigencia de la oferta en horas desde el cálculo; vigenteHasta se deriva al
+    # leer. Configurable por ambiente con SOLVENTA_OFERTA_VIGENCIA_HORAS (0 = nace vencida).
+    oferta_vigencia_horas: int = Field(96, ge=0)
     cache_url: str | None = Field(None, validation_alias=_env("CACHE_URL"), repr=False)
     cache_timeout_ms: int = Field(50, ge=1)
     catalogo_cache_ttl_s: int = Field(60, ge=0)
