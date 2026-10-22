@@ -29,7 +29,7 @@ def _error(descripcion: str) -> dict[str, Any]:
     return {"model": ErrorDto, "description": descripcion}
 
 
-_RESPUESTAS = {
+_RESPUESTAS: dict[int | str, dict[str, Any]] = {
     401: _error("ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado"),
     403: _error("ROL_NO_AUTORIZADO: falta el grupo asesores o no es del back-office"),
     422: _error("SOLICITUD_INVALIDA (detalles.campos)"),

@@ -31,3 +31,19 @@ def requerir_grupo(grupo: str) -> Callable[..., None]:
             raise HTTPException(403, f"Requiere el grupo {grupo}")
 
     return dependencia
+
+
+def requerir_alguno(*requeridos: str) -> Callable[..., None]:
+    """Como requerir_grupo, pero basta con uno de los grupos (HU-W13: asesores o suscriptores)."""
+
+    def dependencia(
+        x_authenticated_groups: Annotated[str | None, Header()] = None,
+        x_authenticated_issuer: Annotated[str | None, Header()] = None,
+    ) -> None:
+        emisor = settings.jwt_issuers.get("backoffice")
+        if emisor and x_authenticated_issuer != emisor:
+            raise HTTPException(403, "Solo usuarios del back-office")
+        if not set(requeridos) & grupos(x_authenticated_groups):
+            raise HTTPException(403, "Requiere uno de los grupos " + ", ".join(requeridos))
+
+    return dependencia

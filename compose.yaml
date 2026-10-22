@@ -69,6 +69,8 @@ services:
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
       COTIZACION_URL: http://cotizacion:8080
       CLIENTES_URL: http://clientes:8080
+      # HU-W13: suscripción automática.
+      POLIZAS_URL: http://polizas:8080
 
   bff-movil:
     <<: *servicio
@@ -105,6 +107,8 @@ services:
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
       DB_HOST: postgres
       ADAPTADOR_IDENTIDAD_URL: http://adaptador-identidad:8080
+      # HU-W13: clientes sintéticos C01–C19 para recorrer la suscripción en local (solo int o local).
+      CLIENTES_SEMILLA_SINTETICA: "true"
 
   adaptador-identidad:
     <<: *servicio

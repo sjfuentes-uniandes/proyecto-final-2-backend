@@ -244,3 +244,57 @@ def test_hu_w31_la_marca_de_revocacion_es_opcional_en_el_bff() -> None:
     assert nuevos <= set(perfil["properties"])
     assert not nuevos & set(perfil["required"])
     assert len(perfil["required"]) == 20
+
+
+POLIZAS = CONTRATO.parent / "polizas.yaml"
+# HU-W13: el BFF publica los mismos esquemas que polizas; las vistas agregan clienteNombre.
+ESQUEMAS_SUSCRIPCION = (
+    "SolicitudSuscripcion",
+    "DecisionSuscripcion",
+    "ReglaEvaluadaDto",
+    "CondicionesOfertaDto",
+    "ContextoCasoDto",
+    "ResumenDecision",
+    "ListaDecisiones",
+    "ResumenBandeja",
+    "ResultadoDecision",
+    "TipoDecision",
+    "TipoRegla",
+    "CampoRegla",
+    "OperadorRegla",
+    "Visibilidad",
+    "ResultadoRegla",
+    "MotivoCliente",
+    "CoberturaProductoDto",
+    "NivelRiesgo",
+)
+
+
+def test_dto_de_suscripcion_iguales_a_polizas() -> None:
+    propios = app.openapi()["components"]["schemas"]
+    de_polizas = yaml.safe_load(POLIZAS.read_text(encoding="utf-8"))["components"]["schemas"]
+    for nombre in ESQUEMAS_SUSCRIPCION:
+        assert propios[nombre] == de_polizas[nombre], nombre
+    for vista, base in (
+        ("DecisionSuscripcionVista", "DecisionSuscripcion"),
+        ("CasoBandejaVista", "CasoBandeja"),
+    ):
+        extra = set(propios[vista]["properties"]) - set(de_polizas[base]["properties"])
+        assert extra == {"clienteNombre"}, vista
+
+
+def test_contrato_de_suscripciones() -> None:
+    rutas = app.openapi()["paths"]
+    assert set(rutas["/v1/suscripciones"]) == {"get", "post"}
+    assert set(rutas["/v1/suscripciones"]["post"]["responses"]) == {
+        "200",
+        "201",
+        "401",
+        "403",
+        "404",
+        "409",
+        "422",
+        "503",
+    }
+    assert set(rutas["/v1/bandeja-suscripcion"]) == {"get"}
+    assert set(rutas["/v1/bandeja-suscripcion/resumen"]) == {"get"}
