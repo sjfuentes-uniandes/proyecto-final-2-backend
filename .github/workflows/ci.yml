@@ -8,7 +8,7 @@ jobs:
     outputs:
       servicios: ${{ steps.detectar.outputs.servicios }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - id: detectar
         name: Detectar servicios que cambiaron
@@ -47,7 +47,7 @@ jobs:
       # Opcional: con estos secretos el pull es autenticado y el límite de Docker Hub es mayor.
       DOCKERHUB_USUARIO: ${{ secrets.DOCKERHUB_USUARIO }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - if: env.IMAGENES_DOCKER != '' && env.DOCKERHUB_USUARIO != ''
         uses: docker/login-action@v3
         with:
