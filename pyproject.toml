@@ -38,7 +38,7 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 show_error_codes = true
 # Layout src/ del workspace: los módulos se nombran desde estas raíces.
-# HU-W13: catalogo y polizas también, para `make typecheck SERVICE=<servicio>` (fuera de la CI,
+# HU-W13: catalogo, polizas y cotizacion también, para `make typecheck SERVICE=<servicio>` (fuera de la CI,
 # ADR 0008).
 mypy_path = [
   "libs/solventa-common/src",
@@ -46,6 +46,7 @@ mypy_path = [
   "services/bff-movil/src",
   "services/catalogo/src",
   "services/polizas/src",
+  "services/cotizacion/src",
 ]
 explicit_package_bases = true
 
