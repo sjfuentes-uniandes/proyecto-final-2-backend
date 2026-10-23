@@ -410,6 +410,11 @@ run "alta_disponibilidad_con_socios_y_mtls" {
     condition     = aws_api_gateway_rest_api.main["socios"].disable_execute_api_endpoint && !aws_api_gateway_rest_api.main["canales"].disable_execute_api_endpoint
     error_message = "Con mTLS, el API de socios solo debe responder por el dominio propio."
   }
+  # HU-W04: el contrato v1 se publica en /v1 también en el dominio propio.
+  assert {
+    condition     = aws_api_gateway_base_path_mapping.partners[0].base_path == "v1" && output.api_urls["socios_mtls"] == "https://socios.example.co/v1"
+    error_message = "El dominio propio de socios debe exponer el contrato v1 en /v1."
+  }
   assert {
     condition     = length(aws_vpc_endpoint.interface) == 2
     error_message = "Deben crearse los endpoints de interfaz solicitados."

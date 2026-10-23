@@ -91,10 +91,10 @@ output "ecr_repositories" {
 }
 
 output "api_urls" {
-  description = "Canales: <url>/web/... y <url>/movil/...; socios: <url>/... (o el dominio mTLS)."
+  description = "Canales: <url>/web/... y <url>/movil/...; socios: <url>/... (o el dominio mTLS, con /v1)."
   value = merge(
     { for name, stage in aws_api_gateway_stage.main : name => stage.invoke_url },
-    var.custom_domain == null ? {} : { socios_mtls = "https://${var.custom_domain.domain_name}" }
+    var.custom_domain == null ? {} : { socios_mtls = "https://${var.custom_domain.domain_name}/${var.api_stage}" }
   )
 }
 

@@ -33,8 +33,11 @@ enable_tracing = true
 
 # DEF-01 (Sprint 1): clientes siembra C01–C19 al arrancar para demostrar el perfilamiento.
 # La semilla de reglas de W11 AC4 (CATALOGO_SEMILLA_QA) NO va aquí: solo en la rama qa/s1-semilla-reglas.
+# HU-W04: catalogo publica los productos de QA (semillas/qa/productos_qa.json), p. ej. la oferta de
+# un minuto con la que el N3 comprueba 410 OFERTA_VENCIDA. Solo en ambientes de QA.
 service_environment = {
   clientes = { CLIENTES_SEMILLA_SINTETICA = "true" }
+  catalogo = { CATALOGO_PRODUCTOS_QA = "true" }
   # DEF-03: en int cada salto por Service Connect suma 60–100 ms y una fuente pasa por dos
   # (cotizacion → adaptador-datos → simulador). Presupuestos con margen, sin pasar el corte de 700 ms.
   cotizacion = {
