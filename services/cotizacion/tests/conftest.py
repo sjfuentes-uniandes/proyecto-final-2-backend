@@ -446,14 +446,15 @@ def producto_semilla(producto_id: str = "vida-hipotecario", **cambios: Any) -> A
     return replace(a_producto(ProductoDto.model_validate(entrada)), **cambios)
 
 
-def reglas_semilla(producto_id: str = "vida-hipotecario", **cambios: Any) -> Any:
-    """Las reglas vigentes de la semilla (con su hash canónico), como las entrega catalogo."""
+def reglas_semilla(producto_id: str = "vida-hipotecario", indice: int = 0, **cambios: Any) -> Any:
+    """Unas reglas de la semilla (con su hash canónico), como las entrega catalogo. Por omisión las
+    primeras (2026.09.1, sin condiciones de oferta); `indice=-1`, las últimas (2026.10.1)."""
     import hashlib
 
     from cotizacion.adapters.outbound.productos_catalogo import ReglasPrimaDto, a_reglas
 
     entradas = json.loads((SEMILLAS_CATALOGO / "productos.json").read_text(encoding="utf-8"))
-    regla = next(e for e in entradas if e["id"] == producto_id)["reglas"][0]
+    regla = next(e for e in entradas if e["id"] == producto_id)["reglas"][indice]
     definicion = json.loads((SEMILLAS_CATALOGO / regla["archivo"]).read_text(encoding="utf-8"))
     canonico = json.dumps(definicion, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     dto = ReglasPrimaDto.model_validate(
@@ -513,9 +514,12 @@ class ProductosFalsos:
 
 
 class RepositorioCotizacionesMemoria:
+    """Como CotizacionesPg: la oferta recibe su código (COT-AAAA-NNNNN) al guardarse."""
+
     def __init__(self) -> None:
         self.cotizaciones: dict[UUID, Any] = {}
         self.errores_al_guardar: list[Exception] = []
+        self._secuencia = 0
 
     async def por_idempotencia(self, actor_id: str, clave: UUID) -> Any:
         return next(
@@ -527,12 +531,17 @@ class RepositorioCotizacionesMemoria:
             None,
         )
 
-    async def guardar(self, cotizacion: Any) -> None:
+    async def guardar(self, cotizacion: Any) -> Any:
         if self.errores_al_guardar:
             raise self.errores_al_guardar.pop(0)
         if await self.por_idempotencia(cotizacion.actor.id, cotizacion.idempotency_key):
             raise ConflictoIdempotencia()
+        if cotizacion.oferta is not None:
+            self._secuencia += 1
+            codigo = f"COT-{cotizacion.oferta.creada_en:%Y}-{self._secuencia:05d}"
+            cotizacion = replace(cotizacion, oferta=replace(cotizacion.oferta, codigo=codigo))
         self.cotizaciones[cotizacion.id] = cotizacion
+        return cotizacion
 
     async def por_id(self, cotizacion_id: UUID) -> Any:
         return self.cotizaciones.get(cotizacion_id)

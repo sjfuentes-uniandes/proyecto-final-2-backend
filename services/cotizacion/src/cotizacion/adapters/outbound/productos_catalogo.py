@@ -93,6 +93,31 @@ class Limites(_Estricto):
     edad: Rango
 
 
+class SumaCobertura(_Estricto):
+    """Parte de la suma asegurada que cubre una cobertura (0 < porcentaje ≤ 1); sin entrada, 1."""
+
+    cobertura: str
+    porcentaje: TextoDecimal
+
+
+class Exclusion(_Estricto):
+    """Exclusión resumida que el socio muestra al cliente; el texto legal está en el condicionado."""
+
+    codigo: Annotated[str, Field(pattern=r"^[A-Z0-9_]{1,64}$")]
+    descripcion: Annotated[str, Field(min_length=1, max_length=200)]
+
+
+class CondicionesOferta(_Estricto):
+    """Condiciones de la oferta que se crea con la prima (HU-W04).
+
+    `vigenciaMinutos` cuenta desde el cálculo: vigente si ahora < calculadoEn + vigenciaMinutos.
+    """
+
+    vigencia_minutos: Annotated[int, Field(ge=1, le=525_600)]
+    exclusiones: Annotated[list[Exclusion], Field(max_length=20)]
+    sumas_coberturas: list[SumaCobertura]
+
+
 class DefinicionReglasPrimaCotizacion(_Estricto):
     model_config = ConfigDict(title="DefinicionReglasPrima")
     producto_id: str
@@ -106,6 +131,7 @@ class DefinicionReglasPrimaCotizacion(_Estricto):
     prima_maxima: TextoDecimal
     redondeo: Redondeo
     limites: Limites
+    oferta: CondicionesOferta | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class _Dto(BaseModel):
@@ -158,6 +184,16 @@ def _rango(dto: Rango) -> dominio.Rango:
     return dominio.Rango(Decimal(dto.minimo), Decimal(dto.maximo))
 
 
+def _condiciones(dto: CondicionesOferta | None) -> dominio.CondicionesOferta | None:
+    if dto is None:
+        return None
+    return dominio.CondicionesOferta(
+        vigencia_minutos=dto.vigencia_minutos,
+        exclusiones=tuple(dominio.Exclusion(e.codigo, e.descripcion) for e in dto.exclusiones),
+        porcentajes_suma={s.cobertura: Decimal(s.porcentaje) for s in dto.sumas_coberturas},
+    )
+
+
 def a_reglas(dto: ReglasPrimaDto) -> ReglasPrima:
     """Convierte la respuesta de catalogo al dominio. Una variable desconocida o un factor sin
     tramo abierto violan el contrato (catalogo los valida al publicar)."""
@@ -197,6 +233,7 @@ def a_reglas(dto: ReglasPrimaDto) -> ReglasPrima:
             plazo_credito_meses=_rango(d.limites.plazo_credito_meses),
             edad=_rango(d.limites.edad),
         ),
+        oferta=_condiciones(d.oferta),
     )
 
 

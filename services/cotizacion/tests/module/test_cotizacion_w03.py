@@ -81,18 +81,21 @@ def test_ac1_prima_persistida_con_la_version_de_reglas(cotizacion: Callable[...,
     assert respuesta.status_code == 201, respuesta.text
     creada = respuesta.json()
     assert (creada["moneda"], creada["primaTotal"]) == ("COP", "97460")
-    hash_publicado = en_catalogo(
+    # Las reglas vigentes hoy en catalogo (2026.10.1 desde HU-W04: mismas tarifas, con las
+    # condiciones de la oferta).
+    ((version_vigente, hash_publicado),) = en_catalogo(
         app,
-        "SELECT hash FROM reglas_prima WHERE producto_id = 'vida-hipotecario' "
-        "AND version = '2026.09.1'",
-    )[0][0]
+        "SELECT version, hash FROM reglas_prima WHERE producto_id = 'vida-hipotecario' "
+        "AND vigente_desde <= now() ORDER BY vigente_desde DESC LIMIT 1",
+    )
     ((version, hash_reglas, moneda, prima, entradas, desglose, correlacion),) = filas(
         app,
         "SELECT version_reglas, hash_reglas, moneda, prima_total, entradas, desglose, "
         "correlation_id FROM cotizaciones WHERE id = %s",
         creada["id"],
     )
-    assert (version, hash_reglas, moneda) == ("2026.09.1", hash_publicado, "COP")
+    assert (version, hash_reglas, moneda) == (version_vigente, hash_publicado, "COP")
+    assert creada["versionReglas"] == version_vigente
     assert str(prima) == "97460.0000"
     assert entradas == {
         "sumaAsegurada": "180000000",

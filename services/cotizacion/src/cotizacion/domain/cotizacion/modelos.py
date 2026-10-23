@@ -12,6 +12,7 @@ from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
+from cotizacion.domain.cotizacion.errores import OfertaVencida
 from cotizacion.domain.perfilamiento.modelos import NivelRiesgo
 
 # Factor de las reglas cuando la cotización no utiliza un perfil con nivel (0..1 del dominio).
@@ -25,6 +26,13 @@ class EstadoProducto(StrEnum):
 
 class EstadoCotizacion(StrEnum):
     CALCULADA = "CALCULADA"
+
+
+class EstadoOferta(StrEnum):
+    """No se guarda: se deriva del instante de la consulta (vigente si ahora < vigenteHasta)."""
+
+    VIGENTE = "VIGENTE"
+    VENCIDA = "VENCIDA"
 
 
 class RolActor(StrEnum):
@@ -96,6 +104,22 @@ class Limites:
 
 
 @dataclass(frozen=True, slots=True)
+class Exclusion:
+    codigo: str
+    descripcion: str
+
+
+@dataclass(frozen=True, slots=True)
+class CondicionesOferta:
+    """Condiciones de la oferta de las reglas (HU-W04): vigencia desde el cálculo, exclusiones
+    resumidas y la parte de la suma asegurada de cada cobertura (sin entrada, toda la suma)."""
+
+    vigencia_minutos: int
+    exclusiones: tuple[Exclusion, ...]
+    porcentajes_suma: Mapping[str, Decimal]
+
+
+@dataclass(frozen=True, slots=True)
 class ReglasPrima:
     producto_id: str
     version: str
@@ -113,6 +137,8 @@ class ReglasPrima:
     redondeo_escala: int
     redondeo_modo: str
     limites: Limites
+    # HU-W04: None en las reglas publicadas antes (la vigencia sale entonces de la configuración).
+    oferta: CondicionesOferta | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +180,46 @@ class Desglose:
 
 
 @dataclass(frozen=True, slots=True)
+class CoberturaOfertada:
+    codigo: str
+    nombre: str
+    suma_asegurada: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class Oferta:
+    """La oferta de una cotización (HU-W04): lo que el socio presenta al cliente. Inmutable.
+
+    Entidad del agregado Cotización (1:1): se crea con la prima y no cambia; su estado se deriva
+    del instante de la consulta. `codigo` es el identificador legible (COT-AAAA-NNNNN) que asigna
+    el repositorio al guardarla; None antes de guardarla.
+    """
+
+    id: UUID
+    cotizacion_id: UUID
+    precio: Decimal
+    moneda: str
+    periodicidad: str
+    coberturas: tuple[CoberturaOfertada, ...]
+    exclusiones: tuple[Exclusion, ...]
+    version: int
+    version_reglas: str
+    creada_en: datetime
+    # Vigencia semiabierta [creada_en, vigente_hasta): el instante exacto ya es vencida.
+    vigente_hasta: datetime
+    codigo: str | None = None
+
+    def estado(self, ahora: datetime) -> EstadoOferta:
+        return EstadoOferta.VIGENTE if ahora < self.vigente_hasta else EstadoOferta.VENCIDA
+
+    def asegurar_utilizable(self, ahora: datetime) -> None:
+        """Regla de dominio: una oferta vencida no puede usarse (aceptarse, HU-W15). Lanza
+        OfertaVencida: hay que cotizar de nuevo."""
+        if self.estado(ahora) is EstadoOferta.VENCIDA:
+            raise OfertaVencida(self.id, self.vigente_hasta)
+
+
+@dataclass(frozen=True, slots=True)
 class Cotizacion:
     id: UUID
     cliente_id: UUID
@@ -176,3 +242,5 @@ class Cotizacion:
     duracion_ms: int
     correlation_id: str
     actor: Actor
+    # HU-W04: None en las cotizaciones calculadas antes de la migración 004.
+    oferta: Oferta | None = None

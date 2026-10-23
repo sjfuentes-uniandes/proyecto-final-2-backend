@@ -2,8 +2,13 @@
 
 Los decimales del JSON van como texto (exactos); `prima_total` también va en su columna numérica
 para consultas. La idempotencia es por actor: UNIQUE (actor_id, idempotency_key).
+
+HU-W04: la oferta se guarda en `ofertas` en la misma transacción que la cotización y se lee con
+ella (LEFT JOIN: las cotizaciones anteriores a la migración 004 no tienen oferta). El código legible
+(COT-AAAA-NNNNN) lo asigna la secuencia `ofertas_codigo_seq` al insertar.
 """
 
+import dataclasses
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from typing import Any
@@ -17,15 +22,18 @@ from psycopg_pool import AsyncConnectionPool
 from cotizacion.domain.cotizacion.modelos import (
     Actor,
     Cobertura,
+    CoberturaOfertada,
     Cotizacion,
     Desglose,
     EntradasPrima,
     EstadoCotizacion,
+    Exclusion,
     FactorAplicado,
+    Oferta,
     RecargoAplicado,
     RolActor,
 )
-from cotizacion.domain.cotizacion.prima import desglose_canonico, entradas_canonicas
+from cotizacion.domain.cotizacion.prima import desglose_canonico, entradas_canonicas, texto
 from cotizacion.domain.perfilamiento.errores import ConflictoIdempotencia
 from cotizacion.domain.perfilamiento.modelos import NivelRiesgo
 
@@ -59,15 +67,43 @@ COLUMNAS = (
 )
 
 
+# Sin `codigo`: lo calcula el INSERT con la secuencia.
+COLUMNAS_OFERTA = (
+    "id",
+    "cotizacion_id",
+    "precio",
+    "moneda",
+    "periodicidad",
+    "coberturas",
+    "exclusiones",
+    "version",
+    "version_reglas",
+    "creada_en",
+    "vigente_hasta",
+)
+
+
 def _insertar(columnas: Sequence[str]) -> str:
     marcas = ", ".join(["%s"] * len(columnas))
     return f"INSERT INTO cotizaciones ({', '.join(columnas)}) VALUES ({marcas})"
 
 
 _INSERTAR = _insertar(COLUMNAS)
-_SELECT = f"SELECT {', '.join(COLUMNAS)} FROM cotizaciones"
-_POR_ID = _SELECT + " WHERE id = %s"
-_POR_IDEMPOTENCIA = _SELECT + " WHERE actor_id = %s AND idempotency_key = %s"
+# COT-<año UTC de creada_en>-<secuencia, al menos 5 dígitos>.
+_INSERTAR_OFERTA = (
+    "WITH s AS (SELECT nextval('ofertas_codigo_seq')::text AS n) "
+    f"INSERT INTO ofertas (codigo, {', '.join(COLUMNAS_OFERTA)}) "
+    "SELECT 'COT-' || to_char(%s::timestamptz AT TIME ZONE 'UTC', 'YYYY') || '-' "
+    "|| lpad(s.n, greatest(5, length(s.n)), '0'), "
+    f"{', '.join(['%s'] * len(COLUMNAS_OFERTA))} FROM s RETURNING codigo"
+)
+_SELECT = (
+    f"SELECT {', '.join(f'c.{c}' for c in COLUMNAS)}, o.codigo AS oferta_codigo, "
+    f"{', '.join(f'o.{c} AS oferta_{c}' for c in COLUMNAS_OFERTA)} "
+    "FROM cotizaciones c LEFT JOIN ofertas o ON o.cotizacion_id = c.id"
+)
+_POR_ID = _SELECT + " WHERE c.id = %s"
+_POR_IDEMPOTENCIA = _SELECT + " WHERE c.actor_id = %s AND c.idempotency_key = %s"
 
 
 def fila_cotizacion(cotizacion: Cotizacion) -> dict[str, Any]:
@@ -103,6 +139,60 @@ def fila_cotizacion(cotizacion: Cotizacion) -> dict[str, Any]:
         "actor_id": cotizacion.actor.id,
         "actor_rol": cotizacion.actor.rol.value,
     }
+
+
+def fila_oferta(oferta: Oferta) -> dict[str, Any]:
+    return {
+        "id": oferta.id,
+        "cotizacion_id": oferta.cotizacion_id,
+        "precio": oferta.precio,
+        "moneda": oferta.moneda,
+        "periodicidad": oferta.periodicidad,
+        "coberturas": Jsonb(
+            [
+                {"codigo": c.codigo, "nombre": c.nombre, "sumaAsegurada": texto(c.suma_asegurada)}
+                for c in oferta.coberturas
+            ]
+        ),
+        "exclusiones": Jsonb(
+            [{"codigo": e.codigo, "descripcion": e.descripcion} for e in oferta.exclusiones]
+        ),
+        "version": oferta.version,
+        "version_reglas": oferta.version_reglas,
+        "creada_en": oferta.creada_en,
+        "vigente_hasta": oferta.vigente_hasta,
+    }
+
+
+def _sin_ceros(valor: Decimal) -> Decimal:
+    """numeric(20,4) vuelve con 4 decimales (97460.0000): se dejan los del monto (97460)."""
+    entero = valor.to_integral_value()
+    return entero if valor == entero else valor.normalize()
+
+
+def oferta_de(fila: Mapping[str, Any]) -> Oferta | None:
+    """La oferta de la fila leída con el LEFT JOIN; None si la cotización no tiene."""
+    if fila.get("oferta_id") is None:
+        return None
+    return Oferta(
+        id=fila["oferta_id"],
+        cotizacion_id=fila["oferta_cotizacion_id"],
+        precio=_sin_ceros(fila["oferta_precio"]),
+        moneda=fila["oferta_moneda"],
+        periodicidad=fila["oferta_periodicidad"],
+        coberturas=tuple(
+            CoberturaOfertada(c["codigo"], c["nombre"], Decimal(c["sumaAsegurada"]))
+            for c in fila["oferta_coberturas"]
+        ),
+        exclusiones=tuple(
+            Exclusion(e["codigo"], e["descripcion"]) for e in fila["oferta_exclusiones"]
+        ),
+        version=fila["oferta_version"],
+        version_reglas=fila["oferta_version_reglas"],
+        creada_en=fila["oferta_creada_en"],
+        vigente_hasta=fila["oferta_vigente_hasta"],
+        codigo=fila["oferta_codigo"],
+    )
 
 
 def _desglose(datos: Mapping[str, Any]) -> Desglose:
@@ -154,6 +244,7 @@ def cotizacion_de(fila: Mapping[str, Any]) -> Cotizacion:
         duracion_ms=fila["duracion_ms"],
         correlation_id=fila["correlation_id"],
         actor=Actor(fila["actor_id"], RolActor(fila["actor_rol"])),
+        oferta=oferta_de(fila),
     )
 
 
@@ -163,15 +254,29 @@ class CotizacionesPg:
     def __init__(self, pool: AsyncConnectionPool) -> None:
         self._pool = pool
 
-    async def guardar(self, cotizacion: Cotizacion) -> None:
+    async def guardar(self, cotizacion: Cotizacion) -> Cotizacion:
+        """Guarda la cotización y su oferta en una transacción; devuelve la oferta con su código."""
         fila = fila_cotizacion(cotizacion)
+        oferta = cotizacion.oferta
         try:
+            # El bloque de la conexión es una transacción: confirma al salir, revierte si falla.
             async with self._pool.connection() as conexion:
                 await conexion.execute(_INSERTAR, [fila[c] for c in COLUMNAS])
+                if oferta is None:
+                    return cotizacion
+                datos = fila_oferta(oferta)
+                cursor = await conexion.execute(
+                    _INSERTAR_OFERTA, [oferta.creada_en, *(datos[c] for c in COLUMNAS_OFERTA)]
+                )
+                fila_codigo = await cursor.fetchone()
+                if fila_codigo is None:  # RETURNING siempre devuelve la fila insertada.
+                    raise RuntimeError("el INSERT de la oferta no devolvió su código")
+                (codigo,) = fila_codigo
         except psycopg.errors.UniqueViolation as error:
             if error.diag.constraint_name == _RESTRICCION_IDEMPOTENCIA:
                 raise ConflictoIdempotencia() from error
             raise
+        return dataclasses.replace(cotizacion, oferta=dataclasses.replace(oferta, codigo=codigo))
 
     async def por_idempotencia(self, actor_id: str, clave: UUID) -> Cotizacion | None:
         return await self._uno(_POR_IDEMPOTENCIA, (actor_id, clave))

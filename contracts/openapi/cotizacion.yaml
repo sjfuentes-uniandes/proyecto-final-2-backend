@@ -457,7 +457,10 @@ paths:
       tags:
       - cotizaciones
       summary: Obtener
-      description: Una cotización calculada; las cotizaciones no cambian nunca.
+      description: 'Una cotización calculada; las cotizaciones no cambian nunca (el
+        estado de su oferta sí, con
+
+        el tiempo: se calcula al leer).'
       operationId: obtener_v1_cotizaciones__cotizacionId__get
       parameters:
       - name: cotizacionId
@@ -691,6 +694,24 @@ components:
       - efecto
       - nivel
       title: AjusteDto
+    CoberturaOfertaDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        nombre:
+          type: string
+          title: Nombre
+        sumaAsegurada:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Sumaasegurada
+      type: object
+      required:
+      - codigo
+      - nombre
+      - sumaAsegurada
+      title: CoberturaOfertaDto
     CoberturaProductoDto:
       properties:
         codigo:
@@ -861,6 +882,11 @@ components:
           title: Vigentehasta
           description: 'Fin de la vigencia de la oferta (UTC): vigente si ahora <
             vigenteHasta (DS2-20, HU-W13)'
+        oferta:
+          anyOf:
+          - $ref: '#/components/schemas/OfertaDto'
+          - type: 'null'
+          description: La oferta de la cotización
       type: object
       required:
       - id
@@ -1083,6 +1109,14 @@ components:
       - RECHAZADO
       - PENDIENTE
       title: EstadoIdentidad
+    EstadoOferta:
+      type: string
+      enum:
+      - VIGENTE
+      - VENCIDA
+      title: EstadoOferta
+      description: 'No se guarda: se deriva del instante de la consulta (vigente si
+        ahora < vigenteHasta).'
     EstadoPerfil:
       type: string
       enum:
@@ -1090,6 +1124,19 @@ components:
       - DEGRADADO
       - INFORMACION_INSUFICIENTE
       title: EstadoPerfil
+    ExclusionDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        descripcion:
+          type: string
+          title: Descripcion
+      type: object
+      required:
+      - codigo
+      - descripcion
+      title: ExclusionDto
     FactorDto:
       properties:
         codigo:
@@ -1203,13 +1250,14 @@ components:
             format: uuid
           - type: 'null'
           title: Ofertaid
-          description: Identificador de la oferta; null hasta HU-W04
+          description: Identificador de la oferta (HU-W04); null en cotizaciones anteriores
         codigo:
           anyOf:
           - type: string
           - type: 'null'
           title: Codigo
-          description: Código legible de la oferta; null hasta HU-W04
+          description: Código legible de la oferta, COT-AAAA-NNNNN (HU-W04); null
+            en anteriores
         clienteId:
           type: string
           format: uuid
@@ -1349,6 +1397,78 @@ components:
       - MEDIO
       - ALTO
       title: NivelRiesgo
+    OfertaDto:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        codigo:
+          type: string
+          title: Codigo
+          description: 'Identificador legible para el cliente: COT-AAAA-NNNNN'
+        cotizacionId:
+          type: string
+          format: uuid
+          title: Cotizacionid
+        precio:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Precio
+          description: La prima total, en `moneda` y por `periodicidad`
+        moneda:
+          type: string
+          title: Moneda
+        periodicidad:
+          type: string
+          title: Periodicidad
+        coberturas:
+          items:
+            $ref: '#/components/schemas/CoberturaOfertaDto'
+          type: array
+          title: Coberturas
+        exclusionesResumidas:
+          items:
+            $ref: '#/components/schemas/ExclusionDto'
+          type: array
+          title: Exclusionesresumidas
+        version:
+          type: integer
+          title: Version
+          description: Versión del documento de la oferta
+        versionReglas:
+          type: string
+          title: Versionreglas
+        creadaEn:
+          type: string
+          format: date-time
+          title: Creadaen
+        vigenteHasta:
+          type: string
+          format: date-time
+          title: Vigentehasta
+          description: 'Fin de la vigencia de la oferta (UTC): vigente si ahora <
+            vigenteHasta (DS2-20, HU-W13)'
+        estado:
+          $ref: '#/components/schemas/EstadoOferta'
+      type: object
+      required:
+      - id
+      - codigo
+      - cotizacionId
+      - precio
+      - moneda
+      - periodicidad
+      - coberturas
+      - exclusionesResumidas
+      - version
+      - versionReglas
+      - creadaEn
+      - vigenteHasta
+      - estado
+      title: OfertaDto
+      description: La oferta de la cotización (HU-W04). Inmutable; `estado` es el
+        del instante de la consulta.
     OrigenDato:
       type: string
       enum:

@@ -1,11 +1,10 @@
 """Vigencia de la oferta (HU-W13, DS2-20). Pura: sin reloj ni E/S.
 
-Mientras HU-W04 no defina su entidad oferta, la oferta es la cotización inmutable y vence
-`vigencia_horas` después de calculada: `vigenteHasta = calculadoEn + vigencia_horas`. Se calcula al
-leer (sin migración: `calculado_en` ya está guardado y no cambia), así que el resultado es
-determinista para un mismo parámetro. Vigente si `ahora < vigenteHasta`: el mismo criterio
-semiabierto que la vigencia del producto (HU-W03). HU-W04 puede reutilizar esta función o
-reemplazarla, conservando el nombre y el significado de `vigenteHasta` en los contratos.
+Desde HU-W04 la vigencia la fijan las reglas de prima (`oferta.vigenciaMinutos`) y se guarda con la
+oferta (`domain/cotizacion/oferta.py`). Esta función queda como respaldo para las reglas sin
+condiciones de oferta y para las cotizaciones anteriores a la migración 004: vencen
+`vigencia_horas` después de calculadas (`calculadoEn + vigencia_horas`), derivado al leer. Vigente
+si `ahora < vigenteHasta`: el mismo criterio semiabierto que la vigencia del producto (HU-W03).
 """
 
 from datetime import datetime, timedelta

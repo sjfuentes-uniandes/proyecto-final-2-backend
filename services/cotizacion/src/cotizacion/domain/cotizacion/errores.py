@@ -3,6 +3,9 @@
 Los errores técnicos (DependenciaNoDisponible) y de idempotencia son los del perfilamiento.
 """
 
+from datetime import datetime
+from uuid import UUID
+
 
 class ProductoNoEncontrado(Exception):
     """No existe un producto con ese identificador."""
@@ -50,3 +53,12 @@ class CotizacionNoEncontrada(Exception):
 
 class RolNoPermitido(Exception):
     """El rol del actor no permite la operación (un socio no usa perfiles ni otro socioId)."""
+
+
+class OfertaVencida(Exception):
+    """La oferta ya no está vigente (ahora ≥ vigenteHasta): hay que cotizar de nuevo (HU-W04)."""
+
+    def __init__(self, oferta_id: UUID, vigente_hasta: datetime) -> None:
+        super().__init__(str(oferta_id))
+        self.oferta_id = oferta_id
+        self.vigente_hasta = vigente_hasta

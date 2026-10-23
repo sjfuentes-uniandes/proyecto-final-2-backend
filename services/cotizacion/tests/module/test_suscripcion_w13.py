@@ -61,8 +61,13 @@ def test_insumos_con_el_perfil_real(cotizacion: Callable[..., Any]) -> None:
     )
     assert insumos["coincidenciasListasRestrictivas"] == 0
     calculado = datetime.fromisoformat(insumos["calculadoEn"])
-    assert datetime.fromisoformat(insumos["vigenteHasta"]) == calculado + timedelta(hours=96)
-    assert insumos["vigenteHasta"] == creada["vigenteHasta"]
+    # HU-W04: la vigencia es la de las reglas vigentes (2026.10.1: 7 días), guardada con la oferta.
+    assert datetime.fromisoformat(insumos["vigenteHasta"]) == calculado + timedelta(days=7)
+    assert insumos["vigenteHasta"] == creada["vigenteHasta"] == creada["oferta"]["vigenteHasta"]
+    assert (insumos["ofertaId"], insumos["codigo"]) == (
+        creada["oferta"]["id"],
+        creada["oferta"]["codigo"],
+    )
     assert "fechaNacimiento" not in respuesta.text
 
 
@@ -86,7 +91,10 @@ def test_identidad_no_verificada_se_informa(
 
 
 def test_otro_parametro_de_vigencia(cotizacion: Callable[..., Any]) -> None:
-    """Con 0 horas la oferta nace vencida (vigenteHasta = calculadoEn)."""
+    """HU-W04: las reglas con condiciones de oferta mandan sobre el parámetro de HU-W13. Con 0
+    horas la oferta ya no nace vencida: vence a los 7 días de las reglas 2026.10.1. El parámetro
+    queda para las reglas sin condiciones (tests/unit/cotizacion/test_oferta.py)."""
     app = cotizacion(oferta_vigencia_horas=0)
     insumos = _insumos(app, _cotizar(app, "01")["id"]).json()
-    assert insumos["vigenteHasta"] == insumos["calculadoEn"]
+    calculado = datetime.fromisoformat(insumos["calculadoEn"])
+    assert datetime.fromisoformat(insumos["vigenteHasta"]) == calculado + timedelta(days=7)

@@ -70,7 +70,7 @@ def validar_entradas(producto: Producto, reglas: ReglasPrima, entradas: Entradas
         raise DatosFueraDeRango(tuple(fuera))
 
 
-def _redondear(valor: Decimal, reglas: ReglasPrima) -> Decimal:
+def redondear(valor: Decimal, reglas: ReglasPrima) -> Decimal:
     exponente = Decimal(1).scaleb(-reglas.redondeo_escala, CONTEXTO)
     return valor.quantize(exponente, rounding=reglas.redondeo_modo, context=CONTEXTO)
 
@@ -90,7 +90,7 @@ def calcular_prima(reglas: ReglasPrima, entradas: EntradasPrima) -> Desglose:
     }
     nivel = entradas.nivel_riesgo.value if entradas.nivel_riesgo else SIN_PERFIL
     with localcontext(CONTEXTO):
-        prima_base = _redondear(entradas.suma_asegurada * reglas.tasa_base, reglas)
+        prima_base = redondear(entradas.suma_asegurada * reglas.tasa_base, reglas)
         factores = (
             FactorAplicado(FACTOR_NIVEL, nivel, reglas.factores_nivel[nivel]),
             *(_factor_variable(f, variables[f.variable]) for f in reglas.factores_variables),
@@ -98,16 +98,16 @@ def calcular_prima(reglas: ReglasPrima, entradas: EntradasPrima) -> Desglose:
         producto_factores = Decimal(1)
         for factor in factores:
             producto_factores *= factor.factor
-        prima_ajustada = _redondear(prima_base * producto_factores, reglas)
+        prima_ajustada = redondear(prima_base * producto_factores, reglas)
         recargos = tuple(
             RecargoAplicado(
-                c, reglas.recargos[c], _redondear(prima_ajustada * reglas.recargos[c], reglas)
+                c, reglas.recargos[c], redondear(prima_ajustada * reglas.recargos[c], reglas)
             )
             for c in sorted(entradas.coberturas_opcionales)
         )
         subtotal = prima_ajustada + sum((r.valor for r in recargos), Decimal(0))
-        minima = _redondear(reglas.prima_minima, reglas)
-        maxima = _redondear(reglas.prima_maxima, reglas)
+        minima = redondear(reglas.prima_minima, reglas)
+        maxima = redondear(reglas.prima_maxima, reglas)
         prima_total = min(max(subtotal, minima), maxima)
     return Desglose(
         prima_base=prima_base,

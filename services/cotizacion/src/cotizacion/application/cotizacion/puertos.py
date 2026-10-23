@@ -1,7 +1,7 @@
 """Puertos de la cotización (HU-W03).
 
 PuertoProductos lanza ProductoNoEncontrado, ReglasNoVigentes y DependenciaNoDisponible.
-RepositorioCotizaciones.guardar lanza ConflictoIdempotencia. La identidad del cliente y los
+RepositorioCotizaciones.guardar lanza ConflictoIdempotencia y asigna el código de la oferta. La identidad del cliente y los
 perfiles usan los puertos del perfilamiento (PuertoIdentidad y RepositorioPerfiles).
 """
 
@@ -43,8 +43,9 @@ class RepositorioCotizaciones(Protocol):
         """Cotización creada antes por el mismo actor con la misma clave de idempotencia."""
         ...
 
-    async def guardar(self, cotizacion: Cotizacion) -> None:
-        """Guarda la cotización inmutable."""
+    async def guardar(self, cotizacion: Cotizacion) -> Cotizacion:
+        """Guarda la cotización inmutable con su oferta (HU-W04) en una transacción. Devuelve la
+        cotización guardada: su oferta ya trae el código legible."""
         ...
 
     async def por_id(self, cotizacion_id: UUID) -> Cotizacion | None: ...

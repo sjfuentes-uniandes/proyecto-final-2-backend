@@ -68,8 +68,12 @@ class InsumosSuscripcion(_Dto):
     la cumplida en la fecha de la cotización. Una cotización vencida también se devuelve."""
 
     cotizacion_id: UUID
-    oferta_id: UUID | None = Field(description="Identificador de la oferta; null hasta HU-W04")
-    codigo: str | None = Field(description="Código legible de la oferta; null hasta HU-W04")
+    oferta_id: UUID | None = Field(
+        description="Identificador de la oferta (HU-W04); null en cotizaciones anteriores"
+    )
+    codigo: str | None = Field(
+        description="Código legible de la oferta, COT-AAAA-NNNNN (HU-W04); null en anteriores"
+    )
     cliente_id: UUID
     estado_identidad: EstadoIdentidad
     socio_id: str | None
@@ -94,11 +98,11 @@ class InsumosSuscripcion(_Dto):
 
 def insumos_de(insumos: Insumos) -> InsumosSuscripcion:
     cotizacion, perfil = insumos.cotizacion, insumos.perfil
-    entradas = cotizacion.entradas
+    entradas, oferta = cotizacion.entradas, cotizacion.oferta
     return InsumosSuscripcion(
         cotizacion_id=cotizacion.id,
-        oferta_id=None,
-        codigo=None,
+        oferta_id=oferta.id if oferta else None,
+        codigo=oferta.codigo if oferta else None,
         cliente_id=cotizacion.cliente_id,
         estado_identidad=insumos.estado_identidad,
         socio_id=cotizacion.socio_id,

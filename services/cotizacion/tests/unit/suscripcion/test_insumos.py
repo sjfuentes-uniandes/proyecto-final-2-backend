@@ -61,13 +61,19 @@ async def test_insumos_con_perfil(
 async def test_insumos_sin_perfil_y_otra_vigencia(
     escenario_cotizacion: Any, nueva_cotizacion: Any
 ) -> None:
+    """HU-W04: la vigencia es la de la oferta guardada; el parámetro solo aplica a las cotizaciones
+    anteriores a la migración 004 (sin oferta)."""
     cotizacion = await _cotizacion(escenario_cotizacion, nueva_cotizacion)
-    insumos = await _caso(escenario_cotizacion, oferta_vigencia_horas=24).ejecutar(
-        cotizacion.id, ACTOR
-    )
+    caso = _caso(escenario_cotizacion, oferta_vigencia_horas=24)
+    insumos = await caso.ejecutar(cotizacion.id, ACTOR)
     assert insumos.perfil is None
-    assert insumos.vigente_hasta == datetime(2026, 10, 16, 15, 0, tzinfo=UTC)
+    assert insumos.vigente_hasta == cotizacion.oferta.vigente_hasta
+    assert insumos.vigente_hasta == datetime(2026, 10, 19, 15, 0, tzinfo=UTC)
     assert coincidencias_listas(None) is None
+    anterior = dataclasses.replace(cotizacion, oferta=None)
+    escenario_cotizacion.repo.cotizaciones[cotizacion.id] = anterior
+    insumos = await caso.ejecutar(cotizacion.id, ACTOR)
+    assert insumos.vigente_hasta == datetime(2026, 10, 16, 15, 0, tzinfo=UTC)
 
 
 async def test_solo_el_asesor_y_cotizacion_inexistente(
@@ -190,7 +196,14 @@ def test_ruta_de_insumos_con_perfil(api: TestClient, perfil_c01: Any) -> None:
         "VERIFICADO",
         "2026-10-19T15:00:00Z",
     )
-    assert (cuerpo["ofertaId"], cuerpo["codigo"], cuerpo["socioId"]) == (None, None, None)
+    # HU-W04: la oferta guardada (W13 los dejaba en null).
+    oferta = creada["oferta"]
+    assert (cuerpo["ofertaId"], cuerpo["codigo"], cuerpo["socioId"]) == (
+        oferta["id"],
+        oferta["codigo"],
+        None,
+    )
+    assert cuerpo["vigenteHasta"] == oferta["vigenteHasta"]
     assert cuerpo["primaTotal"] == creada["primaTotal"]
     assert cuerpo["perfil"] == {
         "id": str(perfil_c01.id),
