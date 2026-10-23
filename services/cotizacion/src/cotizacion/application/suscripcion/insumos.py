@@ -3,7 +3,8 @@
 Solo lectura: no cambia ninguna fila (las cotizaciones y los perfiles son inmutables). Reúne lo
 mínimo que evalúan las reglas: la cotización (con la edad, nunca la fecha de nacimiento), su perfil
 si lo usó (nivel, confianza, fuentes y coincidencias en listas restrictivas), el estado de identidad
-del cliente, que se consulta a `clientes` (DS2-17), y el fin de la vigencia de la oferta (DS2-20).
+del cliente, que se consulta a `clientes` (DS2-17), y el fin de la vigencia de la oferta (DS2-20):
+desde HU-W04, el de la oferta guardada; sin ella (cotizaciones anteriores), el de HU-W13.
 Una cotización vencida también se devuelve: la decide `polizas`.
 
 Se mide con `operacion("cotizacion.insumos_suscripcion")`. La identidad y el perfil se piden en
@@ -22,7 +23,7 @@ from cotizacion.application.cotizacion.puertos import RepositorioCotizaciones
 from cotizacion.application.perfilamiento.puertos import PuertoIdentidad, RepositorioPerfiles
 from cotizacion.domain.cotizacion.errores import CotizacionNoEncontrada, RolNoPermitido
 from cotizacion.domain.cotizacion.modelos import Actor, Cotizacion, RolActor
-from cotizacion.domain.cotizacion.vigencia import vigente_hasta
+from cotizacion.domain.cotizacion.oferta import vigente_hasta_de
 from cotizacion.domain.perfilamiento.errores import ClienteNoEncontrado, DependenciaNoDisponible
 from cotizacion.domain.perfilamiento.modelos import (
     EstadoCampo,
@@ -102,7 +103,7 @@ class ConsultarInsumos:
         return Insumos(
             cotizacion=cotizacion,
             estado_identidad=estado,
-            vigente_hasta=vigente_hasta(cotizacion.calculado_en, self.config.oferta_vigencia_horas),
+            vigente_hasta=vigente_hasta_de(cotizacion, self.config.oferta_vigencia_horas),
             perfil=perfil,
         )
 

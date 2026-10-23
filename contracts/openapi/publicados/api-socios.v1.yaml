@@ -1,0 +1,516 @@
+openapi: 3.1.0
+info:
+  title: API de socios de Solventa
+  version: v1
+paths:
+  /socio/me:
+    get:
+      tags:
+      - socio
+      summary: Perfil
+      operationId: perfil_socio_me_get
+      parameters:
+      - name: x-partner-client-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Client-Id
+      - name: x-partner-key-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Key-Id
+      - name: x-partner-scopes
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Scopes
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilSocio'
+        '401':
+          description: 'NO_AUTENTICADO: credenciales inexistentes, incorrectas o desactivadas'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: PERMISO_NO_ASIGNADO (detalles.permiso)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /cotizaciones:
+    post:
+      tags:
+      - socio
+      summary: Solicitar Cotizacion
+      description: Calcula la prima con el producto y las reglas vigentes y devuelve
+        la oferta (HU-W04).
+      operationId: solicitar_cotizacion_cotizaciones_post
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Idempotency-Key
+      - name: x-partner-client-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Client-Id
+      - name: x-partner-key-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Key-Id
+      - name: x-partner-scopes
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Scopes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudCotizacionV1'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfertaV1'
+        '401':
+          description: 'NO_AUTENTICADO: credenciales inexistentes, incorrectas o desactivadas'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: PERMISO_NO_ASIGNADO (detalles.permiso)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA, IDEMPOTENCIA_CONFLICTO, PRODUCTO_NO_ENCONTRADO,
+            PRODUCTO_INACTIVO, PRODUCTO_FUERA_DE_VIGENCIA, REGLAS_NO_VIGENTES, DATOS_FUERA_DE_RANGO
+            o COBERTURA_NO_DISPONIBLE (detalles.campos, sin valores)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '200':
+          description: Misma Idempotency-Key y mismo cuerpo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfertaV1'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: CLIENTE_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '410':
+          description: 'OFERTA_VENCIDA: la oferta ya no está vigente; detalles.accion
+            = NUEVA_COTIZACION (con ofertaId, cotizacionId y vigenteHasta)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: la cotización no respondió (sin detalles)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /cotizaciones/{cotizacion_id}:
+    get:
+      tags:
+      - socio
+      summary: Consultar Cotizacion
+      description: La oferta vigente de una cotización del socio; vencida, 410 OFERTA_VENCIDA
+        (AC3).
+      operationId: consultar_cotizacion_cotizaciones__cotizacion_id__get
+      parameters:
+      - name: cotizacion_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cotizacion Id
+      - name: x-partner-client-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Client-Id
+      - name: x-partner-key-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Key-Id
+      - name: x-partner-scopes
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Partner-Scopes
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfertaV1'
+        '401':
+          description: 'NO_AUTENTICADO: credenciales inexistentes, incorrectas o desactivadas'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: PERMISO_NO_ASIGNADO (detalles.permiso)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'OFERTA_NO_ENCONTRADA (también si es de otro socio: no revela
+            que existe)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '410':
+          description: 'OFERTA_VENCIDA: la oferta ya no está vigente; detalles.accion
+            = NUEVA_COTIZACION (con ofertaId, cotizacionId y vigenteHasta)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: la cotización no respondió (sin detalles)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+components:
+  schemas:
+    CanalVenta:
+      type: string
+      enum:
+      - plataforma_digital
+      - entidad_financiera
+      - comercio
+      - otro
+      title: CanalVenta
+    CoberturaOfertaV1:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        nombre:
+          type: string
+          title: Nombre
+        sumaAsegurada:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Sumaasegurada
+          description: Parte de la suma asegurada que cubre
+      type: object
+      required:
+      - codigo
+      - nombre
+      - sumaAsegurada
+      title: CoberturaOfertaV1
+    DatosAseguradoV1:
+      properties:
+        fechaNacimiento:
+          type: string
+          format: date
+          title: Fechanacimiento
+        plazoCreditoMeses:
+          type: integer
+          maximum: 600.0
+          minimum: 1.0
+          title: Plazocreditomeses
+        sumaAsegurada:
+          type: integer
+          maximum: 1000000000000.0
+          minimum: 0.0
+          title: Sumaasegurada
+          description: Entero, en la moneda del producto
+      additionalProperties: false
+      type: object
+      required:
+      - fechaNacimiento
+      - plazoCreditoMeses
+      - sumaAsegurada
+      title: DatosAseguradoV1
+      description: Los límites los fijan las reglas del producto (DATOS_FUERA_DE_RANGO);
+        aquí solo la forma.
+    ErrorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        mensaje:
+          type: string
+          title: Mensaje
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          type: object
+          title: Detalles
+      type: object
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
+    Estado:
+      type: string
+      enum:
+      - activo
+      - desactivado
+      title: Estado
+    EstadoOferta:
+      type: string
+      enum:
+      - VIGENTE
+      - VENCIDA
+      title: EstadoOferta
+    ExclusionResumidaV1:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        descripcion:
+          type: string
+          title: Descripcion
+      type: object
+      required:
+      - codigo
+      - descripcion
+      title: ExclusionResumidaV1
+    OfertaV1:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Identificador de la oferta
+        codigo:
+          type: string
+          title: Codigo
+          description: 'Identificador legible para el cliente: COT-AAAA-NNNNN'
+        cotizacionId:
+          type: string
+          format: uuid
+          title: Cotizacionid
+          description: 'Con él se consulta: GET /cotizaciones/{id}'
+        productoId:
+          type: string
+          title: Productoid
+        precio:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Precio
+          description: Prima total, en `moneda` y por `periodicidad`
+        moneda:
+          type: string
+          title: Moneda
+          description: ISO 4217
+        periodicidad:
+          type: string
+          title: Periodicidad
+        coberturas:
+          items:
+            $ref: '#/components/schemas/CoberturaOfertaV1'
+          type: array
+          title: Coberturas
+        exclusionesResumidas:
+          items:
+            $ref: '#/components/schemas/ExclusionResumidaV1'
+          type: array
+          title: Exclusionesresumidas
+        vigenteHasta:
+          type: string
+          format: date-time
+          title: Vigentehasta
+          description: 'Fin de la vigencia (UTC): vigente si ahora < vigenteHasta'
+        estado:
+          $ref: '#/components/schemas/EstadoOferta'
+        version:
+          type: integer
+          title: Version
+          description: Versión del documento de la oferta
+        versionReglas:
+          type: string
+          title: Versionreglas
+          description: Versión de las reglas de prima con que se calculó
+        creadaEn:
+          type: string
+          format: date-time
+          title: Creadaen
+      type: object
+      required:
+      - id
+      - codigo
+      - cotizacionId
+      - productoId
+      - precio
+      - moneda
+      - periodicidad
+      - coberturas
+      - exclusionesResumidas
+      - vigenteHasta
+      - estado
+      - version
+      - versionReglas
+      - creadaEn
+      title: OfertaV1
+      description: La oferta que el socio presenta al cliente (HU-W04).
+    PerfilSocio:
+      properties:
+        id:
+          type: string
+          title: Id
+        nombre:
+          type: string
+          title: Nombre
+        canal:
+          $ref: '#/components/schemas/CanalVenta'
+        plan:
+          $ref: '#/components/schemas/Plan'
+        permisos:
+          items:
+            $ref: '#/components/schemas/Permiso'
+          type: array
+          title: Permisos
+        estado:
+          $ref: '#/components/schemas/Estado'
+        clientId:
+          type: string
+          title: Clientid
+        creado:
+          type: string
+          format: date-time
+          title: Creado
+      type: object
+      required:
+      - id
+      - nombre
+      - canal
+      - plan
+      - permisos
+      - estado
+      - clientId
+      - creado
+      title: PerfilSocio
+      description: Datos propios del socio; nunca incluye el secreto ni la API key.
+    Permiso:
+      type: string
+      enum:
+      - cotizar
+      - emitir
+      - consultar
+      - siniestros
+      title: Permiso
+      description: 'Alcances del servidor de recursos de Cognito (infra: partner_scopes).'
+    Plan:
+      type: string
+      enum:
+      - basico
+      - estandar
+      - prueba
+      title: Plan
+      description: 'Límite de solicitudes: plan de uso de API Gateway (infra: partner_tiers).
+
+
+        Un plan solo se puede asignar si el ambiente lo configura en PARTNERS_USAGE_PLANS.'
+    SolicitudCotizacionV1:
+      properties:
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        productoId:
+          type: string
+          pattern: ^[a-z0-9-]{1,64}$
+          title: Productoid
+        datosAsegurado:
+          $ref: '#/components/schemas/DatosAseguradoV1'
+        coberturasOpcionales:
+          items:
+            type: string
+            pattern: ^[A-Z0-9_]{1,64}$
+          type: array
+          maxItems: 20
+          title: Coberturasopcionales
+      additionalProperties: false
+      type: object
+      required:
+      - clienteId
+      - productoId
+      - datosAsegurado
+      title: SolicitudCotizacionV1

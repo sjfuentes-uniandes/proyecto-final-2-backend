@@ -167,18 +167,20 @@ def test_credenciales_invalidas_responden_401(entorno, encabezados, caso: str) -
     assert entorno.cliente.get("/socio/me", headers=encabezados(b, "cotizar")).status_code == 200
 
 
+# Con permiso, la solicitud llega a la operación: las de otras historias responden 501 y las de
+# cotizaciones (HU-W04), sin cuerpo ni un id válido, validan la solicitud (422).
 @pytest.mark.parametrize(
-    "metodo, ruta, permiso",
+    "metodo, ruta, permiso, autorizada",
     [
-        ("POST", "/cotizaciones", "cotizar"),
-        ("GET", "/cotizaciones/COT-1", "cotizar"),
-        ("POST", "/polizas", "emitir"),
-        ("GET", "/polizas/POL-1", "consultar"),
-        ("POST", "/siniestros", "siniestros"),
+        ("POST", "/cotizaciones", "cotizar", (422, "SOLICITUD_INVALIDA")),
+        ("GET", "/cotizaciones/COT-1", "cotizar", (422, "SOLICITUD_INVALIDA")),
+        ("POST", "/polizas", "emitir", (501, "OPERACION_NO_DISPONIBLE")),
+        ("GET", "/polizas/POL-1", "consultar", (501, "OPERACION_NO_DISPONIBLE")),
+        ("POST", "/siniestros", "siniestros", (501, "OPERACION_NO_DISPONIBLE")),
     ],
 )
 def test_operacion_sin_permiso_responde_403(
-    entorno, encabezados, metodo: str, ruta: str, permiso: str
+    entorno, encabezados, metodo: str, ruta: str, permiso: str, autorizada: tuple[int, str]
 ) -> None:
     alta(entorno, permisos=["cotizar", "emitir", "consultar", "siniestros"])
     socio = entorno.repositorio.obtener("SOC-000001")
@@ -189,8 +191,7 @@ def test_operacion_sin_permiso_responde_403(
     assert sin_permiso.json()["codigo"] == "PERMISO_NO_ASIGNADO" and sin_permiso.json()[
         "detalles"
     ] == {"permiso": permiso}
-    assert con_permiso.status_code == 501  # autorizada; la operación llega en otra historia
-    assert con_permiso.json()["codigo"] == "OPERACION_NO_DISPONIBLE"
+    assert (con_permiso.status_code, con_permiso.json()["codigo"]) == autorizada
 
 
 def test_alcance_del_token_no_amplia_los_permisos_del_socio(entorno, encabezados) -> None:

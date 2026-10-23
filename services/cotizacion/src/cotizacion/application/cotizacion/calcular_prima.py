@@ -10,6 +10,9 @@ Orden de las causas (una sola, estable):
 3. Reglas no vigentes; cliente inexistente; perfil inexistente o que no corresponde.
 4. Coberturas y límites de las reglas; luego el cálculo.
 
+HU-W04: con la prima se crea la oferta (precio, coberturas, exclusiones y vigencia de las reglas) y
+se guarda con la cotización en una transacción.
+
 El log de cierre lleva solo identificadores: ni montos, ni edad, ni fecha de nacimiento.
 """
 
@@ -19,7 +22,7 @@ import json
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, TypeVar
@@ -68,6 +71,7 @@ from cotizacion.domain.cotizacion.modelos import (
     ReglasPrima,
     RolActor,
 )
+from cotizacion.domain.cotizacion.oferta import crear_oferta
 from cotizacion.domain.cotizacion.prima import (
     CAMPO_NACIMIENTO,
     CAMPO_PLAZO,
@@ -136,7 +140,8 @@ class ConfigCotizacion:
 
     dependencia_timeout_ms: int = 150
     presupuesto_ms: int = 250
-    # HU-W13 (DS2-20): horas de vigencia de la oferta desde el cálculo.
+    # HU-W13 (DS2-20): horas de vigencia de la oferta desde el cálculo. Desde HU-W04 solo se usa
+    # con reglas sin condiciones de oferta (las anteriores a 2026.10.1).
     oferta_vigencia_horas: int = VIGENCIA_HORAS_POR_OMISION
 
 
@@ -221,7 +226,7 @@ class CalcularPrima:
         self._identidad = identidad
         self._perfiles = perfiles
         self._repo = repo
-        self._reloj = reloj
+        self.reloj = reloj
         self.config = config
 
     async def ejecutar(self, cmd: ComandoCotizacion) -> tuple[Cotizacion, tuple[Paso, ...], bool]:
@@ -241,7 +246,7 @@ class CalcularPrima:
         if existente is not None:
             return existente, (), False
 
-        ahora = self._reloj.ahora()
+        ahora = self.reloj.ahora()
         inicio = time.perf_counter()
         dependencias = _Dependencias()
         producto, reglas, perfil = await self._consultar(cmd, ahora, dependencias)
@@ -281,9 +286,15 @@ class CalcularPrima:
             correlation_id=cmd.correlation_id,
             actor=cmd.actor,
         )
+        cotizacion = replace(
+            cotizacion,
+            oferta=crear_oferta(
+                cotizacion, reglas.valor, uuid4(), self.config.oferta_vigencia_horas
+            ),
+        )
         pasos = self._pasos(producto, reglas, perfil, dependencias, inicio_calculo)
         try:
-            await self._repo.guardar(cotizacion)
+            cotizacion = await self._repo.guardar(cotizacion)
         except ConflictoIdempotencia:
             # Carrera con otra solicitud de la misma clave: gana la que guardó primero.
             ganadora = await self._existente(cmd, huella)
@@ -294,6 +305,7 @@ class CalcularPrima:
             "cotizacion calculada",
             extra={
                 "cotizacion_id": str(cotizacion.id),
+                "oferta_id": str(cotizacion.oferta.id) if cotizacion.oferta else None,
                 "producto_id": cotizacion.producto_id,
                 "version_reglas": cotizacion.version_reglas,
                 "perfil_id": str(cmd.perfil_id) if cmd.perfil_id else None,

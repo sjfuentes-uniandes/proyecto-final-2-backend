@@ -3,6 +3,9 @@
 `sembrar` publica los productos de `semillas/productos.json` y sus reglas, con la misma validación
 y el mismo hash canónico que los modelos de riesgo: una semilla inválida impide arrancar. Es
 idempotente: un producto existente no cambia y una versión de reglas existente tampoco.
+
+`semillas/qa/productos_qa.json` (HU-W04) solo se publica con CATALOGO_PRODUCTOS_QA: productos de
+prueba para los ambientes de QA, p. ej. una oferta de un minuto para probar OFERTA_VENCIDA en N3.
 """
 
 import json
@@ -22,6 +25,8 @@ from catalogo.domain.productos.validacion import validar_reglas
 from catalogo.domain.reglas.hash import hash_canonico
 
 _SEMILLAS = resources.files("catalogo.adapters.outbound").joinpath("semillas")
+PRODUCTOS = "productos.json"
+PRODUCTOS_QA = "qa/productos_qa.json"
 
 _COLUMNAS_PRODUCTO = (
     "id, version, nombre, ramo, pais, moneda, estado, vigente_desde, vigente_hasta, coberturas"
@@ -64,13 +69,15 @@ def producto_de(datos: dict[str, Any]) -> Producto:
     )
 
 
-def semillas() -> list[tuple[Producto, list[tuple[str, datetime, dict[str, Any]]]]]:
+def semillas(
+    archivo: str = PRODUCTOS,
+) -> list[tuple[Producto, list[tuple[str, datetime, dict[str, Any]]]]]:
     """Cada producto de la semilla con sus reglas (versión, vigente desde, definición).
 
     Lanza ReglasInvalidas si una definición no cumple el esquema o sus validaciones.
     """
     datos: list[dict[str, Any]] = json.loads(
-        _SEMILLAS.joinpath("productos.json").read_text(encoding="utf-8")
+        _SEMILLAS.joinpath(archivo).read_text(encoding="utf-8")
     )
     resultado = []
     for entrada in datos:
@@ -88,9 +95,9 @@ def semillas() -> list[tuple[Producto, list[tuple[str, datetime, dict[str, Any]]
     return resultado
 
 
-def sembrar(conexion: psycopg.Connection[Any]) -> None:
+def sembrar(conexion: psycopg.Connection[Any], archivo: str = PRODUCTOS) -> None:
     """Inserta los productos y las reglas de la semilla que aún no existen."""
-    for producto, reglas in semillas():
+    for producto, reglas in semillas(archivo):
         conexion.execute(
             _INSERTAR_PRODUCTO,
             (
@@ -118,6 +125,12 @@ def sembrar(conexion: psycopg.Connection[Any]) -> None:
                     "migracion",
                 ),
             )
+
+
+def sembrar_qa(url: str) -> None:
+    """Publica los productos de QA (CATALOGO_PRODUCTOS_QA). Idempotente, como `sembrar`."""
+    with psycopg.connect(url) as conexion, conexion.transaction():
+        sembrar(conexion, PRODUCTOS_QA)
 
 
 def _cobertura_json(cobertura: Cobertura) -> dict[str, Any]:

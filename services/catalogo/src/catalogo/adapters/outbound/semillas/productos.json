@@ -15,7 +15,10 @@
       {"codigo": "ENFERMEDADES_GRAVES", "nombre": "Enfermedades graves", "obligatoria": false},
       {"codigo": "AUXILIO_FUNERARIO", "nombre": "Auxilio funerario", "obligatoria": false}
     ],
-    "reglas": [{"version": "2026.09.1", "vigenteDesde": "2026-09-01T00:00:00Z", "archivo": "reglas_prima_2026_09_1.json"}],
+    "reglas": [
+      {"version": "2026.09.1", "vigenteDesde": "2026-09-01T00:00:00Z", "archivo": "reglas_prima_2026_09_1.json"},
+      {"version": "2026.10.1", "vigenteDesde": "2026-10-22T00:00:00Z", "archivo": "reglas_prima_2026_10_1.json"}
+    ],
     "reglasSuscripcion": [{"version": "2026.10.1", "vigenteDesde": "2026-10-01T00:00:00Z", "archivo": "reglas_suscripcion_2026_10_1.json"}]
   },
   {

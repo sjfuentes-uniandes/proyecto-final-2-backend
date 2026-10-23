@@ -1,0 +1,440 @@
+{
+  "consumer": {
+    "name": "socio-referencia"
+  },
+  "interactions": [
+    {
+      "description": "la consulta de una cotización que no es del socio",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el socio SOC-000001 con permiso cotizar existe"
+        },
+        {
+          "name": "la cotización 00000000-0000-4000-d000-000000000012 es de otro socio"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Partner-Client-Id": [
+            "cliente-socio-referencia"
+          ],
+          "X-Partner-Key-Id": [
+            "key-socio-referencia"
+          ],
+          "X-Partner-Scopes": [
+            "solventa/cotizar"
+          ]
+        },
+        "method": "GET",
+        "path": "/cotizaciones/00000000-0000-4000-d000-000000000012"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "OFERTA_NO_ENCONTRADA"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "status": 404
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la consulta de una oferta vencida del socio",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el socio SOC-000001 con permiso cotizar existe"
+        },
+        {
+          "name": "la oferta de la cotización 00000000-0000-4000-d000-000000000011 del socio venció"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Partner-Client-Id": [
+            "cliente-socio-referencia"
+          ],
+          "X-Partner-Key-Id": [
+            "key-socio-referencia"
+          ],
+          "X-Partner-Scopes": [
+            "solventa/cotizar"
+          ]
+        },
+        "method": "GET",
+        "path": "/cotizaciones/00000000-0000-4000-d000-000000000011"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "OFERTA_VENCIDA",
+            "detalles": {
+              "accion": "NUEVA_COTIZACION"
+            }
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "status": 410
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la consulta de una oferta vigente del socio",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el socio SOC-000001 con permiso cotizar existe"
+        },
+        {
+          "name": "la cotización 00000000-0000-4000-d000-000000000010 del socio tiene una oferta vigente"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Partner-Client-Id": [
+            "cliente-socio-referencia"
+          ],
+          "X-Partner-Key-Id": [
+            "key-socio-referencia"
+          ],
+          "X-Partner-Scopes": [
+            "solventa/cotizar"
+          ]
+        },
+        "method": "GET",
+        "path": "/cotizaciones/00000000-0000-4000-d000-000000000010"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "coberturas": [
+              {
+                "nombre": "Muerte por cualquier causa",
+                "sumaAsegurada": "180000000"
+              }
+            ],
+            "codigo": "COT-2026-00010",
+            "cotizacionId": "00000000-0000-4000-d000-000000000010",
+            "exclusionesResumidas": [
+              {
+                "descripcion": "Suicidio durante el primer año"
+              }
+            ],
+            "moneda": "COP",
+            "precio": "97460",
+            "vigenteHasta": "2026-10-29T15:00:00Z"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.coberturas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.coberturas[*].nombre": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.coberturas[*].sumaAsegurada": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^COT-\\d{4}-\\d{5,}$"
+                }
+              ]
+            },
+            "$.cotizacionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.exclusionesResumidas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.exclusionesResumidas[*].descripcion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.moneda": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z]{3}$"
+                }
+              ]
+            },
+            "$.precio": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.vigenteHasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una solicitud de cotización del socio",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el socio SOC-000001 con permiso cotizar existe"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "clienteId": "00000000-0000-4000-8000-000000000001",
+            "coberturasOpcionales": [
+              "ENFERMEDADES_GRAVES"
+            ],
+            "datosAsegurado": {
+              "fechaNacimiento": "1990-04-18",
+              "plazoCreditoMeses": 180,
+              "sumaAsegurada": 180000000
+            },
+            "productoId": "vida-hipotecario"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotency-Key": [
+            "00000000-0000-4000-c000-000000000010"
+          ],
+          "X-Partner-Client-Id": [
+            "cliente-socio-referencia"
+          ],
+          "X-Partner-Key-Id": [
+            "key-socio-referencia"
+          ],
+          "X-Partner-Scopes": [
+            "solventa/cotizar"
+          ]
+        },
+        "matchingRules": {
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/cotizaciones"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "coberturas": [
+              {
+                "nombre": "Muerte por cualquier causa",
+                "sumaAsegurada": "180000000"
+              }
+            ],
+            "codigo": "COT-2026-00010",
+            "cotizacionId": "00000000-0000-4000-d000-000000000010",
+            "exclusionesResumidas": [
+              {
+                "descripcion": "Suicidio durante el primer año"
+              }
+            ],
+            "moneda": "COP",
+            "precio": "97460",
+            "vigenteHasta": "2026-10-29T15:00:00Z"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.coberturas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.coberturas[*].nombre": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.coberturas[*].sumaAsegurada": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^COT-\\d{4}-\\d{5,}$"
+                }
+              ]
+            },
+            "$.cotizacionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.exclusionesResumidas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.exclusionesResumidas[*].descripcion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.moneda": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z]{3}$"
+                }
+              ]
+            },
+            "$.precio": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.vigenteHasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactRust": {
+      "ffi": "0.5.8",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    }
+  },
+  "provider": {
+    "name": "api-socios"
+  }
+}

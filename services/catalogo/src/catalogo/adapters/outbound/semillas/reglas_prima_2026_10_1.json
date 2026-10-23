@@ -1,0 +1,44 @@
+{
+  "productoId": "vida-hipotecario",
+  "moneda": "COP",
+  "periodicidad": "MENSUAL",
+  "tasaBase": "0.00042",
+  "factoresNivel": {"BAJO": "0.90", "MEDIO": "1.00", "ALTO": "1.30", "SIN_PERFIL": "1.15"},
+  "factoresVariables": [
+    {"codigo": "EDAD", "variable": "edad", "tramos": [
+      {"hasta": "29", "factor": "0.80"},
+      {"hasta": "39", "factor": "0.95"},
+      {"hasta": "49", "factor": "1.15"},
+      {"hasta": "59", "factor": "1.55"},
+      {"hasta": null, "factor": "2.20"}]},
+    {"codigo": "PLAZO", "variable": "plazo_credito_meses", "tramos": [
+      {"hasta": "120", "factor": "0.95"},
+      {"hasta": "240", "factor": "1.00"},
+      {"hasta": null, "factor": "1.08"}]}
+  ],
+  "recargos": [
+    {"cobertura": "ENFERMEDADES_GRAVES", "tasa": "0.18"},
+    {"cobertura": "AUXILIO_FUNERARIO", "tasa": "0.04"}
+  ],
+  "primaMinima": "15000",
+  "primaMaxima": "2500000",
+  "redondeo": {"escala": 0, "modo": "ROUND_HALF_EVEN"},
+  "limites": {
+    "sumaAsegurada": {"minimo": "10000000", "maximo": "1000000000"},
+    "plazoCreditoMeses": {"minimo": "12", "maximo": "360"},
+    "edad": {"minimo": "18", "maximo": "70"}
+  },
+  "oferta": {
+    "vigenciaMinutos": 10080,
+    "exclusiones": [
+      {"codigo": "SUICIDIO_PRIMER_ANIO", "descripcion": "Suicidio o intento de suicidio durante el primer año de vigencia"},
+      {"codigo": "PREEXISTENCIAS_NO_DECLARADAS", "descripcion": "Enfermedades o lesiones preexistentes no declaradas al contratar"},
+      {"codigo": "GUERRA_Y_TERRORISMO", "descripcion": "Actos de guerra, terrorismo o participación en actos delictivos"},
+      {"codigo": "ACTIVIDADES_ALTO_RIESGO", "descripcion": "Deportes o actividades de alto riesgo no declarados"}
+    ],
+    "sumasCoberturas": [
+      {"cobertura": "ENFERMEDADES_GRAVES", "porcentaje": "0.30"},
+      {"cobertura": "AUXILIO_FUNERARIO", "porcentaje": "0.03"}
+    ]
+  }
+}

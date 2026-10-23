@@ -256,3 +256,62 @@ def test_cambio_de_plan_real_mueve_solo_la_api_key_del_socio(
         "periodo": "DAY",
     }
     assert api.get("/socio/me", headers=borde(aws, a)).json()["plan"] == "prueba"
+
+
+# --- HU-W04: la oferta con el socio autenticado contra su base real -------------------------
+
+OFERTA = {
+    "id": "00000000-0000-4000-e000-000000000001",
+    "codigo": "COT-2026-00001",
+    "cotizacionId": "00000000-0000-4000-d000-000000000001",
+    "precio": "97460",
+    "moneda": "COP",
+    "periodicidad": "MENSUAL",
+    "coberturas": [{"codigo": "MUERTE", "nombre": "Muerte", "sumaAsegurada": "180000000"}],
+    "exclusionesResumidas": [{"codigo": "SUICIDIO_PRIMER_ANIO", "descripcion": "Suicidio"}],
+    "version": 1,
+    "versionReglas": "2026.10.1",
+    "creadaEn": "2026-10-22T15:00:00Z",
+    "vigenteHasta": "2026-10-29T15:00:00Z",
+    "estado": "VIGENTE",
+}
+SOLICITUD = {
+    "clienteId": "00000000-0000-4000-8000-000000000001",
+    "productoId": "vida-hipotecario",
+    "datosAsegurado": {
+        "fechaNacimiento": "1990-04-18",
+        "plazoCreditoMeses": 180,
+        "sumaAsegurada": 180000000,
+    },
+}
+
+
+def test_hu_w04_la_oferta_exige_cotizar_y_va_a_nombre_del_socio(api: TestClient, aws: Aws) -> None:
+    """El permiso sale del cliente de Cognito y del socio guardado; cotizacion (simulada) recibe
+    al socio como actor. La cadena con cotizacion real es N2 de cotizacion (test_oferta_w04.py)."""
+    import httpx
+    from api_socios.adapters.inbound.dependencias import consultar_oferta, cotizar_oferta
+    from api_socios.adapters.outbound.cotizacion_http import CotizacionHttp
+    from api_socios.application.ofertas import ConsultarOferta, CotizarOferta
+
+    actores: list[str] = []
+
+    def cotizacion(solicitud: httpx.Request) -> httpx.Response:
+        actores.append(solicitud.headers["X-Actor-Id"])
+        return httpx.Response(201, json={"productoId": "vida-hipotecario", "oferta": OFERTA})
+
+    puerto = CotizacionHttp("http://cotizacion:8080", 1500, httpx.MockTransport(cotizacion))
+    app.dependency_overrides[cotizar_oferta] = lambda: CotizarOferta(puerto)
+    app.dependency_overrides[consultar_oferta] = lambda: ConsultarOferta(puerto)
+    cotiza = api.post("/admin/socios", json=ALTA | {"permisos": ["cotizar"]}).json()
+    emite = api.post("/admin/socios", json=ALTA | {"nombre": "Otro", "permisos": ["emitir"]}).json()
+    clave = {"Idempotency-Key": "00000000-0000-4000-c000-000000000001"}
+
+    con_permiso = api.post("/cotizaciones", json=SOLICITUD, headers=borde(aws, cotiza) | clave)
+    sin_permiso = api.post("/cotizaciones", json=SOLICITUD, headers=borde(aws, emite) | clave)
+    assert (con_permiso.status_code, con_permiso.json()["codigo"]) == (201, "COT-2026-00001")
+    assert (sin_permiso.status_code, sin_permiso.json()["detalles"]) == (
+        403,
+        {"permiso": "cotizar"},
+    )
+    assert actores == [cotiza["id"]]

@@ -6,6 +6,10 @@ socio, SOC-NNNNNN). Un socio solo cotiza para sí, sin perfiles, y solo lee sus 
 
 Los montos viajan como texto decimal (exactos, nunca float). La respuesta no incluye el hash de las
 reglas (minimización, como el perfil): sí su versión y la huella del cálculo.
+
+HU-W04: la respuesta trae la oferta (`oferta`, aditivo) con su estado al momento de la consulta.
+Una oferta vencida se sigue leyendo aquí (200 con `estado: VENCIDA`, para el portal); el 410 al
+socio lo decide api-socios.
 """
 
 import re
@@ -36,6 +40,7 @@ from cotizacion.domain.cotizacion.errores import (
     CoberturaNoDisponible,
     CotizacionNoEncontrada,
     DatosFueraDeRango,
+    OfertaVencida,
     PerfilNoCorresponde,
     ProductoFueraDeVigencia,
     ProductoInactivo,
@@ -43,9 +48,17 @@ from cotizacion.domain.cotizacion.errores import (
     ReglasNoVigentes,
     RolNoPermitido,
 )
-from cotizacion.domain.cotizacion.modelos import Actor, Cotizacion, EstadoCotizacion, RolActor
+from cotizacion.domain.cotizacion.modelos import (
+    Actor,
+    Cotizacion,
+    EstadoCotizacion,
+    EstadoOferta,
+    Oferta,
+    RolActor,
+)
+from cotizacion.domain.cotizacion.oferta import vigente_hasta_de
 from cotizacion.domain.cotizacion.prima import desglose_canonico, entradas_canonicas, texto
-from cotizacion.domain.cotizacion.vigencia import VIGENCIA_HORAS_POR_OMISION, vigente_hasta
+from cotizacion.domain.cotizacion.vigencia import VIGENCIA_HORAS_POR_OMISION
 from cotizacion.domain.perfilamiento.errores import (
     ClienteNoEncontrado,
     ConflictoIdempotencia,
@@ -53,6 +66,8 @@ from cotizacion.domain.perfilamiento.errores import (
     PerfilNoEncontrado,
 )
 from cotizacion.domain.perfilamiento.modelos import NivelRiesgo
+
+ACCION_OFERTA_VENCIDA = "NUEVA_COTIZACION"
 
 PATRON_SOCIO = re.compile(r"SOC-\d{6}")
 PATRON_PRODUCTO = r"^[a-z0-9-]{1,64}$"
@@ -174,6 +189,35 @@ class PasoCotizacionDto(_Dto):
     origen: OrigenDato | None
 
 
+class CoberturaOfertaDto(_Dto):
+    codigo: str
+    nombre: str
+    suma_asegurada: TextoDecimal
+
+
+class ExclusionDto(_Dto):
+    codigo: str
+    descripcion: str
+
+
+class OfertaDto(_Dto):
+    """La oferta de la cotización (HU-W04). Inmutable; `estado` es el del instante de la consulta."""
+
+    id: UUID
+    codigo: str = Field(description="Identificador legible para el cliente: COT-AAAA-NNNNN")
+    cotizacion_id: UUID
+    precio: TextoDecimal = Field(description="La prima total, en `moneda` y por `periodicidad`")
+    moneda: str
+    periodicidad: str
+    coberturas: list[CoberturaOfertaDto]
+    exclusiones_resumidas: list[ExclusionDto]
+    version: int = Field(description="Versión del documento de la oferta")
+    version_reglas: str
+    creada_en: datetime
+    vigente_hasta: datetime = Field(description=DESCRIPCION_VIGENTE_HASTA)
+    estado: EstadoOferta
+
+
 class CotizacionRespuesta(_Dto):
     id: UUID
     cliente_id: UUID
@@ -199,6 +243,8 @@ class CotizacionRespuesta(_Dto):
     )
     # HU-W13 (DS2-20): aditivo y opcional; HU-W04 conserva su nombre y su significado.
     vigente_hasta: datetime | None = Field(default=None, description=DESCRIPCION_VIGENTE_HASTA)
+    # HU-W04: aditivo y opcional; null en las cotizaciones anteriores a la migración 004.
+    oferta: OfertaDto | None = Field(default=None, description="La oferta de la cotización")
 
 
 class RangoDto(_Dto):
@@ -226,13 +272,40 @@ class CondicionesProducto(_Dto):
     limites: LimitesDto
 
 
+def oferta_de(oferta: Oferta, ahora: datetime) -> OfertaDto:
+    return OfertaDto(
+        id=oferta.id,
+        codigo=oferta.codigo or "",
+        cotizacion_id=oferta.cotizacion_id,
+        precio=texto(oferta.precio),
+        moneda=oferta.moneda,
+        periodicidad=oferta.periodicidad,
+        coberturas=[
+            CoberturaOfertaDto(
+                codigo=c.codigo, nombre=c.nombre, suma_asegurada=texto(c.suma_asegurada)
+            )
+            for c in oferta.coberturas
+        ],
+        exclusiones_resumidas=[
+            ExclusionDto(codigo=e.codigo, descripcion=e.descripcion) for e in oferta.exclusiones
+        ],
+        version=oferta.version,
+        version_reglas=oferta.version_reglas,
+        creada_en=oferta.creada_en.astimezone(UTC),
+        vigente_hasta=oferta.vigente_hasta.astimezone(UTC),
+        estado=oferta.estado(ahora),
+    )
+
+
 def respuesta_de(
     cotizacion: Cotizacion,
     presupuesto_ms: int,
     pasos: tuple[Paso, ...] = (),
     *,
     vigencia_horas: int = VIGENCIA_HORAS_POR_OMISION,
+    ahora: datetime | None = None,
 ) -> CotizacionRespuesta:
+    """`ahora` decide el estado de la oferta; sin él, el del reloj del sistema."""
     return CotizacionRespuesta(
         id=cotizacion.id,
         cliente_id=cotizacion.cliente_id,
@@ -259,7 +332,10 @@ def respuesta_de(
             PasoCotizacionDto(codigo=p.codigo, duracion_ms=p.duracion_ms, origen=p.origen)
             for p in pasos
         ],
-        vigente_hasta=vigente_hasta(cotizacion.calculado_en, vigencia_horas).astimezone(UTC),
+        vigente_hasta=vigente_hasta_de(cotizacion, vigencia_horas).astimezone(UTC),
+        oferta=None
+        if cotizacion.oferta is None
+        else oferta_de(cotizacion.oferta, ahora or datetime.now(UTC)),
     )
 
 
@@ -350,6 +426,14 @@ def error_cotizacion(error: Exception, producto_en_ruta: bool = False) -> ErrorN
             )
         case RolNoPermitido():
             return ErrorNegocio(ROL_NO_AUTORIZADO, "No autorizado", 403)
+        case OfertaVencida():
+            # El mismo código y detalle que polizas (HU-W13): hay que cotizar de nuevo.
+            return ErrorNegocio(
+                "OFERTA_VENCIDA",
+                "La oferta ya no está vigente",
+                409,
+                {"accion": ACCION_OFERTA_VENCIDA},
+            )
         case DependenciaNoDisponible(dependencia=dependencia):
             return ErrorNegocio(
                 "DEPENDENCIA_NO_DISPONIBLE",
@@ -375,6 +459,7 @@ ERRORES_TRADUCIBLES = (
     RolNoPermitido,
     DependenciaNoDisponible,
     CotizacionNoEncontrada,
+    OfertaVencida,
 )
 
 # --- Rutas ---------------------------------------------------------------------------------
@@ -453,7 +538,11 @@ async def cotizar(
         respuesta.status_code = 200
     config = calcular.config
     return respuesta_de(
-        cotizacion, config.presupuesto_ms, pasos, vigencia_horas=config.oferta_vigencia_horas
+        cotizacion,
+        config.presupuesto_ms,
+        pasos,
+        vigencia_horas=config.oferta_vigencia_horas,
+        ahora=calcular.reloj.ahora(),
     )
 
 
@@ -471,14 +560,18 @@ async def obtener(
     calcular: Annotated[CalcularPrima, Depends(_calcular)],
     cotizacion_id: Annotated[UUID, Path(alias="cotizacionId")],
 ) -> CotizacionRespuesta:
-    """Una cotización calculada; las cotizaciones no cambian nunca."""
+    """Una cotización calculada; las cotizaciones no cambian nunca (el estado de su oferta sí, con
+    el tiempo: se calcula al leer)."""
     try:
         cotizacion = await consultar.ejecutar(cotizacion_id, actor)
     except CotizacionNoEncontrada as error:
         raise error_cotizacion(error) from error
     config = calcular.config
     return respuesta_de(
-        cotizacion, config.presupuesto_ms, vigencia_horas=config.oferta_vigencia_horas
+        cotizacion,
+        config.presupuesto_ms,
+        vigencia_horas=config.oferta_vigencia_horas,
+        ahora=calcular.reloj.ahora(),
     )
 
 

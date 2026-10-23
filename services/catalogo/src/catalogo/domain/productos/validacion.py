@@ -35,6 +35,8 @@ def validar_reglas(definicion: Mapping[str, Any], producto: Producto) -> tuple[s
     for campo, rango in definicion["limites"].items():
         if Decimal(rango["minimo"]) < 0 or Decimal(rango["minimo"]) > Decimal(rango["maximo"]):
             errores.append(f"LIMITE_INVALIDO:{campo}")
+    if definicion.get("oferta") is not None:
+        errores.extend(_oferta(definicion["oferta"], producto))
     return tuple(errores)
 
 
@@ -80,4 +82,24 @@ def _recargos(recargos: list[Mapping[str, Any]], producto: Producto) -> list[str
             errores.append(f"RECARGO_FUERA_DE_RANGO:{cobertura}")
     for cobertura in sorted(producto.opcionales - con_recargo):
         errores.append(f"COBERTURA_OPCIONAL_SIN_RECARGO:{cobertura}")
+    return errores
+
+
+def _oferta(oferta: Mapping[str, Any], producto: Producto) -> list[str]:
+    """HU-W04: exclusiones sin códigos repetidos y una suma por cobertura del producto, en (0, 1]."""
+    errores: list[str] = []
+    codigos = [e["codigo"] for e in oferta["exclusiones"]]
+    for codigo in sorted({c for c in codigos if codigos.count(c) > 1}):
+        errores.append(f"EXCLUSION_DUPLICADA:{codigo}")
+    del_producto = {c.codigo for c in producto.coberturas}
+    vistas: set[str] = set()
+    for suma in oferta["sumasCoberturas"]:
+        cobertura = suma["cobertura"]
+        if cobertura in vistas:
+            errores.append(f"SUMA_DUPLICADA:{cobertura}")
+        vistas.add(cobertura)
+        if cobertura not in del_producto:
+            errores.append(f"SUMA_SIN_COBERTURA:{cobertura}")
+        if not 0 < Decimal(suma["porcentaje"]) <= 1:
+            errores.append(f"SUMA_FUERA_DE_RANGO:{cobertura}")
     return errores

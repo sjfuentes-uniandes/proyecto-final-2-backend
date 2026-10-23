@@ -10,6 +10,7 @@ dependencies = [
     "alembic>=1.14",
     "solventa-common",
     "boto3>=1.35",
+    "httpx>=0.28",
 ]
 
 [tool.uv.sources]

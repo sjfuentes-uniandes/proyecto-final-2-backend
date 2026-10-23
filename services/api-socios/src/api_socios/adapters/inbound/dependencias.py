@@ -2,6 +2,8 @@ from functools import lru_cache
 
 from fastapi import HTTPException
 
+from api_socios.adapters.outbound.cotizacion_http import CotizacionHttp
+from api_socios.application.ofertas import ConsultarOferta, CotizarOferta
 from api_socios.application.socios import AdministrarSocios, AutenticarSocio
 from api_socios.config import settings
 
@@ -52,3 +54,16 @@ def publicar_cuotas() -> int:
 @lru_cache
 def autenticar_socio() -> AutenticarSocio:
     return AutenticarSocio(repositorio())
+
+
+@lru_cache
+def _cotizacion() -> CotizacionHttp:
+    return CotizacionHttp(settings.cotizacion_url, settings.cotizacion_timeout_ms)
+
+
+def cotizar_oferta() -> CotizarOferta:
+    return CotizarOferta(_cotizacion())
+
+
+def consultar_oferta() -> ConsultarOferta:
+    return ConsultarOferta(_cotizacion())

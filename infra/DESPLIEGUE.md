@@ -233,6 +233,21 @@ make test-e2e                                                            # N3; s
 
 La prima de punta a punta (solicitud → prima persistida, producto vencido como fallo controlado) es la prueba N3 `tests/e2e/test_hu_w03_r1_prima.py` (sección 7, "Pruebas E2E (N3)").
 
+### 5.5 HU-W04 (oferta del socio)
+
+HU-W04 no crea recursos nuevos: `api-socios` ya llama a `cotizacion` (`calls = ["cotizacion"]` define `COTIZACION_URL`) y el API de socios ya enruta `/{proxy+}` con el autorizador, los alcances y la API key con su plan. Los cambios de Terraform son dos y mínimos:
+
+- **Dominio propio con mTLS (`custom_domain`):** el *base path* pasa a ser `v1` (`aws_api_gateway_base_path_mapping.partners`), el mismo prefijo del stage de execute-api. La URL del socio queda `https://<dominio>/v1/...` y la salida `api_urls.socios_mtls` ya la incluye. Sin dominio propio no cambia nada.
+- **`int`:** `catalogo` publica los productos de QA (`CATALOGO_PRODUCTOS_QA = "true"` en `infra/envs/int/apps.tfvars`), entre ellos `vida-hipotecario-qa-oferta-corta`, cuya oferta dura un minuto (para el N3 de `OFERTA_VENCIDA`).
+
+```bash
+make infra-aplicaciones ENV=int                                                    # la variable de catalogo
+make infra-microservicios SERVICES=catalogo,cotizacion,api-socios,bff-web ENV=int    # imágenes nuevas
+uv run pytest tests/e2e -k hu_w04                                                  # N3 (~1,5 min)
+```
+
+`catalogo` siembra la versión `2026.10.1` de las reglas de `vida-hipotecario` (mismas tarifas, con vigencia de la oferta, exclusiones y suma por cobertura; vigente desde 2026-10-22) y `cotizacion` crea `ofertas` (migración `004`, aditiva; reversa en `migraciones/down/004_ofertas.sql`, antes de la de `003`). No hay pasos manuales de base de datos.
+
 ### Imágenes de los microservicios
 
 - **Convención:** `services/<servicio>/Dockerfile`, construido con contexto en la raíz del repo para que la imagen incluya `libs/`. El nombre de la carpeta debe coincidir con el del catálogo (`bff-web`, `clientes`, `adaptador-identidad`…). Con `SRC_DIR=otra/carpeta` se usa otra raíz.
@@ -357,6 +372,8 @@ Las dos pruebas reponen la cuota de `socio-a` y `socio-b` al empezar y al termin
 
 **HU-W03, R1 (`tests/e2e/test_hu_w03_r1_prima.py`)** recorre el cálculo de la prima por el portal: `POST /web/v1/cotizaciones` y `GET /web/v1/cotizaciones/{id}` (`bff-web` → `cotizacion` → `catalogo` y `clientes`) y `GET /web/v1/productos/{productoId}/condiciones`. Usa el usuario E2E del back-office (`E2E_ADMIN_*`), que debe estar en el grupo `asesores`, y el cliente sintético C01 que `clientes` siembra en `int` (`CLIENTES_SEMILLA_SINTETICA`); otro cliente existente con `E2E_W03_CLIENTE_ID`. No necesita secretos nuevos. Comprueba 401 sin token; las condiciones del producto; que la prima salga en COP con la versión de las reglas y un desglose que cuadra; que la lectura por id la devuelva igual y que repetir la `Idempotency-Key` responda 200 con la misma cotización (persistida); que otra clave con la misma entrada dé la misma prima, el mismo desglose y la misma huella (AC3); y que `vida-hipotecario-2025` responda 422 `PRODUCTO_FUERA_DE_VIGENCIA` con `correlationId`. Imprime la duración de punta a punta y los pasos (origen `CACHE` o `CATALOGO`). Sin acceso a las bases, la fila persistida, el hash de las reglas y la caché no se ven aquí: los cubre la versión de módulo (`services/cotizacion/tests/module/test_cotizacion_w03.py`). Filtro: `-k hu_w03`.
 
+**HU-W04, R1 (`tests/e2e/test_hu_w04_oferta.py`)** recorre la oferta por el API de socios: `POST /cotizaciones` y `GET /cotizaciones/{cotizacion_id}` con token `client_credentials` y API key (WAF → API Gateway → `api-socios` → `cotizacion` → `catalogo` y `clientes`). Los socios de Terraform (`socio-a`, `socio-b`) solo llegan a `/health` (no están en la base de `api-socios`) y su plan `prueba` permite 5 solicitudes al día, así que la prueba da de alta dos socios en `basico` con permiso `cotizar` por `POST /web/socios` (como HU-W01; usuario E2E del back-office, `E2E_ADMIN_*`) y los desactiva al terminar. Usa el cliente sintético C01 (`CLIENTES_SEMILLA_SINTETICA`; otro con `E2E_W04_CLIENTE_ID`). No necesita secretos nuevos. Comprueba 201 con exactamente los campos del contrato v1 y ningún campo interno, la lectura igual, que el otro socio reciba 404 `OFERTA_NO_ENCONTRADA` (igual que una inexistente) y, con `vida-hipotecario-qa-oferta-corta` (requiere `CATALOGO_PRODUCTOS_QA`; si falta, se omite con el motivo), que pasado el minuto de vigencia `GET` responda 410 `OFERTA_VENCIDA` con `detalles.accion = NUEVA_COTIZACION` y sin el precio. Sin acceso a las bases, la fila de `ofertas` y su inmutabilidad no se ven aquí: las cubre la versión de módulo (`services/cotizacion/tests/module/test_oferta_w04.py`). Filtro: `-k hu_w04`.
+
 **HU-W31, R2 y R8 (`tests/e2e/test_hu_w31_r8_verificacion.py`)** recorre la verificación del consentimiento: el titular A otorga y revoca por `/movil` (las mismas variables que HU-M08 y HU-M09: `E2E_CLIENTE_A_*`, `E2E_CLIENTES_POOL_ID`, `E2E_CLIENTES_APP_CLIENT_ID`) y el usuario E2E del back-office (`E2E_ADMIN_*`) pide el perfil por `POST /web/v1/perfiles` (`bff-web` → `cotizacion` → `clientes`). Ese usuario debe estar también en el grupo `asesores` (la prueba falla con un mensaje claro si recibe 403). No necesita secretos nuevos. Comprueba 401 sin token; que con un consentimiento vigente de un solo alcance la verificación permita (`PERMITIDO` o `PERMITIDO_PARCIAL`) y no se consulte lo no autorizado; que tras revocar, el perfil siguiente salga `RECHAZADO` con causa `REVOCADO`, `COMPLETAR_CONSENTIMIENTO` y todas las fuentes `NO_AUTORIZADA`; y 404 `CLIENTE_NO_ENCONTRADO` para un cliente inexistente. Deja revocado el consentimiento del titular A, como HU-M09. Sin acceso a las bases, el registro de cada decisión (`VerificacionConsentimientoRegistrada`) y la ausencia de llamadas al proveedor no se ven aquí; tampoco la revocación a mitad del perfilamiento, el vencimiento ni `clientes` caído: los cubre la versión de módulo (`services/cotizacion/tests/module/test_r2_r8_verificacion.py` y `test_perfilamiento_w31.py`). Filtro: `-k hu_w31`.
 
 ### Portal web (repo proyecto-final-2-frontend)
@@ -420,3 +437,5 @@ unset CLAVE
 make infra-validar                      # fmt, validate, pruebas con proveedores simulados y Trivy
 shellcheck -x -P scripts/plataforma scripts/plataforma/*.sh
 ```
+
+

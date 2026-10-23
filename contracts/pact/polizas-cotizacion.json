@@ -35,14 +35,14 @@
                 "obligatoria": true
               }
             ],
-            "codigo": null,
+            "codigo": "COT-2026-00001",
             "coincidenciasListasRestrictivas": 0,
             "cotizacionId": "00000000-0000-4000-a000-000000000001",
             "edad": 36,
             "estadoIdentidad": "VERIFICADO",
             "huellaCalculo": "sha256:ac7438e86cb85ebd90f4d0abb235f9a28f112e1ec0b7995156f3d5e868d315f8",
             "moneda": "COP",
-            "ofertaId": null,
+            "ofertaId": "00000000-0000-4000-e000-000000000001",
             "perfil": {
               "confianza": "0.92",
               "estado": "CALCULADO",
@@ -98,6 +98,15 @@
                 }
               ]
             },
+            "$.codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^COT-\\d{4}-\\d{5,}$"
+                }
+              ]
+            },
             "$.coincidenciasListasRestrictivas": {
               "combine": "AND",
               "matchers": [
@@ -146,6 +155,15 @@
                 {
                   "match": "regex",
                   "regex": "^[A-Z]{3}$"
+                }
+              ]
+            },
+            "$.ofertaId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                 }
               ]
             },
@@ -356,14 +374,14 @@
                 "obligatoria": true
               }
             ],
-            "codigo": null,
+            "codigo": "COT-2026-00008",
             "coincidenciasListasRestrictivas": null,
             "cotizacionId": "00000000-0000-4000-a000-000000000008",
             "edad": 36,
             "estadoIdentidad": "VERIFICADO",
             "huellaCalculo": "sha256:33829b0e034a02f2b827bc9267740addd593bdcb2a8750a137c7358a17e3b8e3",
             "moneda": "COP",
-            "ofertaId": null,
+            "ofertaId": "00000000-0000-4000-e000-000000000008",
             "perfil": null,
             "periodicidad": "MENSUAL",
             "plazoCreditoMeses": 180,
@@ -412,6 +430,15 @@
                 }
               ]
             },
+            "$.codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^COT-\\d{4}-\\d{5,}$"
+                }
+              ]
+            },
             "$.cotizacionId": {
               "combine": "AND",
               "matchers": [
@@ -452,6 +479,15 @@
                 {
                   "match": "regex",
                   "regex": "^[A-Z]{3}$"
+                }
+              ]
+            },
+            "$.ofertaId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                 }
               ]
             },

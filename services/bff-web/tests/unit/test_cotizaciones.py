@@ -225,3 +225,29 @@ def test_sin_sub_es_actor_requerido(cotizacion: CotizacionFalsa) -> None:
 
 def test_dependencia_real_por_omision() -> None:
     assert isinstance(ruta.cotizaciones(), Cotizaciones)
+
+
+OFERTA = {
+    "id": "00000000-0000-4000-e000-000000000001",
+    "codigo": "COT-2026-00001",
+    "cotizacionId": COTIZACION_ID,
+    "precio": "97460",
+    "moneda": "COP",
+    "periodicidad": "MENSUAL",
+    "coberturas": [
+        {"codigo": "MUERTE", "nombre": "Muerte por cualquier causa", "sumaAsegurada": "180000000"}
+    ],
+    "exclusionesResumidas": [{"codigo": "SUICIDIO_PRIMER_ANIO", "descripcion": "Suicidio"}],
+    "version": 1,
+    "versionReglas": "2026.10.1",
+    "creadaEn": "2026-10-22T15:00:00Z",
+    "vigenteHasta": "2026-10-29T15:00:00Z",
+    "estado": "VENCIDA",
+}
+
+
+def test_la_oferta_llega_al_portal_tal_cual(cotizacion: CotizacionFalsa) -> None:
+    """HU-W04 (C04 y C08): la oferta de cotizacion, también vencida, sin cambios."""
+    con_oferta = {**COTIZACION, "vigenteHasta": OFERTA["vigenteHasta"], "oferta": OFERTA}
+    cotizacion.respuesta = httpx.Response(201, json=con_oferta)
+    assert _cotizar().json()["oferta"] == OFERTA

@@ -1,5 +1,62 @@
 {
   "$defs": {
+    "CondicionesOferta": {
+      "additionalProperties": false,
+      "description": "Condiciones de la oferta que se crea con la prima (HU-W04).\n\n`vigenciaMinutos` cuenta desde el c\u00e1lculo: vigente si ahora < calculadoEn + vigenciaMinutos.",
+      "properties": {
+        "exclusiones": {
+          "items": {
+            "$ref": "#/$defs/Exclusion"
+          },
+          "maxItems": 20,
+          "title": "Exclusiones",
+          "type": "array"
+        },
+        "sumasCoberturas": {
+          "items": {
+            "$ref": "#/$defs/SumaCobertura"
+          },
+          "title": "Sumascoberturas",
+          "type": "array"
+        },
+        "vigenciaMinutos": {
+          "maximum": 525600,
+          "minimum": 1,
+          "title": "Vigenciaminutos",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "vigenciaMinutos",
+        "exclusiones",
+        "sumasCoberturas"
+      ],
+      "title": "CondicionesOferta",
+      "type": "object"
+    },
+    "Exclusion": {
+      "additionalProperties": false,
+      "description": "Exclusi\u00f3n resumida que el socio muestra al cliente; el texto legal est\u00e1 en el condicionado.",
+      "properties": {
+        "codigo": {
+          "pattern": "^[A-Z0-9_]{1,64}$",
+          "title": "Codigo",
+          "type": "string"
+        },
+        "descripcion": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Descripcion",
+          "type": "string"
+        }
+      },
+      "required": [
+        "codigo",
+        "descripcion"
+      ],
+      "title": "Exclusion",
+      "type": "object"
+    },
     "FactorVariable": {
       "additionalProperties": false,
       "properties": {
@@ -152,6 +209,27 @@
       "title": "Redondeo",
       "type": "object"
     },
+    "SumaCobertura": {
+      "additionalProperties": false,
+      "description": "Parte de la suma asegurada que cubre una cobertura (0 < porcentaje \u2264 1); sin entrada, 1.",
+      "properties": {
+        "cobertura": {
+          "title": "Cobertura",
+          "type": "string"
+        },
+        "porcentaje": {
+          "pattern": "^-?\\d+(\\.\\d+)?$",
+          "title": "Porcentaje",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cobertura",
+        "porcentaje"
+      ],
+      "title": "SumaCobertura",
+      "type": "object"
+    },
     "Tramo": {
       "additionalProperties": false,
       "description": "Factor para los valores \u2264 `hasta`; el \u00faltimo tramo es abierto (`hasta` nulo).",
@@ -201,6 +279,17 @@
       "pattern": "^[A-Z]{3}$",
       "title": "Moneda",
       "type": "string"
+    },
+    "oferta": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CondicionesOferta"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "periodicidad": {
       "enum": [

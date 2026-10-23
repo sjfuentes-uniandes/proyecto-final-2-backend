@@ -105,6 +105,11 @@ ESQUEMAS_COTIZACION = (
     "CondicionesProducto",
     "LimitesDto",
     "RangoDto",
+    # HU-W04
+    "OfertaDto",
+    "CoberturaOfertaDto",
+    "ExclusionDto",
+    "EstadoOferta",
 )
 
 

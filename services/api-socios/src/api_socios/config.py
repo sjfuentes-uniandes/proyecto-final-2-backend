@@ -17,6 +17,10 @@ class Settings(ServiceSettings):
     partners_usage_plans: dict[str, str] = Field(
         default_factory=dict, validation_alias=_env("PARTNERS_USAGE_PLANS")
     )
+    # HU-W04: la oferta del socio la calcula cotizacion (catálogo de infra: calls = ["cotizacion"],
+    # que define COTIZACION_URL). El timeout es el de bff-web hacia cotizacion.
+    cotizacion_url: str = Field("http://localhost:8085", validation_alias=_env("COTIZACION_URL"))
+    cotizacion_timeout_ms: int = Field(1500, ge=1)
     # HU-W28: cada cuánto se publica PartnerQuotaUsage (0 = no se publica).
     quota_metric_interval_s: int = Field(0, ge=0, validation_alias=_env("QUOTA_METRIC_INTERVAL_S"))
 

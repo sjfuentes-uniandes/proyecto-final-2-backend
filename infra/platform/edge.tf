@@ -513,9 +513,12 @@ resource "aws_api_gateway_domain_name" "partners" {
   }
 }
 
+# HU-W04: el contrato publicado es v1 y el dominio propio lo expone en /v1 (el mismo prefijo que
+# el stage de execute-api), para que una v2 pueda convivir en el mismo dominio.
 resource "aws_api_gateway_base_path_mapping" "partners" {
   count       = var.custom_domain == null ? 0 : 1
   api_id      = aws_api_gateway_rest_api.main["socios"].id
   stage_name  = aws_api_gateway_stage.main["socios"].stage_name
   domain_name = aws_api_gateway_domain_name.partners[0].domain_name
+  base_path   = aws_api_gateway_stage.main["socios"].stage_name
 }
