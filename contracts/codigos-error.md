@@ -9,6 +9,7 @@ Formato estable de todo error de las rutas nuevas (`solventa_common.errors`):
 - Los clientes (web, móvil y socios) traducen por `codigo`, nunca por `mensaje`.
 - El 422 de validación es `SOLICITUD_INVALIDA`, con `detalles.campos` = lista de rutas de los campos inválidos (nunca sus valores).
 - Las rutas de HU-W27 en `bff-web` conservan `{"detail"}` hasta que se migren a este formato.
+- En el canal del socio (`api-socios`, HU-W04), los rechazos de `POST /v1/cotizaciones` de `cotizacion` llegan con el **mismo código y estado** (`PRODUCTO_NO_ENCONTRADO`, `PRODUCTO_INACTIVO`, `PRODUCTO_FUERA_DE_VIGENCIA`, `REGLAS_NO_VIGENTES`, `DATOS_FUERA_DE_RANGO`, `COBERTURA_NO_DISPONIBLE`, `IDEMPOTENCIA_CONFLICTO`, `SOLICITUD_INVALIDA` y `CLIENTE_NO_ENCONTRADO`); de sus `detalles` solo pasa `campos`.
 
 | Código | HTTP | Emisor | Cuándo |
 | --- | --- | --- | --- |
@@ -28,7 +29,8 @@ Formato estable de todo error de las rutas nuevas (`solventa_common.errors`):
 | `COBERTURA_NO_DISPONIBLE` | 422 | `cotizacion`, `bff-web` | Una cobertura pedida no es opcional en el producto (`detalles.campos`: `coberturasOpcionales`). HU-W03 |
 | `PERFIL_NO_CORRESPONDE` | 422 | `cotizacion`, `bff-web` | El perfil de la cotización es de otro cliente u otro producto, o se calculó con otros datos declarados (`detalles.campos`). HU-W03 |
 | `COTIZACION_NO_ENCONTRADA` | 404 | `cotizacion`, `polizas`, `bff-web` | La cotización no existe o es de otro socio: no se distingue, para no revelar su existencia. HU-W03. En `polizas`, la cotización de la solicitud de suscripción no existe (HU-W13) |
-| `OFERTA_VENCIDA` | 409 | `polizas`, `bff-web` | La oferta (cotización) ya no está vigente: `ahora ≥ vigenteHasta` (DS2-10, DS2-20). No se crea decisión. `detalles.accion = "NUEVA_COTIZACION"` (HU-W13) |
+| `OFERTA_VENCIDA` | 409 / 410 | `polizas`, `bff-web`, `cotizacion`, `api-socios` | La oferta ya no está vigente: `ahora ≥ vigenteHasta` (DS2-10, DS2-20), siempre con `detalles.accion = "NUEVA_COTIZACION"`. **409** al intentar usarla en una operación sobre otro recurso: la suscripción (`polizas`, `bff-web`, HU-W13; no se crea decisión) y la regla `Oferta.asegurar_utilizable` de `cotizacion` (HU-W04, para la aceptación de HU-W15). **410** en el canal del socio (`api-socios`, HU-W04 AC3), donde la oferta es el recurso de la ruta: `GET /cotizaciones/{cotizacion_id}` o `POST /cotizaciones` que repite la clave de una oferta ya vencida; `detalles` agrega `ofertaId`, `cotizacionId` y `vigenteHasta`, y nunca el precio vencido. Como `PRODUCTO_NO_ENCONTRADO` (422/404), el estado depende de si la oferta es el recurso |
+| `OFERTA_NO_ENCONTRADA` | 404 | `api-socios` | La cotización no existe, es de otro socio o no tiene oferta (anterior a HU-W04): no se distingue, para no revelar su existencia (HU-W04). `cotizacion` responde `COTIZACION_NO_ENCONTRADA` y `api-socios` lo traduce |
 | `DECISION_NO_ENCONTRADA` | 404 | `polizas`, `bff-web` | La decisión de suscripción no existe (HU-W13) |
 | `IDEMPOTENCIA_CONFLICTO` | 422 | `cotizacion`, `clientes`, `bff-movil`, `polizas`, `bff-web` | Misma `Idempotency-Key` con otro cuerpo; en `clientes`, la clave es por cliente y se conserva 24 h (HU-M08); `bff-movil` lo reenvía tal cual. En `/v1/cotizaciones` la clave es por actor (HU-W03). En `POST /v1/suscripciones` (`polizas`, `bff-web`), la clave es global y otra clave sobre una cotización ya decidida no es error: responde 200 con la decisión existente (HU-W13, DS2-05) |
 | `SIN_PERFIL_ANTERIOR` | 422 | `bff-web` | Comparación sin perfil anterior |
@@ -45,11 +47,11 @@ Formato estable de todo error de las rutas nuevas (`solventa_common.errors`):
 | `SERVICIO_NO_DISPONIBLE` | 503 | `bff-web`, `bff-movil` | `cotizacion` o `clientes` (`bff-web`) o `clientes` (`bff-movil`) no respondieron; en `bff-web`, `polizas` no respondió o respondió un código que la ruta no promete (HU-W13, falla cerrado, sin `detalles`); en la lectura de consentimientos (HU-W31), también cuando `clientes` responde un código que la ruta no promete, cualquier 5xx o un cuerpo fuera de su contrato (falla cerrado, sin `detalles`); en `bff-movil`, también cuando `clientes` responde `DEPENDENCIA_NO_DISPONIBLE`, otro 5xx o una respuesta fuera de su contrato (falla cerrado, sin `detalles`) |
 | `NO_AUTENTICADO` | 401 | `bff-web` (`RutaB2`), `bff-movil` | `HTTPException` 401 en un router con `RutaB2` (`bff-web`) o `ErrorNegocio` tras revalidar el JWT (`bff-movil`) |
 | `NO_ENCONTRADO` | 404 | Todos | Ruta inexistente (manejador global) o `HTTPException` 404 en `RutaB2` |
-| `SERVICIO_NO_DISPONIBLE` | 503 | `bff-web` | `cotizacion` o `api-socios` no respondieron |
+| `SERVICIO_NO_DISPONIBLE` | 503 | `bff-web`, `api-socios` | `cotizacion` o `api-socios` no respondieron (`bff-web`). En `api-socios` (HU-W04), `cotizacion` no respondió dentro de `cotizacion_timeout_ms`, respondió un 5xx (incluido `DEPENDENCIA_NO_DISPONIBLE`), un código que el socio no puede provocar o un cuerpo fuera de su contrato: falla cerrada, sin `detalles` (no revela la topología interna) |
 | `NO_AUTENTICADO` | 401 | `bff-web` (`RutaB2`), `api-socios` | `HTTPException` 401 dentro de un router con `RutaB2`. En `api-socios`: credenciales de socio inexistentes, incorrectas, desactivadas o con API key de otro socio (HU-W01 AC2) |
 | `PERMISO_NO_ASIGNADO` | 403 | `api-socios` | El socio no tiene el permiso de la operación (`detalles.permiso`, HU-W01 AC4) |
 | `SOCIO_NO_ENCONTRADO` | 404 | `api-socios`, `bff-web` | El socio no existe |
-| `OPERACION_NO_DISPONIBLE` | 501 | `api-socios` | Operación de socio autorizada pero aún no implementada |
+| `OPERACION_NO_DISPONIBLE` | 501 | `api-socios` | Operación de socio autorizada pero aún no implementada (`/polizas` y `/siniestros`; `/cotizaciones` responde desde HU-W04) |
 | `SOCIO_DESACTIVADO` | 409 | `api-socios`, `bff-web` | No se puede cambiar el plan de un socio desactivado (HU-W02) |
 | `REGISTRO_CORREO_DISTINTO` | 409 | `clientes`, `bff-movil` | El registro ya se verificó con otro correo: la verificación va ligada a un correo (HU-M06) |
 | `REGISTRO_YA_VINCULADO` | 409 | `clientes`, `bff-movil` | La cuenta de ese registro ya existe, o el titular ya pertenece a otro cliente (HU-M06) |

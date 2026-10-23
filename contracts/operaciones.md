@@ -33,6 +33,8 @@ Nombres de `Operation` en `OperationDuration` y `OperationErrors` (`solventa_com
 | `autenticar_socio` | `api-socios` | Verificación del socio tras el borde (HU-W01 AC2) | `ok`, `rechazado` |
 | `cambiar_plan_socio`, `consultar_consumo_socio`, `listar_planes` | `api-socios` | Plan de uso y consumo de la cuota por socio (HU-W02) | `ok`, `error` |
 | `medir_cuota_socios` | `api-socios` | Porcentaje de la cuota de cada socio activo para `PartnerQuotaUsage` (HU-W28) | `ok`, `error` |
+| `socio.cotizar` | `api-socios` | Caso de uso `CotizarOferta` (HU-W04): `POST /cotizaciones` del socio, incluida la llamada a `cotizacion` (`POST /v1/cotizaciones` con el socio como actor) | `ok`, `rechazado` (rechazo de `cotizacion` con su código u oferta vencida al repetir la clave), `error` / `timeout` (`cotizacion` no respondió o violó su contrato: 503) |
+| `socio.consultar_oferta` | `api-socios` | Caso de uso `ConsultarOferta` (HU-W04): `GET /cotizaciones/{cotizacion_id}` del socio | `ok`, `rechazado` (inexistente, de otro socio u oferta vencida: 404 o 410), `error` / `timeout` (503) |
 | `consultar_alertas` | `bff-web` | Alertas abiertas, umbrales y resumen del mes (HU-W28) | `ok`, `error` |
 | `cotizacion` | `cotizacion` | Caso de uso `calcular_prima` (HU-W03): de la solicitud a la cotización persistida. Meta p95 de 250 ms en `latency_targets` de `int` (HU-W28) | `ok`, `rechazado` (4xx: tabla de decisión, datos, perfil, idempotencia o rol), `error` / `timeout` (5xx) |
 | `reglas_suscripcion.consultar` | `catalogo` | Consulta de las reglas de suscripción vigentes o de una versión (HU-W13) | `ok`, `rechazado` (producto inexistente o sin reglas vigentes), `error` |
