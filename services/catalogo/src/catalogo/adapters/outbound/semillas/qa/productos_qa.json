@@ -1,0 +1,18 @@
+[
+  {
+    "id": "vida-hipotecario-qa-oferta-corta",
+    "version": "2026.10.1",
+    "nombre": "Vida deudor hipotecario (QA: oferta de un minuto)",
+    "ramo": "VIDA_HIPOTECARIO",
+    "pais": "CO",
+    "moneda": "COP",
+    "estado": "ACTIVO",
+    "vigenteDesde": "2026-10-01T00:00:00Z",
+    "vigenteHasta": null,
+    "coberturas": [
+      {"codigo": "MUERTE", "nombre": "Muerte por cualquier causa", "obligatoria": true},
+      {"codigo": "INCAPACIDAD_TOTAL_PERMANENTE", "nombre": "Incapacidad total y permanente", "obligatoria": true}
+    ],
+    "reglas": [{"version": "2026.10.1", "vigenteDesde": "2026-10-01T00:00:00Z", "archivo": "qa/reglas_prima_qa_oferta_corta.json"}]
+  }
+]

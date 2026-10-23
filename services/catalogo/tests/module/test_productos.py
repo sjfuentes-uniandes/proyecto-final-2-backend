@@ -71,9 +71,31 @@ def test_migracion_y_semilla_idempotentes(base: str) -> None:
         ("vida-hipotecario-2025", "COP", "ACTIVO"),
     ]
     reglas = _filas(base, "SELECT producto_id, version, definicion, hash FROM reglas_prima")
-    assert len(reglas) == 2
-    for _, _, definicion, hash_ in reglas:
+    # HU-W04: vida-hipotecario suma la versión 2026.10.1 (con las condiciones de la oferta).
+    assert sorted((p, v) for p, v, _, _ in reglas) == [
+        ("vida-hipotecario", "2026.09.1"),
+        ("vida-hipotecario", "2026.10.1"),
+        ("vida-hipotecario-2025", "2025.01.1"),
+    ]
+    for _, version, definicion, hash_ in reglas:
         assert hash_ == hash_canonico(definicion)
+        assert ("oferta" in definicion) is (version == "2026.10.1")
+
+
+def test_productos_qa_solo_con_la_bandera_e_idempotentes(base: str) -> None:
+    """HU-W04: la semilla normal no publica el producto de QA; sembrar_qa lo publica una vez."""
+    from catalogo.adapters.outbound.productos_pg import sembrar_qa
+
+    consulta = "SELECT count(*) FROM productos WHERE id = 'vida-hipotecario-qa-oferta-corta'"
+    assert _filas(base, consulta) == [(0,)]
+    sembrar_qa(base)
+    sembrar_qa(base)
+    assert _filas(base, consulta) == [(1,)]
+    ((definicion,),) = _filas(
+        base,
+        "SELECT definicion FROM reglas_prima WHERE producto_id = 'vida-hipotecario-qa-oferta-corta'",
+    )
+    assert definicion["oferta"]["vigenciaMinutos"] == 1
 
 
 def test_reglas_de_prima_inmutables(base: str) -> None:

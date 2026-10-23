@@ -13,6 +13,13 @@ class Settings(ServiceSettings):
         validation_alias=AliasChoices("CATALOGO_SEMILLA_QA", "SOLVENTA_CATALOGO_SEMILLA_QA"),
     )
 
+    # HU-W04: publica semillas/qa/productos_qa.json (productos de prueba, p. ej. la oferta de un
+    # minuto del N3 de OFERTA_VENCIDA). Solo en ambientes de QA (infra/envs/int/apps.tfvars).
+    productos_qa: bool = Field(
+        False,
+        validation_alias=AliasChoices("CATALOGO_PRODUCTOS_QA", "SOLVENTA_CATALOGO_PRODUCTOS_QA"),
+    )
+
     # Cache-Aside de productos y reglas de prima (HU-S02, HU-W03). Sin CACHE_URL, sin caché.
     cache_url: str | None = Field(
         None, validation_alias=AliasChoices("CACHE_URL", "SOLVENTA_CACHE_URL"), repr=False

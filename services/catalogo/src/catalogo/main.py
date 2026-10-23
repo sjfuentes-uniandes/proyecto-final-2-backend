@@ -30,12 +30,21 @@ async def _abrir_base(
     from psycopg_pool import AsyncConnectionPool
 
     from catalogo.adapters.outbound.modelos_pg import ModelosPg, migrar, sembrar_qa
-    from catalogo.adapters.outbound.productos_pg import ProductosPg, semillas
+    from catalogo.adapters.outbound.productos_pg import (
+        PRODUCTOS_QA,
+        ProductosPg,
+        semillas,
+    )
+    from catalogo.adapters.outbound.productos_pg import (
+        sembrar_qa as sembrar_productos_qa,
+    )
     from catalogo.adapters.outbound.reglas_suscripcion_pg import ReglasSuscripcionPg
 
     migrar(settings.database_url)
     if settings.semilla_qa:
         sembrar_qa(settings.database_url, settings.semilla_qa)
+    if settings.productos_qa:
+        sembrar_productos_qa(settings.database_url)
     pool = AsyncConnectionPool(
         settings.database_url,
         min_size=1,
@@ -49,7 +58,8 @@ async def _abrir_base(
     pila.push_async_callback(cache_productos.cerrar)
     con_cache = ProductosConCache(ProductosPg(pool), cache_productos, reloj, settings.cache_ttl_s)
     # La semilla pudo cambiar con este despliegue: catalogo invalida la caché (diagramas).
-    await con_cache.invalidar([p.id for p, _ in semillas()])
+    sembrados = semillas() + (semillas(PRODUCTOS_QA) if settings.productos_qa else [])
+    await con_cache.invalidar([p.id for p, _ in sembrados])
     return ModelosPg(pool), con_cache, ReglasSuscripcionPg(pool)
 
 

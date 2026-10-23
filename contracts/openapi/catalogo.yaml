@@ -460,6 +460,36 @@ components:
       - EDAD_MAXIMA
       - SIN_LIMITE_EDAD
       title: CodigoDescriptor
+    CondicionesOferta:
+      properties:
+        vigenciaMinutos:
+          type: integer
+          maximum: 525600.0
+          minimum: 1.0
+          title: Vigenciaminutos
+        exclusiones:
+          items:
+            $ref: '#/components/schemas/Exclusion'
+          type: array
+          maxItems: 20
+          title: Exclusiones
+        sumasCoberturas:
+          items:
+            $ref: '#/components/schemas/SumaCobertura'
+          type: array
+          title: Sumascoberturas
+      additionalProperties: false
+      type: object
+      required:
+      - vigenciaMinutos
+      - exclusiones
+      - sumasCoberturas
+      title: CondicionesOferta
+      description: 'Condiciones de la oferta que se crea con la prima (HU-W04).
+
+
+        `vigenciaMinutos` cuenta desde el cálculo: vigente si ahora < calculadoEn
+        + vigenciaMinutos.'
     Confianza:
       properties:
         penalizacionNoAutorizada:
@@ -656,6 +686,10 @@ components:
           $ref: '#/components/schemas/Redondeo'
         limites:
           $ref: '#/components/schemas/Limites'
+        oferta:
+          anyOf:
+          - $ref: '#/components/schemas/CondicionesOferta'
+          - type: 'null'
       additionalProperties: false
       type: object
       required:
@@ -745,6 +779,25 @@ components:
       - ACTIVO
       - INACTIVO
       title: EstadoProducto
+    Exclusion:
+      properties:
+        codigo:
+          type: string
+          pattern: ^[A-Z0-9_]{1,64}$
+          title: Codigo
+        descripcion:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Descripcion
+      additionalProperties: false
+      type: object
+      required:
+      - codigo
+      - descripcion
+      title: Exclusion
+      description: Exclusión resumida que el socio muestra al cliente; el texto legal
+        está en el condicionado.
     Expresion-Input:
       properties:
         op:
@@ -1192,6 +1245,23 @@ components:
       - vigenteDesde
       - definicion
       title: SolicitudPublicacion
+    SumaCobertura:
+      properties:
+        cobertura:
+          type: string
+          title: Cobertura
+        porcentaje:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Porcentaje
+      additionalProperties: false
+      type: object
+      required:
+      - cobertura
+      - porcentaje
+      title: SumaCobertura
+      description: Parte de la suma asegurada que cubre una cobertura (0 < porcentaje
+        ≤ 1); sin entrada, 1.
     TipoRegla:
       type: string
       enum:
