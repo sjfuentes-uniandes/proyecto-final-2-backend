@@ -139,6 +139,46 @@ class PasoCotizacionDto(_Dto):
     origen: OrigenDato | None
 
 
+class EstadoOferta(StrEnum):
+    """No se guarda: se deriva del instante de la consulta (vigente si ahora < vigenteHasta)."""
+
+    VIGENTE = "VIGENTE"
+    VENCIDA = "VENCIDA"
+
+
+class CoberturaOfertaDto(_Dto):
+    codigo: str
+    nombre: str
+    suma_asegurada: TextoDecimal
+
+
+class ExclusionDto(_Dto):
+    codigo: str
+    descripcion: str
+
+
+class OfertaDto(_Dto):
+    """La oferta de la cotización (HU-W04). Inmutable; `estado` es el del instante de la consulta."""
+
+    id: UUID
+    codigo: str = Field(description="Identificador legible para el cliente: COT-AAAA-NNNNN")
+    cotizacion_id: UUID
+    precio: TextoDecimal = Field(description="La prima total, en `moneda` y por `periodicidad`")
+    moneda: str
+    periodicidad: str
+    coberturas: list[CoberturaOfertaDto]
+    exclusiones_resumidas: list[ExclusionDto]
+    version: int = Field(description="Versión del documento de la oferta")
+    version_reglas: str
+    creada_en: datetime
+    vigente_hasta: datetime = Field(
+        description=(
+            "Fin de la vigencia de la oferta (UTC): vigente si ahora < vigenteHasta (DS2-20, HU-W13)"
+        )
+    )
+    estado: EstadoOferta
+
+
 class CotizacionRespuesta(_Dto):
     id: UUID
     cliente_id: UUID
@@ -169,6 +209,8 @@ class CotizacionRespuesta(_Dto):
             "Fin de la vigencia de la oferta (UTC): vigente si ahora < vigenteHasta (DS2-20, HU-W13)"
         ),
     )
+    # HU-W04: aditivo y opcional, copia del campo de cotizacion (C04 y C08 del portal).
+    oferta: OfertaDto | None = Field(default=None, description="La oferta de la cotización")
 
 
 class RangoDto(_Dto):
