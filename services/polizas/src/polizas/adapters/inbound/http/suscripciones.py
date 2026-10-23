@@ -167,7 +167,7 @@ class DescriptorAlternativaDto(_Dto):
 
 
 class AlternativaDto(_Dto):
-    producto_id: str
+    producto_id: Annotated[str, Field(pattern=PATRON_PRODUCTO)]
     descriptor: DescriptorAlternativaDto
 
 

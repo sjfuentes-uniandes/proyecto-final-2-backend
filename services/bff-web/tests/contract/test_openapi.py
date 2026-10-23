@@ -253,6 +253,7 @@ def test_hu_w31_la_marca_de_revocacion_es_opcional_en_el_bff() -> None:
 
 POLIZAS = CONTRATO.parent / "polizas.yaml"
 # HU-W13: el BFF publica los mismos esquemas que polizas; las vistas agregan clienteNombre.
+# HU-W14: también los de la comunicación (DecisionSuscripcionVista hereda `comunicacion`).
 ESQUEMAS_SUSCRIPCION = (
     "SolicitudSuscripcion",
     "DecisionSuscripcion",
@@ -272,6 +273,13 @@ ESQUEMAS_SUSCRIPCION = (
     "MotivoCliente",
     "CoberturaProductoDto",
     "NivelRiesgo",
+    # HU-W14: comunicación de la decisión.
+    "ComunicacionDto",
+    "AlternativaDto",
+    "DescriptorAlternativaDto",
+    "CondicionAseguramiento",
+    "SiguientePaso",
+    "CodigoDescriptor",
 )
 
 

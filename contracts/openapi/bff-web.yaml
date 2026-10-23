@@ -2147,6 +2147,19 @@ components:
       - umbrales
       - resumen
       title: AlertasRespuesta
+    AlternativaDto:
+      properties:
+        productoId:
+          type: string
+          pattern: ^[a-z0-9-]{1,64}$
+          title: Productoid
+        descriptor:
+          $ref: '#/components/schemas/DescriptorAlternativaDto'
+      type: object
+      required:
+      - productoId
+      - descriptor
+      title: AlternativaDto
     BandejaSuscripcionVista:
       properties:
         items:
@@ -2337,6 +2350,12 @@ components:
       - nombre
       - obligatoria
       title: CoberturaProductoDto
+    CodigoDescriptor:
+      type: string
+      enum:
+      - EDAD_MAXIMA
+      - SIN_LIMITE_EDAD
+      title: CodigoDescriptor
     ComparacionPerfiles:
       properties:
         anterior:
@@ -2349,6 +2368,62 @@ components:
       - actual
       title: ComparacionPerfiles
       description: Perfil anterior y perfil recalculado desde él (HU-W12, D05).
+    ComunicacionDto:
+      properties:
+        condicion:
+          $ref: '#/components/schemas/CondicionAseguramiento'
+        admiteContratacion:
+          type: boolean
+          title: Admitecontratacion
+          description: 'true solo en una APROBADA con la oferta vigente: el portal
+            ofrece aceptar'
+        siguientePaso:
+          $ref: '#/components/schemas/SiguientePaso'
+        vigenteHasta:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Vigentehasta
+          description: Fin de la vigencia de la oferta; solo en APROBADA_SIN_AJUSTES
+        motivoCliente:
+          anyOf:
+          - $ref: '#/components/schemas/MotivoCliente'
+          - type: 'null'
+          description: 'NO_ASEGURABLE: motivo de la regla determinante (NO_ELEGIBLE
+            si es reservada). EN_REVISION: el de la primera regla explicable pendiente,
+            o null (R-12)'
+        alternativas:
+          items:
+            $ref: '#/components/schemas/AlternativaDto'
+          type: array
+          title: Alternativas
+          description: Solo en NO_ASEGURABLE; vacía si catalogo no respondió
+        plazoRespuestaHoras:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Plazorespuestahoras
+          description: Solo en EN_REVISION
+      type: object
+      required:
+      - condicion
+      - admiteContratacion
+      - siguientePaso
+      - vigenteHasta
+      - motivoCliente
+      - alternativas
+      - plazoRespuestaHoras
+      title: ComunicacionDto
+      description: La decisión en términos del cliente (HU-W14). Sin códigos ni valores
+        de reglas.
+    CondicionAseguramiento:
+      type: string
+      enum:
+      - APROBADA_SIN_AJUSTES
+      - NO_ASEGURABLE
+      - EN_REVISION
+      title: CondicionAseguramiento
     CondicionesOfertaDto:
       properties:
         socioId:
@@ -2879,6 +2954,11 @@ components:
         duracionMs:
           type: integer
           title: Duracionms
+        comunicacion:
+          anyOf:
+          - $ref: '#/components/schemas/ComunicacionDto'
+          - type: 'null'
+          description: Comunicación de la decisión (HU-W14), derivada al leer
       type: object
       required:
       - id
@@ -2977,6 +3057,11 @@ components:
         duracionMs:
           type: integer
           title: Duracionms
+        comunicacion:
+          anyOf:
+          - $ref: '#/components/schemas/ComunicacionDto'
+          - type: 'null'
+          description: Comunicación de la decisión (HU-W14), derivada al leer
         clienteNombre:
           anyOf:
           - type: string
@@ -3007,6 +3092,22 @@ components:
       title: DecisionSuscripcionVista
       description: La decisión de polizas más el nombre del cliente (E03, E04); null
         si clientes falla.
+    DescriptorAlternativaDto:
+      properties:
+        codigo:
+          $ref: '#/components/schemas/CodigoDescriptor'
+        valor:
+          anyOf:
+          - type: string
+            pattern: ^-?\d+(\.\d+)?$
+          - type: 'null'
+          title: Valor
+          description: Años con EDAD_MAXIMA; null con SIN_LIMITE_EDAD
+      type: object
+      required:
+      - codigo
+      - valor
+      title: DescriptorAlternativaDto
     DesglosePrimaDto:
       properties:
         primaBase:
@@ -4002,6 +4103,14 @@ components:
       - tiempo_medio_atencion_min
       - metas_incumplidas
       title: ResumenRespuesta
+    SiguientePaso:
+      type: string
+      enum:
+      - ACEPTAR_OFERTA
+      - COTIZAR_NUEVAMENTE
+      - COTIZAR_ALTERNATIVA
+      - ESPERAR_REVISION
+      title: SiguientePaso
     SocioCreado:
       properties:
         id:

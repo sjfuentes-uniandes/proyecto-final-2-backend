@@ -461,6 +461,7 @@ components:
       properties:
         productoId:
           type: string
+          pattern: ^[a-z0-9-]{1,64}$
           title: Productoid
         descriptor:
           $ref: '#/components/schemas/DescriptorAlternativaDto'
