@@ -20,6 +20,27 @@ def test_contrato_documenta_los_codigos_de_la_historia() -> None:
     assert set(rutas["/admin/socios"]["post"]["responses"]) >= {"201", "400", "422"}
     assert set(rutas["/socio/me"]["get"]["responses"]) >= {"200", "401"}
     assert set(rutas["/polizas"]["post"]["responses"]) >= {"401", "403", "501"}
+    # HU-W04: la oferta, sin el 501 de antes.
+    assert set(rutas["/cotizaciones"]["post"]["responses"]) == {
+        "200",
+        "201",
+        "400",
+        "401",
+        "403",
+        "404",
+        "410",
+        "422",
+        "503",
+    }
+    assert set(rutas["/cotizaciones/{cotizacion_id}"]["get"]["responses"]) == {
+        "200",
+        "401",
+        "403",
+        "404",
+        "410",
+        "422",
+        "503",
+    }
     assert set(rutas["/admin/socios/{socio_id}/plan"]["put"]["responses"]) >= {
         "200",
         "404",
@@ -43,3 +64,31 @@ def test_contrato_documenta_los_codigos_de_la_historia() -> None:
     assert {"clientSecret", "apiKey"} <= set(creado) and not {"clientSecret", "apiKey"} & set(
         respuesta
     )
+
+
+def test_hu_w04_la_oferta_publica_no_expone_campos_internos() -> None:
+    esquemas = app.openapi()["components"]["schemas"]
+    oferta = set(esquemas["OfertaV1"]["properties"])
+    assert oferta == {
+        "id",
+        "codigo",
+        "cotizacionId",
+        "productoId",
+        "precio",
+        "moneda",
+        "periodicidad",
+        "coberturas",
+        "exclusionesResumidas",
+        "vigenteHasta",
+        "estado",
+        "version",
+        "versionReglas",
+        "creadaEn",
+    }
+    internos = {"huellaCalculo", "hashReglas", "entradas", "desglose", "perfilId", "socioId"}
+    for nombre in ("OfertaV1", "CoberturaOfertaV1", "ExclusionResumidaV1"):
+        assert not internos & set(esquemas[nombre]["properties"]), nombre
+    # La solicitud no admite perfil ni socio: el socio es la credencial.
+    solicitud = esquemas["SolicitudCotizacionV1"]
+    assert solicitud["additionalProperties"] is False
+    assert not {"perfilId", "socioId"} & set(solicitud["properties"])
