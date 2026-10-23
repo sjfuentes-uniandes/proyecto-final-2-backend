@@ -3,6 +3,10 @@
 Actores (X-Actor-Id, X-Actor-Rol): `ASESOR` solicita y lee; `SUSCRIPTOR` lee, ve la bandeja y sus
 indicadores. Para `ASESOR`, las reglas RESERVADA llegan sin `valorCaso` (DS2-07). Montos como texto
 decimal (DS2-16). Errores en formato B2, sin detalles internos.
+
+HU-W14: la decisión que devuelven `POST /v1/suscripciones` y `GET /v1/suscripciones/{decisionId}`
+trae `comunicacion`, derivada al leer (campo opcional: un cliente de la versión W13 sigue
+validando). No lleva códigos ni valores de reglas.
 """
 
 from datetime import datetime
@@ -16,6 +20,7 @@ from pydantic.alias_generators import to_camel
 from solventa_common import correlation
 from solventa_common.errors import ROL_NO_AUTORIZADO, ErrorNegocio
 
+from polizas.application.suscripcion.comunicar import ComunicarDecision
 from polizas.application.suscripcion.consultar import ConsultarSuscripciones
 from polizas.application.suscripcion.reconstruir import ReconstruirDecision
 from polizas.application.suscripcion.solicitar_suscripcion import (
@@ -37,12 +42,15 @@ from polizas.domain.suscripcion.errores import (
 from polizas.domain.suscripcion.insumos import texto
 from polizas.domain.suscripcion.modelos import (
     Actor,
+    Comunicacion,
+    CondicionAseguramiento,
     Decision,
     FiltrosBandeja,
     NivelRiesgo,
     ResultadoDecision,
     ResultadoRegla,
     RolActor,
+    SiguientePaso,
     TipoDecision,
     TipoRegla,
     Visibilidad,
@@ -79,6 +87,11 @@ class MotivoCliente(StrEnum):
     SUMA_REQUIERE_REVISION = "SUMA_REQUIERE_REVISION"
     PERFIL_REQUIERE_REVISION = "PERFIL_REQUIERE_REVISION"
     NO_ELEGIBLE = "NO_ELEGIBLE"
+
+
+class CodigoDescriptor(StrEnum):
+    EDAD_MAXIMA = "EDAD_MAXIMA"
+    SIN_LIMITE_EDAD = "SIN_LIMITE_EDAD"
 
 
 # --- DTO (bff-web copia los mismos, con los mismos nombres) ----------------------------------
@@ -148,6 +161,37 @@ class ContextoCasoDto(_Dto):
     fuentes_declaradas: int | None
 
 
+class DescriptorAlternativaDto(_Dto):
+    codigo: CodigoDescriptor
+    valor: TextoDecimal | None = Field(description="Años con EDAD_MAXIMA; null con SIN_LIMITE_EDAD")
+
+
+class AlternativaDto(_Dto):
+    producto_id: str
+    descriptor: DescriptorAlternativaDto
+
+
+class ComunicacionDto(_Dto):
+    """La decisión en términos del cliente (HU-W14). Sin códigos ni valores de reglas."""
+
+    condicion: CondicionAseguramiento
+    admite_contratacion: bool = Field(
+        description="true solo en una APROBADA con la oferta vigente: el portal ofrece aceptar"
+    )
+    siguiente_paso: SiguientePaso
+    vigente_hasta: datetime | None = Field(
+        description="Fin de la vigencia de la oferta; solo en APROBADA_SIN_AJUSTES"
+    )
+    motivo_cliente: MotivoCliente | None = Field(
+        description="NO_ASEGURABLE: motivo de la regla determinante (NO_ELEGIBLE si es "
+        "reservada). EN_REVISION: el de la primera regla explicable pendiente, o null (R-12)"
+    )
+    alternativas: list[AlternativaDto] = Field(
+        description="Solo en NO_ASEGURABLE; vacía si catalogo no respondió"
+    )
+    plazo_respuesta_horas: int | None = Field(description="Solo en EN_REVISION")
+
+
 class DecisionSuscripcion(_Dto):
     id: UUID
     codigo: Annotated[str, Field(pattern=r"^DEC-\d{4}-\d{6}$")]
@@ -170,6 +214,9 @@ class DecisionSuscripcion(_Dto):
     admite_excepcion: bool = Field(description="Siempre false en el Sprint 2 (DS2-08)")
     decidida_en: datetime
     duracion_ms: int
+    comunicacion: ComunicacionDto | None = Field(
+        None, description="Comunicación de la decisión (HU-W14), derivada al leer"
+    )
 
 
 class ResumenDecision(_Dto):
@@ -234,7 +281,30 @@ class ReconstruccionDecision(_Dto):
 # --- Dominio → DTO ---------------------------------------------------------------------------
 
 
-def decision_dto(decision: Decision, rol: RolActor) -> DecisionSuscripcion:
+def comunicacion_dto(comunicacion: Comunicacion) -> ComunicacionDto:
+    motivo = comunicacion.motivo_cliente
+    return ComunicacionDto(
+        condicion=comunicacion.condicion,
+        admite_contratacion=comunicacion.admite_contratacion,
+        siguiente_paso=comunicacion.siguiente_paso,
+        vigente_hasta=comunicacion.vigente_hasta,
+        motivo_cliente=None if motivo is None else MotivoCliente(motivo),
+        alternativas=[
+            AlternativaDto(
+                producto_id=a.producto_id,
+                descriptor=DescriptorAlternativaDto(
+                    codigo=CodigoDescriptor(a.descriptor.codigo), valor=a.descriptor.valor
+                ),
+            )
+            for a in comunicacion.alternativas
+        ],
+        plazo_respuesta_horas=comunicacion.plazo_respuesta_horas,
+    )
+
+
+def decision_dto(
+    decision: Decision, rol: RolActor, comunicacion: Comunicacion | None = None
+) -> DecisionSuscripcion:
     """La decisión para el actor: solo SUSCRIPTOR ve el valor de las reglas RESERVADA."""
     insumos, perfil = decision.insumos, decision.insumos.perfil
     reglas = []
@@ -297,6 +367,7 @@ def decision_dto(decision: Decision, rol: RolActor) -> DecisionSuscripcion:
         admite_excepcion=False,
         decidida_en=decision.decidida_en,
         duracion_ms=decision.duracion_ms,
+        comunicacion=None if comunicacion is None else comunicacion_dto(comunicacion),
     )
 
 
@@ -456,7 +527,13 @@ def _reconstruir(request: Request) -> ReconstruirDecision:
     return caso
 
 
+def _comunicar(request: Request) -> ComunicarDecision:
+    caso: ComunicarDecision = _caso(request, "comunicar_decision")
+    return caso
+
+
 Consultar = Annotated[ConsultarSuscripciones, Depends(_consultar)]
+Comunicar = Annotated[ComunicarDecision, Depends(_comunicar)]
 
 
 @router.post(
@@ -487,8 +564,10 @@ async def solicitar(
     respuesta: Response,
     actor: ActorPolizas,
     solicitar: Annotated[SolicitarSuscripcion, Depends(_solicitar)],
+    comunicar: Comunicar,
 ) -> DecisionSuscripcion:
-    """Evalúa las reglas de suscripción vigentes sobre la oferta y registra la decisión."""
+    """Evalúa las reglas vigentes sobre la oferta y registra la decisión, con su comunicación."""
+    # HU-W14: la comunicación viene en la misma respuesta; el portal no hace una segunda llamada.
     _exigir(actor, RolActor.ASESOR)
     comando = ComandoSuscripcion(
         cotizacion_id=solicitud.cotizacion_id,
@@ -502,7 +581,7 @@ async def solicitar(
         raise error_suscripcion(error) from error
     if not creada:
         respuesta.status_code = 200
-    return decision_dto(decision, actor.rol)
+    return decision_dto(decision, actor.rol, await comunicar.ejecutar(decision))
 
 
 @router.get(
@@ -583,14 +662,15 @@ async def resumen(
     responses={404: _error("DECISION_NO_ENCONTRADA"), 422: _error("SOLICITUD_INVALIDA")},
 )
 async def consultar(
-    decision_id: IdDecision, actor: ActorPolizas, consultar: Consultar
+    decision_id: IdDecision, actor: ActorPolizas, consultar: Consultar, comunicar: Comunicar
 ) -> DecisionSuscripcion:
-    """Una decisión registrada; no cambia nunca (ASESOR o SUSCRIPTOR, DS2-07)."""
+    """Una decisión registrada (no cambia) con su comunicación (ASESOR o SUSCRIPTOR, DS2-07)."""
+    # HU-W14: la comunicación se deriva al leer; una aprobada deja de admitir contratación al vencer.
     try:
         decision = await consultar.decision(decision_id)
     except DecisionNoEncontrada as error:
         raise error_suscripcion(error) from error
-    return decision_dto(decision, actor.rol)
+    return decision_dto(decision, actor.rol, await comunicar.ejecutar(decision))
 
 
 @router.get(

@@ -9,24 +9,14 @@ resumen sobre SQL real, logs sin PII y migraciones adelante y atrás.
 
 import asyncio
 import json
-import os
-import re
 import time
-from collections.abc import AsyncIterator, Iterator
-from contextlib import asynccontextmanager
 from importlib import resources
 from typing import Any
 from uuid import uuid4
 
-import httpx
 import psycopg
 import pytest
-from polizas.adapters.outbound.catalogo_http import CatalogoHttp
-from polizas.adapters.outbound.codigos import CodigosPg
-from polizas.adapters.outbound.cotizacion_http import CotizacionHttp
-from polizas.adapters.outbound.decisiones_pg import DecisionesPg, migrar
-from polizas.config import Settings
-from polizas.main import Puertos, crear_app
+from polizas.adapters.outbound.decisiones_pg import migrar
 
 docker = pytest.importorskip("docker")
 pytestmark = pytest.mark.anyio
@@ -34,21 +24,6 @@ MIGRACIONES = resources.files("polizas.adapters.outbound").joinpath("migraciones
 BASE = "/v1/suscripciones"
 ASESOR = {"X-Actor-Id": "sub-asesor-1", "X-Actor-Rol": "ASESOR"}
 SUSCRIPTOR = {"X-Actor-Id": "sub-suscriptor-1", "X-Actor-Rol": "SUSCRIPTOR"}
-
-
-@pytest.fixture(scope="module")
-def base() -> Iterator[str]:
-    os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
-    from testcontainers.community.postgres import PostgresContainer
-
-    try:
-        docker.from_env().ping()
-    except docker.errors.DockerException:
-        pytest.skip("Docker no está disponible para testcontainers")
-    with PostgresContainer("postgres:16", driver=None) as postgres:
-        url: str = postgres.get_connection_url()
-        migrar(url)
-        yield url
 
 
 def _filas(url: str, sql: str, *parametros: Any) -> list[tuple[Any, ...]]:
@@ -59,73 +34,6 @@ def _filas(url: str, sql: str, *parametros: Any) -> list[tuple[Any, ...]]:
 def _ejecutar(url: str, sql: str) -> None:
     with psycopg.connect(url, autocommit=True) as conexion:
         conexion.execute(sql)
-
-
-@pytest.fixture
-def limpia(base: str) -> str:
-    # TRUNCATE no dispara el disparador de inmutabilidad (es por fila): solo para las pruebas.
-    _ejecutar(base, "TRUNCATE decisiones_suscripcion, outbox")
-    return base
-
-
-class Proveedores:
-    """Dobles HTTP de cotizacion y catalogo, con su estado (nominal, caído o lento)."""
-
-    def __init__(self, sinteticos: Any) -> None:
-        self.insumos = {
-            c["insumos"]["cotizacionId"]: c["insumos"] for c in sinteticos.datos["casos"]
-        }
-        self.reglas = sinteticos.respuesta_reglas()
-        self.cotizacion = "nominal"
-        self.catalogo = "nominal"
-
-    async def responder(self, pedido: httpx.Request) -> httpx.Response:
-        estado = self.cotizacion if pedido.url.host == "cotizacion" else self.catalogo
-        if estado == "caido":
-            return httpx.Response(503, json={"codigo": "SERVICIO_NO_DISPONIBLE"})
-        if estado == "lento":
-            await asyncio.sleep(2)
-        if pedido.url.host == "catalogo":
-            return httpx.Response(200, json=self.reglas)
-        cotizacion = re.search(r"/v1/cotizaciones/([^/]+)/", pedido.url.path)
-        insumos = self.insumos.get(cotizacion.group(1) if cotizacion else "")
-        if insumos is None:
-            return httpx.Response(404, json={"codigo": "COTIZACION_NO_ENCONTRADA"})
-        return httpx.Response(200, json=insumos)
-
-
-@asynccontextmanager
-async def _api(url: str, proveedores: Proveedores, reloj: Any) -> AsyncIterator[httpx.AsyncClient]:
-    from psycopg_pool import AsyncConnectionPool
-
-    settings = Settings(SOLVENTA_DATABASE_URL=url)
-    async with (
-        AsyncConnectionPool(url, min_size=1, max_size=10, open=False) as pool,
-        httpx.AsyncClient(transport=httpx.MockTransport(proveedores.responder)) as salida,
-    ):
-        puertos = Puertos(
-            insumos=CotizacionHttp(salida, "http://cotizacion", settings.cotizacion_timeout_ms),
-            reglas=CatalogoHttp(salida, "http://catalogo", settings.catalogo_timeout_ms, reloj),
-            decisiones=DecisionesPg(pool),
-            codigos=CodigosPg(pool),
-            reloj=reloj,
-        )
-        app = crear_app(settings, puertos=puertos)
-        async with (
-            app.router.lifespan_context(app),
-            httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app), base_url="http://polizas"
-            ) as cliente,
-        ):
-            yield cliente
-
-
-@pytest.fixture
-async def api(limpia: str, sinteticos: Any, dobles: Any) -> AsyncIterator[Any]:
-    proveedores = Proveedores(sinteticos)
-    async with _api(limpia, proveedores, dobles.reloj) as cliente:
-        cliente.proveedores = proveedores  # type: ignore[attr-defined]
-        yield cliente
 
 
 async def _solicitar(api: Any, sinteticos: Any, id_caso: str, clave: str | None = None) -> Any:

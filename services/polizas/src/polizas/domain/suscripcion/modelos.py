@@ -78,11 +78,30 @@ class Regla:
 
 
 @dataclass(frozen=True, slots=True)
+class DescriptorAlternativa:
+    """Lo que el portal muestra de la alternativa (E03): `EDAD_MAXIMA` con `valor` en años o
+    `SIN_LIMITE_EDAD` sin valor."""
+
+    codigo: str
+    valor: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class Alternativa:
+    """Producto alternativo de una versión de reglas de suscripción; solo informativo."""
+
+    producto_id: str
+    descriptor: DescriptorAlternativa
+
+
+@dataclass(frozen=True, slots=True)
 class ReglasSuscripcion:
     producto_id: str
     version: str
     hash: str
     reglas: tuple[Regla, ...]
+    # HU-W14: productos alternativos que se comunican en un rechazo (E03).
+    alternativas: tuple[Alternativa, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -248,23 +267,6 @@ class SiguientePaso(StrEnum):
     COTIZAR_NUEVAMENTE = "COTIZAR_NUEVAMENTE"
     COTIZAR_ALTERNATIVA = "COTIZAR_ALTERNATIVA"
     ESPERAR_REVISION = "ESPERAR_REVISION"
-
-
-@dataclass(frozen=True, slots=True)
-class DescriptorAlternativa:
-    """Lo que el portal muestra de la alternativa (E03): `EDAD_MAXIMA` con `valor` en años o
-    `SIN_LIMITE_EDAD` sin valor."""
-
-    codigo: str
-    valor: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class Alternativa:
-    """Producto alternativo de una versión de reglas de suscripción; solo informativo."""
-
-    producto_id: str
-    descriptor: DescriptorAlternativa
 
 
 @dataclass(frozen=True, slots=True)
