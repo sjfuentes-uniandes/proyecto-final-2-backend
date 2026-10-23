@@ -61,8 +61,8 @@ El backend solo entrega códigos; los textos viven en el catálogo del portal (`
 | `motivoCliente` `SUMA_REQUIERE_REVISION` | El valor que quieres asegurar necesita la revisión de un suscriptor | The amount you want to insure needs to be reviewed by an underwriter |
 | `motivoCliente` `PERFIL_REQUIERE_REVISION` | Necesitamos revisar con más detalle la información de tu perfil | We need to take a closer look at your profile information |
 | `motivoCliente` `null` (revisión) | Un suscriptor revisará tu solicitud | An underwriter will review your request |
-| `siguientePaso` `ACEPTAR_OFERTA` | Puedes continuar a la aceptación. La oferta está vigente hasta el {fecha} | You can continue to acceptance. The offer is valid until {date} |
-| `siguientePaso` `COTIZAR_NUEVAMENTE` | La oferta venció el {fecha}. Para continuar, haz una nueva cotización | The offer expired on {date}. To continue, request a new quote |
+| `siguientePaso` `ACEPTAR_OFERTA` | La oferta está vigente hasta el {fecha} y puedes continuar a la aceptación | The offer is valid until {date} and you can continue to acceptance |
+| `siguientePaso` `COTIZAR_NUEVAMENTE` | La oferta venció el {fecha} y ya no se puede aceptar. Para continuar, haz una nueva cotización | The offer expired on {date} and can no longer be accepted. To continue, request a new quote |
 | `siguientePaso` `COTIZAR_ALTERNATIVA` | Puedes cotizar uno de los productos alternativos | You can get a quote for one of the alternative products |
 | `siguientePaso` `ESPERAR_REVISION` | Aún no tienes cobertura. Un suscriptor revisará tu solicitud y te responderá en un plazo de hasta {horas} horas | You are not covered yet. An underwriter will review your request and reply within {hours} hours |
 | descriptor `EDAD_MAXIMA` | hasta {valor} años | up to age {value} |
@@ -71,7 +71,7 @@ El backend solo entrega códigos; los textos viven en el catálogo del portal (`
 | producto `proteccion-pagos` | Protección de pagos | Payment protection |
 | producto `auxilio-funerario` | Auxilio funerario | Funeral assistance |
 
-`NO_ELEGIBLE` no menciona listas, verificaciones ni antecedentes. La fecha va en la zona del usuario; el contrato la entrega en UTC.
+`NO_ELEGIBLE` no menciona listas, verificaciones ni antecedentes. Una fecha nunca cierra la oración: en es-CO la hora termina en «p. m.» y quedaría «p. m..» (hallado en el recorrido local de cierre). La fecha va en la zona del usuario; el contrato la entrega en UTC.
 
 ## 3. Recorrido local
 
@@ -130,6 +130,8 @@ Esperado: `admiteContratacion = false`, `siguientePaso = COTIZAR_NUEVAMENTE` y e
 
 En todos los casos el `GET` comunicó lo mismo que el `POST`, ninguna comunicación tuvo un código `SUS-NNN` y cada respuesta trajo `X-Correlation-Id`. Los logs de los cuatro servicios no tienen errores, fechas de nacimiento ni nombres; se midieron `suscripcion.evaluar`, `suscripcion.consultar`, `suscripcion.dependencia.*` (`polizas`) y `suscripcion.solicitar`/`suscripcion.consultar` (`bff-web`). La falla de `catalogo` al leer (alternativas vacías) se prueba en MT-W14-01.
 
+**Cierre (fase C, mismo día):** el recorrido se repitió con `make dev-up` (imágenes reconstruidas con el código de la rama; `bff-web` publicado en el 18080 con un *override* local) y con el portal local mediante el arnés de R-50: S01, S02, S04, S06 y la aprobada vencida se ven igual que con la API simulada, en es-CO, en-US y pseudo. El portal también verifica el pacto `contracts/pact/web-bff-web.json` en `bff-web` (`tests/contract/test_pact_web.py`). Evidencia en `docs/sprint_2/evidencias/hu-w14/` del espacio de trabajo.
+
 ## 4. Pruebas
 
 | Nivel | Qué | Dónde |
@@ -138,4 +140,5 @@ En todos los casos el `GET` comunicó lo mismo que el `POST`, ninguna comunicaci
 | N1 `polizas` | Caso de uso: alternativas de la versión guardada, solo en el rechazo, vencimiento con el reloj, falla abierta medida y registrada sin PII | `test_comunicar.py`, `test_api_comunicacion.py`, `test_adaptadores_http.py` |
 | N2 `polizas` (MT-W14-01) | `POST` y `GET` con PostgreSQL efímero, aprobada vencida sin cambios en la base, `catalogo` caído en otra réplica | `services/polizas/tests/module/test_comunicacion_w14.py` |
 | Contrato | `polizas.yaml` y `bff-web.yaml` regenerados; DTO de `bff-web` iguales a los de `polizas`; `comunicacion` opcional (un cuerpo de W13 valida) | `tests/contract/test_openapi.py` de `polizas` y `bff-web` |
+| Contrato portal → `bff-web` (CT-W14-01) | El pacto que genera el portal (`web/pact/`) se verifica con la app real de `bff-web`, `polizas` y `clientes` simulados y los encabezados de API Gateway de un asesor | `services/bff-web/tests/contract/test_pact_web.py`, `contracts/pact/web-bff-web.json` |
 | N1 `bff-web` (UT-W14-02) | La comunicación pasa tal cual al asesor, sin valores reservados ni códigos de regla; una comunicación fuera del contrato es 503; un campo extra no llega al portal; una decisión sin comunicación sigue pasando | `services/bff-web/tests/unit/test_suscripcion.py` |
