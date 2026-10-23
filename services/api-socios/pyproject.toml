@@ -9,7 +9,7 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "alembic>=1.14",
     "solventa-common",
-    "boto3>=1.35",
+    "boto3>=1.43.115",
     "httpx>=0.28",
 ]
 
