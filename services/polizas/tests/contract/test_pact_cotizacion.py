@@ -57,8 +57,13 @@ def _cuerpo(insumos: dict[str, Any]) -> dict[str, Any]:
     perfil = insumos["perfil"]
     return {
         "cotizacionId": match.regex(insumos["cotizacionId"], regex=UUID_RE),
-        "ofertaId": None,
-        "codigo": None,
+        # HU-W04: la oferta guardada; null en las cotizaciones anteriores a ella.
+        "ofertaId": None
+        if insumos["ofertaId"] is None
+        else match.regex(insumos["ofertaId"], regex=UUID_RE),
+        "codigo": None
+        if insumos["codigo"] is None
+        else match.regex(insumos["codigo"], regex=r"^COT-\d{4}-\d{5,}$"),
         "clienteId": match.regex(insumos["clienteId"], regex=UUID_RE),
         "estadoIdentidad": match.regex(
             insumos["estadoIdentidad"], regex="^(VERIFICADO|PENDIENTE|RECHAZADO)$"

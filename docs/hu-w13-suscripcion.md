@@ -94,6 +94,8 @@ HU-W13 necesita saber si una oferta está vigente (la suscripción no decide sob
 | Contratos que la exponen | `contracts/openapi/cotizacion.yaml` y `contracts/openapi/bff-web.yaml` | Campo **opcional** `vigenteHasta` (instante UTC) de `CotizacionRespuesta` (`POST` y `GET /v1/cotizaciones/...`), y campo obligatorio `vigenteHasta` de `InsumosSuscripcion` (`GET /v1/cotizaciones/{cotizacionId}/insumos-suscripcion`) |
 | Quién la usa | `polizas` | Lee `vigenteHasta` de los insumos, decide con su propio reloj (`ahora < vigenteHasta`, `polizas/domain/suscripcion/vigencia.py`) y la guarda en la instantánea de la decisión (DS2-10); la aceptación de HU-W15 validará contra esa instantánea, sin volver a llamar a `cotizacion` |
 
+> **Hecho en HU-W04** ([docs/hu-w04-oferta.md](hu-w04-oferta.md#7-traspaso-de-hu-w13)): la vigencia sale de las reglas de prima (`oferta.vigenciaMinutos`, 7 días en 2026.10.1) y se guarda con la oferta; `ofertaId` y `codigo` ya se llenan; `vigenteHasta` conserva nombre y significado; el pacto `polizas-cotizacion` sigue verde. `oferta_vigencia_horas` se conserva como respaldo para reglas sin condiciones de oferta y cotizaciones anteriores a la migración 004.
+
 **Cómo reemplazarla en HU-W04 sin romper `polizas`:**
 
 1. Si W04 crea su entidad oferta con su propia vigencia, calcula `vigenteHasta` con ella en `ConsultarInsumos` (`application/suscripcion/insumos.py`) y en `respuesta_de` (`adapters/inbound/http/cotizaciones.py`), en lugar de `vigente_hasta(...)`. Puede reutilizar `oferta_vigente` para su propio criterio.

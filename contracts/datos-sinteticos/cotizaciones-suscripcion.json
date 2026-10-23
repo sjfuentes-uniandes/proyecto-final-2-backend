@@ -23,8 +23,8 @@
       },
       "insumos": {
         "cotizacionId": "00000000-0000-4000-a000-000000000001",
-        "ofertaId": null,
-        "codigo": null,
+        "ofertaId": "00000000-0000-4000-e000-000000000001",
+        "codigo": "COT-2026-00001",
         "clienteId": "00000000-0000-4000-8000-000000000001",
         "estadoIdentidad": "VERIFICADO",
         "socioId": null,
@@ -540,8 +540,8 @@
       },
       "insumos": {
         "cotizacionId": "00000000-0000-4000-a000-000000000008",
-        "ofertaId": null,
-        "codigo": null,
+        "ofertaId": "00000000-0000-4000-e000-000000000008",
+        "codigo": "COT-2026-00008",
         "clienteId": "00000000-0000-4000-8000-000000000006",
         "estadoIdentidad": "VERIFICADO",
         "socioId": null,
