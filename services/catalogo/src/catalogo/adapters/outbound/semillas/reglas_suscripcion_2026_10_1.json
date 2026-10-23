@@ -1,0 +1,29 @@
+{
+  "productoId": "vida-hipotecario",
+  "alternativas": [
+    {"productoId": "vida-senior", "descriptor": {"codigo": "EDAD_MAXIMA", "valor": "80"}},
+    {"productoId": "proteccion-pagos", "descriptor": {"codigo": "SIN_LIMITE_EDAD", "valor": null}},
+    {"productoId": "auxilio-funerario", "descriptor": {"codigo": "EDAD_MAXIMA", "valor": "85"}}
+  ],
+  "reglas": [
+    {"codigo": "SUS-001", "orden": 1, "tipo": "EXCLUYENTE", "descripcion": "regla.edad.entre",
+     "campo": "edad", "operador": "entre", "valor": ["18", "65"],
+     "visibilidad": "EXPLICABLE", "motivoCliente": "EDAD_FUERA_DE_RANGO"},
+    {"codigo": "SUS-004", "orden": 2, "tipo": "REVISION", "descripcion": "regla.suma_asegurada.maximo",
+     "campo": "suma_asegurada", "operador": "<=", "valor": "500000000",
+     "visibilidad": "EXPLICABLE", "motivoCliente": "SUMA_REQUIERE_REVISION"},
+    {"codigo": "SUS-007", "orden": 3, "tipo": "REVISION", "descripcion": "regla.nivel_riesgo.distinto",
+     "campo": "nivel_riesgo", "operador": "!=", "valor": "ALTO",
+     "visibilidad": "EXPLICABLE", "motivoCliente": "PERFIL_REQUIERE_REVISION"},
+    {"codigo": "SUS-011", "orden": 4, "tipo": "REVISION", "descripcion": "regla.confianza_perfil.minimo",
+     "campo": "confianza_perfil", "operador": ">=", "valor": "0.70",
+     "visibilidad": "EXPLICABLE", "motivoCliente": "PERFIL_REQUIERE_REVISION"},
+    {"codigo": "SUS-015", "orden": 5, "tipo": "EXCLUYENTE",
+     "descripcion": "regla.listas_restrictivas.sin_coincidencias",
+     "campo": "coincidencias_listas_restrictivas", "operador": "==", "valor": "0",
+     "visibilidad": "RESERVADA", "motivoCliente": "NO_ELEGIBLE"},
+    {"codigo": "SUS-019", "orden": 6, "tipo": "EXCLUYENTE", "descripcion": "regla.plazo_credito_meses.maximo",
+     "campo": "plazo_credito_meses", "operador": "<=", "valor": "240",
+     "visibilidad": "EXPLICABLE", "motivoCliente": "PLAZO_FUERA_DE_RANGO"}
+  ]
+}

@@ -25,6 +25,8 @@ UMBRALES: dict[str, Umbral] = {
     "api-socios": Umbral(90, 85),
     "adaptador-identidad": Umbral(90, 0),
     "clientes": Umbral(90, 85),
+    # HU-W13: negocio asegurador (§12.2), como catalogo.
+    "polizas": Umbral(90, 85),
 }
 SIN_UMBRAL = Umbral(0, 0)
 

@@ -14,8 +14,16 @@ from schemathesis.specs.openapi.checks import response_schema_conformance
 
 
 @pytest.fixture
-def esquema(repositorio: Any, productos_repo: Any, reloj: Any) -> Iterator[Any]:
-    app = crear_app(Settings(), repositorio=repositorio, productos_repo=productos_repo, reloj=reloj)
+def esquema(
+    repositorio: Any, productos_repo: Any, reglas_suscripcion_repo: Any, reloj: Any
+) -> Iterator[Any]:
+    app = crear_app(
+        Settings(),
+        repositorio=repositorio,
+        productos_repo=productos_repo,
+        reglas_suscripcion_repo=reglas_suscripcion_repo,
+        reloj=reloj,
+    )
     # El lifespan crea los casos de uso en app.state.
     with TestClient(app):
         yield schemathesis.openapi.from_asgi("/openapi.json", app)

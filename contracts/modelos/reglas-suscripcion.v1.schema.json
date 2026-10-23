@@ -1,0 +1,211 @@
+{
+  "$defs": {
+    "Alternativa": {
+      "additionalProperties": false,
+      "description": "Producto alternativo, solo informativo (E03).",
+      "properties": {
+        "descriptor": {
+          "$ref": "#/$defs/DescriptorAlternativa"
+        },
+        "productoId": {
+          "pattern": "^[a-z0-9-]{1,64}$",
+          "title": "Productoid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "productoId",
+        "descriptor"
+      ],
+      "title": "Alternativa",
+      "type": "object"
+    },
+    "CampoRegla": {
+      "description": "Conjunto cerrado de insumos de la oferta que una regla puede evaluar.",
+      "enum": [
+        "edad",
+        "suma_asegurada",
+        "plazo_credito_meses",
+        "nivel_riesgo",
+        "confianza_perfil",
+        "coincidencias_listas_restrictivas"
+      ],
+      "title": "CampoRegla",
+      "type": "string"
+    },
+    "CodigoDescriptor": {
+      "enum": [
+        "EDAD_MAXIMA",
+        "SIN_LIMITE_EDAD"
+      ],
+      "title": "CodigoDescriptor",
+      "type": "string"
+    },
+    "DescriptorAlternativa": {
+      "additionalProperties": false,
+      "description": "Lo que el portal muestra de la alternativa (E03): `EDAD_MAXIMA` con `valor` en a\u00f1os.",
+      "properties": {
+        "codigo": {
+          "$ref": "#/$defs/CodigoDescriptor"
+        },
+        "valor": {
+          "anyOf": [
+            {
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Valor"
+        }
+      },
+      "required": [
+        "codigo",
+        "valor"
+      ],
+      "title": "DescriptorAlternativa",
+      "type": "object"
+    },
+    "MotivoCliente": {
+      "enum": [
+        "EDAD_FUERA_DE_RANGO",
+        "PLAZO_FUERA_DE_RANGO",
+        "SUMA_REQUIERE_REVISION",
+        "PERFIL_REQUIERE_REVISION",
+        "NO_ELEGIBLE"
+      ],
+      "title": "MotivoCliente",
+      "type": "string"
+    },
+    "OperadorRegla": {
+      "enum": [
+        ">=",
+        "<=",
+        "==",
+        "!=",
+        "entre",
+        "en"
+      ],
+      "title": "OperadorRegla",
+      "type": "string"
+    },
+    "ReglaSuscripcion": {
+      "additionalProperties": false,
+      "description": "Una regla de la tabla de decisi\u00f3n. `valor` es texto (decimal o categor\u00eda) o, con `entre`\ny `en`, una lista de textos; su coherencia con el operador se valida en el dominio.",
+      "properties": {
+        "campo": {
+          "$ref": "#/$defs/CampoRegla"
+        },
+        "codigo": {
+          "pattern": "^SUS-\\d{3}$",
+          "title": "Codigo",
+          "type": "string"
+        },
+        "descripcion": {
+          "maxLength": 120,
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$",
+          "title": "Descripcion",
+          "type": "string"
+        },
+        "motivoCliente": {
+          "$ref": "#/$defs/MotivoCliente"
+        },
+        "operador": {
+          "$ref": "#/$defs/OperadorRegla"
+        },
+        "orden": {
+          "minimum": 1,
+          "title": "Orden",
+          "type": "integer"
+        },
+        "tipo": {
+          "$ref": "#/$defs/TipoRegla"
+        },
+        "valor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 20,
+              "minItems": 1,
+              "type": "array"
+            }
+          ],
+          "title": "Valor"
+        },
+        "visibilidad": {
+          "$ref": "#/$defs/Visibilidad"
+        }
+      },
+      "required": [
+        "codigo",
+        "orden",
+        "tipo",
+        "descripcion",
+        "campo",
+        "operador",
+        "valor",
+        "visibilidad",
+        "motivoCliente"
+      ],
+      "title": "ReglaSuscripcion",
+      "type": "object"
+    },
+    "TipoRegla": {
+      "description": "EXCLUYENTE: si no se cumple, rechaza. REVISION: si no se cumple, env\u00eda a un suscriptor.",
+      "enum": [
+        "EXCLUYENTE",
+        "REVISION"
+      ],
+      "title": "TipoRegla",
+      "type": "string"
+    },
+    "Visibilidad": {
+      "description": "RESERVADA: el valor del caso no se muestra al asesor ni al cliente (DS2-07).",
+      "enum": [
+        "EXPLICABLE",
+        "RESERVADA"
+      ],
+      "title": "Visibilidad",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "alternativas": {
+      "items": {
+        "$ref": "#/$defs/Alternativa"
+      },
+      "maxItems": 10,
+      "title": "Alternativas",
+      "type": "array"
+    },
+    "productoId": {
+      "pattern": "^[a-z0-9-]{1,64}$",
+      "title": "Productoid",
+      "type": "string"
+    },
+    "reglas": {
+      "items": {
+        "$ref": "#/$defs/ReglaSuscripcion"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "title": "Reglas",
+      "type": "array"
+    }
+  },
+  "required": [
+    "productoId",
+    "alternativas",
+    "reglas"
+  ],
+  "title": "DefinicionReglasSuscripcion",
+  "type": "object"
+}

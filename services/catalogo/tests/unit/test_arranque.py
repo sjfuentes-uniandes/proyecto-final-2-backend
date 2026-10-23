@@ -32,6 +32,7 @@ def test_el_arranque_migra_y_abre_el_pool_solo_con_base_configurada(
     with TestClient(crear_app(settings)) as cliente:
         estado = cliente.app.state  # type: ignore[attr-defined]
         assert hasattr(estado, "consultar_modelo") is con_base
+        assert hasattr(estado, "consultar_reglas_suscripcion") is con_base
         pool = getattr(estado, "pool", None)
     assert len(migraciones) == (1 if con_base else 0)
     if con_base:

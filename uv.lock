@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -2052,7 +2052,7 @@ source = { editable = "services/polizas" }
 dependencies = [
     { name = "alembic" },
     { name = "fastapi" },
-    { name = "psycopg", extra = ["binary"] },
+    { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pydantic-settings" },
     { name = "solventa-common" },
     { name = "uvicorn", extra = ["standard"] },
@@ -2062,7 +2062,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "solventa-common", editable = "libs/solventa-common" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },

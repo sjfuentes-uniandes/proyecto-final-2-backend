@@ -13,7 +13,7 @@ from solventa_common.cache import crear_cache
 from solventa_common.errors import registrar_manejadores
 from solventa_common.telemetry import instrumentar
 
-from cotizacion.adapters.inbound.http import cotizaciones, perfilamiento
+from cotizacion.adapters.inbound.http import cotizaciones, perfilamiento, suscripcion
 from cotizacion.adapters.outbound.adaptador_datos_http import AdaptadorDatosHttp
 from cotizacion.adapters.outbound.catalogo_http import CatalogoHttp
 from cotizacion.adapters.outbound.clientes_http import ClientesHttp
@@ -34,6 +34,7 @@ from cotizacion.application.perfilamiento.puertos import (
 )
 from cotizacion.application.perfilamiento.recalcular_perfil import RecalcularPerfil
 from cotizacion.application.perfilamiento.reconstruir_perfil import ReconstruirPerfil
+from cotizacion.application.suscripcion.insumos import ConfigInsumos, ConsultarInsumos
 from cotizacion.config import Settings
 from cotizacion.domain.perfilamiento.plan_fuentes import plan_fuentes
 
@@ -83,10 +84,21 @@ def _configurar_casos(app: FastAPI, puertos: Puertos, settings: Settings) -> Non
             config=ConfigCotizacion(
                 dependencia_timeout_ms=settings.dependencia_timeout_ms,
                 presupuesto_ms=settings.cotizacion_presupuesto_ms,
+                oferta_vigencia_horas=settings.oferta_vigencia_horas,
             ),
         )
         app.state.consultar_cotizacion = ConsultarCotizacion(puertos.cotizaciones)
         app.state.consultar_condiciones = ConsultarCondiciones(puertos.productos, puertos.reloj)
+        # HU-W13: insumos de la oferta para la suscripción de polizas.
+        app.state.consultar_insumos = ConsultarInsumos(
+            cotizaciones=puertos.cotizaciones,
+            perfiles=puertos.perfiles,
+            identidad=puertos.identidad,
+            config=ConfigInsumos(
+                dependencia_timeout_ms=settings.dependencia_timeout_ms,
+                oferta_vigencia_horas=settings.oferta_vigencia_horas,
+            ),
+        )
 
 
 def crear_app(
@@ -175,6 +187,7 @@ def crear_app(
     app.include_router(perfilamiento.router)
     app.include_router(cotizaciones.router)
     app.include_router(cotizaciones.router_productos)
+    app.include_router(suscripcion.router)
 
     @app.get("/health", response_model=None)
     async def health(request: Request) -> dict[str, str] | JSONResponse:

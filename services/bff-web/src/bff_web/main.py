@@ -9,6 +9,7 @@ from bff_web.adapters.inbound import (
     operacion,
     perfilamiento,
     socios,
+    suscripciones,
     usuarios,
 )
 from bff_web.config import settings
@@ -34,6 +35,9 @@ app.include_router(cotizaciones.router)
 app.include_router(cotizaciones.router_productos)
 app.include_router(clientes.router)
 app.include_router(consentimientos.router)
+# HU-W13: suscripción automática (polizas).
+app.include_router(suscripciones.router)
+app.include_router(suscripciones.router_bandeja)
 
 
 @app.get("/health")

@@ -18,6 +18,8 @@ class Settings(ServiceSettings):
     grupo_administradores: str = "administradores"
     grupo_administradores_socios: str = "administradores-socios"
     grupo_asesores: str = "asesores"
+    # HU-W13 (DS2-12): bandeja de suscripción (E01) y revisión asistida (E04).
+    grupo_suscriptores: str = "suscriptores"
     api_socios_url: str = Field(
         "http://localhost:8082",
         validation_alias=AliasChoices("API_SOCIOS_URL", "SOLVENTA_API_SOCIOS_URL"),
@@ -35,6 +37,14 @@ class Settings(ServiceSettings):
         validation_alias=AliasChoices("CLIENTES_URL", "SOLVENTA_CLIENTES_URL"),
     )
     clientes_timeout_ms: int = 5000
+    # HU-W13: suscripción en polizas (DS2-19: como cotizacion_timeout_ms). El nombre del cliente
+    # se compone con su propio timeout corto: si clientes tarda, la vista sale sin él.
+    polizas_url: str = Field(
+        "http://localhost:8088",
+        validation_alias=AliasChoices("POLIZAS_URL", "SOLVENTA_POLIZAS_URL"),
+    )
+    polizas_timeout_ms: int = 1500
+    nombre_cliente_timeout_ms: int = 500
     # Pool de Cognito del back-office (infra/apps/ecs.tf): Administración › Usuarios.
     backoffice_user_pool_id: str | None = Field(
         None,

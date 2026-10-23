@@ -1635,6 +1635,399 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/suscripciones:
+    post:
+      tags:
+      - suscripciones
+      summary: Solicitar Suscripcion
+      description: Pide la decisión automática de suscripción de una cotización (grupo
+        asesores).
+      operationId: solicitar_suscripcion_v1_suscripciones_post
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Idempotency-Key
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudSuscripcion'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionSuscripcion'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: ROL_NO_AUTORIZADO o IDENTIDAD_NO_VERIFICADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA, IDEMPOTENCIA_CONFLICTO o REGLAS_NO_VIGENTES
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '200':
+          description: Misma Idempotency-Key, o la cotización ya tenía una decisión
+            (DS2-05)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionSuscripcion'
+        '404':
+          description: COTIZACION_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: OFERTA_VENCIDA (detalles.accion = NUEVA_COTIZACION) o IDENTIDAD_PENDIENTE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+    get:
+      tags:
+      - suscripciones
+      summary: Buscar Suscripcion
+      description: La decisión de una cotización, si existe (grupo asesores).
+      operationId: buscar_suscripcion_v1_suscripciones_get
+      parameters:
+      - name: cotizacionId
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cotizacionid
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaDecisiones'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo requerido o no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/suscripciones/{decisionId}:
+    get:
+      tags:
+      - suscripciones
+      summary: Consultar Suscripcion
+      description: Una decisión (E02, E03, E04). Para asesores, las reglas RESERVADA
+        llegan sin valorCaso.
+      operationId: consultar_suscripcion_v1_suscripciones__decisionId__get
+      parameters:
+      - name: decisionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Decisionid
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionSuscripcionVista'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo requerido o no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: DECISION_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/bandeja-suscripcion:
+    get:
+      tags:
+      - suscripciones
+      summary: Bandeja Suscripcion
+      description: Casos en revisión del más antiguo al más reciente, con el nombre
+        del cliente (E01).
+      operationId: bandeja_suscripcion_v1_bandeja_suscripcion_get
+      parameters:
+      - name: productoId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^[a-z0-9-]{1,64}$
+          - type: 'null'
+          title: Productoid
+      - name: motivo
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/MotivoCliente'
+          - type: 'null'
+          title: Motivo
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 64
+          - type: 'null'
+          title: Q
+      - name: limite
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limite
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Cursor
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BandejaSuscripcionVista'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo requerido o no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/bandeja-suscripcion/resumen:
+    get:
+      tags:
+      - suscripciones
+      summary: Resumen Bandeja
+      description: Indicadores de la bandeja (DS2-14); `desde` y `hasta` delimitan
+        el día del usuario.
+      operationId: resumen_bandeja_v1_bandeja_suscripcion_resumen_get
+      parameters:
+      - name: desde
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+          description: Inicio (incluido), ISO-8601 con zona
+          title: Desde
+        description: Inicio (incluido), ISO-8601 con zona
+      - name: hasta
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+          description: Fin (excluido), ISO-8601 con zona
+          title: Hasta
+        description: Fin (excluido), ISO-8601 con zona
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumenBandeja'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo requerido o no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (también si desde ≥ hasta)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -1754,6 +2147,29 @@ components:
       - umbrales
       - resumen
       title: AlertasRespuesta
+    BandejaSuscripcionVista:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/CasoBandejaVista'
+          type: array
+          title: Items
+          description: Del más antiguo al más reciente
+        siguienteCursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Siguientecursor
+        total:
+          type: integer
+          title: Total
+          description: Casos en revisión que cumplen los filtros
+      type: object
+      required:
+      - items
+      - siguienteCursor
+      - total
+      title: BandejaSuscripcionVista
     CambioPlanSolicitud:
       properties:
         plan:
@@ -1763,6 +2179,16 @@ components:
       required:
       - plan
       title: CambioPlanSolicitud
+    CampoRegla:
+      type: string
+      enum:
+      - edad
+      - suma_asegurada
+      - plazo_credito_meses
+      - nivel_riesgo
+      - confianza_perfil
+      - coincidencias_listas_restrictivas
+      title: CampoRegla
     CanalVenta:
       type: string
       enum:
@@ -1771,6 +2197,77 @@ components:
       - comercio
       - otro
       title: CanalVenta
+    CasoBandejaVista:
+      properties:
+        decisionId:
+          type: string
+          format: uuid
+          title: Decisionid
+        codigo:
+          type: string
+          title: Codigo
+        cotizacionId:
+          type: string
+          format: uuid
+          title: Cotizacionid
+        cotizacionCodigo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cotizacioncodigo
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        productoId:
+          type: string
+          title: Productoid
+        moneda:
+          type: string
+          title: Moneda
+        sumaAsegurada:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Sumaasegurada
+        motivos:
+          items:
+            $ref: '#/components/schemas/MotivoCliente'
+          type: array
+          title: Motivos
+        reglasNoCumplidas:
+          items:
+            type: string
+          type: array
+          title: Reglasnocumplidas
+          description: Códigos de las reglas NO_CUMPLE o NO_EVALUABLE, por orden
+        decididaEn:
+          type: string
+          format: date-time
+          title: Decididaen
+        antiguedadMinutos:
+          type: integer
+          title: Antiguedadminutos
+        clienteNombre:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Clientenombre
+      type: object
+      required:
+      - decisionId
+      - codigo
+      - cotizacionId
+      - cotizacionCodigo
+      - clienteId
+      - productoId
+      - moneda
+      - sumaAsegurada
+      - motivos
+      - reglasNoCumplidas
+      - decididaEn
+      - antiguedadMinutos
+      - clienteNombre
+      title: CasoBandejaVista
     ClienteDto:
       properties:
         clienteId:
@@ -1834,6 +2331,69 @@ components:
       - actual
       title: ComparacionPerfiles
       description: Perfil anterior y perfil recalculado desde él (HU-W12, D05).
+    CondicionesOfertaDto:
+      properties:
+        socioId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Socioid
+        versionProducto:
+          type: string
+          title: Versionproducto
+        moneda:
+          type: string
+          title: Moneda
+        periodicidad:
+          type: string
+          title: Periodicidad
+        primaTotal:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Primatotal
+        versionReglasPrima:
+          type: string
+          title: Versionreglasprima
+        huellaCalculo:
+          type: string
+          title: Huellacalculo
+        coberturas:
+          items:
+            $ref: '#/components/schemas/CoberturaProductoDto'
+          type: array
+          title: Coberturas
+        sumaAsegurada:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Sumaasegurada
+        plazoCreditoMeses:
+          type: integer
+          title: Plazocreditomeses
+        calculadoEn:
+          type: string
+          format: date-time
+          title: Calculadoen
+        vigenteHasta:
+          type: string
+          format: date-time
+          title: Vigentehasta
+      type: object
+      required:
+      - socioId
+      - versionProducto
+      - moneda
+      - periodicidad
+      - primaTotal
+      - versionReglasPrima
+      - huellaCalculo
+      - coberturas
+      - sumaAsegurada
+      - plazoCreditoMeses
+      - calculadoEn
+      - vigenteHasta
+      title: CondicionesOfertaDto
+      description: Instantánea de la oferta al decidir (DS2-10), sin datos del perfil
+        ni la edad.
     CondicionesProducto:
       properties:
         productoId:
@@ -1994,6 +2554,37 @@ components:
       title: ConsumoSocio
       description: 'Solo datos del socio consultado: el administrador nunca ve la
         API key.'
+    ContextoCasoDto:
+      properties:
+        nivelRiesgo:
+          anyOf:
+          - $ref: '#/components/schemas/NivelRiesgo'
+          - type: 'null'
+        confianza:
+          anyOf:
+          - type: string
+            pattern: ^-?\d+(\.\d+)?$
+          - type: 'null'
+          title: Confianza
+        fuentesConsultadas:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Fuentesconsultadas
+        fuentesDeclaradas:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Fuentesdeclaradas
+      type: object
+      required:
+      - nivelRiesgo
+      - confianza
+      - fuentesConsultadas
+      - fuentesDeclaradas
+      title: ContextoCasoDto
+      description: Contexto del perfil para la revisión (E04); null en cada campo
+        si no hubo perfil.
     ContextoRespuesta:
       properties:
         canal:
@@ -2090,6 +2681,14 @@ components:
           title: Pasos
           description: Pasos del cálculo con su duración; vacío al leer o al repetir
             la clave
+        vigenteHasta:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Vigentehasta
+          description: 'Fin de la vigencia de la oferta (UTC): vigente si ahora <
+            vigenteHasta (DS2-20, HU-W13)'
       type: object
       required:
       - id
@@ -2181,6 +2780,210 @@ components:
       - PERMITIDO_PARCIAL
       - RECHAZADO
       title: DecisionConsentimiento
+    DecisionSuscripcion:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        codigo:
+          type: string
+          pattern: ^DEC-\d{4}-\d{6}$
+          title: Codigo
+        cotizacionId:
+          type: string
+          format: uuid
+          title: Cotizacionid
+        ofertaId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Ofertaid
+          description: Null hasta HU-W04
+        cotizacionCodigo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cotizacioncodigo
+          description: Null hasta HU-W04 (CF-S2-10)
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        productoId:
+          type: string
+          title: Productoid
+        resultado:
+          $ref: '#/components/schemas/ResultadoDecision'
+        tipo:
+          $ref: '#/components/schemas/TipoDecision'
+        reglasEvaluadas:
+          items:
+            $ref: '#/components/schemas/ReglaEvaluadaDto'
+          type: array
+          title: Reglasevaluadas
+        reglaDeterminante:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Regladeterminante
+          description: Primera regla EXCLUYENTE incumplida (RECHAZADA); null en otro
+            caso
+        motivos:
+          items:
+            $ref: '#/components/schemas/MotivoCliente'
+          type: array
+          title: Motivos
+        versionReglas:
+          type: string
+          title: Versionreglas
+        hashReglas:
+          type: string
+          title: Hashreglas
+        condiciones:
+          $ref: '#/components/schemas/CondicionesOfertaDto'
+        contexto:
+          $ref: '#/components/schemas/ContextoCasoDto'
+        admiteExcepcion:
+          type: boolean
+          title: Admiteexcepcion
+          description: Siempre false en el Sprint 2 (DS2-08)
+        decididaEn:
+          type: string
+          format: date-time
+          title: Decididaen
+        duracionMs:
+          type: integer
+          title: Duracionms
+      type: object
+      required:
+      - id
+      - codigo
+      - cotizacionId
+      - ofertaId
+      - cotizacionCodigo
+      - clienteId
+      - productoId
+      - resultado
+      - tipo
+      - reglasEvaluadas
+      - reglaDeterminante
+      - motivos
+      - versionReglas
+      - hashReglas
+      - condiciones
+      - contexto
+      - admiteExcepcion
+      - decididaEn
+      - duracionMs
+      title: DecisionSuscripcion
+    DecisionSuscripcionVista:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        codigo:
+          type: string
+          pattern: ^DEC-\d{4}-\d{6}$
+          title: Codigo
+        cotizacionId:
+          type: string
+          format: uuid
+          title: Cotizacionid
+        ofertaId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Ofertaid
+          description: Null hasta HU-W04
+        cotizacionCodigo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cotizacioncodigo
+          description: Null hasta HU-W04 (CF-S2-10)
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        productoId:
+          type: string
+          title: Productoid
+        resultado:
+          $ref: '#/components/schemas/ResultadoDecision'
+        tipo:
+          $ref: '#/components/schemas/TipoDecision'
+        reglasEvaluadas:
+          items:
+            $ref: '#/components/schemas/ReglaEvaluadaDto'
+          type: array
+          title: Reglasevaluadas
+        reglaDeterminante:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Regladeterminante
+          description: Primera regla EXCLUYENTE incumplida (RECHAZADA); null en otro
+            caso
+        motivos:
+          items:
+            $ref: '#/components/schemas/MotivoCliente'
+          type: array
+          title: Motivos
+        versionReglas:
+          type: string
+          title: Versionreglas
+        hashReglas:
+          type: string
+          title: Hashreglas
+        condiciones:
+          $ref: '#/components/schemas/CondicionesOfertaDto'
+        contexto:
+          $ref: '#/components/schemas/ContextoCasoDto'
+        admiteExcepcion:
+          type: boolean
+          title: Admiteexcepcion
+          description: Siempre false en el Sprint 2 (DS2-08)
+        decididaEn:
+          type: string
+          format: date-time
+          title: Decididaen
+        duracionMs:
+          type: integer
+          title: Duracionms
+        clienteNombre:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Clientenombre
+      type: object
+      required:
+      - id
+      - codigo
+      - cotizacionId
+      - ofertaId
+      - cotizacionCodigo
+      - clienteId
+      - productoId
+      - resultado
+      - tipo
+      - reglasEvaluadas
+      - reglaDeterminante
+      - motivos
+      - versionReglas
+      - hashReglas
+      - condiciones
+      - contexto
+      - admiteExcepcion
+      - decididaEn
+      - duracionMs
+      - clienteNombre
+      title: DecisionSuscripcionVista
+      description: La decisión de polizas más el nombre del cliente (E03, E04); null
+        si clientes falla.
     DesglosePrimaDto:
       properties:
         primaBase:
@@ -2562,6 +3365,18 @@ components:
       - cuota
       - periodo
       title: LimitesPlan
+    ListaDecisiones:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ResumenDecision'
+          type: array
+          title: Items
+          description: '0 o 1 elemento: una decisión por cotización'
+      type: object
+      required:
+      - items
+      title: ListaDecisiones
     ListaPerfiles:
       properties:
         items:
@@ -2573,6 +3388,15 @@ components:
       required:
       - items
       title: ListaPerfiles
+    MotivoCliente:
+      type: string
+      enum:
+      - EDAD_FUERA_DE_RANGO
+      - PLAZO_FUERA_DE_RANGO
+      - SUMA_REQUIERE_REVISION
+      - PERFIL_REQUIERE_REVISION
+      - NO_ELEGIBLE
+      title: MotivoCliente
     MotivoDato:
       type: string
       enum:
@@ -2642,6 +3466,16 @@ components:
       - nombre
       - grupos
       title: NuevoUsuarioSolicitud
+    OperadorRegla:
+      type: string
+      enum:
+      - '>='
+      - <=
+      - ==
+      - '!='
+      - entre
+      - en
+      title: OperadorRegla
     OrigenDato:
       type: string
       enum:
@@ -2840,6 +3674,148 @@ components:
       - tasa
       - valor
       title: RecargoPrimaDto
+    ReglaEvaluadaDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        orden:
+          type: integer
+          title: Orden
+        tipo:
+          $ref: '#/components/schemas/TipoRegla'
+        descripcion:
+          type: string
+          title: Descripcion
+        campo:
+          $ref: '#/components/schemas/CampoRegla'
+        operador:
+          $ref: '#/components/schemas/OperadorRegla'
+        valor:
+          anyOf:
+          - type: string
+          - items:
+              type: string
+            type: array
+          title: Valor
+        valorCaso:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Valorcaso
+          description: Valor del caso como texto; null si no es evaluable o si la
+            regla es RESERVADA y el actor no es SUSCRIPTOR (DS2-07)
+        resultado:
+          $ref: '#/components/schemas/ResultadoRegla'
+        visibilidad:
+          $ref: '#/components/schemas/Visibilidad'
+        reservada:
+          type: boolean
+          title: Reservada
+          description: true si se ocultó valorCaso al actor (DS2-07)
+      type: object
+      required:
+      - codigo
+      - orden
+      - tipo
+      - descripcion
+      - campo
+      - operador
+      - valor
+      - valorCaso
+      - resultado
+      - visibilidad
+      - reservada
+      title: ReglaEvaluadaDto
+    ResultadoDecision:
+      type: string
+      enum:
+      - APROBADA
+      - RECHAZADA
+      - REVISION_REQUERIDA
+      title: ResultadoDecision
+    ResultadoRegla:
+      type: string
+      enum:
+      - CUMPLE
+      - NO_CUMPLE
+      - NO_EVALUABLE
+      title: ResultadoRegla
+    ResumenBandeja:
+      properties:
+        desde:
+          type: string
+          format: date-time
+          title: Desde
+        hasta:
+          type: string
+          format: date-time
+          title: Hasta
+        resueltasAutomaticamente:
+          type: integer
+          title: Resueltasautomaticamente
+        enviadasARevision:
+          type: integer
+          title: Enviadasarevision
+        total:
+          type: integer
+          title: Total
+        tiempoMedioDecisionMs:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Tiempomediodecisionms
+        fueraDelCompromiso:
+          type: integer
+          title: Fueradelcompromiso
+          description: Casos en revisión con antigüedad mayor que el compromiso (de
+            cualquier día)
+        compromisoRevisionHoras:
+          type: integer
+          title: Compromisorevisionhoras
+      type: object
+      required:
+      - desde
+      - hasta
+      - resueltasAutomaticamente
+      - enviadasARevision
+      - total
+      - tiempoMedioDecisionMs
+      - fueraDelCompromiso
+      - compromisoRevisionHoras
+      title: ResumenBandeja
+      description: Indicadores de E01 (DS2-14) en [desde, hasta).
+    ResumenDecision:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        codigo:
+          type: string
+          title: Codigo
+        cotizacionId:
+          type: string
+          format: uuid
+          title: Cotizacionid
+        resultado:
+          $ref: '#/components/schemas/ResultadoDecision'
+        versionReglas:
+          type: string
+          title: Versionreglas
+        decididaEn:
+          type: string
+          format: date-time
+          title: Decididaen
+      type: object
+      required:
+      - id
+      - codigo
+      - cotizacionId
+      - resultado
+      - versionReglas
+      - decididaEn
+      title: ResumenDecision
     ResumenPerfil:
       properties:
         id:
@@ -3089,6 +4065,21 @@ components:
       - productoId
       - datosDeclarados
       title: SolicitudPerfil
+    SolicitudSuscripcion:
+      properties:
+        cotizacionId:
+          type: string
+          format: uuid
+          title: Cotizacionid
+      type: object
+      required:
+      - cotizacionId
+      title: SolicitudSuscripcion
+    TipoDecision:
+      type: string
+      enum:
+      - AUTOMATICA
+      title: TipoDecision
     TipoFuente:
       type: string
       enum:
@@ -3103,6 +4094,12 @@ components:
       - REVOCADO
       - VENCIDO
       title: TipoHito
+    TipoRegla:
+      type: string
+      enum:
+      - EXCLUYENTE
+      - REVISION
+      title: TipoRegla
     TramoRespuesta:
       properties:
         servicio:
@@ -3298,3 +4295,9 @@ components:
       - fin
       - reinicio
       title: VentanaCuota
+    Visibilidad:
+      type: string
+      enum:
+      - EXPLICABLE
+      - RESERVADA
+      title: Visibilidad

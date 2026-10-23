@@ -77,6 +77,7 @@ from cotizacion.domain.cotizacion.prima import (
     huella_calculo,
     validar_entradas,
 )
+from cotizacion.domain.cotizacion.vigencia import VIGENCIA_HORAS_POR_OMISION
 from cotizacion.domain.perfilamiento.errores import (
     ClienteNoEncontrado,
     ConflictoIdempotencia,
@@ -135,6 +136,8 @@ class ConfigCotizacion:
 
     dependencia_timeout_ms: int = 150
     presupuesto_ms: int = 250
+    # HU-W13 (DS2-20): horas de vigencia de la oferta desde el cálculo.
+    oferta_vigencia_horas: int = VIGENCIA_HORAS_POR_OMISION
 
 
 @dataclass(frozen=True, slots=True)

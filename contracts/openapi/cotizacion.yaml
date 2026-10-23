@@ -586,6 +586,75 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/cotizaciones/{cotizacionId}/insumos-suscripcion:
+    get:
+      tags:
+      - suscripcion
+      summary: Insumos Suscripcion
+      description: Insumos de la oferta para el motor de suscripción de polizas (uso
+        interno, ASESOR).
+      operationId: insumos_suscripcion_v1_cotizaciones__cotizacionId__insumos_suscripcion_get
+      parameters:
+      - name: cotizacionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cotizacionid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsumosSuscripcion'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de ASESOR'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: COTIZACION_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia: clientes.identidad)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -784,6 +853,14 @@ components:
           title: Pasos
           description: Pasos del cálculo con su duración; vacío al leer o al repetir
             la clave
+        vigenteHasta:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Vigentehasta
+          description: 'Fin de la vigencia de la oferta (UTC): vigente si ahora <
+            vigenteHasta (DS2-20, HU-W13)'
       type: object
       required:
       - id
@@ -999,6 +1076,13 @@ components:
       - NO_DISPONIBLE
       - RESPUESTA_INVALIDA
       title: EstadoFuente
+    EstadoIdentidad:
+      type: string
+      enum:
+      - VERIFICADO
+      - RECHAZADO
+      - PENDIENTE
+      title: EstadoIdentidad
     EstadoPerfil:
       type: string
       enum:
@@ -1107,6 +1191,123 @@ components:
       - consultadaEn
       - duracionMs
       title: FuenteDto
+    InsumosSuscripcion:
+      properties:
+        cotizacionId:
+          type: string
+          format: uuid
+          title: Cotizacionid
+        ofertaId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Ofertaid
+          description: Identificador de la oferta; null hasta HU-W04
+        codigo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Codigo
+          description: Código legible de la oferta; null hasta HU-W04
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        estadoIdentidad:
+          $ref: '#/components/schemas/EstadoIdentidad'
+        socioId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Socioid
+        productoId:
+          type: string
+          title: Productoid
+        versionProducto:
+          type: string
+          title: Versionproducto
+        moneda:
+          type: string
+          title: Moneda
+        periodicidad:
+          type: string
+          title: Periodicidad
+        primaTotal:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Primatotal
+        versionReglasPrima:
+          type: string
+          title: Versionreglasprima
+        huellaCalculo:
+          type: string
+          title: Huellacalculo
+        coberturas:
+          items:
+            $ref: '#/components/schemas/CoberturaProductoDto'
+          type: array
+          title: Coberturas
+        sumaAsegurada:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Sumaasegurada
+        plazoCreditoMeses:
+          type: integer
+          title: Plazocreditomeses
+        edad:
+          type: integer
+          title: Edad
+        calculadoEn:
+          type: string
+          format: date-time
+          title: Calculadoen
+        vigenteHasta:
+          type: string
+          format: date-time
+          title: Vigentehasta
+          description: 'Fin de la vigencia de la oferta (UTC): vigente si ahora <
+            vigenteHasta (DS2-20, HU-W13)'
+        perfil:
+          anyOf:
+          - $ref: '#/components/schemas/PerfilInsumosDto'
+          - type: 'null'
+          description: Null si la cotización no usó perfil
+        coincidenciasListasRestrictivas:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Coincidenciaslistasrestrictivas
+          description: De DA_REGISTROS_PUBLICOS en el perfil; null si no se consultó
+      type: object
+      required:
+      - cotizacionId
+      - ofertaId
+      - codigo
+      - clienteId
+      - estadoIdentidad
+      - socioId
+      - productoId
+      - versionProducto
+      - moneda
+      - periodicidad
+      - primaTotal
+      - versionReglasPrima
+      - huellaCalculo
+      - coberturas
+      - sumaAsegurada
+      - plazoCreditoMeses
+      - edad
+      - calculadoEn
+      - vigenteHasta
+      - perfil
+      - coincidenciasListasRestrictivas
+      title: InsumosSuscripcion
+      description: 'Resumen de la cotización para la suscripción (HU-W13). Sin fecha
+        de nacimiento: `edad` es
+
+        la cumplida en la fecha de la cotización. Una cotización vencida también se
+        devuelve.'
     LimitesDto:
       properties:
         sumaAsegurada:
@@ -1175,6 +1376,39 @@ components:
       - duracionMs
       - origen
       title: PasoCotizacionDto
+    PerfilInsumosDto:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        estado:
+          $ref: '#/components/schemas/EstadoPerfil'
+        nivelRiesgo:
+          anyOf:
+          - $ref: '#/components/schemas/NivelRiesgo'
+          - type: 'null'
+        confianza:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Confianza
+        fuentesConsultadas:
+          type: integer
+          title: Fuentesconsultadas
+        fuentesDeclaradas:
+          type: integer
+          title: Fuentesdeclaradas
+      type: object
+      required:
+      - id
+      - estado
+      - nivelRiesgo
+      - confianza
+      - fuentesConsultadas
+      - fuentesDeclaradas
+      title: PerfilInsumosDto
+      description: 'Lo mínimo del perfil que evalúan las reglas: sin factores ni datos
+        de las fuentes.'
     PerfilRespuesta:
       properties:
         id:

@@ -10,7 +10,7 @@ from solventa_common.cache import Cache, crear_cache
 from solventa_common.errors import registrar_manejadores
 from solventa_common.telemetry import instrumentar
 
-from catalogo.adapters.inbound.http import modelos_riesgo, productos
+from catalogo.adapters.inbound.http import modelos_riesgo, productos, reglas_suscripcion
 from catalogo.adapters.outbound.productos_cache import ProductosConCache
 from catalogo.adapters.outbound.reloj import RelojSistema
 from catalogo.application.productos.consultar_producto import ConsultarProductos
@@ -18,17 +18,20 @@ from catalogo.application.productos.puertos import RepositorioProductos
 from catalogo.application.reglas.consultar_modelo import ConsultarModelo
 from catalogo.application.reglas.publicar_modelo import PublicarModelo
 from catalogo.application.reglas.puertos import Reloj, RepositorioModelos
+from catalogo.application.suscripcion.consultar_reglas import ConsultarReglasSuscripcion
+from catalogo.application.suscripcion.puertos import RepositorioReglasSuscripcion
 from catalogo.config import Settings
 
 
 async def _abrir_base(
     app: FastAPI, pila: AsyncExitStack, settings: Settings, cache: Cache | None, reloj: Reloj
-) -> tuple[RepositorioModelos, RepositorioProductos]:
+) -> tuple[RepositorioModelos, RepositorioProductos, RepositorioReglasSuscripcion]:
     """Migra, abre el pool y la caché, e invalida los productos de la semilla (HU-W03)."""
     from psycopg_pool import AsyncConnectionPool
 
     from catalogo.adapters.outbound.modelos_pg import ModelosPg, migrar, sembrar_qa
     from catalogo.adapters.outbound.productos_pg import ProductosPg, semillas
+    from catalogo.adapters.outbound.reglas_suscripcion_pg import ReglasSuscripcionPg
 
     migrar(settings.database_url)
     if settings.semilla_qa:
@@ -47,7 +50,7 @@ async def _abrir_base(
     con_cache = ProductosConCache(ProductosPg(pool), cache_productos, reloj, settings.cache_ttl_s)
     # La semilla pudo cambiar con este despliegue: catalogo invalida la caché (diagramas).
     await con_cache.invalidar([p.id for p, _ in semillas()])
-    return ModelosPg(pool), con_cache
+    return ModelosPg(pool), con_cache, ReglasSuscripcionPg(pool)
 
 
 def crear_app(
@@ -55,6 +58,7 @@ def crear_app(
     *,
     repositorio: RepositorioModelos | None = None,
     productos_repo: RepositorioProductos | None = None,
+    reglas_suscripcion_repo: RepositorioReglasSuscripcion | None = None,
     cache: Cache | None = None,
     reloj: Reloj | None = None,
     span_exporter: SpanExporter | None = None,
@@ -69,15 +73,23 @@ def crear_app(
     async def ciclo(app: FastAPI) -> AsyncIterator[None]:
         async with AsyncExitStack() as pila:
             repo, repo_productos = repositorio, productos_repo
+            repo_suscripcion = reglas_suscripcion_repo
             # Sin base configurada (pruebas) no se migra ni se abre el pool.
             if repo is None and (settings.db_host or settings.database_url_override):
-                repo, repo_productos = await _abrir_base(app, pila, settings, cache, reloj)
+                repo, repo_productos, repo_suscripcion = await _abrir_base(
+                    app, pila, settings, cache, reloj
+                )
             if repo is not None:
                 app.state.reloj = reloj
                 app.state.consultar_modelo = ConsultarModelo(repo)
                 app.state.publicar_modelo = PublicarModelo(repo, reloj)
             if repo_productos is not None:
                 app.state.consultar_productos = ConsultarProductos(repo_productos, reloj)
+                if repo_suscripcion is not None:
+                    # HU-W13: el producto inexistente se distingue con el repositorio de productos.
+                    app.state.consultar_reglas_suscripcion = ConsultarReglasSuscripcion(
+                        repo_suscripcion, repo_productos, reloj
+                    )
             yield
 
     app = instrumentar(
@@ -89,6 +101,7 @@ def crear_app(
     registrar_manejadores(app)
     app.include_router(modelos_riesgo.router)
     app.include_router(productos.router)
+    app.include_router(reglas_suscripcion.router)
 
     @app.get("/health", response_model=None)
     async def health(request: Request) -> dict[str, str] | JSONResponse:

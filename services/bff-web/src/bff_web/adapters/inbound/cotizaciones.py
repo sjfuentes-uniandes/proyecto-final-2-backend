@@ -29,7 +29,7 @@ def _error(descripcion: str) -> dict[str, Any]:
     return {"model": ErrorDto, "description": descripcion}
 
 
-_RESPUESTAS = {
+_RESPUESTAS: dict[int | str, dict[str, Any]] = {
     401: _error("ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado"),
     403: _error("ROL_NO_AUTORIZADO: falta el grupo asesores o no es del back-office"),
     422: _error("SOLICITUD_INVALIDA (detalles.campos)"),
@@ -161,6 +161,13 @@ class CotizacionRespuesta(_Dto):
     pasos: list[PasoCotizacionDto] = Field(
         default_factory=list,
         description="Pasos del cálculo con su duración; vacío al leer o al repetir la clave",
+    )
+    # HU-W13 (DS2-20): aditivo y opcional, copia del campo de cotizacion.
+    vigente_hasta: datetime | None = Field(
+        default=None,
+        description=(
+            "Fin de la vigencia de la oferta (UTC): vigente si ahora < vigenteHasta (DS2-20, HU-W13)"
+        ),
     )
 
 

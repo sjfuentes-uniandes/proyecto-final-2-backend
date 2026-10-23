@@ -45,6 +45,7 @@ from cotizacion.domain.cotizacion.errores import (
 )
 from cotizacion.domain.cotizacion.modelos import Actor, Cotizacion, EstadoCotizacion, RolActor
 from cotizacion.domain.cotizacion.prima import desglose_canonico, entradas_canonicas, texto
+from cotizacion.domain.cotizacion.vigencia import VIGENCIA_HORAS_POR_OMISION, vigente_hasta
 from cotizacion.domain.perfilamiento.errores import (
     ClienteNoEncontrado,
     ConflictoIdempotencia,
@@ -97,6 +98,9 @@ router_productos = APIRouter(
 # --- DTO ---------------------------------------------------------------------------------
 
 TextoDecimal = Annotated[str, Field(pattern=r"^-?\d+(\.\d+)?$")]
+DESCRIPCION_VIGENTE_HASTA = (
+    "Fin de la vigencia de la oferta (UTC): vigente si ahora < vigenteHasta (DS2-20, HU-W13)"
+)
 CodigoCobertura = Annotated[str, Field(pattern=r"^[A-Z0-9_]{1,64}$")]
 
 
@@ -193,6 +197,8 @@ class CotizacionRespuesta(_Dto):
         default_factory=list,
         description="Pasos del cálculo con su duración; vacío al leer o al repetir la clave",
     )
+    # HU-W13 (DS2-20): aditivo y opcional; HU-W04 conserva su nombre y su significado.
+    vigente_hasta: datetime | None = Field(default=None, description=DESCRIPCION_VIGENTE_HASTA)
 
 
 class RangoDto(_Dto):
@@ -221,7 +227,11 @@ class CondicionesProducto(_Dto):
 
 
 def respuesta_de(
-    cotizacion: Cotizacion, presupuesto_ms: int, pasos: tuple[Paso, ...] = ()
+    cotizacion: Cotizacion,
+    presupuesto_ms: int,
+    pasos: tuple[Paso, ...] = (),
+    *,
+    vigencia_horas: int = VIGENCIA_HORAS_POR_OMISION,
 ) -> CotizacionRespuesta:
     return CotizacionRespuesta(
         id=cotizacion.id,
@@ -249,6 +259,7 @@ def respuesta_de(
             PasoCotizacionDto(codigo=p.codigo, duracion_ms=p.duracion_ms, origen=p.origen)
             for p in pasos
         ],
+        vigente_hasta=vigente_hasta(cotizacion.calculado_en, vigencia_horas).astimezone(UTC),
     )
 
 
@@ -440,7 +451,10 @@ async def cotizar(
         raise error_cotizacion(error) from error
     if not creada:
         respuesta.status_code = 200
-    return respuesta_de(cotizacion, calcular.config.presupuesto_ms, pasos)
+    config = calcular.config
+    return respuesta_de(
+        cotizacion, config.presupuesto_ms, pasos, vigencia_horas=config.oferta_vigencia_horas
+    )
 
 
 @router.get(
@@ -462,7 +476,10 @@ async def obtener(
         cotizacion = await consultar.ejecutar(cotizacion_id, actor)
     except CotizacionNoEncontrada as error:
         raise error_cotizacion(error) from error
-    return respuesta_de(cotizacion, calcular.config.presupuesto_ms)
+    config = calcular.config
+    return respuesta_de(
+        cotizacion, config.presupuesto_ms, vigencia_horas=config.oferta_vigencia_horas
+    )
 
 
 @router_productos.get(

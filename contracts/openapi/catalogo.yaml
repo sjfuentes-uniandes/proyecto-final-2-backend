@@ -267,6 +267,95 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/productos/{productoId}/reglas-suscripcion/vigente:
+    get:
+      tags:
+      - reglas-suscripcion
+      summary: Reglas Suscripcion Vigentes
+      description: Las reglas de suscripción del producto con el mayor vigenteDesde
+        ≤ fecha (HU-W13).
+      operationId: reglas_suscripcion_vigentes_v1_productos__productoId__reglas_suscripcion_vigente_get
+      parameters:
+      - name: productoId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-z0-9-]{1,64}$
+          title: Productoid
+      - name: fecha
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          description: Instante ISO-8601 con zona; por defecto, ahora
+          title: Fecha
+        description: Instante ISO-8601 con zona; por defecto, ahora
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReglasSuscripcionRespuesta'
+        '404':
+          description: PRODUCTO_NO_ENCONTRADO o REGLAS_NO_VIGENTES (ninguna vigente
+            en la fecha)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/productos/{productoId}/reglas-suscripcion/{version}:
+    get:
+      tags:
+      - reglas-suscripcion
+      summary: Reglas Suscripcion Por Version
+      description: Una versión publicada de las reglas de suscripción; no cambia nunca
+        (reconstrucción).
+      operationId: reglas_suscripcion_por_version_v1_productos__productoId__reglas_suscripcion__version__get
+      parameters:
+      - name: productoId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-z0-9-]{1,64}$
+          title: Productoid
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^\d{4}\.\d{2}\.\d+$
+          title: Version
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReglasSuscripcionRespuesta'
+        '404':
+          description: PRODUCTO_NO_ENCONTRADO o REGLAS_NO_VIGENTES (no existe la versión)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -322,6 +411,32 @@ components:
       - efecto
       - nivel
       title: Ajuste
+    Alternativa:
+      properties:
+        productoId:
+          type: string
+          pattern: ^[a-z0-9-]{1,64}$
+          title: Productoid
+        descriptor:
+          $ref: '#/components/schemas/DescriptorAlternativa'
+      additionalProperties: false
+      type: object
+      required:
+      - productoId
+      - descriptor
+      title: Alternativa
+      description: Producto alternativo, solo informativo (E03).
+    CampoRegla:
+      type: string
+      enum:
+      - edad
+      - suma_asegurada
+      - plazo_credito_meses
+      - nivel_riesgo
+      - confianza_perfil
+      - coincidencias_listas_restrictivas
+      title: CampoRegla
+      description: Conjunto cerrado de insumos de la oferta que una regla puede evaluar.
     CoberturaDto:
       properties:
         codigo:
@@ -339,6 +454,12 @@ components:
       - nombre
       - obligatoria
       title: CoberturaDto
+    CodigoDescriptor:
+      type: string
+      enum:
+      - EDAD_MAXIMA
+      - SIN_LIMITE_EDAD
+      title: CodigoDescriptor
     Confianza:
       properties:
         penalizacionNoAutorizada:
@@ -550,6 +671,50 @@ components:
       - redondeo
       - limites
       title: DefinicionReglasPrima
+    DefinicionReglasSuscripcion:
+      properties:
+        productoId:
+          type: string
+          pattern: ^[a-z0-9-]{1,64}$
+          title: Productoid
+        alternativas:
+          items:
+            $ref: '#/components/schemas/Alternativa'
+          type: array
+          maxItems: 10
+          title: Alternativas
+        reglas:
+          items:
+            $ref: '#/components/schemas/ReglaSuscripcion'
+          type: array
+          maxItems: 50
+          minItems: 1
+          title: Reglas
+      additionalProperties: false
+      type: object
+      required:
+      - productoId
+      - alternativas
+      - reglas
+      title: DefinicionReglasSuscripcion
+    DescriptorAlternativa:
+      properties:
+        codigo:
+          $ref: '#/components/schemas/CodigoDescriptor'
+        valor:
+          anyOf:
+          - type: string
+            pattern: ^-?\d+(\.\d+)?$
+          - type: 'null'
+          title: Valor
+      additionalProperties: false
+      type: object
+      required:
+      - codigo
+      - valor
+      title: DescriptorAlternativa
+      description: 'Lo que el portal muestra de la alternativa (E03): `EDAD_MAXIMA`
+        con `valor` en años.'
     ErrorDto:
       properties:
         codigo:
@@ -739,6 +904,25 @@ components:
       - hash
       - definicion
       title: ModeloRiesgoRespuesta
+    MotivoCliente:
+      type: string
+      enum:
+      - EDAD_FUERA_DE_RANGO
+      - PLAZO_FUERA_DE_RANGO
+      - SUMA_REQUIERE_REVISION
+      - PERFIL_REQUIERE_REVISION
+      - NO_ELEGIBLE
+      title: MotivoCliente
+    OperadorRegla:
+      type: string
+      enum:
+      - '>='
+      - <=
+      - ==
+      - '!='
+      - entre
+      - en
+      title: OperadorRegla
     ProductoRespuesta:
       properties:
         id:
@@ -883,6 +1067,58 @@ components:
       - contribucion
       - direccion
       title: Regla
+    ReglaSuscripcion:
+      properties:
+        codigo:
+          type: string
+          pattern: ^SUS-\d{3}$
+          title: Codigo
+        orden:
+          type: integer
+          minimum: 1.0
+          title: Orden
+        tipo:
+          $ref: '#/components/schemas/TipoRegla'
+        descripcion:
+          type: string
+          maxLength: 120
+          pattern: ^[a-z][a-z0-9_]*(\.[a-z0-9_]+)*$
+          title: Descripcion
+        campo:
+          $ref: '#/components/schemas/CampoRegla'
+        operador:
+          $ref: '#/components/schemas/OperadorRegla'
+        valor:
+          anyOf:
+          - type: string
+          - items:
+              type: string
+            type: array
+            maxItems: 20
+            minItems: 1
+          title: Valor
+        visibilidad:
+          $ref: '#/components/schemas/Visibilidad'
+        motivoCliente:
+          $ref: '#/components/schemas/MotivoCliente'
+      additionalProperties: false
+      type: object
+      required:
+      - codigo
+      - orden
+      - tipo
+      - descripcion
+      - campo
+      - operador
+      - valor
+      - visibilidad
+      - motivoCliente
+      title: ReglaSuscripcion
+      description: 'Una regla de la tabla de decisión. `valor` es texto (decimal o
+        categoría) o, con `entre`
+
+        y `en`, una lista de textos; su coherencia con el operador se valida en el
+        dominio.'
     ReglasPrimaRespuesta:
       properties:
         productoId:
@@ -908,6 +1144,31 @@ components:
       - hash
       - definicion
       title: ReglasPrimaRespuesta
+    ReglasSuscripcionRespuesta:
+      properties:
+        productoId:
+          type: string
+          title: Productoid
+        version:
+          type: string
+          title: Version
+        vigenteDesde:
+          type: string
+          format: date-time
+          title: Vigentedesde
+        hash:
+          type: string
+          title: Hash
+        definicion:
+          $ref: '#/components/schemas/DefinicionReglasSuscripcion'
+      type: object
+      required:
+      - productoId
+      - version
+      - vigenteDesde
+      - hash
+      - definicion
+      title: ReglasSuscripcionRespuesta
     SolicitudPublicacion:
       properties:
         version:
@@ -931,6 +1192,14 @@ components:
       - vigenteDesde
       - definicion
       title: SolicitudPublicacion
+    TipoRegla:
+      type: string
+      enum:
+      - EXCLUYENTE
+      - REVISION
+      title: TipoRegla
+      description: 'EXCLUYENTE: si no se cumple, rechaza. REVISION: si no se cumple,
+        envía a un suscriptor.'
     Tramo:
       properties:
         hasta:
@@ -970,3 +1239,11 @@ components:
       - desde
       - nivel
       title: UmbralNivel
+    Visibilidad:
+      type: string
+      enum:
+      - EXPLICABLE
+      - RESERVADA
+      title: Visibilidad
+      description: 'RESERVADA: el valor del caso no se muestra al asesor ni al cliente
+        (DS2-07).'

@@ -35,6 +35,14 @@ Nombres de `Operation` en `OperationDuration` y `OperationErrors` (`solventa_com
 | `medir_cuota_socios` | `api-socios` | Porcentaje de la cuota de cada socio activo para `PartnerQuotaUsage` (HU-W28) | `ok`, `error` |
 | `consultar_alertas` | `bff-web` | Alertas abiertas, umbrales y resumen del mes (HU-W28) | `ok`, `error` |
 | `cotizacion` | `cotizacion` | Caso de uso `calcular_prima` (HU-W03): de la solicitud a la cotización persistida. Meta p95 de 250 ms en `latency_targets` de `int` (HU-W28) | `ok`, `rechazado` (4xx: tabla de decisión, datos, perfil, idempotencia o rol), `error` / `timeout` (5xx) |
+| `reglas_suscripcion.consultar` | `catalogo` | Consulta de las reglas de suscripción vigentes o de una versión (HU-W13) | `ok`, `rechazado` (producto inexistente o sin reglas vigentes), `error` |
+| `cotizacion.insumos_suscripcion` | `cotizacion` | Insumos de la oferta para la suscripción (HU-W13): cotización, perfil y estado de identidad; incluye `cotizacion.dependencia.clientes.identidad` | `ok`, `rechazado` (inexistente o rol no permitido), `error` / `timeout` (5xx) |
+| `suscripcion.evaluar` | `polizas` | Caso de uso `solicitar_suscripcion` (HU-W13): de la solicitud a la decisión persistida con su fila de `outbox` | `aprobada`, `rechazada`, `revision` (decisión nueva o existente), `rechazado` (4xx: identidad, oferta vencida, cotización inexistente, sin reglas, idempotencia), `error` / `timeout` (5xx) |
+| `suscripcion.dependencia.cotizacion.insumos`, `suscripcion.dependencia.catalogo.reglas` | `polizas` | Cada dependencia de la evaluación (HU-W13), en paralelo y sin conexión de base abierta; el "no existe" de una dependencia que respondió es `ok` | `ok`, `timeout`, `error` |
+| `suscripcion.consultar` | `polizas`, `bff-web` | Lectura de una decisión o de la decisión de una cotización (HU-W13); en `bff-web` incluye el nombre del cliente | `ok`, `rechazado` (inexistente o rol no permitido), `error` / `timeout` (5xx, solo `bff-web`) |
+| `suscripcion.bandeja`, `suscripcion.resumen` | `polizas`, `bff-web` | Bandeja de casos en revisión (E01) e indicadores del día (DS2-14) (HU-W13); en `bff-web` la bandeja compone `clienteNombre` desde `clientes` | `ok`, `rechazado` (filtros inválidos o rol no permitido), `error` / `timeout` (5xx, solo `bff-web`) |
+| `suscripcion.reconstruir` | `polizas` | Reevaluación de una decisión con los insumos y la versión de reglas guardados (HU-W13) | `ok` (coincide), `diferente` (no coincide), `rechazado` (inexistente), `error` / `timeout` |
+| `suscripcion.solicitar` | `bff-web` | Solicitud de la decisión de suscripción desde el portal (llamada a `polizas`, HU-W13) | `ok`, `rechazado` (4xx de `polizas`), `error` / `timeout` |
 | `emision` | `polizas` | Prevista (HU-W17): emisión de la póliza tras el recaudo. Meta p95 de `latency_targets` en `int` | `ok`, `error`, `timeout`, `rechazado` |
 | `consulta` | `consulta` | Prevista (HU-W18, HU-M10): lectura de la proyección. Meta p95 de `latency_targets` en `int` | `ok`, `error`, `rechazado` (no encontrada o ajena) |
 | `cobro.pagos` | `adaptador-pagos` | Prevista (HU-W16): llamada a la pasarela de pagos (aliado `pagos`) | `ok`, `timeout`, `error`, `rechazado` (pago rechazado por el proveedor) |
@@ -45,6 +53,8 @@ Nombres de `Operation` en `OperationDuration` y `OperationErrors` (`solventa_com
 `<FUENTE>` ∈ {`FA_PRODUCTOS_VIGENTES`, `FA_HISTORIAL_PAGOS_12M`, `FA_INGRESOS_AGREGADOS`, `DA_REGISTROS_PUBLICOS`}.
 
 **Log de cierre de la cotización (HU-W03):** `logger.info("cotizacion calculada", extra={"cotizacion_id": …, "producto_id": …, "version_reglas": …, "perfil_id": …, "dependencias": [{"nombre": …, "ms": …, "resultado": …}]})`, solo identificadores: ni montos, ni edad, ni fecha de nacimiento.
+
+**Log de cierre de la suscripción (HU-W13):** `logger.info("suscripcion decidida", extra={"decision_id": …, "resultado": …, "version_reglas": …, "dependencias": [{"nombre": …, "ms": …, "resultado": …}]})`, solo identificadores: ni insumos, ni montos, ni edad.
 
 **Log de cierre del perfilamiento:** `logger.info("perfil calculado", extra={"perfil_id": …, "estado": …, "dependencias": [{"nombre": …, "ms": …, "resultado": …}]})`, dentro de la `operacion`. Las dependencias van en una **lista** para que `sanitizar` no redacte valores por el nombre de la clave.
 
