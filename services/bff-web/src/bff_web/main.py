@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from solventa_common.telemetry import instrumentar
 
 from bff_web.adapters.inbound import (
+    aceptaciones,
     clientes,
     consentimientos,
     cotizaciones,
@@ -38,6 +39,8 @@ app.include_router(consentimientos.router)
 # HU-W13: suscripción automática (polizas).
 app.include_router(suscripciones.router)
 app.include_router(suscripciones.router_bandeja)
+# HU-W15: aceptación de la oferta (polizas).
+app.include_router(aceptaciones.router)
 
 
 @app.get("/health")

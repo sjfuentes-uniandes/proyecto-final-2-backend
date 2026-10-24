@@ -45,6 +45,8 @@ Nombres de `Operation` en `OperationDuration` y `OperationErrors` (`solventa_com
 | `suscripcion.bandeja`, `suscripcion.resumen` | `polizas`, `bff-web` | Bandeja de casos en revisión (E01) e indicadores del día (DS2-14) (HU-W13); en `bff-web` la bandeja compone `clienteNombre` desde `clientes` | `ok`, `rechazado` (filtros inválidos o rol no permitido), `error` / `timeout` (5xx, solo `bff-web`) |
 | `suscripcion.reconstruir` | `polizas` | Reevaluación de una decisión con los insumos y la versión de reglas guardados (HU-W13) | `ok` (coincide), `diferente` (no coincide), `rechazado` (inexistente), `error` / `timeout` |
 | `suscripcion.solicitar` | `bff-web` | Solicitud de la decisión de suscripción desde el portal (llamada a `polizas`, HU-W13); desde HU-W14 la respuesta trae la `comunicacion` | `ok`, `rechazado` (4xx de `polizas`), `error` / `timeout` |
+| `aceptacion.registrar` | `polizas`, `bff-web` | Registro de la aceptación de la oferta (HU-W15): en `polizas`, caso de uso `RegistrarAceptacion`, de la solicitud a la aceptación persistida con su fila `OfertaAceptada` en el `outbox` (sin llamadas a otros servicios); en `bff-web`, la llamada a `polizas` | `ok` (registrada o repetida con la misma clave), `rechazado` (4xx: texto no vigente, decisión no aprobada o inexistente, oferta vencida o ya aceptada, declaraciones incompletas, idempotencia), `error` (5xx; también `timeout` en `bff-web`) |
+| `aceptacion.consultar` | `polizas`, `bff-web` | Lectura de la aceptación de una cotización (HU-W15) | `ok`, `rechazado` (inexistente o rol no permitido), `error` / `timeout` (5xx, solo `bff-web`) |
 | `emision` | `polizas` | Prevista (HU-W17): emisión de la póliza tras el recaudo. Meta p95 de `latency_targets` en `int` | `ok`, `error`, `timeout`, `rechazado` |
 | `consulta` | `consulta` | Prevista (HU-W18, HU-M10): lectura de la proyección. Meta p95 de `latency_targets` en `int` | `ok`, `error`, `rechazado` (no encontrada o ajena) |
 | `cobro.pagos` | `adaptador-pagos` | Prevista (HU-W16): llamada a la pasarela de pagos (aliado `pagos`) | `ok`, `timeout`, `error`, `rechazado` (pago rechazado por el proveedor) |
@@ -57,6 +59,8 @@ Nombres de `Operation` en `OperationDuration` y `OperationErrors` (`solventa_com
 **Log de cierre de la cotización (HU-W03):** `logger.info("cotizacion calculada", extra={"cotizacion_id": …, "producto_id": …, "version_reglas": …, "perfil_id": …, "dependencias": [{"nombre": …, "ms": …, "resultado": …}]})`, solo identificadores: ni montos, ni edad, ni fecha de nacimiento.
 
 **Log de cierre de la suscripción (HU-W13):** `logger.info("suscripcion decidida", extra={"decision_id": …, "resultado": …, "version_reglas": …, "dependencias": [{"nombre": …, "ms": …, "resultado": …}]})`, solo identificadores: ni insumos, ni montos, ni edad.
+
+**Log de cierre de la aceptación (HU-W15):** `logger.info("aceptacion registrada", extra={"aceptacion_id": …, "decision_id": …, "version_declaraciones": …})`, solo identificadores: ni prima, ni suma asegurada, ni declaraciones.
 
 **Aviso de alternativas no disponibles (HU-W14):** `logger.warning("alternativas no disponibles", extra={"decision_id": …, "version_reglas": …, "dependencia": "catalogo", "resultado": "error" | "timeout"})` cuando `catalogo` no entrega la versión de reglas de un rechazo; la decisión se comunica con `alternativas = []`.
 
