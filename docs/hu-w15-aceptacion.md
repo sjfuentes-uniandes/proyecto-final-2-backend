@@ -132,6 +132,8 @@ Esperado: 409 `OFERTA_VENCIDA` con `detalles.accion = NUEVA_COTIZACION` y ningun
 
 En la base quedó una aceptación con su fila `OfertaAceptada` (mismo `correlation_id`, `claveRecaudo` = `aceptacionId`, prima `{"valor": "64638", "moneda": "COP", "periodicidad": "MENSUAL"}`, `published_at` nulo por EXT-04), junto a la `DecisionSuscripcionRegistrada` de su decisión. `UPDATE` y `DELETE` sobre `aceptaciones` fallan con «aceptaciones es inmutable». Los logs de `polizas` y `bff-web` de la aceptación comparten el `X-Correlation-Id` y no contienen la suma asegurada, la fecha de nacimiento, las declaraciones ni nombres.
 
+**Cierre (fase C, mismo día):** el portal local (arnés de R-50 y R-82 de la bitácora del sprint) recorrió R3 contra `make dev-up`: C04 → «Continuar con la suscripción» → E02 → «Continuar a la aceptación» → F01 → confirmación, en es-CO y en-US, con una sola aceptación aunque se pulsó dos veces; el rechazo (68 años) y la revisión (620.000.000) sin opción de aceptar y con 409 `DECISION_NO_APROBADA` al forzar el `POST`; `cotizacion` detenido → 503 `DEPENDENCIA_NO_DISPONIBLE` en 243 ms sin decisión y la misma clave decide al reanudarlo; y la oferta vencida (reloj +8 días) con el estado tipo C08 en el portal. `bff-web` verifica el pacto ampliado del portal (`contracts/pact/web-bff-web.json`, 10 interacciones) en `tests/contract/test_pact_web.py`. Evidencia en `docs/sprint_2/evidencias/hu-w15/` del espacio de trabajo.
+
 ## 4. Pruebas
 
 | ID | Nivel | Dónde |

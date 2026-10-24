@@ -4,6 +4,855 @@
   },
   "interactions": [
     {
+      "description": "la aceptación de la oferta · 200: la misma clave devuelve la aceptación existente",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "la cotización ya tiene una aceptación con la misma clave",
+          "params": {
+            "caso": "S01",
+            "cotizacionId": "00000000-0000-4000-a000-000000000001",
+            "decisionId": "00000000-0000-4000-e000-000000000001",
+            "idempotencyKey": "00000000-0000-4000-c000-000000000015"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "decisionId": "00000000-0000-4000-e000-000000000001",
+            "declaraciones": {
+              "avisosElectronicos": false,
+              "debitoAutomatico": false,
+              "informacionVeraz": true,
+              "leidoCondiciones": true
+            },
+            "versionDeclaraciones": "2026.10.1"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Accept": [
+            "application/json"
+          ],
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotency-Key": [
+            "00000000-0000-4000-c000-000000000015"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.decisionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.declaraciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.versionDeclaraciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/v1/cotizaciones/00000000-0000-4000-a000-000000000001/aceptacion"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "aceptadaEn": "2026-10-24T15:00:00Z",
+            "actorId": "sub-asesor",
+            "canal": "PORTAL_ASESOR",
+            "clienteId": "00000000-0000-4000-8000-000000000001",
+            "cotizacionId": "00000000-0000-4000-a000-000000000001",
+            "decisionId": "00000000-0000-4000-e000-000000000001",
+            "declaraciones": {
+              "avisosElectronicos": false,
+              "debitoAutomatico": false,
+              "informacionVeraz": true,
+              "leidoCondiciones": true
+            },
+            "huellaCalculo": "sha256:calculo-s01",
+            "huellaEvidencia": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "id": "00000000-0000-4000-f000-000000000001",
+            "recaudoHabilitado": true,
+            "siguientePaso": "FIRMA",
+            "versionDeclaraciones": "2026.10.1"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.aceptadaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.actorId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.canal": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.clienteId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.cotizacionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.decisionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.declaraciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.huellaCalculo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.huellaEvidencia": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^sha256:[0-9a-f]{64}$"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.recaudoHabilitado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.siguientePaso": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.versionDeclaraciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la aceptación de la oferta · 201: registra la aceptación de una aprobada con la oferta vigente",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "existe una decisión aprobada con la oferta vigente",
+          "params": {
+            "caso": "S01",
+            "cotizacionId": "00000000-0000-4000-a000-000000000001",
+            "decisionId": "00000000-0000-4000-e000-000000000001"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "decisionId": "00000000-0000-4000-e000-000000000001",
+            "declaraciones": {
+              "avisosElectronicos": false,
+              "debitoAutomatico": false,
+              "informacionVeraz": true,
+              "leidoCondiciones": true
+            },
+            "versionDeclaraciones": "2026.10.1"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Accept": [
+            "application/json"
+          ],
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotency-Key": [
+            "00000000-0000-4000-c000-000000000015"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.decisionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.declaraciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.versionDeclaraciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/v1/cotizaciones/00000000-0000-4000-a000-000000000001/aceptacion"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "aceptadaEn": "2026-10-24T15:00:00Z",
+            "actorId": "sub-asesor",
+            "canal": "PORTAL_ASESOR",
+            "clienteId": "00000000-0000-4000-8000-000000000001",
+            "cotizacionId": "00000000-0000-4000-a000-000000000001",
+            "decisionId": "00000000-0000-4000-e000-000000000001",
+            "declaraciones": {
+              "avisosElectronicos": false,
+              "debitoAutomatico": false,
+              "informacionVeraz": true,
+              "leidoCondiciones": true
+            },
+            "huellaCalculo": "sha256:calculo-s01",
+            "huellaEvidencia": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "id": "00000000-0000-4000-f000-000000000001",
+            "recaudoHabilitado": true,
+            "siguientePaso": "FIRMA",
+            "versionDeclaraciones": "2026.10.1"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.aceptadaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.actorId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.canal": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.clienteId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.cotizacionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.decisionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.declaraciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.huellaCalculo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.huellaEvidencia": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^sha256:[0-9a-f]{64}$"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.recaudoHabilitado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.siguientePaso": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.versionDeclaraciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la aceptación de la oferta · 409 DECISION_NO_APROBADA: la decisión es un rechazo",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "existe una decisión rechazada",
+          "params": {
+            "caso": "S02",
+            "cotizacionId": "00000000-0000-4000-a000-000000000002",
+            "decisionId": "00000000-0000-4000-e000-000000000002"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "decisionId": "00000000-0000-4000-e000-000000000002",
+            "declaraciones": {
+              "avisosElectronicos": false,
+              "debitoAutomatico": false,
+              "informacionVeraz": true,
+              "leidoCondiciones": true
+            },
+            "versionDeclaraciones": "2026.10.1"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Accept": [
+            "application/json"
+          ],
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotency-Key": [
+            "00000000-0000-4000-c000-000000000015"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.decisionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.declaraciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.versionDeclaraciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/v1/cotizaciones/00000000-0000-4000-a000-000000000002/aceptacion"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "DECISION_NO_APROBADA",
+            "correlationId": "corr-pact",
+            "detalles": {},
+            "mensaje": "mensaje"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 409
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la aceptación de la oferta · 409 OFERTA_VENCIDA: la oferta de la aprobada ya venció",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "existe una decisión aprobada con la oferta vencida",
+          "params": {
+            "caso": "S01",
+            "cotizacionId": "00000000-0000-4000-a000-000000000001",
+            "decisionId": "00000000-0000-4000-e000-000000000001"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "decisionId": "00000000-0000-4000-e000-000000000001",
+            "declaraciones": {
+              "avisosElectronicos": false,
+              "debitoAutomatico": false,
+              "informacionVeraz": true,
+              "leidoCondiciones": true
+            },
+            "versionDeclaraciones": "2026.10.1"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Accept": [
+            "application/json"
+          ],
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotency-Key": [
+            "00000000-0000-4000-c000-000000000015"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.decisionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.declaraciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.versionDeclaraciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/v1/cotizaciones/00000000-0000-4000-a000-000000000001/aceptacion"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "OFERTA_VENCIDA",
+            "correlationId": "corr-pact",
+            "detalles": {
+              "accion": "NUEVA_COTIZACION"
+            },
+            "mensaje": "mensaje"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.detalles.accion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 409
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la aceptación de la oferta · 422 DECLARACIONES_INCOMPLETAS: falta «He leído las condiciones generales»",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "existe una decisión aprobada con la oferta vigente",
+          "params": {
+            "caso": "S01",
+            "cotizacionId": "00000000-0000-4000-a000-000000000001",
+            "decisionId": "00000000-0000-4000-e000-000000000001"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "decisionId": "00000000-0000-4000-e000-000000000001",
+            "declaraciones": {
+              "avisosElectronicos": false,
+              "debitoAutomatico": false,
+              "informacionVeraz": true,
+              "leidoCondiciones": false
+            },
+            "versionDeclaraciones": "2026.10.1"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Accept": [
+            "application/json"
+          ],
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotency-Key": [
+            "00000000-0000-4000-c000-000000000015"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.decisionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.declaraciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.versionDeclaraciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/v1/cotizaciones/00000000-0000-4000-a000-000000000001/aceptacion"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "DECLARACIONES_INCOMPLETAS",
+            "correlationId": "corr-pact",
+            "detalles": {
+              "campos": [
+                "leidoCondiciones"
+              ]
+            },
+            "mensaje": "mensaje"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.detalles.campos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 422
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
       "description": "la consulta de una decisión aprobada con la oferta vigente",
       "pending": false,
       "providerStates": [

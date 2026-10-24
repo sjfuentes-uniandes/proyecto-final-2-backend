@@ -1,12 +1,15 @@
-"""CT-W14-01: `bff-web` verifica como proveedor el pacto del portal (contracts/pact/web-bff-web.json).
+"""CT-W14-01 y CT-W15-01: `bff-web` verifica como proveedor el pacto del portal
+(contracts/pact/web-bff-web.json).
 
 El pacto lo genera el portal (`proyecto-final-2-frontend/web`, `npm run test:pact`) y se copia aquí
 sin editarlo. La app real de bff-web (rutas, autorización por grupo, DTO y falla cerrada) se sirve
 con uvicorn en un hilo; polizas y clientes se simulan con un transporte de httpx. Cada estado del
 proveedor siembra la decisión que polizas devolvería para el caso sintético (S01, S02, S04, S06):
 las alternativas salen de la semilla de reglas 2026.10.1 de catalogo y la comunicación es la de
-docs/hu-w14-comunicacion.md §1.1. El verificador envía los encabezados que pone API Gateway para un
-usuario del grupo `asesores`.
+docs/hu-w14-comunicacion.md §1.1. HU-W15: los estados de la aceptación hacen que polizas responda
+lo que responde en ese caso (201, 200 con la misma clave, 409 OFERTA_VENCIDA o DECISION_NO_APROBADA y
+422 DECLARACIONES_INCOMPLETAS si faltan las declaraciones obligatorias). El verificador envía los
+encabezados que pone API Gateway para un usuario del grupo `asesores`.
 """
 
 import asyncio
@@ -23,9 +26,11 @@ from typing import Any
 import httpx
 import pytest
 import uvicorn
+from bff_web.adapters.inbound import aceptaciones as ruta_aceptacion
 from bff_web.adapters.inbound import suscripciones as ruta
 from bff_web.adapters.outbound.clientes import ClientesCliente
 from bff_web.adapters.outbound.polizas import PolizasCliente
+from bff_web.application.aceptacion import Aceptaciones
 from bff_web.application.suscripcion import Suscripciones
 from bff_web.config import settings
 from bff_web.main import app
@@ -43,6 +48,12 @@ SEMILLA = json.loads(
 EMISOR = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_back"
 EXISTE = "existe la decisión de suscripción"
 NO_EXISTE = "no existe la decisión de suscripción"
+# HU-W15: estados de la aceptación (web/pact/contratacion.pact.spec.ts).
+APROBADA_VIGENTE = "existe una decisión aprobada con la oferta vigente"
+MISMA_CLAVE = "la cotización ya tiene una aceptación con la misma clave"
+APROBADA_VENCIDA = "existe una decisión aprobada con la oferta vencida"
+RECHAZADA = "existe una decisión rechazada"
+ESTADOS_ACEPTACION = {APROBADA_VIGENTE, MISMA_CLAVE, APROBADA_VENCIDA, RECHAZADA}
 SIN_DATOS: dict[str, Any] = {
     "vigenteHasta": None,
     "motivoCliente": None,
@@ -175,15 +186,66 @@ def _decision(decision_id: str, caso: str) -> dict[str, Any]:
     }
 
 
+def _error(codigo: str, estado: int, detalles: dict[str, Any] | None = None) -> httpx.Response:
+    return httpx.Response(
+        estado,
+        json={"codigo": codigo, "mensaje": "x", "correlationId": "c", "detalles": detalles or {}},
+    )
+
+
+def _aceptacion(cotizacion_id: str, cuerpo: dict[str, Any]) -> dict[str, Any]:
+    """La aceptación que polizas registraría con el cuerpo recibido."""
+    return {
+        "id": "00000000-0000-4000-f000-000000000001",
+        "cotizacionId": cotizacion_id,
+        "ofertaId": "00000000-0000-4000-b000-000000000001",
+        "decisionId": cuerpo["decisionId"],
+        "clienteId": "00000000-0000-4000-8000-000000000001",
+        "huellaCalculo": "sha256:calculo",
+        "versionDeclaraciones": cuerpo["versionDeclaraciones"],
+        "declaraciones": cuerpo["declaraciones"],
+        "canal": "PORTAL_ASESOR",
+        "actorId": "sub-asesor-pact",
+        "aceptadaEn": "2026-10-24T15:00:00.123456Z",
+        "huellaEvidencia": "sha256:" + "a" * 64,
+        "recaudoHabilitado": True,
+        "siguientePaso": "FIRMA",
+    }
+
+
 class PolizasSimulado:
-    """GET /v1/suscripciones/{id}: la decisión sembrada por el estado, o 404 en formato B2."""
+    """GET /v1/suscripciones/{id}: la decisión sembrada por el estado, o 404 en formato B2.
+    POST /v1/cotizaciones/{id}/aceptacion (HU-W15): lo que polizas responde en el estado sembrado."""
 
     def __init__(self) -> None:
         self.decision: dict[str, Any] | None = None
+        self.aceptacion: str | None = None
         self.roles: list[str] = []
+
+    def aceptar(self, pedido: httpx.Request) -> httpx.Response:
+        cotizacion_id = pedido.url.path.split("/")[3]
+        cuerpo = json.loads(pedido.content)
+        declaraciones = cuerpo["declaraciones"]
+        match self.aceptacion:
+            case "existe una decisión aprobada con la oferta vencida":
+                return _error("OFERTA_VENCIDA", 409, {"accion": "NUEVA_COTIZACION"})
+            case "existe una decisión rechazada":
+                return _error("DECISION_NO_APROBADA", 409)
+            case "la cotización ya tiene una aceptación con la misma clave":
+                return httpx.Response(200, json=_aceptacion(cotizacion_id, cuerpo))
+            case "existe una decisión aprobada con la oferta vigente":
+                faltan = [
+                    c for c in ("leidoCondiciones", "informacionVeraz") if not declaraciones[c]
+                ]
+                if faltan:
+                    return _error("DECLARACIONES_INCOMPLETAS", 422, {"campos": faltan})
+                return httpx.Response(201, json=_aceptacion(cotizacion_id, cuerpo))
+        return _error("DECISION_NO_ENCONTRADA", 404)
 
     def responder(self, pedido: httpx.Request) -> httpx.Response:
         self.roles.append(pedido.headers.get("X-Actor-Rol", ""))
+        if pedido.url.path.endswith("/aceptacion"):
+            return self.aceptar(pedido)
         decision_id = pedido.url.path.rsplit("/", 1)[-1]
         if self.decision is not None and self.decision["id"] == decision_id:
             return httpx.Response(200, json=self.decision)
@@ -228,11 +290,13 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
     clientes = httpx.MockTransport(
         lambda pedido: httpx.Response(200, json={"id": pedido.url.path.rsplit("/", 1)[-1]})
     )
-    app.dependency_overrides[ruta.suscripciones] = lambda: Suscripciones(
-        PolizasCliente("http://polizas:8080", 1500, httpx.MockTransport(polizas.responder)),
-        ClientesCliente("http://clientes:8080", 1500, clientes),
-        200,
+    cliente_polizas = PolizasCliente(
+        "http://polizas:8080", 1500, httpx.MockTransport(polizas.responder)
     )
+    app.dependency_overrides[ruta.suscripciones] = lambda: Suscripciones(
+        cliente_polizas, ClientesCliente("http://clientes:8080", 1500, clientes), 200
+    )
+    app.dependency_overrides[ruta_aceptacion.aceptaciones] = lambda: Aceptaciones(cliente_polizas)
     vistos: list[tuple[str, str | None]] = []
 
     def estado(state: str, action: str, parameters: dict[str, Any] | None) -> None:
@@ -242,6 +306,10 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
         parametros = parameters or {}
         vistos.append((state, parametros.get("caso")))
         polizas.decision = None
+        polizas.aceptacion = None
+        if state in ESTADOS_ACEPTACION:
+            polizas.aceptacion = state
+            return
         if state == NO_EXISTE:
             return
         if state != EXISTE:
@@ -262,7 +330,19 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
     finally:
         app.dependency_overrides.clear()
     assert sorted(vistos, key=str) == sorted(
-        [(EXISTE, "S01"), (EXISTE, "S02"), (EXISTE, "S04"), (EXISTE, "S06"), (NO_EXISTE, None)],
+        [
+            (EXISTE, "S01"),
+            (EXISTE, "S02"),
+            (EXISTE, "S04"),
+            (EXISTE, "S06"),
+            (NO_EXISTE, None),
+            # HU-W15: 201, 422 (misma aprobada), 200, 409 vencida y 409 rechazada.
+            (APROBADA_VIGENTE, "S01"),
+            (APROBADA_VIGENTE, "S01"),
+            (MISMA_CLAVE, "S01"),
+            (APROBADA_VENCIDA, "S01"),
+            (RECHAZADA, "S02"),
+        ],
         key=str,
     )
     # El asesor pide como ASESOR: polizas filtra las reglas reservadas (DS2-07, R-08).
