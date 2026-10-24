@@ -1,6 +1,7 @@
 """EjecutorParalelo (UT-W12-10 a 17)."""
 
 import asyncio
+import gc
 import time
 from typing import Any
 from uuid import UUID
@@ -73,6 +74,9 @@ async def test_ut_w12_11_resultados_en_el_orden_de_las_solicitudes() -> None:
     fuentes = list(Fuente)
     # La primera solicitud es la más lenta: terminan en orden inverso.
     puerto = PuertoQueRegistra({f: 0.01 * (len(fuentes) - i) for i, f in enumerate(fuentes)})
+    # Las ramas se separan por 10 ms: una recolección gen2 bajo cobertura (30–40 ms) dentro de la
+    # medición invertía el orden. Se recolecta antes para que no caiga en la ventana.
+    gc.collect()
     resultados = await EjecutorParalelo(puerto, 300).ejecutar(TODAS, CONTEXTO)
     assert [r.fuente for r in resultados] == fuentes
     assert sorted(puerto.fines, key=puerto.fines.__getitem__) == list(reversed(fuentes))

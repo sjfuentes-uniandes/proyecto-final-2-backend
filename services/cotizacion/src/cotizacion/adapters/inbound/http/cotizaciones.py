@@ -489,6 +489,15 @@ def _condiciones(request: Request) -> ConsultarCondiciones:
 
 
 ActorCotizacion = Annotated[Actor, Depends(actor_cotizacion)]
+# HU-W05: tiempo restante de quien llama (api-socios, bff-web); acota el presupuesto del recorrido.
+DeadlineMs = Annotated[
+    int | None,
+    Header(
+        alias="X-Deadline-Ms",
+        ge=1,
+        description="Milisegundos que quien llama seguirá esperando (contracts/encabezados.md)",
+    ),
+]
 
 
 @router.post(
@@ -514,6 +523,7 @@ async def cotizar(
     actor: ActorCotizacion,
     calcular: Annotated[CalcularPrima, Depends(_calcular)],
     idempotency_key: Annotated[UUID, Header(alias="Idempotency-Key")],
+    x_deadline_ms: DeadlineMs = None,
 ) -> CotizacionRespuesta:
     """Calcula la prima con el producto y las reglas vigentes y guarda la cotización."""
     datos = solicitud.datos_asegurado
@@ -529,6 +539,7 @@ async def cotizar(
         idempotency_key=idempotency_key,
         actor=actor,
         correlation_id=correlation.obtener() or "",
+        deadline_ms=x_deadline_ms,
     )
     try:
         cotizacion, pasos, creada = await calcular.ejecutar(comando)

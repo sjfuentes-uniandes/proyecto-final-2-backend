@@ -29,6 +29,14 @@ class DependenciaNoDisponible(Exception):
         self.dependencia = dependencia
 
 
+class DependenciaAgotada(DependenciaNoDisponible):
+    """La dependencia no respondió dentro de su timeout efectivo (HU-W05).
+
+    Es una DependenciaNoDisponible: quien no la distingue la trata igual (503 recuperable). La
+    cotización la clasifica como TIEMPO_AGOTADO para la política de HU-W06.
+    """
+
+
 class ConflictoIdempotencia(Exception):
     """La clave de idempotencia ya se usó con otra solicitud."""
 

@@ -11,6 +11,7 @@ from opentelemetry.sdk.trace.export import SpanExporter
 from solventa_common import correlation
 from solventa_common.cache import crear_cache
 from solventa_common.errors import registrar_manejadores
+from solventa_common.resiliencia import ProteccionDependencia
 from solventa_common.telemetry import instrumentar
 
 from cotizacion.adapters.inbound.http import cotizaciones, perfilamiento, suscripcion
@@ -84,6 +85,7 @@ def _configurar_casos(app: FastAPI, puertos: Puertos, settings: Settings) -> Non
             config=ConfigCotizacion(
                 dependencia_timeout_ms=settings.dependencia_timeout_ms,
                 presupuesto_ms=settings.cotizacion_presupuesto_ms,
+                presupuesto_recorrido_ms=settings.presupuesto_recorrido_ms,
                 oferta_vigencia_horas=settings.oferta_vigencia_horas,
             ),
         )
@@ -133,17 +135,27 @@ def crear_app(
                 pila.push_async_callback(pool.close)
                 app.state.pool = pool
                 # Un cliente para las tres dependencias; propaga X-Correlation-Id y traceparent.
+                # Límites del pool: docs/hu-w05-limite-tiempo.md §Conexiones.
                 cliente = await pila.enter_async_context(
                     correlation.cliente_async(
-                        timeout=httpx.Timeout(2.0), limits=httpx.Limits(max_connections=200)
+                        timeout=httpx.Timeout(2.0),
+                        limits=httpx.Limits(
+                            max_connections=settings.http_max_conexiones,
+                            max_keepalive_connections=settings.http_max_keepalive,
+                        ),
                     )
+                )
+                # HU-W05: una protección para catalogo y clientes (circuito por recurso,
+                # bulkhead por servicio), como la de adaptador-datos con sus aliados.
+                proteccion = ProteccionDependencia(
+                    settings.cb_fallos_consecutivos, settings.cb_apertura_s, settings.bulkhead_max
                 )
                 reloj = RelojSistema()
                 # Solo lectura (diagramas): catalogo actualiza e invalida la caché.
                 cache = crear_cache(settings.cache_url, settings.cache_timeout_ms)
                 pila.push_async_callback(cache.cerrar)
                 clientes = ClientesHttp(
-                    cliente, settings.clientes_url, settings.dependencia_timeout_ms
+                    cliente, settings.clientes_url, settings.dependencia_timeout_ms, proteccion
                 )
                 _configurar_casos(
                     app,
@@ -170,6 +182,7 @@ def crear_app(
                             reloj,
                             cache=cache if settings.cache_url else None,
                             ttl_s=settings.catalogo_cache_ttl_s,
+                            proteccion=proteccion,
                         ),
                         cotizaciones=CotizacionesPg(pool),
                     ),

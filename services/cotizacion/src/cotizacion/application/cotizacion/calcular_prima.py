@@ -1,8 +1,13 @@
 """Caso de uso calcular_prima (HU-W03): calcula, persiste y devuelve una cotización inmutable.
 
 Se mide con `operacion("cotizacion")` (meta p95 de `latency_targets` en `int`). Producto, reglas,
-cliente y perfil se piden en paralelo, cada uno con `dependencia_timeout_ms`; no se retiene una
-conexión de base mientras se espera a otros servicios.
+cliente y perfil se piden en paralelo; no se retiene una conexión de base mientras se espera a otros
+servicios.
+
+HU-W05: el recorrido abre un presupuesto (`presupuesto_recorrido_ms`, de LATENCY_BUDGET_MS, o el
+X-Deadline-Ms recibido si es menor). Cada dependencia corta en min(`dependencia_timeout_ms`, corte
+duro, restante − margen) y nunca pasa del restante; un corte es TIEMPO_AGOTADO y la
+`PoliticaDependencias` decide qué hacer (hoy, falla cerrada: 503 DEPENDENCIA_NO_DISPONIBLE).
 
 Orden de las causas (una sola, estable):
 1. La tabla de decisión del producto (`elegibilidad`): inexistente, inactivo, fuera de vigencia.
@@ -25,9 +30,12 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, TypeVar
+from enum import StrEnum
+from typing import Any, NoReturn, Protocol, TypeVar
 from uuid import UUID, uuid4
 
+from solventa_common import presupuesto
+from solventa_common.resiliencia import SinProteccion, TiempoAgotado, registrar_tiempo_agotado
 from solventa_common.telemetry import (
     RESULTADO_ERROR,
     RESULTADO_OK,
@@ -85,6 +93,7 @@ from cotizacion.domain.cotizacion.vigencia import VIGENCIA_HORAS_POR_OMISION
 from cotizacion.domain.perfilamiento.errores import (
     ClienteNoEncontrado,
     ConflictoIdempotencia,
+    DependenciaAgotada,
     DependenciaNoDisponible,
     PerfilNoEncontrado,
 )
@@ -98,6 +107,15 @@ DEPENDENCIA_REGLAS = "catalogo.reglas_prima"
 DEPENDENCIA_CLIENTE = "clientes.identidad"
 DEPENDENCIA_PERFIL = "perfil"
 CAMPO_PERFIL = "perfilId"
+# Lo que el límite del caso de uso espera de más sobre el timeout de la dependencia.
+HOLGURA_RED_MS = 10
+# Proveedor de cada dependencia en el log del timeout (el grupo de su bulkhead).
+PROVEEDORES = {
+    DEPENDENCIA_PRODUCTO: "catalogo",
+    DEPENDENCIA_REGLAS: "catalogo",
+    DEPENDENCIA_CLIENTE: "clientes",
+    DEPENDENCIA_PERFIL: "base-cotizacion",
+}
 
 # Errores de negocio (4xx): la operación queda "rechazado", no "error".
 ERRORES_DE_NEGOCIO: tuple[type[Exception], ...] = (
@@ -132,17 +150,51 @@ class ComandoCotizacion:
     idempotency_key: UUID
     actor: Actor
     correlation_id: str
+    # X-Deadline-Ms recibido (api-socios, bff-web): acota el presupuesto propio.
+    deadline_ms: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class ConfigCotizacion:
-    """`presupuesto_ms` es la meta p95 de la operación (contracts/operaciones.md)."""
+    """`presupuesto_ms` es la meta p95 de la operación (contracts/operaciones.md) que se informa al
+    portal; `presupuesto_recorrido_ms` es el corte del recorrido (HU-W05, LATENCY_BUDGET_MS)."""
 
     dependencia_timeout_ms: int = 150
     presupuesto_ms: int = 250
+    presupuesto_recorrido_ms: int = 700
     # HU-W13 (DS2-20): horas de vigencia de la oferta desde el cálculo. Desde HU-W04 solo se usa
     # con reglas sin condiciones de oferta (las anteriores a 2026.10.1).
     oferta_vigencia_horas: int = VIGENCIA_HORAS_POR_OMISION
+
+
+class ResultadoDependencia(StrEnum):
+    """Cómo falló una dependencia del recorrido; lo recibe la PoliticaDependencias."""
+
+    TIEMPO_AGOTADO = "TIEMPO_AGOTADO"
+    NO_DISPONIBLE = "NO_DISPONIBLE"
+
+
+class PoliticaDependencias(Protocol):
+    """Punto de extensión de HU-W06 (proveedor degradado).
+
+    Recibe cada falla técnica de una dependencia. Hoy toda política lanza; HU-W06 decidirá si
+    alguna dependencia admite un valor sustituto (y cambiará el tipo de retorno).
+    """
+
+    def ante_falla(
+        self, dependencia: str, resultado: ResultadoDependencia, error: BaseException
+    ) -> NoReturn: ...
+
+
+class FallaCerrada:
+    """Política por omisión: cualquier falla técnica es 503 DEPENDENCIA_NO_DISPONIBLE."""
+
+    def ante_falla(
+        self, dependencia: str, resultado: ResultadoDependencia, error: BaseException
+    ) -> NoReturn:
+        if resultado is ResultadoDependencia.TIEMPO_AGOTADO:
+            raise DependenciaAgotada(dependencia) from error
+        raise DependenciaNoDisponible(dependencia) from error
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,6 +273,7 @@ class CalcularPrima:
         repo: RepositorioCotizaciones,
         reloj: Reloj,
         config: ConfigCotizacion,
+        politica: PoliticaDependencias | None = None,
     ) -> None:
         self._productos = productos
         self._identidad = identidad
@@ -228,14 +281,24 @@ class CalcularPrima:
         self._repo = repo
         self.reloj = reloj
         self.config = config
+        self._politica = politica or FallaCerrada()
+        # El perfil es una lectura de la base propia: solo timeout, sin reintento ni circuito.
+        self._lectura_local = SinProteccion()
 
     async def ejecutar(self, cmd: ComandoCotizacion) -> tuple[Cotizacion, tuple[Paso, ...], bool]:
         """La cotización, sus pasos (vacíos si ya existía) y si se creó ahora."""
-        with operacion(OPERACION) as op:
+        with (
+            operacion(OPERACION) as op,
+            presupuesto.iniciar(self.config.presupuesto_recorrido_ms, cmd.deadline_ms),
+        ):
             try:
                 resultado = await self._ejecutar(cmd)
             except ERRORES_DE_NEGOCIO:
                 op.marcar(RESULTADO_RECHAZADO)
+                raise
+            except DependenciaAgotada:
+                # HU-W05: el recorrido falló porque una dependencia agotó su tiempo.
+                op.marcar(RESULTADO_TIMEOUT)
                 raise
         return resultado
 
@@ -327,7 +390,19 @@ class CalcularPrima:
         producto_id = cmd.producto_id
 
         async def perfil() -> Perfil | None:
-            return await self._perfiles.por_id(cmd.perfil_id) if cmd.perfil_id else None
+            perfil_id = cmd.perfil_id
+            if perfil_id is None:
+                return None
+            try:
+                return await self._lectura_local.ejecutar(
+                    DEPENDENCIA_PERFIL,
+                    PROVEEDORES[DEPENDENCIA_PERFIL],
+                    lambda _timeout_s: self._perfiles.por_id(perfil_id),
+                    self.config.dependencia_timeout_ms,
+                    presupuesto.restante_ms(),
+                )
+            except TiempoAgotado as error:
+                raise DependenciaAgotada(DEPENDENCIA_PERFIL) from error
 
         r_producto, r_reglas, r_cliente, r_perfil = await asyncio.gather(
             self._medir(
@@ -345,15 +420,15 @@ class CalcularPrima:
             return_exceptions=True,
         )
         # 1. Tabla de decisión del producto.
-        _tecnica(DEPENDENCIA_PRODUCTO, r_producto)
+        self._tecnica(DEPENDENCIA_PRODUCTO, r_producto)
         producto = _resuelto(r_producto, ProductoNoEncontrado)
         if producto is None:
             raise ProductoNoEncontrado()
         verificar_producto(producto.valor, ahora)
         # 2. Fallas técnicas.
-        _tecnica(DEPENDENCIA_REGLAS, r_reglas)
-        _tecnica(DEPENDENCIA_CLIENTE, r_cliente)
-        _tecnica(DEPENDENCIA_PERFIL, r_perfil)
+        self._tecnica(DEPENDENCIA_REGLAS, r_reglas)
+        self._tecnica(DEPENDENCIA_CLIENTE, r_cliente)
+        self._tecnica(DEPENDENCIA_PERFIL, r_perfil)
         # 3. Reglas, cliente y perfil.
         reglas = _resuelto(r_reglas, (ReglasNoVigentes, ProductoNoEncontrado))
         if reglas is None:
@@ -371,22 +446,42 @@ class CalcularPrima:
             _verificar_perfil(cmd, r_perfil)
         return producto, reglas, r_perfil
 
+    def _tecnica(self, nombre: str, resultado: object) -> None:
+        """Un timeout o una falla técnica de la dependencia: decide la política."""
+        if isinstance(resultado, DependenciaAgotada | TimeoutError):
+            self._politica.ante_falla(nombre, ResultadoDependencia.TIEMPO_AGOTADO, resultado)
+        if isinstance(resultado, DependenciaNoDisponible):
+            self._politica.ante_falla(nombre, ResultadoDependencia.NO_DISPONIBLE, resultado)
+
     async def _medir(
         self, nombre: str, llamada: Callable[[], Awaitable[T]], dependencias: _Dependencias
     ) -> T:
+        """Mide la dependencia. El adaptador corta en su timeout efectivo, min(timeout, restante −
+        margen); este límite es la red de seguridad (caché, candado, un puerto sin protección):
+        min(timeout + holgura, restante), así el corte del adaptador llega primero."""
         inicio = time.perf_counter()
         resultado = RESULTADO_OK
+        limite_ms = self.config.dependencia_timeout_ms + HOLGURA_RED_MS
+        restante = presupuesto.restante_ms()
+        if restante is not None:
+            limite_ms = min(limite_ms, restante)
         try:
             with operacion(f"cotizacion.dependencia.{nombre}") as op:
                 try:
-                    return await asyncio.wait_for(
-                        llamada(), self.config.dependencia_timeout_ms / 1000
-                    )
+                    async with asyncio.timeout(limite_ms / 1000):
+                        return await llamada()
                 except _NO_EXISTE:
                     # La dependencia respondió bien: el "no existe" es de negocio.
                     op.marcar(RESULTADO_OK)
                     raise
-        except TimeoutError:
+                except TimeoutError as error:
+                    op.marcar(RESULTADO_TIMEOUT)
+                    registrar_tiempo_agotado(PROVEEDORES.get(nombre, nombre), nombre, limite_ms, 0)
+                    raise DependenciaAgotada(nombre) from error
+                except DependenciaAgotada:
+                    op.marcar(RESULTADO_TIMEOUT)
+                    raise
+        except DependenciaAgotada:
             resultado = RESULTADO_TIMEOUT
             raise
         except DependenciaNoDisponible:
@@ -430,9 +525,3 @@ def _resuelto[V](
     if isinstance(resultado, BaseException):
         raise resultado
     return resultado
-
-
-def _tecnica(nombre: str, resultado: object) -> None:
-    """Un timeout o una falla técnica de la dependencia: falla cerrada (503)."""
-    if isinstance(resultado, TimeoutError | DependenciaNoDisponible):
-        raise DependenciaNoDisponible(nombre) from resultado
