@@ -1,20 +1,30 @@
 """Protección de llamadas a terceros (regla 7, DT-10 y DT-21).
 
 - `timeout_efectivo_ms`: min(configurado, corte duro de 700, deadline - margen).
-- `Proteccion`: contrato que usa `adaptador-datos`. `SinProteccion` solo aplica el timeout;
-  `ProteccionDependencia` agrega el reintento acotado, el circuit breaker por clave (fuente) y
-  el bulkhead por grupo (aliado).
+- `Proteccion`: contrato que usan `adaptador-datos` y `cotizacion`. `SinProteccion` solo aplica
+  el timeout; `ProteccionDependencia` agrega el reintento acotado, el circuit breaker por clave
+  (fuente) y el bulkhead por grupo (aliado).
+- HU-W05: cada llamada anota en el span actual `solventa.timeout_ms`, `solventa.restante_ms` y
+  `solventa.presupuesto_ms` (si hay un recorrido con presupuesto), y un timeout deja el WARNING
+  "dependencia agotó su tiempo" con proveedor (grupo), operación (clave), timeout y restante. El
+  correlation_id lo agrega el formateador de logs.
 """
 
 import asyncio
+import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Literal, Protocol, TypeVar
 
 import httpx
+from opentelemetry import trace
+
+from solventa_common import presupuesto
 
 CORTE_DURO_MS = 700
+
+logger = logging.getLogger("solventa.resiliencia")
 
 T = TypeVar("T")
 Motivo = Literal["ERROR", "CIRCUITO_ABIERTO", "BULKHEAD"]
@@ -50,6 +60,42 @@ def timeout_efectivo_ms(
     return max(1, min(limites))
 
 
+def anotar_llamada(timeout_ms: int, deadline_ms: int | None) -> None:
+    """Atributos de presupuesto en el span actual (el de la operación de la dependencia)."""
+    span = trace.get_current_span()
+    span.set_attribute(presupuesto.ATRIBUTO_TIMEOUT, timeout_ms)
+    if deadline_ms is not None:
+        span.set_attribute(presupuesto.ATRIBUTO_RESTANTE, deadline_ms)
+    recorrido = presupuesto.actual()
+    if recorrido is not None:
+        span.set_attribute(presupuesto.ATRIBUTO_PRESUPUESTO, recorrido.total_ms)
+
+
+def registrar_tiempo_agotado(
+    proveedor: str, operacion: str, timeout_ms: int, restante_ms: int | None
+) -> None:
+    """AC1 (HU-W05): el timeout queda en el log con proveedor, operación y correlación."""
+    logger.warning(
+        "dependencia agotó su tiempo",
+        extra={
+            "proveedor": proveedor,
+            "operacion": operacion,
+            "timeout_ms": timeout_ms,
+            "restante_ms": restante_ms,
+        },
+    )
+
+
+def _restante_tras(inicio_s: float, deadline_ms: int | None) -> int | None:
+    """Lo que queda del recorrido al cortar: el presupuesto en curso o el deadline recibido."""
+    recorrido = presupuesto.restante_ms()
+    if recorrido is not None:
+        return recorrido
+    if deadline_ms is None:
+        return None
+    return max(0, deadline_ms - int((time.monotonic() - inicio_s) * 1000))
+
+
 class Proteccion(Protocol):
     async def ejecutar(
         self,
@@ -81,13 +127,16 @@ class SinProteccion:
         configurado_ms: int,
         deadline_ms: int | None,
     ) -> T:
-        timeout_s = (
-            timeout_efectivo_ms(configurado_ms, deadline_ms, corte_duro_ms=self._corte_duro_ms)
-            / 1000
+        timeout_ms = timeout_efectivo_ms(
+            configurado_ms, deadline_ms, corte_duro_ms=self._corte_duro_ms
         )
+        timeout_s = timeout_ms / 1000
+        anotar_llamada(timeout_ms, deadline_ms)
+        inicio = time.monotonic()
         try:
             return await asyncio.wait_for(llamada(timeout_s), timeout=timeout_s)
         except (httpx.TimeoutException, TimeoutError) as error:
+            registrar_tiempo_agotado(grupo, clave, timeout_ms, _restante_tras(inicio, deadline_ms))
             raise TiempoAgotado(clave) from error
         except httpx.HTTPError as error:
             # Incluye HTTPStatusError (5xx con raise_for_status) y los errores de conexión.
@@ -252,7 +301,10 @@ class ProteccionDependencia:
         cb = self._circuito(clave)
         if not cb.permitir():
             raise DependenciaNoDisponible("CIRCUITO_ABIERTO", cb.estado)
-        fin = self._reloj() + timeout_efectivo_ms(configurado_ms, deadline_ms) / 1000
+        timeout_ms = timeout_efectivo_ms(configurado_ms, deadline_ms)
+        anotar_llamada(timeout_ms, deadline_ms)
+        inicio = time.monotonic()
+        fin = self._reloj() + timeout_ms / 1000
 
         def restante() -> float:
             return max(0.0, fin - self._reloj())
@@ -273,6 +325,7 @@ class ProteccionDependencia:
         except (httpx.TimeoutException, TimeoutError) as error:
             cb.registrar_fallo()
             registrado = True
+            registrar_tiempo_agotado(grupo, clave, timeout_ms, _restante_tras(inicio, deadline_ms))
             raise TiempoAgotado(clave) from error
         except httpx.HTTPError as error:
             cb.registrar_fallo()
@@ -285,3 +338,23 @@ class ProteccionDependencia:
         finally:
             if not registrado:
                 cb.liberar_prueba()
+
+
+async def acotar[R](
+    fn: Callable[[], Awaitable[R]],
+    *,
+    operacion: str,
+    proveedor: str,
+    configurado_ms: int,
+    deadline_ms: int | None,
+) -> R:
+    """Trabajo propio de quien recibe X-Deadline-Ms (HU-W05): corta en
+    timeout_efectivo_ms(configurado, deadline) y lanza TiempoAgotado, para no seguir trabajando
+    cuando quien llama ya dejó de esperar. La ruta lo traduce a 504 TIEMPO_AGOTADO.
+
+    Cancela la corrutina; un trabajo en `asyncio.to_thread` termina en su hilo aunque la
+    respuesta ya haya salido.
+    """
+    return await SinProteccion().ejecutar(
+        operacion, proveedor, lambda _timeout_s: fn(), configurado_ms, deadline_ms
+    )
