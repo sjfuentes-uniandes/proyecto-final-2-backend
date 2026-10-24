@@ -1,10 +1,17 @@
 """Cliente HTTP de la API interna de cotizacion: /v1/perfiles (04 §B.4.2) y, desde HU-W03,
-/v1/cotizaciones y /v1/productos/{productoId}/condiciones."""
+/v1/cotizaciones y /v1/productos/{productoId}/condiciones.
 
+HU-W05: `cotizar` abre el presupuesto del portal (`presupuesto_ms`, portal.cotizar de
+LATENCY_BUDGET_MS): la llamada corta en min(timeout, restante) y envía ese valor en X-Deadline-Ms.
+El corte lo garantiza asyncio.timeout (TimeoutError), no solo el timeout de httpx.
+"""
+
+import asyncio
 from typing import Any
 from uuid import UUID
 
 import httpx
+from solventa_common import presupuesto
 from solventa_common.correlation import cliente_async
 
 ROL_ASESOR = "ASESOR"
@@ -21,11 +28,16 @@ class ErrorCotizacion(Exception):
 
 class CotizacionCliente:
     def __init__(
-        self, url: str, timeout_ms: int, transporte: httpx.AsyncBaseTransport | None = None
+        self,
+        url: str,
+        timeout_ms: int,
+        transporte: httpx.AsyncBaseTransport | None = None,
+        presupuesto_ms: int | None = None,
     ) -> None:
         self.url = url.rstrip("/")
         self.timeout = timeout_ms / 1000
         self.transporte = transporte
+        self.presupuesto_ms = presupuesto_ms
 
     async def _llamar(
         self, metodo: str, ruta: str, actor: str, prefijo: str = "/v1/perfiles", **opciones: Any
@@ -35,8 +47,13 @@ class CotizacionCliente:
             "X-Actor-Rol": ROL_ASESOR,
             **opciones.pop("headers", {}),
         }
+        timeout = self.timeout
+        restante = presupuesto.restante_ms()
+        if restante is not None:
+            timeout = max(0.001, min(timeout, restante / 1000))
+            encabezados.update(presupuesto.encabezado(timeout * 1000))
         async with cliente_async(
-            base_url=self.url, timeout=self.timeout, transport=self.transporte
+            base_url=self.url, timeout=timeout, transport=self.transporte
         ) as cliente:
             respuesta = await cliente.request(
                 metodo, f"{prefijo}{ruta}", headers=encabezados, **opciones
@@ -73,6 +90,15 @@ class CotizacionCliente:
     # --- HU-W03 ---------------------------------------------------------------------------
 
     async def cotizar(
+        self, cuerpo: dict[str, Any], actor: str, clave: UUID
+    ) -> tuple[int, dict[str, Any]]:
+        if self.presupuesto_ms is None:
+            return await self._cotizar(cuerpo, actor, clave)
+        with presupuesto.iniciar(self.presupuesto_ms):
+            async with asyncio.timeout(self.presupuesto_ms / 1000):
+                return await self._cotizar(cuerpo, actor, clave)
+
+    async def _cotizar(
         self, cuerpo: dict[str, Any], actor: str, clave: UUID
     ) -> tuple[int, dict[str, Any]]:
         return await self._llamar(
