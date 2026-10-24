@@ -1,0 +1,211 @@
+{
+  "generado": "2026-10-24T18:03:08-0500",
+  "adaptador_datos": {
+    "escenario": "adaptador-datos + WireMock: C06 DA_REGISTROS_PUBLICOS lento (1000 ms), X-Deadline-Ms 300",
+    "respuesta": {
+      "status": 504,
+      "cuerpo": {
+        "codigo": "TIEMPO_AGOTADO",
+        "mensaje": "La fuente no respondió a tiempo",
+        "correlationId": "evidencia-hu-w05-c06",
+        "detalles": {}
+      },
+      "duracion_ms": 285.7
+    },
+    "log_warning": [
+      {
+        "timestamp": "2026-10-24T23:03:09.637+00:00",
+        "level": "WARNING",
+        "service": "adaptador-datos",
+        "environment": "evidencia",
+        "logger": "solventa.resiliencia",
+        "message": "dependencia agotó su tiempo",
+        "operation": "consulta.DA_REGISTROS_PUBLICOS",
+        "result": null,
+        "duration_ms": null,
+        "correlation_id": "evidencia-hu-w05-c06",
+        "trace_id": "1-6add392d-42ef19177813ae89ef059dc1",
+        "span_id": "b7ea1a2c770c70e7",
+        "proveedor": "DATOS_ABIERTOS",
+        "operacion": "DA_REGISTROS_PUBLICOS",
+        "timeout_ms": 280,
+        "restante_ms": 17
+      }
+    ],
+    "spans": [
+      {
+        "name": "GET",
+        "trace_id": "6add392d42ef19177813ae89ef059dc1",
+        "span_id": "b5a6e06936f2b660",
+        "parent_id": "b7ea1a2c770c70e7",
+        "duration_ms": 282.0,
+        "status": "UNSET",
+        "attributes": {
+          "http.method": "GET",
+          "http.url": "http://localhost:64511/datos-abiertos/v1/registros/00000000-0000-4000-8000-000000000006?campos=listasRestrictivas",
+          "correlation_id": "evidencia-hu-w05-c06"
+        }
+      },
+      {
+        "name": "consulta.DA_REGISTROS_PUBLICOS",
+        "trace_id": "6add392d42ef19177813ae89ef059dc1",
+        "span_id": "b7ea1a2c770c70e7",
+        "parent_id": "f8bc344f6aff11d9",
+        "duration_ms": 282.9,
+        "status": "ERROR",
+        "attributes": {
+          "operation": "consulta.DA_REGISTROS_PUBLICOS",
+          "correlation_id": "evidencia-hu-w05-c06",
+          "solventa.timeout_ms": 280,
+          "solventa.restante_ms": 300,
+          "solventa.presupuesto_ms": 300,
+          "result": "timeout"
+        }
+      },
+      {
+        "name": "POST /v1/consultas",
+        "trace_id": "6add392d42ef19177813ae89ef059dc1",
+        "span_id": "f8bc344f6aff11d9",
+        "parent_id": null,
+        "duration_ms": 283.5,
+        "status": "ERROR",
+        "attributes": {
+          "correlation_id": "evidencia-hu-w05-c06",
+          "http.scheme": "http",
+          "http.host": "testserver",
+          "net.host.port": 80,
+          "http.flavor": "1.1",
+          "http.target": "/v1/consultas",
+          "http.url": "http://testserver/v1/consultas",
+          "http.method": "POST",
+          "http.server_name": "testserver",
+          "http.user_agent": "testclient",
+          "net.peer.ip": "testclient",
+          "net.peer.port": 50000,
+          "http.route": "/v1/consultas",
+          "http.status_code": 504
+        }
+      }
+    ]
+  },
+  "cotizacion": {
+    "escenario": "cotizacion: catalogo lento (2 s), dependencia_timeout_ms 300, presupuesto 700 acotado por X-Deadline-Ms 250",
+    "resultado": {
+      "error": "DependenciaAgotada(catalogo.producto)",
+      "http": "503 DEPENDENCIA_NO_DISPONIBLE",
+      "duracion_ms": 231.4
+    },
+    "log_warning": [
+      {
+        "timestamp": "2026-10-24T23:03:10.117+00:00",
+        "level": "WARNING",
+        "service": "cotizacion",
+        "environment": "evidencia",
+        "logger": "solventa.resiliencia",
+        "message": "dependencia agotó su tiempo",
+        "operation": "cotizacion.dependencia.catalogo.producto",
+        "result": null,
+        "duration_ms": null,
+        "correlation_id": "evidencia-hu-w05-cotizacion",
+        "trace_id": "1-6add392d-c39f23315e014998ebdc3de7",
+        "span_id": "f1a2994f67597569",
+        "proveedor": "catalogo",
+        "operacion": "catalogo.producto",
+        "timeout_ms": 229,
+        "restante_ms": 19
+      },
+      {
+        "timestamp": "2026-10-24T23:03:10.118+00:00",
+        "level": "WARNING",
+        "service": "cotizacion",
+        "environment": "evidencia",
+        "logger": "solventa.resiliencia",
+        "message": "dependencia agotó su tiempo",
+        "operation": "cotizacion.dependencia.catalogo.reglas_prima",
+        "result": null,
+        "duration_ms": null,
+        "correlation_id": "evidencia-hu-w05-cotizacion",
+        "trace_id": "1-6add392d-c39f23315e014998ebdc3de7",
+        "span_id": "7c3c3e950d960869",
+        "proveedor": "catalogo",
+        "operacion": "catalogo.reglas_prima",
+        "timeout_ms": 229,
+        "restante_ms": 19
+      }
+    ],
+    "spans": [
+      {
+        "name": "cotizacion.dependencia.clientes.identidad",
+        "trace_id": "6add392dc39f23315e014998ebdc3de7",
+        "span_id": "7026c0b67377ca64",
+        "parent_id": "26fe816c80409d07",
+        "duration_ms": 0.1,
+        "status": "UNSET",
+        "attributes": {
+          "operation": "cotizacion.dependencia.clientes.identidad",
+          "correlation_id": "evidencia-hu-w05-cotizacion",
+          "result": "ok"
+        }
+      },
+      {
+        "name": "cotizacion.dependencia.perfil",
+        "trace_id": "6add392dc39f23315e014998ebdc3de7",
+        "span_id": "72481cf7c3975112",
+        "parent_id": "26fe816c80409d07",
+        "duration_ms": 0.0,
+        "status": "UNSET",
+        "attributes": {
+          "operation": "cotizacion.dependencia.perfil",
+          "correlation_id": "evidencia-hu-w05-cotizacion",
+          "result": "ok"
+        }
+      },
+      {
+        "name": "cotizacion.dependencia.catalogo.producto",
+        "trace_id": "6add392dc39f23315e014998ebdc3de7",
+        "span_id": "f1a2994f67597569",
+        "parent_id": "26fe816c80409d07",
+        "duration_ms": 230.7,
+        "status": "ERROR",
+        "attributes": {
+          "operation": "cotizacion.dependencia.catalogo.producto",
+          "correlation_id": "evidencia-hu-w05-cotizacion",
+          "solventa.timeout_ms": 229,
+          "solventa.restante_ms": 249,
+          "solventa.presupuesto_ms": 250,
+          "result": "timeout"
+        }
+      },
+      {
+        "name": "cotizacion.dependencia.catalogo.reglas_prima",
+        "trace_id": "6add392dc39f23315e014998ebdc3de7",
+        "span_id": "7c3c3e950d960869",
+        "parent_id": "26fe816c80409d07",
+        "duration_ms": 230.9,
+        "status": "ERROR",
+        "attributes": {
+          "operation": "cotizacion.dependencia.catalogo.reglas_prima",
+          "correlation_id": "evidencia-hu-w05-cotizacion",
+          "solventa.timeout_ms": 229,
+          "solventa.restante_ms": 249,
+          "solventa.presupuesto_ms": 250,
+          "result": "timeout"
+        }
+      },
+      {
+        "name": "cotizacion",
+        "trace_id": "6add392dc39f23315e014998ebdc3de7",
+        "span_id": "26fe816c80409d07",
+        "parent_id": null,
+        "duration_ms": 231.4,
+        "status": "ERROR",
+        "attributes": {
+          "operation": "cotizacion",
+          "correlation_id": "evidencia-hu-w05-cotizacion",
+          "solventa.presupuesto_ms": 250,
+          "result": "timeout"
+        }
+      }
+    ]
+  }
+}
