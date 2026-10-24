@@ -1,0 +1,173 @@
+{
+  "$defs": {
+    "CanalAceptacion": {
+      "enum": [
+        "PORTAL_ASESOR"
+      ],
+      "title": "CanalAceptacion",
+      "type": "string"
+    },
+    "OfertaAceptadaV1": {
+      "description": "Aceptaci\u00f3n registrada: habilita el recaudo. Sin datos personales ni de medios de pago.",
+      "properties": {
+        "aceptacionId": {
+          "format": "uuid",
+          "title": "Aceptacionid",
+          "type": "string"
+        },
+        "aceptadaEn": {
+          "format": "date-time",
+          "title": "Aceptadaen",
+          "type": "string"
+        },
+        "actorId": {
+          "title": "Actorid",
+          "type": "string"
+        },
+        "canal": {
+          "$ref": "#/$defs/CanalAceptacion"
+        },
+        "claveRecaudo": {
+          "format": "uuid",
+          "title": "Claverecaudo",
+          "type": "string"
+        },
+        "clienteId": {
+          "format": "uuid",
+          "title": "Clienteid",
+          "type": "string"
+        },
+        "cotizacionId": {
+          "format": "uuid",
+          "title": "Cotizacionid",
+          "type": "string"
+        },
+        "decisionId": {
+          "format": "uuid",
+          "title": "Decisionid",
+          "type": "string"
+        },
+        "huellaCalculo": {
+          "title": "Huellacalculo",
+          "type": "string"
+        },
+        "ofertaId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ofertaid"
+        },
+        "prima": {
+          "$ref": "#/$defs/PrimaAceptadaV1"
+        },
+        "productoId": {
+          "title": "Productoid",
+          "type": "string"
+        },
+        "versionDeclaraciones": {
+          "title": "Versiondeclaraciones",
+          "type": "string"
+        },
+        "vigenteHasta": {
+          "format": "date-time",
+          "title": "Vigentehasta",
+          "type": "string"
+        }
+      },
+      "required": [
+        "aceptacionId",
+        "cotizacionId",
+        "ofertaId",
+        "decisionId",
+        "clienteId",
+        "productoId",
+        "prima",
+        "claveRecaudo",
+        "huellaCalculo",
+        "vigenteHasta",
+        "versionDeclaraciones",
+        "aceptadaEn",
+        "actorId",
+        "canal"
+      ],
+      "title": "OfertaAceptadaV1",
+      "type": "object"
+    },
+    "PrimaAceptadaV1": {
+      "description": "La prima de la oferta aceptada; el valor es texto decimal (DS2-16).",
+      "properties": {
+        "moneda": {
+          "pattern": "^[A-Z]{3}$",
+          "title": "Moneda",
+          "type": "string"
+        },
+        "periodicidad": {
+          "title": "Periodicidad",
+          "type": "string"
+        },
+        "valor": {
+          "pattern": "^\\d+(\\.\\d+)?$",
+          "title": "Valor",
+          "type": "string"
+        }
+      },
+      "required": [
+        "valor",
+        "moneda",
+        "periodicidad"
+      ],
+      "title": "PrimaAceptadaV1",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/OfertaAceptadaV1"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreEvento[OfertaAceptadaV1]",
+  "type": "object"
+}
