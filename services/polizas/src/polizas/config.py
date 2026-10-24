@@ -22,6 +22,9 @@ class Settings(ServiceSettings):
     reglas_cache_version_s: int = Field(24 * 3600, ge=0)
     # DS2-14: un caso en revisión más antiguo que esto está fuera del compromiso (E01).
     compromiso_revision_horas: int = Field(8, ge=1)
+    # HU-W15, DS2-24: versión vigente del texto de las declaraciones del tomador (F01). Una
+    # solicitud con otra versión responde 422 TEXTO_NO_VIGENTE.
+    version_declaraciones: str = Field("2026.10.1", min_length=1, max_length=32)
     # Outbox: la tabla se escribe siempre; la publicación es del relay (EXT-04).
     outbox_enabled: bool = Field(False, validation_alias=_env("OUTBOX_ENABLED"))
     events_topic_arn: str | None = Field(None, validation_alias=_env("EVENTS_TOPIC_ARN"))

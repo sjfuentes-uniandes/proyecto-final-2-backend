@@ -52,6 +52,8 @@ def test_el_arranque_migra_y_abre_el_pool_solo_con_base_configurada(
         assert hasattr(estado, "solicitar_suscripcion") is con_base
         assert hasattr(estado, "consultar_suscripciones") is con_base
         assert hasattr(estado, "reconstruir_decision") is con_base
+        assert hasattr(estado, "registrar_aceptacion") is con_base
+        assert hasattr(estado, "consultar_aceptacion") is con_base
         pool = getattr(estado, "pool", None)
         assert cliente.get("/health").json() == {"status": "ok"}
         if con_base:
