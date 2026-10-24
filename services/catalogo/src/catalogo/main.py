@@ -82,6 +82,7 @@ def crear_app(
     @asynccontextmanager
     async def ciclo(app: FastAPI) -> AsyncIterator[None]:
         async with AsyncExitStack() as pila:
+            app.state.consulta_timeout_ms = settings.consulta_timeout_ms
             repo, repo_productos = repositorio, productos_repo
             repo_suscripcion = reglas_suscripcion_repo
             # Sin base configurada (pruebas) no se migra ni se abre el pool.
