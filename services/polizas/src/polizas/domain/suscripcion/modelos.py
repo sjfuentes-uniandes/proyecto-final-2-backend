@@ -78,11 +78,30 @@ class Regla:
 
 
 @dataclass(frozen=True, slots=True)
+class DescriptorAlternativa:
+    """Lo que el portal muestra de la alternativa (E03): `EDAD_MAXIMA` con `valor` en años o
+    `SIN_LIMITE_EDAD` sin valor."""
+
+    codigo: str
+    valor: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class Alternativa:
+    """Producto alternativo de una versión de reglas de suscripción; solo informativo."""
+
+    producto_id: str
+    descriptor: DescriptorAlternativa
+
+
+@dataclass(frozen=True, slots=True)
 class ReglasSuscripcion:
     producto_id: str
     version: str
     hash: str
     reglas: tuple[Regla, ...]
+    # HU-W14: productos alternativos que se comunican en un rechazo (E03).
+    alternativas: tuple[Alternativa, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,3 +251,37 @@ class Reconstruccion:
     resultado_reconstruido: ResultadoDecision
     version_reglas: str
     hash_reglas: str
+
+
+# --- Comunicación de la decisión (HU-W14) ----------------------------------------------------
+
+
+class CondicionAseguramiento(StrEnum):
+    APROBADA_SIN_AJUSTES = "APROBADA_SIN_AJUSTES"
+    NO_ASEGURABLE = "NO_ASEGURABLE"
+    EN_REVISION = "EN_REVISION"
+
+
+class SiguientePaso(StrEnum):
+    ACEPTAR_OFERTA = "ACEPTAR_OFERTA"
+    COTIZAR_NUEVAMENTE = "COTIZAR_NUEVAMENTE"
+    COTIZAR_ALTERNATIVA = "COTIZAR_ALTERNATIVA"
+    ESPERAR_REVISION = "ESPERAR_REVISION"
+
+
+@dataclass(frozen=True, slots=True)
+class Comunicacion:
+    """La decisión en términos del cliente (HU-W14). Nunca lleva el código ni el valor de una
+    regla: solo motivos de un conjunto cerrado."""
+
+    condicion: CondicionAseguramiento
+    admite_contratacion: bool
+    siguiente_paso: SiguientePaso
+    # Solo en una aprobada (vigente o vencida).
+    vigente_hasta: datetime | None
+    # Rechazo: el de la regla determinante; revisión: R-12 (puede ser None).
+    motivo_cliente: str | None
+    # Solo en un rechazo.
+    alternativas: tuple[Alternativa, ...]
+    # Solo en una revisión.
+    plazo_respuesta_horas: int | None

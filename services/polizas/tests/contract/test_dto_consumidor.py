@@ -1,6 +1,7 @@
 """Las copias del consumidor en polizas coinciden con los contratos de sus proveedores (HU-W13):
 - `InsumosSuscripcionDto` con `InsumosSuscripcion` de contracts/openapi/cotizacion.yaml;
-- los conjuntos cerrados de `catalogo_http` con contracts/modelos/reglas-suscripcion.v1.schema.json.
+- los conjuntos cerrados de `catalogo_http` con contracts/modelos/reglas-suscripcion.v1.schema.json
+  (desde HU-W14, también el descriptor de las alternativas).
 La verificación del proveedor con Pact (CT-W13-02) llega con los insumos de cotizacion (B4).
 """
 
@@ -42,6 +43,10 @@ def test_los_conjuntos_cerrados_son_los_del_contrato_de_reglas() -> None:
     assert list(get_args(catalogo_http.Campo)) == definiciones["CampoRegla"]["enum"]
     assert list(get_args(catalogo_http.Operador)) == definiciones["OperadorRegla"]["enum"]
     assert list(get_args(catalogo_http.Motivo)) == definiciones["MotivoCliente"]["enum"]
+    # HU-W14: descriptor de las alternativas.
+    assert (
+        list(get_args(catalogo_http.CodigoDescriptor)) == definiciones["CodigoDescriptor"]["enum"]
+    )
 
 
 def test_la_semilla_de_catalogo_se_lee(sinteticos: Any) -> None:

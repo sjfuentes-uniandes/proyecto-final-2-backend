@@ -16,6 +16,7 @@ from polizas.adapters.inbound.http import suscripciones
 from polizas.adapters.outbound.catalogo_http import CatalogoHttp
 from polizas.adapters.outbound.cotizacion_http import CotizacionHttp
 from polizas.adapters.outbound.reloj import RelojSistema
+from polizas.application.suscripcion.comunicar import ComunicarDecision
 from polizas.application.suscripcion.consultar import ConsultarSuscripciones
 from polizas.application.suscripcion.puertos import (
     DecisionesRepositorio,
@@ -60,6 +61,13 @@ def _configurar_casos(app: FastAPI, puertos: Puertos, settings: Settings) -> Non
     )
     app.state.reconstruir_decision = ReconstruirDecision(
         puertos.decisiones, puertos.reglas, settings.catalogo_timeout_ms
+    )
+    # HU-W14: la comunicación se deriva al leer (GET y POST); no se persiste.
+    app.state.comunicar_decision = ComunicarDecision(
+        puertos.reglas,
+        puertos.reloj,
+        settings.compromiso_revision_horas,
+        settings.catalogo_timeout_ms,
     )
 
 

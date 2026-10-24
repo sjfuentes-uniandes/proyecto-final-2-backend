@@ -2,10 +2,13 @@
 
 Autorización por grupo (asesores solicita y lee; suscriptores lee, ve la bandeja y el resumen),
 rol hacia polizas según el grupo, filtrado DS2-07, composición del nombre del cliente con falla de
-clientes, errores B2 que pasan y falla cerrada (503) para todo lo demás.
+clientes, errores B2 que pasan y falla cerrada (503) para todo lo demás. Desde HU-W14
+(UT-W14-02), la comunicación: pasa tal cual, sin nada reservado ni códigos de reglas.
 """
 
 import copy
+import json
+import re
 from collections.abc import Callable, Iterator
 from typing import Any
 
@@ -425,3 +428,95 @@ def test_rechazos_de_polizas_en_bandeja_y_resumen(simulados: Simulados, ruta_: s
     parametros = {"desde": "2026-10-22T05:00:00Z", "hasta": "2026-10-23T05:00:00Z"}
     respuesta = TestClient(app).get(ruta_, params=parametros, headers=SUSCRIPTOR)
     assert respuesta.status_code == 422
+
+
+# --- HU-W14: comunicación (UT-W14-02) --------------------------------------------------------
+
+COMUNICACION_RECHAZO: dict[str, Any] = {
+    "condicion": "NO_ASEGURABLE",
+    "admiteContratacion": False,
+    "siguientePaso": "COTIZAR_ALTERNATIVA",
+    "vigenteHasta": None,
+    "motivoCliente": "NO_ELEGIBLE",
+    "alternativas": [
+        {"productoId": "vida-senior", "descriptor": {"codigo": "EDAD_MAXIMA", "valor": "80"}},
+        {
+            "productoId": "proteccion-pagos",
+            "descriptor": {"codigo": "SIN_LIMITE_EDAD", "valor": None},
+        },
+    ],
+    "plazoRespuestaHoras": None,
+}
+CODIGO_REGLA = re.compile(r"SUS-\d{3}")
+
+
+def _con_comunicacion(comunicacion: Any) -> Callable[[httpx.Request], httpx.Response]:
+    def responder(pedido: httpx.Request) -> httpx.Response:
+        estado = 201 if pedido.method == "POST" else 200
+        return httpx.Response(
+            estado, json={**copy.deepcopy(DECISION), "comunicacion": comunicacion}
+        )
+
+    return responder
+
+
+def _post_y_get(encabezados: dict[str, str]) -> list[httpx.Response]:
+    leida = TestClient(app).get(f"/v1/suscripciones/{DECISION_ID}", headers=encabezados)
+    return [_solicitar(encabezados), leida]
+
+
+def test_hu_w14_la_comunicacion_llega_al_asesor_sin_nada_reservado(simulados: Simulados) -> None:
+    """DS2-07 y R-08: el asesor recibe la comunicación tal cual; ni en ella ni en las reglas
+    aparece el valor de SUS-015, y la comunicación no lleva códigos de reglas."""
+    simulados.polizas = _con_comunicacion(COMUNICACION_RECHAZO)
+    for respuesta in _post_y_get(ASESOR):
+        assert respuesta.status_code in (200, 201)
+        cuerpo = respuesta.json()
+        assert cuerpo["comunicacion"] == COMUNICACION_RECHAZO
+        assert not CODIGO_REGLA.search(json.dumps(cuerpo["comunicacion"]))
+        reservadas = [r for r in cuerpo["reglasEvaluadas"] if r["visibilidad"] == "RESERVADA"]
+        assert [(r["valorCaso"], r["reservada"]) for r in reservadas] == [(None, True)]
+
+
+def test_hu_w14_el_suscriptor_recibe_la_misma_comunicacion(simulados: Simulados) -> None:
+    simulados.polizas = _con_comunicacion(COMUNICACION_RECHAZO)
+    cuerpo = TestClient(app).get(f"/v1/suscripciones/{DECISION_ID}", headers=SUSCRIPTOR).json()
+    assert cuerpo["comunicacion"] == COMUNICACION_RECHAZO
+
+
+@pytest.mark.parametrize(
+    "fuga",
+    [
+        {"motivoCliente": "SUS-015"},
+        {"condicion": "RECHAZADA_POR_LISTAS"},
+        {"alternativas": [{"productoId": "SUS-015", "descriptor": {"codigo": "EDAD_MAXIMA"}}]},
+        {"alternativas": [{"productoId": "vida-senior", "descriptor": {"codigo": "LISTAS"}}]},
+        {"admiteContratacion": "quizas"},
+    ],
+)
+def test_hu_w14_una_comunicacion_fuera_del_contrato_es_falla_cerrada(
+    simulados: Simulados, fuga: dict[str, Any]
+) -> None:
+    """Todo campo de la comunicación es un conjunto cerrado: un código de regla no cabe."""
+    simulados.polizas = _con_comunicacion({**COMUNICACION_RECHAZO, **fuga})
+    for respuesta in _post_y_get(ASESOR):
+        assert (respuesta.status_code, respuesta.json()["codigo"]) == (
+            503,
+            "SERVICIO_NO_DISPONIBLE",
+        )
+
+
+def test_hu_w14_un_campo_extra_en_la_comunicacion_no_llega_al_portal(
+    simulados: Simulados,
+) -> None:
+    simulados.polizas = _con_comunicacion({**COMUNICACION_RECHAZO, "regla": "SUS-015"})
+    for respuesta in _post_y_get(ASESOR):
+        assert "regla" not in respuesta.json()["comunicacion"]
+        assert not CODIGO_REGLA.search(json.dumps(respuesta.json()["comunicacion"]))
+
+
+def test_hu_w14_una_decision_sin_comunicacion_sigue_pasando(simulados: Simulados) -> None:
+    """Criterio técnico 5: polizas de la versión W13 (sin el campo) no rompe el portal."""
+    for respuesta in _post_y_get(ASESOR):
+        assert respuesta.status_code in (200, 201)
+        assert respuesta.json()["comunicacion"] is None

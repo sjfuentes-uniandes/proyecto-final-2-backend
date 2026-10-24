@@ -1,8 +1,9 @@
 """ReglasSuscripcionPuerto sobre catalogo (`/v1/productos/{id}/reglas-suscripcion/...`, HU-W13).
 
 Lector del contrato contracts/modelos/reglas-suscripcion.v1.schema.json: los conjuntos cerrados
-(tipo, campo, operador, visibilidad y motivo) se validan al leer; una respuesta fuera de ellos es
-una dependencia no disponible (falla cerrada).
+(tipo, campo, operador, visibilidad, motivo y descriptor de las alternativas) se validan al leer;
+una respuesta fuera de ellos es una dependencia no disponible (falla cerrada). Las alternativas
+(HU-W14) son opcionales al leer: una definición sin ellas no tiene alternativas.
 
 Caché TTL en memoria por réplica (DS2-18; polizas no tiene CACHE_URL): las reglas vigentes
 `ttl_vigente_s` (60 s) y una versión cerrada `ttl_version_s` (24 h, no cambia nunca). Con 0 no se
@@ -21,6 +22,8 @@ from pydantic.alias_generators import to_camel
 from polizas.application.suscripcion.puertos import Reloj
 from polizas.domain.suscripcion.errores import DependenciaNoDisponible, ReglasNoVigentes
 from polizas.domain.suscripcion.modelos import (
+    Alternativa,
+    DescriptorAlternativa,
     Regla,
     ReglasSuscripcion,
     TipoRegla,
@@ -45,6 +48,8 @@ Motivo = Literal[
     "PERFIL_REQUIERE_REVISION",
     "NO_ELEGIBLE",
 ]
+CodigoDescriptor = Literal["EDAD_MAXIMA", "SIN_LIMITE_EDAD"]
+TextoDecimal = Annotated[str, Field(pattern=r"^-?\d+(\.\d+)?$")]
 
 
 class _Dto(BaseModel):
@@ -63,8 +68,19 @@ class ReglaDto(_Dto):
     motivo_cliente: Motivo
 
 
+class DescriptorAlternativaDto(_Dto):
+    codigo: CodigoDescriptor
+    valor: TextoDecimal | None
+
+
+class AlternativaDto(_Dto):
+    producto_id: str
+    descriptor: DescriptorAlternativaDto
+
+
 class DefinicionDto(_Dto):
     producto_id: str
+    alternativas: list[AlternativaDto] = []
     reglas: Annotated[list[ReglaDto], Field(min_length=1)]
 
 
@@ -95,6 +111,12 @@ def a_reglas(contenido: bytes) -> ReglasSuscripcion:
                 motivo_cliente=r.motivo_cliente,
             )
             for r in dto.definicion.reglas
+        ),
+        alternativas=tuple(
+            Alternativa(
+                a.producto_id, DescriptorAlternativa(a.descriptor.codigo, a.descriptor.valor)
+            )
+            for a in dto.definicion.alternativas
         ),
     )
 

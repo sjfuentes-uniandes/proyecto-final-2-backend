@@ -197,3 +197,45 @@ async def test_reglas_con_la_red_caida(dobles: Any) -> None:
                 "p", "2026.10.1"
             )
     assert error.value.dependencia == "catalogo"
+
+
+# --- catalogo: alternativas (HU-W14) --------------------------------------------------------
+
+
+async def test_reglas_con_sus_alternativas(sinteticos: Any, dobles: Any) -> None:
+    cuerpo = _respuesta_reglas(sinteticos)
+    async with _cliente(lambda _: httpx.Response(200, json=cuerpo)) as cliente:
+        reglas = await CatalogoHttp(cliente, "http://catalogo", 300, dobles.reloj).por_version(
+            "vida-hipotecario", "2026.10.1"
+        )
+    assert [
+        (a.producto_id, a.descriptor.codigo, a.descriptor.valor) for a in reglas.alternativas
+    ] == [
+        ("vida-senior", "EDAD_MAXIMA", "80"),
+        ("proteccion-pagos", "SIN_LIMITE_EDAD", None),
+        ("auxilio-funerario", "EDAD_MAXIMA", "85"),
+    ]
+
+
+async def test_una_definicion_sin_alternativas_no_tiene_alternativas(
+    sinteticos: Any, dobles: Any
+) -> None:
+    cuerpo = _respuesta_reglas(sinteticos)
+    del cuerpo["definicion"]["alternativas"]
+    async with _cliente(lambda _: httpx.Response(200, json=cuerpo)) as cliente:
+        reglas = await CatalogoHttp(cliente, "http://catalogo", 300, dobles.reloj).vigentes("p")
+    assert reglas.alternativas == ()
+    assert reglas.reglas == sinteticos.reglas().reglas
+
+
+@pytest.mark.parametrize(
+    "descriptor", [{"codigo": "OTRO", "valor": None}, {"codigo": "EDAD_MAXIMA", "valor": "80 años"}]
+)
+async def test_una_alternativa_fuera_del_contrato_es_falla_cerrada(
+    descriptor: dict[str, Any], sinteticos: Any, dobles: Any
+) -> None:
+    cuerpo = _respuesta_reglas(sinteticos)
+    cuerpo["definicion"]["alternativas"][0]["descriptor"] = descriptor
+    async with _cliente(lambda _: httpx.Response(200, json=cuerpo)) as cliente:
+        with pytest.raises(DependenciaNoDisponible):
+            await CatalogoHttp(cliente, "http://catalogo", 300, dobles.reloj).vigentes("p")

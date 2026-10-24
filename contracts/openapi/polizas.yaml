@@ -8,8 +8,8 @@ paths:
       tags:
       - suscripciones
       summary: Solicitar
-      description: Evalúa las reglas de suscripción vigentes sobre la oferta y registra
-        la decisión.
+      description: Evalúa las reglas vigentes sobre la oferta y registra la decisión,
+        con su comunicación.
       operationId: solicitar_v1_suscripciones_post
       parameters:
       - name: Idempotency-Key
@@ -318,8 +318,8 @@ paths:
       tags:
       - suscripciones
       summary: Consultar
-      description: Una decisión registrada; no cambia nunca (ASESOR o SUSCRIPTOR,
-        DS2-07).
+      description: Una decisión registrada (no cambia) con su comunicación (ASESOR
+        o SUSCRIPTOR, DS2-07).
       operationId: consultar_v1_suscripciones__decisionId__get
       parameters:
       - name: decisionId
@@ -457,6 +457,19 @@ paths:
               schema: {}
 components:
   schemas:
+    AlternativaDto:
+      properties:
+        productoId:
+          type: string
+          pattern: ^[a-z0-9-]{1,64}$
+          title: Productoid
+        descriptor:
+          $ref: '#/components/schemas/DescriptorAlternativaDto'
+      type: object
+      required:
+      - productoId
+      - descriptor
+      title: AlternativaDto
     BandejaSuscripcion:
       properties:
         items:
@@ -572,6 +585,68 @@ components:
       - nombre
       - obligatoria
       title: CoberturaProductoDto
+    CodigoDescriptor:
+      type: string
+      enum:
+      - EDAD_MAXIMA
+      - SIN_LIMITE_EDAD
+      title: CodigoDescriptor
+    ComunicacionDto:
+      properties:
+        condicion:
+          $ref: '#/components/schemas/CondicionAseguramiento'
+        admiteContratacion:
+          type: boolean
+          title: Admitecontratacion
+          description: 'true solo en una APROBADA con la oferta vigente: el portal
+            ofrece aceptar'
+        siguientePaso:
+          $ref: '#/components/schemas/SiguientePaso'
+        vigenteHasta:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Vigentehasta
+          description: Fin de la vigencia de la oferta; solo en APROBADA_SIN_AJUSTES
+        motivoCliente:
+          anyOf:
+          - $ref: '#/components/schemas/MotivoCliente'
+          - type: 'null'
+          description: 'NO_ASEGURABLE: motivo de la regla determinante (NO_ELEGIBLE
+            si es reservada). EN_REVISION: el de la primera regla explicable pendiente,
+            o null (R-12)'
+        alternativas:
+          items:
+            $ref: '#/components/schemas/AlternativaDto'
+          type: array
+          title: Alternativas
+          description: Solo en NO_ASEGURABLE; vacía si catalogo no respondió
+        plazoRespuestaHoras:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Plazorespuestahoras
+          description: Solo en EN_REVISION
+      type: object
+      required:
+      - condicion
+      - admiteContratacion
+      - siguientePaso
+      - vigenteHasta
+      - motivoCliente
+      - alternativas
+      - plazoRespuestaHoras
+      title: ComunicacionDto
+      description: La decisión en términos del cliente (HU-W14). Sin códigos ni valores
+        de reglas.
+    CondicionAseguramiento:
+      type: string
+      enum:
+      - APROBADA_SIN_AJUSTES
+      - NO_ASEGURABLE
+      - EN_REVISION
+      title: CondicionAseguramiento
     CondicionesOfertaDto:
       properties:
         socioId:
@@ -742,6 +817,11 @@ components:
         duracionMs:
           type: integer
           title: Duracionms
+        comunicacion:
+          anyOf:
+          - $ref: '#/components/schemas/ComunicacionDto'
+          - type: 'null'
+          description: Comunicación de la decisión (HU-W14), derivada al leer
       type: object
       required:
       - id
@@ -764,6 +844,22 @@ components:
       - decididaEn
       - duracionMs
       title: DecisionSuscripcion
+    DescriptorAlternativaDto:
+      properties:
+        codigo:
+          $ref: '#/components/schemas/CodigoDescriptor'
+        valor:
+          anyOf:
+          - type: string
+            pattern: ^-?\d+(\.\d+)?$
+          - type: 'null'
+          title: Valor
+          description: Años con EDAD_MAXIMA; null con SIN_LIMITE_EDAD
+      type: object
+      required:
+      - codigo
+      - valor
+      title: DescriptorAlternativaDto
     ErrorDto:
       properties:
         codigo:
@@ -991,6 +1087,14 @@ components:
       - versionReglas
       - decididaEn
       title: ResumenDecision
+    SiguientePaso:
+      type: string
+      enum:
+      - ACEPTAR_OFERTA
+      - COTIZAR_NUEVAMENTE
+      - COTIZAR_ALTERNATIVA
+      - ESPERAR_REVISION
+      title: SiguientePaso
     SolicitudSuscripcion:
       properties:
         cotizacionId:

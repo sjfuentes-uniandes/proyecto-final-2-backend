@@ -1,0 +1,1549 @@
+{
+  "consumer": {
+    "name": "portal-web"
+  },
+  "interactions": [
+    {
+      "description": "la consulta de una decisión aprobada con la oferta vigente",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "existe la decisión de suscripción",
+          "params": {
+            "caso": "S01",
+            "decisionId": "00000000-0000-4000-e000-000000000001"
+          }
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": [
+            "application/json"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/suscripciones/00000000-0000-4000-e000-000000000001"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "admiteExcepcion": false,
+            "clienteId": "00000000-0000-4000-8000-000000000001",
+            "codigo": "DEC-2026-000001",
+            "comunicacion": {
+              "admiteContratacion": true,
+              "alternativas": [],
+              "condicion": "APROBADA_SIN_AJUSTES",
+              "motivoCliente": null,
+              "plazoRespuestaHoras": null,
+              "siguientePaso": "ACEPTAR_OFERTA",
+              "vigenteHasta": "2026-10-26T14:00:00Z"
+            },
+            "condiciones": {
+              "calculadoEn": "2026-10-22T14:00:00Z",
+              "coberturas": [
+                {
+                  "codigo": "MUERTE",
+                  "nombre": "Muerte por cualquier causa",
+                  "obligatoria": true
+                }
+              ],
+              "huellaCalculo": "sha256:calculo-s01",
+              "moneda": "COP",
+              "periodicidad": "MENSUAL",
+              "plazoCreditoMeses": 180,
+              "primaTotal": "64638",
+              "socioId": null,
+              "sumaAsegurada": "180000000",
+              "versionProducto": "2026.09.1",
+              "versionReglasPrima": "2026.09.1",
+              "vigenteHasta": "2026-10-26T14:00:00Z"
+            },
+            "contexto": {
+              "confianza": "0.92",
+              "fuentesConsultadas": 4,
+              "fuentesDeclaradas": 4,
+              "nivelRiesgo": "BAJO"
+            },
+            "cotizacionId": "00000000-0000-4000-a000-000000000001",
+            "decididaEn": "2026-10-22T15:00:00Z",
+            "duracionMs": 41,
+            "hashReglas": "sha256:reglas-2026-10-1",
+            "id": "00000000-0000-4000-e000-000000000001",
+            "motivos": [],
+            "productoId": "vida-hipotecario",
+            "reglaDeterminante": null,
+            "reglasEvaluadas": [
+              {
+                "campo": "edad",
+                "codigo": "SUS-001",
+                "descripcion": "regla.edad.entre",
+                "operador": "entre",
+                "orden": 1,
+                "reservada": false,
+                "resultado": "CUMPLE",
+                "tipo": "EXCLUYENTE",
+                "visibilidad": "EXPLICABLE"
+              }
+            ],
+            "resultado": "APROBADA",
+            "tipo": "AUTOMATICA",
+            "versionReglas": "2026.10.1"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.admiteExcepcion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.clienteId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^DEC-\\d{4}-\\d{6}$"
+                }
+              ]
+            },
+            "$.comunicacion.admiteContratacion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.comunicacion.alternativas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.comunicacion.condicion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.comunicacion.siguientePaso": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.comunicacion.vigenteHasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.condiciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.contexto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.cotizacionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.decididaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.duracionMs": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.hashReglas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.productoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].campo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^SUS-\\d{3}$"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].descripcion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].operador": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].orden": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].reservada": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].resultado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].tipo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].visibilidad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.resultado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.tipo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.versionReglas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la consulta de una decisión de suscripción que no existe",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "no existe la decisión de suscripción",
+          "params": {
+            "decisionId": "00000000-0000-4000-e000-0000000000ff"
+          }
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": [
+            "application/json"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/suscripciones/00000000-0000-4000-e000-0000000000ff"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "DECISION_NO_ENCONTRADA",
+            "correlationId": "corr-pact",
+            "detalles": {},
+            "mensaje": "La decisión no existe"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la consulta de una decisión en revisión por la suma asegurada",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "existe la decisión de suscripción",
+          "params": {
+            "caso": "S06",
+            "decisionId": "00000000-0000-4000-e000-000000000005"
+          }
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": [
+            "application/json"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/suscripciones/00000000-0000-4000-e000-000000000005"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "admiteExcepcion": false,
+            "clienteId": "00000000-0000-4000-8000-000000000001",
+            "codigo": "DEC-2026-000005",
+            "comunicacion": {
+              "admiteContratacion": false,
+              "alternativas": [],
+              "condicion": "EN_REVISION",
+              "motivoCliente": "SUMA_REQUIERE_REVISION",
+              "plazoRespuestaHoras": 8,
+              "siguientePaso": "ESPERAR_REVISION",
+              "vigenteHasta": null
+            },
+            "condiciones": {
+              "calculadoEn": "2026-10-22T14:00:00Z",
+              "coberturas": [
+                {
+                  "codigo": "MUERTE",
+                  "nombre": "Muerte por cualquier causa",
+                  "obligatoria": true
+                }
+              ],
+              "huellaCalculo": "sha256:calculo-s01",
+              "moneda": "COP",
+              "periodicidad": "MENSUAL",
+              "plazoCreditoMeses": 180,
+              "primaTotal": "403620",
+              "socioId": null,
+              "sumaAsegurada": "620000000",
+              "versionProducto": "2026.09.1",
+              "versionReglasPrima": "2026.09.1",
+              "vigenteHasta": "2026-10-26T14:00:00Z"
+            },
+            "contexto": {
+              "confianza": "0.61",
+              "fuentesConsultadas": 3,
+              "fuentesDeclaradas": 4,
+              "nivelRiesgo": "MEDIO"
+            },
+            "cotizacionId": "00000000-0000-4000-a000-000000000005",
+            "decididaEn": "2026-10-22T12:46:00Z",
+            "duracionMs": 41,
+            "hashReglas": "sha256:reglas-2026-10-1",
+            "id": "00000000-0000-4000-e000-000000000005",
+            "motivos": [
+              "SUMA_REQUIERE_REVISION"
+            ],
+            "productoId": "vida-hipotecario",
+            "reglaDeterminante": null,
+            "reglasEvaluadas": [
+              {
+                "campo": "edad",
+                "codigo": "SUS-001",
+                "descripcion": "regla.edad.entre",
+                "operador": "entre",
+                "orden": 1,
+                "reservada": false,
+                "resultado": "CUMPLE",
+                "tipo": "EXCLUYENTE",
+                "visibilidad": "EXPLICABLE"
+              }
+            ],
+            "resultado": "REVISION_REQUERIDA",
+            "tipo": "AUTOMATICA",
+            "versionReglas": "2026.10.1"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.admiteExcepcion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.clienteId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^DEC-\\d{4}-\\d{6}$"
+                }
+              ]
+            },
+            "$.comunicacion.admiteContratacion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.comunicacion.alternativas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.comunicacion.condicion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.comunicacion.motivoCliente": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.comunicacion.plazoRespuestaHoras": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.comunicacion.siguientePaso": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.condiciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.contexto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.cotizacionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.decididaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.duracionMs": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.hashReglas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.motivos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.productoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].campo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^SUS-\\d{3}$"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].descripcion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].operador": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].orden": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].reservada": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].resultado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].tipo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].visibilidad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.resultado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.tipo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.versionReglas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la consulta de una decisión rechazada por edad (SUS-001)",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "existe la decisión de suscripción",
+          "params": {
+            "caso": "S02",
+            "decisionId": "00000000-0000-4000-e000-000000000002"
+          }
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": [
+            "application/json"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/suscripciones/00000000-0000-4000-e000-000000000002"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "admiteExcepcion": false,
+            "clienteId": "00000000-0000-4000-8000-000000000001",
+            "codigo": "DEC-2026-000002",
+            "comunicacion": {
+              "admiteContratacion": false,
+              "alternativas": [
+                {
+                  "descriptor": {
+                    "codigo": "EDAD_MAXIMA",
+                    "valor": "80"
+                  },
+                  "productoId": "vida-senior"
+                },
+                {
+                  "descriptor": {
+                    "codigo": "SIN_LIMITE_EDAD",
+                    "valor": null
+                  },
+                  "productoId": "proteccion-pagos"
+                },
+                {
+                  "descriptor": {
+                    "codigo": "EDAD_MAXIMA",
+                    "valor": "85"
+                  },
+                  "productoId": "auxilio-funerario"
+                }
+              ],
+              "condicion": "NO_ASEGURABLE",
+              "motivoCliente": "EDAD_FUERA_DE_RANGO",
+              "plazoRespuestaHoras": null,
+              "siguientePaso": "COTIZAR_ALTERNATIVA",
+              "vigenteHasta": null
+            },
+            "condiciones": {
+              "calculadoEn": "2026-10-22T14:00:00Z",
+              "coberturas": [
+                {
+                  "codigo": "MUERTE",
+                  "nombre": "Muerte por cualquier causa",
+                  "obligatoria": true
+                }
+              ],
+              "huellaCalculo": "sha256:calculo-s01",
+              "moneda": "COP",
+              "periodicidad": "MENSUAL",
+              "plazoCreditoMeses": 180,
+              "primaTotal": "64638",
+              "socioId": null,
+              "sumaAsegurada": "180000000",
+              "versionProducto": "2026.09.1",
+              "versionReglasPrima": "2026.09.1",
+              "vigenteHasta": "2026-10-26T14:00:00Z"
+            },
+            "contexto": {
+              "confianza": "0.92",
+              "fuentesConsultadas": 4,
+              "fuentesDeclaradas": 4,
+              "nivelRiesgo": "BAJO"
+            },
+            "cotizacionId": "00000000-0000-4000-a000-000000000002",
+            "decididaEn": "2026-10-22T15:00:00Z",
+            "duracionMs": 39,
+            "hashReglas": "sha256:reglas-2026-10-1",
+            "id": "00000000-0000-4000-e000-000000000002",
+            "motivos": [
+              "EDAD_FUERA_DE_RANGO"
+            ],
+            "productoId": "vida-hipotecario",
+            "reglaDeterminante": "SUS-001",
+            "reglasEvaluadas": [
+              {
+                "campo": "edad",
+                "codigo": "SUS-001",
+                "descripcion": "regla.edad.entre",
+                "operador": "entre",
+                "orden": 1,
+                "reservada": false,
+                "resultado": "NO_CUMPLE",
+                "tipo": "EXCLUYENTE",
+                "visibilidad": "EXPLICABLE"
+              }
+            ],
+            "resultado": "RECHAZADA",
+            "tipo": "AUTOMATICA",
+            "versionReglas": "2026.10.1"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.admiteExcepcion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.clienteId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^DEC-\\d{4}-\\d{6}$"
+                }
+              ]
+            },
+            "$.comunicacion.admiteContratacion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.comunicacion.alternativas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.comunicacion.condicion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.comunicacion.motivoCliente": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.comunicacion.siguientePaso": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.condiciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.contexto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.cotizacionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.decididaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.duracionMs": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.hashReglas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.motivos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.productoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglaDeterminante": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].campo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^SUS-\\d{3}$"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].descripcion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].operador": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].orden": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].reservada": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].resultado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].tipo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].visibilidad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.resultado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.tipo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.versionReglas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la consulta de una decisión rechazada por una regla reservada (SUS-015), vista por un asesor",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "existe la decisión de suscripción",
+          "params": {
+            "caso": "S04",
+            "decisionId": "00000000-0000-4000-e000-000000000004"
+          }
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": [
+            "application/json"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/suscripciones/00000000-0000-4000-e000-000000000004"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "admiteExcepcion": false,
+            "clienteId": "00000000-0000-4000-8000-000000000001",
+            "codigo": "DEC-2026-000004",
+            "comunicacion": {
+              "admiteContratacion": false,
+              "alternativas": [
+                {
+                  "descriptor": {
+                    "codigo": "EDAD_MAXIMA",
+                    "valor": "80"
+                  },
+                  "productoId": "vida-senior"
+                },
+                {
+                  "descriptor": {
+                    "codigo": "SIN_LIMITE_EDAD",
+                    "valor": null
+                  },
+                  "productoId": "proteccion-pagos"
+                },
+                {
+                  "descriptor": {
+                    "codigo": "EDAD_MAXIMA",
+                    "valor": "85"
+                  },
+                  "productoId": "auxilio-funerario"
+                }
+              ],
+              "condicion": "NO_ASEGURABLE",
+              "motivoCliente": "NO_ELEGIBLE",
+              "plazoRespuestaHoras": null,
+              "siguientePaso": "COTIZAR_ALTERNATIVA",
+              "vigenteHasta": null
+            },
+            "condiciones": {
+              "calculadoEn": "2026-10-22T14:00:00Z",
+              "coberturas": [
+                {
+                  "codigo": "MUERTE",
+                  "nombre": "Muerte por cualquier causa",
+                  "obligatoria": true
+                }
+              ],
+              "huellaCalculo": "sha256:calculo-s01",
+              "moneda": "COP",
+              "periodicidad": "MENSUAL",
+              "plazoCreditoMeses": 180,
+              "primaTotal": "64638",
+              "socioId": null,
+              "sumaAsegurada": "180000000",
+              "versionProducto": "2026.09.1",
+              "versionReglasPrima": "2026.09.1",
+              "vigenteHasta": "2026-10-26T14:00:00Z"
+            },
+            "contexto": {
+              "confianza": "0.92",
+              "fuentesConsultadas": 4,
+              "fuentesDeclaradas": 4,
+              "nivelRiesgo": "BAJO"
+            },
+            "cotizacionId": "00000000-0000-4000-a000-000000000002",
+            "decididaEn": "2026-10-22T15:00:00Z",
+            "duracionMs": 39,
+            "hashReglas": "sha256:reglas-2026-10-1",
+            "id": "00000000-0000-4000-e000-000000000004",
+            "motivos": [
+              "NO_ELEGIBLE"
+            ],
+            "productoId": "vida-hipotecario",
+            "reglaDeterminante": "SUS-015",
+            "reglasEvaluadas": [
+              {
+                "campo": "edad",
+                "codigo": "SUS-001",
+                "descripcion": "regla.edad.entre",
+                "operador": "entre",
+                "orden": 1,
+                "reservada": false,
+                "resultado": "CUMPLE",
+                "tipo": "EXCLUYENTE",
+                "visibilidad": "EXPLICABLE"
+              }
+            ],
+            "resultado": "RECHAZADA",
+            "tipo": "AUTOMATICA",
+            "versionReglas": "2026.10.1"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.admiteExcepcion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.clienteId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^DEC-\\d{4}-\\d{6}$"
+                }
+              ]
+            },
+            "$.comunicacion.admiteContratacion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.comunicacion.alternativas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.comunicacion.condicion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.comunicacion.motivoCliente": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.comunicacion.siguientePaso": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.condiciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.contexto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.cotizacionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.decididaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.duracionMs": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.hashReglas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.motivos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.productoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglaDeterminante": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].campo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^SUS-\\d{3}$"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].descripcion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].operador": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].orden": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].reservada": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].resultado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].tipo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reglasEvaluadas[*].visibilidad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.resultado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.tipo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.versionReglas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pact-js": {
+      "version": "17.1.4"
+    },
+    "pactRust": {
+      "ffi": "0.5.8",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    }
+  },
+  "provider": {
+    "name": "bff-web"
+  }
+}

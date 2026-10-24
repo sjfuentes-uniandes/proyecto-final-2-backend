@@ -28,8 +28,10 @@ from polizas.domain.suscripcion.errores import (
 from polizas.domain.suscripcion.insumos import huella, insumos_de
 from polizas.domain.suscripcion.modelos import (
     Actor,
+    Alternativa,
     CasoBandeja,
     Decision,
+    DescriptorAlternativa,
     FiltrosBandeja,
     InsumosSuscripcion,
     Regla,
@@ -96,6 +98,10 @@ def reglas_semilla() -> ReglasSuscripcion:
         version=VERSION_REGLAS,
         hash=huella(definicion),
         reglas=tuple(regla_de(r) for r in definicion["reglas"]),
+        alternativas=tuple(
+            Alternativa(a["productoId"], DescriptorAlternativa(**a["descriptor"]))
+            for a in definicion["alternativas"]
+        ),
     )
 
 

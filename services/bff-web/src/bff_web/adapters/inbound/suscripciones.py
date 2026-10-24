@@ -1,4 +1,5 @@
-"""HU-W13: suscripción automática desde el portal (E01 a E04).
+"""HU-W13: suscripción automática desde el portal (E01 a E04). HU-W14: la decisión trae su
+`comunicacion` (copia de `ComunicacionDto` de polizas), que el portal usa para decidir qué mostrar.
 
 Los DTO son copia de los de polizas (contracts/openapi/polizas.yaml) con los mismos nombres:
 tests/contract/test_openapi.py verifica que sus esquemas sean iguales. Las vistas
@@ -85,6 +86,24 @@ class MotivoCliente(StrEnum):
     NO_ELEGIBLE = "NO_ELEGIBLE"
 
 
+class CondicionAseguramiento(StrEnum):
+    APROBADA_SIN_AJUSTES = "APROBADA_SIN_AJUSTES"
+    NO_ASEGURABLE = "NO_ASEGURABLE"
+    EN_REVISION = "EN_REVISION"
+
+
+class SiguientePaso(StrEnum):
+    ACEPTAR_OFERTA = "ACEPTAR_OFERTA"
+    COTIZAR_NUEVAMENTE = "COTIZAR_NUEVAMENTE"
+    COTIZAR_ALTERNATIVA = "COTIZAR_ALTERNATIVA"
+    ESPERAR_REVISION = "ESPERAR_REVISION"
+
+
+class CodigoDescriptor(StrEnum):
+    EDAD_MAXIMA = "EDAD_MAXIMA"
+    SIN_LIMITE_EDAD = "SIN_LIMITE_EDAD"
+
+
 class _Dto(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
@@ -136,6 +155,37 @@ class ContextoCasoDto(_Dto):
     fuentes_declaradas: int | None
 
 
+class DescriptorAlternativaDto(_Dto):
+    codigo: CodigoDescriptor
+    valor: TextoDecimal | None = Field(description="Años con EDAD_MAXIMA; null con SIN_LIMITE_EDAD")
+
+
+class AlternativaDto(_Dto):
+    producto_id: Annotated[str, Field(pattern=PATRON_PRODUCTO)]
+    descriptor: DescriptorAlternativaDto
+
+
+class ComunicacionDto(_Dto):
+    """La decisión en términos del cliente (HU-W14). Sin códigos ni valores de reglas."""
+
+    condicion: CondicionAseguramiento
+    admite_contratacion: bool = Field(
+        description="true solo en una APROBADA con la oferta vigente: el portal ofrece aceptar"
+    )
+    siguiente_paso: SiguientePaso
+    vigente_hasta: datetime | None = Field(
+        description="Fin de la vigencia de la oferta; solo en APROBADA_SIN_AJUSTES"
+    )
+    motivo_cliente: MotivoCliente | None = Field(
+        description="NO_ASEGURABLE: motivo de la regla determinante (NO_ELEGIBLE si es "
+        "reservada). EN_REVISION: el de la primera regla explicable pendiente, o null (R-12)"
+    )
+    alternativas: list[AlternativaDto] = Field(
+        description="Solo en NO_ASEGURABLE; vacía si catalogo no respondió"
+    )
+    plazo_respuesta_horas: int | None = Field(description="Solo en EN_REVISION")
+
+
 class DecisionSuscripcion(_Dto):
     id: UUID
     codigo: Annotated[str, Field(pattern=r"^DEC-\d{4}-\d{6}$")]
@@ -158,6 +208,9 @@ class DecisionSuscripcion(_Dto):
     admite_excepcion: bool = Field(description="Siempre false en el Sprint 2 (DS2-08)")
     decidida_en: datetime
     duracion_ms: int
+    comunicacion: ComunicacionDto | None = Field(
+        None, description="Comunicación de la decisión (HU-W14), derivada al leer"
+    )
 
 
 class ResumenDecision(_Dto):
