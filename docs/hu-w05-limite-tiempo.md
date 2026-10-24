@@ -116,7 +116,7 @@ Diferencias con el backend, que manda:
 | Contrato | OpenAPI regenerados (`cotizacion`, `catalogo`, `clientes`: encabezado opcional y 504); pactos y Schemathesis | `make test-contract`: `cotizacion` **25**, `catalogo` **18**, `clientes` **89**, `api-socios` **38**, `bff-web` **24**, `adaptador-datos` **4** |
 | N3 R1 | `tests/e2e/test_hu_w05_r1_limite_tiempo.py` contra `int` | **No ejecutado**: la plataforma está destruida. Sin ambiente se omite con el motivo (3 skipped) |
 | Regresión | `make test-unit` (todo el monorepo); `make test-module` de `clientes`, `api-socios`, `bff-web` y `libs` | **2646 passed**; módulo **135**, **7**, **17** y **8 passed**. Lint y `mypy` limpios (en `api-socios`, los 2 `unused-ignore` de `dependencias.py` que ya están en `main`) |
-| Infraestructura | `terraform fmt` y `validate` de `infra/apps` | Válido |
+| Infraestructura | `terraform fmt`, `validate` y `terraform test` de `infra/apps` (`sprint2` ahora exige `LATENCY_BUDGET_MS` en `cotizacion`, `api-socios` y `bff-web` con las tres claves) | Válido; **8 passed** |
 
 **Notas de las corridas:**
 - **Testcontainers en esta máquina:** necesita `TESTCONTAINERS_RYUK_DISABLED=true`, porque Docker Desktop rechaza montar `docker.sock` para Ryuk.
