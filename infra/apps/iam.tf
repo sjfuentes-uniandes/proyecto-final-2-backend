@@ -17,8 +17,9 @@ locals {
   # (HU-M10), porque bff-movil no llama a polizas. Ningún BFF accede al bucket.
   document_writers = ["polizas"]
   document_readers = ["polizas", "consulta"]
-  # HU-W05: presupuesto de latencia por operación (LATENCY_BUDGET_MS).
-  latency_budget_readers = ["cotizacion"]
+  # HU-W05: presupuesto de latencia por operación (LATENCY_BUDGET_MS). cotizacion fija el deadline
+  # del recorrido; api-socios y bff-web inician el X-Deadline-Ms con el suyo.
+  latency_budget_readers = ["cotizacion", "api-socios", "bff-web"]
   # HU-M06: firma el token de registro con el secreto de la plataforma.
   registro_token_issuers = ["clientes"]
   # HU-W27: pantalla Operación › Trazas del portal (consulta X-Ray por correlationId).

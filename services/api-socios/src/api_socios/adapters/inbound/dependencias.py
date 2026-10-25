@@ -62,7 +62,7 @@ def _cotizacion() -> CotizacionHttp:
 
 
 def cotizar_oferta() -> CotizarOferta:
-    return CotizarOferta(_cotizacion())
+    return CotizarOferta(_cotizacion(), settings.presupuesto_cotizar_ms)
 
 
 def consultar_oferta() -> ConsultarOferta:

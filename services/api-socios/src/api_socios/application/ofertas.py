@@ -4,12 +4,16 @@
 cotiza para él y solo le deja leer sus cotizaciones. Aquí se aplica la regla del canal (una oferta
 vencida no se entrega) y se mide cada operación (`socio.cotizar`, `socio.consultar_oferta`).
 Los logs llevan solo identificadores: nunca la fecha de nacimiento ni la suma asegurada.
+
+HU-W05: `socio.cotizar` abre el presupuesto del socio; el puerto envía el restante a cotizacion en
+X-Deadline-Ms y corta en él.
 """
 
 import logging
 from typing import Protocol
 from uuid import UUID
 
+from solventa_common import presupuesto
 from solventa_common.telemetry import RESULTADO_RECHAZADO, operacion
 
 from api_socios.domain.ofertas import (
@@ -39,13 +43,14 @@ class PuertoCotizacion(Protocol):
 
 
 class CotizarOferta:
-    def __init__(self, cotizacion: PuertoCotizacion) -> None:
+    def __init__(self, cotizacion: PuertoCotizacion, presupuesto_ms: int = 2000) -> None:
         self._cotizacion = cotizacion
+        self._presupuesto_ms = presupuesto_ms
 
     async def ejecutar(
         self, socio_id: str, solicitud: SolicitudOferta, clave: UUID
     ) -> tuple[Oferta, bool]:
-        with operacion("socio.cotizar") as op:
+        with operacion("socio.cotizar") as op, presupuesto.iniciar(self._presupuesto_ms):
             try:
                 oferta, creada = await self._cotizacion.cotizar(solicitud, socio_id, clave)
                 asegurar_presentable(oferta)

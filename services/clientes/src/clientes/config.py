@@ -26,6 +26,9 @@ class Settings(ServiceSettings):
     # Debe superar el timeout del proveedor KYC en adaptador-identidad (3 s): si no, `clientes`
     # se rinde antes que el adaptador y una verificación lenta pero válida se pierde.
     adaptador_identidad_timeout_ms: int = Field(4000, ge=1)
+    # HU-W05: tope de GET /v1/clientes/{id}/identidad (recorrido de cotización); con
+    # X-Deadline-Ms corta en min(este, 700, deadline − 20) y responde 504 TIEMPO_AGOTADO.
+    consulta_timeout_ms: int = Field(500, ge=1)
 
     # Secreto con el que se firma el token de registro; lo valida el Lambda pre sign-up.
     registro_token_secret: SecretStr | None = Field(

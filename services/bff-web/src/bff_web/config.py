@@ -1,10 +1,22 @@
-from typing import Any
+from typing import Any, Self
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
+from pydantic_settings import SettingsConfigDict
+from solventa_common import presupuesto
 from solventa_common.settings import ServiceSettings
+
+# HU-W05: presupuesto de portal.cotizar si LATENCY_BUDGET_MS no lo trae (latency_budget_ms de
+# infra/envs/<env>/apps.tfvars). Debe superar el timeout hacia cotizacion.
+PRESUPUESTO_COTIZAR_MS = 2000
+OPERACION_COTIZAR = "portal.cotizar"
 
 
 class Settings(ServiceSettings):
+    # Un error de validación al arrancar no debe imprimir la configuración (DB_PASSWORD).
+    model_config = SettingsConfigDict(
+        env_prefix="SOLVENTA_", extra="ignore", hide_input_in_errors=True
+    )
+
     service_name: str = "bff-web"
 
     aws_region: str = Field(
@@ -30,6 +42,12 @@ class Settings(ServiceSettings):
         validation_alias=AliasChoices("COTIZACION_URL", "SOLVENTA_COTIZACION_URL"),
     )
     cotizacion_timeout_ms: int = 1500
+    # HU-W05: presupuesto por operación (JSON). "portal.cotizar" inicia el X-Deadline-Ms de la
+    # cotización del portal hacia cotizacion.
+    latency_budget_ms: dict[str, int] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices("LATENCY_BUDGET_MS", "SOLVENTA_LATENCY_BUDGET_MS"),
+    )
     # HU-W30: alta y verificación de identidad en clientes. El timeout supera el de clientes
     # hacia adaptador-identidad (4 s): el BFF no debe rendirse antes que el proveedor.
     clientes_url: str = Field(
@@ -87,6 +105,21 @@ class Settings(ServiceSettings):
             "ALERTAS_FALSO_POSITIVO_MIN", "SOLVENTA_ALERTAS_FALSO_POSITIVO_MIN"
         ),
     )
+
+    @property
+    def presupuesto_cotizar_ms(self) -> int:
+        return self.latency_budget_ms.get(OPERACION_COTIZAR, PRESUPUESTO_COTIZAR_MS)
+
+    @model_validator(mode="after")
+    def _timeout_dentro_del_presupuesto(self) -> Self:
+        # Si el timeout hacia cotizacion no es menor que el presupuesto, el servicio no arranca.
+        presupuesto.por_operacion(self.latency_budget_ms)
+        presupuesto.validar_timeouts(
+            OPERACION_COTIZAR,
+            self.presupuesto_cotizar_ms,
+            {"cotizacion_timeout_ms": self.cotizacion_timeout_ms},
+        )
+        return self
 
 
 settings = Settings()

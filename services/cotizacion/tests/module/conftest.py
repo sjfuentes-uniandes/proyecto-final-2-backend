@@ -586,8 +586,10 @@ def cotizacion(
             "ADAPTADOR_DATOS_URL": adaptador_url,
             "CLIENTES_URL": clientes_real.url,
             "modelo_cache_ttl_s": 0,
-            # Holgura para apps en hilos y contenedores en la CI; nunca sobre el corte de 700.
+            # Holgura para apps en hilos y contenedores en la CI; el corte duro de 700 la acota.
+            # HU-W05: el presupuesto del recorrido debe superar el timeout de dependencia.
             "dependencia_timeout_ms": 1000,
+            "latency_budget_ms": {"cotizacion": 1500},
             "fuente_timeout_ms": 700,
             **cambios,
         }

@@ -4,6 +4,10 @@
 Una respuesta fuera del contrato (estado o alcance desconocido) se trata como dependencia no
 disponible. Un 404 solo es "cliente no encontrado" si trae el `codigo` del contrato; uno de ruta,
 de gateway o con otro cuerpo es dependencia no disponible.
+
+HU-W05: el GET de identidad (recorrido de cotización) pasa por la `Proteccion` (grupo "clientes")
+con el restante del presupuesto; la verificación de consentimiento es un POST y solo lleva timeout,
+sin reintento. Ambos envían X-Deadline-Ms.
 """
 
 from collections.abc import Sequence
@@ -14,7 +18,9 @@ from uuid import UUID
 import httpx
 from pydantic import BaseModel, ConfigDict, ValidationError
 from pydantic.alias_generators import to_camel
+from solventa_common import resiliencia
 
+from cotizacion.adapters.outbound.http_protegido import llamar_protegido
 from cotizacion.domain.perfilamiento.errores import ClienteNoEncontrado, DependenciaNoDisponible
 from cotizacion.domain.perfilamiento.modelos import (
     DecisionConsentimiento,
@@ -26,6 +32,7 @@ from cotizacion.domain.perfilamiento.modelos import (
 DEPENDENCIA_IDENTIDAD = "clientes.identidad"
 DEPENDENCIA_CONSENTIMIENTO = "clientes.consentimiento"
 CLIENTE_NO_ENCONTRADO = "CLIENTE_NO_ENCONTRADO"
+GRUPO = "clientes"
 
 CausaConsentimiento = Literal[
     "SIN_CONSENTIMIENTO", "REVOCADO", "VENCIDO", "PROPOSITO_NO_AUTORIZADO"
@@ -83,20 +90,34 @@ def _codigo(respuesta: httpx.Response) -> object:
 
 
 class ClientesHttp:
-    def __init__(self, cliente: httpx.AsyncClient, base_url: str, timeout_ms: int) -> None:
+    def __init__(
+        self,
+        cliente: httpx.AsyncClient,
+        base_url: str,
+        timeout_ms: int,
+        proteccion: resiliencia.Proteccion | None = None,
+    ) -> None:
         self._cliente = cliente
         self._base_url = base_url.rstrip("/")
-        self._timeout_s = timeout_ms / 1000
+        self._timeout_ms = timeout_ms
+        self._proteccion = proteccion or resiliencia.SinProteccion()
+        self._sin_reintento = resiliencia.SinProteccion()
 
     async def _enviar(
         self, dependencia: str, metodo: str, ruta: str, cuerpo: object = None
     ) -> object:
-        try:
-            respuesta = await self._cliente.request(
-                metodo, f"{self._base_url}{ruta}", json=cuerpo, timeout=self._timeout_s
-            )
-        except httpx.HTTPError as error:
-            raise DependenciaNoDisponible(dependencia) from error
+        respuesta = await llamar_protegido(
+            self._cliente,
+            self._proteccion if metodo == "GET" else self._sin_reintento,
+            f"{self._base_url}{ruta}",
+            None,
+            clave=dependencia,
+            grupo=GRUPO,
+            timeout_ms=self._timeout_ms,
+            dependencia=dependencia,
+            metodo=metodo,
+            cuerpo=cuerpo,
+        )
         if respuesta.status_code == 404 and _codigo(respuesta) == CLIENTE_NO_ENCONTRADO:
             raise ClienteNoEncontrado()
         if respuesta.status_code != 200:

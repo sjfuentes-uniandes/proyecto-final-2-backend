@@ -109,6 +109,7 @@ def crear_app(
                 repo, settings.secreto_registro, settings.registro_vinculacion_gracia_s
             )
             app.state.consultar_cliente = ConsultarCliente(repo)
+            app.state.consulta_timeout_ms = settings.consulta_timeout_ms
             app.state.crear_cliente = CrearCliente(repo)
             app.state.verificar_documento = VerificarDocumento(repo, adaptador_identidad)
             if repo_consentimientos is not None:

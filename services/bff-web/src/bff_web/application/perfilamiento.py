@@ -43,7 +43,8 @@ async def _proteger[T](llamada: Awaitable[T], mensaje: str = MENSAJE_NO_DISPONIB
                 detalles if isinstance(detalles, dict) else {},
             ) from error
         raise _servicio_no_disponible(mensaje) from error
-    except httpx.HTTPError as error:
+    except (httpx.HTTPError, TimeoutError) as error:
+        # TimeoutError: se agotó el presupuesto del portal (HU-W05).
         raise _servicio_no_disponible(mensaje) from error
 
 

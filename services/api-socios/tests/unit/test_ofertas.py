@@ -7,8 +7,10 @@
 - Se mide `socio.cotizar` y `socio.consultar_oferta`, y los logs no llevan datos del asegurado.
 """
 
+import asyncio
 import copy
 import json
+import time
 from collections.abc import Callable, Iterator
 from typing import Any
 from uuid import UUID
@@ -19,7 +21,9 @@ from api_socios.adapters.inbound.dependencias import consultar_oferta, cotizar_o
 from api_socios.adapters.inbound.socio import OfertaV1
 from api_socios.adapters.outbound.cotizacion_http import CotizacionHttp
 from api_socios.application.ofertas import ConsultarOferta, CotizarOferta
+from api_socios.config import PRESUPUESTO_COTIZAR_MS, Settings
 from api_socios.main import app
+from pydantic import ValidationError
 from solventa_common import correlation
 
 COTIZACION_ID = "00000000-0000-4000-d000-000000000001"
@@ -433,3 +437,64 @@ def test_el_cliente_http_cierra_ante_un_cuerpo_que_no_es_json(entorno: Any) -> N
             asyncio.run(adaptador.oferta(UUID(COTIZACION_ID), "SOC-000001"))
     finally:
         correlation.restablecer(token)
+
+
+# --- HU-W05: socio.cotizar inicia el X-Deadline-Ms con su presupuesto --------------------------
+
+TOLERANCIA_MS = 80
+
+
+def _con_presupuesto(falsa: Any, presupuesto_ms: int, timeout_ms: int = 1500) -> None:
+    adaptador = CotizacionHttp("http://cotizacion:8080", timeout_ms, httpx.MockTransport(falsa))
+    app.dependency_overrides[cotizar_oferta] = lambda: CotizarOferta(adaptador, presupuesto_ms)
+
+
+def test_envia_el_restante_del_presupuesto_del_socio(
+    entorno: Any, socio: dict[str, str], cotizacion: CotizacionFalsa
+) -> None:
+    _con_presupuesto(cotizacion, 900)
+    assert _cotizar(entorno, socio).status_code == 201
+    (solicitud,) = cotizacion.solicitudes
+    assert 800 <= int(solicitud.headers["X-Deadline-Ms"]) <= 900
+
+
+def test_el_timeout_hacia_cotizacion_acota_el_deadline(
+    entorno: Any, socio: dict[str, str], cotizacion: CotizacionFalsa
+) -> None:
+    _con_presupuesto(cotizacion, 2000, timeout_ms=600)
+    assert _cotizar(entorno, socio).status_code == 201
+    assert int(cotizacion.solicitudes[0].headers["X-Deadline-Ms"]) == 600
+
+
+def test_cotizacion_lenta_se_abandona_en_el_presupuesto(
+    entorno: Any, socio: dict[str, str]
+) -> None:
+    async def lenta(solicitud: httpx.Request) -> httpx.Response:
+        await asyncio.sleep(2)
+        return _respuesta(COTIZACION)  # pragma: no cover
+
+    _con_presupuesto(lenta, 200)
+    inicio = time.perf_counter()
+    respuesta = _cotizar(entorno, socio)
+    duracion_ms = (time.perf_counter() - inicio) * 1000
+    assert respuesta.status_code == 503
+    assert duracion_ms <= 200 + TOLERANCIA_MS, duracion_ms
+
+
+def test_presupuesto_por_omision_y_desde_latency_budget_ms(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("LATENCY_BUDGET_MS", raising=False)
+    assert Settings().presupuesto_cotizar_ms == PRESUPUESTO_COTIZAR_MS
+    monkeypatch.setenv("LATENCY_BUDGET_MS", '{"cotizacion":700,"socio.cotizar":1000}')
+    monkeypatch.setenv("SOLVENTA_COTIZACION_TIMEOUT_MS", "900")
+    assert Settings().presupuesto_cotizar_ms == 1000
+
+
+def test_timeout_mayor_o_igual_al_presupuesto_no_arranca(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LATENCY_BUDGET_MS", '{"socio.cotizar":1000}')
+    monkeypatch.setenv("SOLVENTA_COTIZACION_TIMEOUT_MS", "1500")
+    with pytest.raises(ValidationError, match="cotizacion_timeout_ms=1500"):
+        Settings()

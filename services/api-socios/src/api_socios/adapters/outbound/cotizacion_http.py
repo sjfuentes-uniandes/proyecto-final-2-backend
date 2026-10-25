@@ -19,7 +19,9 @@ from uuid import UUID
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pydantic.alias_generators import to_camel
+from solventa_common import presupuesto
 from solventa_common.correlation import cliente_async
+from solventa_common.resiliencia import DependenciaNoDisponible, SinProteccion, TiempoAgotado
 
 from api_socios.domain.ofertas import (
     CoberturaOferta,
@@ -148,7 +150,10 @@ class CotizacionHttp:
         self, url: str, timeout_ms: int, transporte: httpx.AsyncBaseTransport | None = None
     ) -> None:
         self._url = url.rstrip("/")
-        self._timeout_s = timeout_ms / 1000
+        self._timeout_ms = timeout_ms
+        # HU-W05: el corte es el del socio (timeout_ms y su presupuesto), no el de 700 ms de
+        # un aliado: cotizacion ya corta su propio recorrido.
+        self._proteccion = SinProteccion(corte_duro_ms=timeout_ms)
         self._transporte = transporte
 
     async def cotizar(
@@ -194,13 +199,22 @@ class CotizacionHttp:
             "X-Actor-Rol": ROL_SOCIO,
             **opciones.pop("headers", {}),
         }
-        try:
+
+        async def llamada(timeout_s: float) -> httpx.Response:
+            # X-Deadline-Ms: lo que el socio seguirá esperando (HU-W05).
+            encabezados.update(presupuesto.encabezado(timeout_s * 1000))
             async with cliente_async(
-                base_url=self._url, timeout=self._timeout_s, transport=self._transporte
+                base_url=self._url, timeout=timeout_s, transport=self._transporte
             ) as cliente:
                 return await cliente.request(metodo, ruta, headers=encabezados, **opciones)
-        except httpx.HTTPError as error:
-            raise CotizacionNoDisponible(type(error).__name__) from error
+
+        try:
+            return await self._proteccion.ejecutar(
+                "cotizacion", "cotizacion", llamada, self._timeout_ms, presupuesto.restante_ms()
+            )
+        except (TiempoAgotado, DependenciaNoDisponible) as error:
+            causa = error.__cause__ or error
+            raise CotizacionNoDisponible(type(causa).__name__) from error
 
     @staticmethod
     def _oferta_de(respuesta: httpx.Response) -> Oferta | None:
