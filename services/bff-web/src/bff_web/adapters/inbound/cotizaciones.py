@@ -243,7 +243,13 @@ class CondicionesProducto(_Dto):
 
 @lru_cache
 def cotizaciones() -> Cotizaciones:
-    return Cotizaciones(CotizacionCliente(settings.cotizacion_url, settings.cotizacion_timeout_ms))
+    return Cotizaciones(
+        CotizacionCliente(
+            settings.cotizacion_url,
+            settings.cotizacion_timeout_ms,
+            presupuesto_ms=settings.presupuesto_cotizar_ms,
+        )
+    )
 
 
 Servicio = Annotated[Cotizaciones, Depends(cotizaciones)]

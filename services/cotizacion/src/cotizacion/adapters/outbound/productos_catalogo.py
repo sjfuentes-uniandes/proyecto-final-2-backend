@@ -10,6 +10,11 @@ Caché (diagramas: catálogo actualiza / invalida, cotización lectura):
   ante un fallo de caché pide a catalogo por HTTP, y es catalogo quien llena la caché.
 - Sin `CACHE_URL`, una caché TTL en memoria por réplica, como CatalogoHttp (con 0 no se guarda).
 Las reglas guardadas solo se usan si su vigenteDesde ≤ la fecha pedida.
+
+HU-W05: cada GET a catalogo pasa por la `Proteccion` (por omisión SinProteccion; en la app,
+ProteccionDependencia: reintento acotado ante conexión o 5xx, circuito por recurso y bulkhead
+"catalogo") con el restante del presupuesto del recorrido, y envía ese timeout en X-Deadline-Ms.
+Un corte (propio o el 504 de catalogo) es DependenciaAgotada.
 """
 
 import asyncio
@@ -22,8 +27,10 @@ from typing import Annotated, Literal
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pydantic.alias_generators import to_camel
+from solventa_common import resiliencia
 from solventa_common.cache import Cache
 
+from cotizacion.adapters.outbound.http_protegido import llamar_protegido
 from cotizacion.application.cotizacion.puertos import OrigenDato, Resuelto
 from cotizacion.application.perfilamiento.puertos import Reloj
 from cotizacion.domain.cotizacion import modelos as dominio
@@ -32,6 +39,9 @@ from cotizacion.domain.cotizacion.modelos import Cobertura, EstadoProducto, Prod
 from cotizacion.domain.perfilamiento.errores import DependenciaNoDisponible
 
 DEPENDENCIA = "catalogo.productos"
+GRUPO = "catalogo"
+CLAVE_PRODUCTO = "catalogo.producto"
+CLAVE_REGLAS = "catalogo.reglas_prima"
 PREFIJO = "catalogo:v1"
 VARIABLES = frozenset({"edad", "plazo_credito_meses", "suma_asegurada"})
 
@@ -254,11 +264,13 @@ class ProductosCatalogo:
         reloj: Reloj,
         cache: Cache | None = None,
         ttl_s: int = 60,
+        proteccion: resiliencia.Proteccion | None = None,
     ) -> None:
         """Con `cache` (CACHE_URL) se lee Valkey; sin ella, la caché en memoria de `ttl_s`."""
         self._cliente = cliente
         self._base_url = base_url.rstrip("/")
-        self._timeout_s = timeout_ms / 1000
+        self._timeout_ms = timeout_ms
+        self._proteccion = proteccion or resiliencia.SinProteccion()
         self._reloj = reloj
         self._cache = cache
         self._ttl = timedelta(seconds=ttl_s)
@@ -269,7 +281,7 @@ class ProductosCatalogo:
     async def producto(self, producto_id: str) -> Resuelto[Producto]:
         resuelto = await self._resolver(
             f"{PREFIJO}:producto:{producto_id}",
-            lambda: self._pedir(f"/v1/productos/{producto_id}", None, _producto_de),
+            lambda: self._pedir(CLAVE_PRODUCTO, f"/v1/productos/{producto_id}", None, _producto_de),
             _producto_de,
         )
         if not isinstance(resuelto.valor, Producto):
@@ -280,6 +292,7 @@ class ProductosCatalogo:
         resuelto = await self._resolver(
             f"{PREFIJO}:reglas-prima:{producto_id}:vigente",
             lambda: self._pedir(
+                CLAVE_REGLAS,
                 f"/v1/productos/{producto_id}/reglas-prima/vigente",
                 {"fecha": en.isoformat()},
                 _reglas_de,
@@ -337,16 +350,21 @@ class ProductosCatalogo:
 
     async def _pedir(
         self,
+        clave: str,
         ruta: str,
         parametros: dict[str, str] | None,
         decodificar: Callable[[bytes], Producto | ReglasPrima],
     ) -> Producto | ReglasPrima:
-        try:
-            respuesta = await self._cliente.get(
-                f"{self._base_url}{ruta}", params=parametros, timeout=self._timeout_s
-            )
-        except httpx.HTTPError as error:
-            raise DependenciaNoDisponible(DEPENDENCIA) from error
+        respuesta = await llamar_protegido(
+            self._cliente,
+            self._proteccion,
+            f"{self._base_url}{ruta}",
+            parametros,
+            clave=clave,
+            grupo=GRUPO,
+            timeout_ms=self._timeout_ms,
+            dependencia=DEPENDENCIA,
+        )
         if respuesta.status_code == 404:
             raise _no_encontrado(respuesta)
         if respuesta.status_code != 200:

@@ -135,10 +135,12 @@ variable "ally_timeouts_ms" {
 }
 
 variable "latency_budget_ms" {
-  description = "Presupuesto de latencia por operación (ms). Llega en JSON como LATENCY_BUDGET_MS a los servicios de latency_budget_readers (HU-W05)."
+  description = "Presupuesto de latencia por operación (ms). Llega en JSON como LATENCY_BUDGET_MS a los servicios de latency_budget_readers (HU-W05): cotizacion (deadline del recorrido), socio.cotizar (api-socios) y portal.cotizar (bff-web). Cada timeout de dependencia debe ser menor que su presupuesto o el servicio no arranca."
   type        = map(number)
   default = {
-    cotizacion = 700
+    cotizacion       = 700
+    "socio.cotizar"  = 1600
+    "portal.cotizar" = 1600
   }
   validation {
     condition     = contains(keys(var.latency_budget_ms), "cotizacion") && alltrue([for ms in values(var.latency_budget_ms) : ms > 0])

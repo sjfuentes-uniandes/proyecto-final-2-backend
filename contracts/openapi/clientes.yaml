@@ -72,6 +72,17 @@ paths:
           type: string
           format: uuid
           title: Cliente Id
+      - name: X-Deadline-Ms
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          description: Milisegundos que quien llama seguirá esperando (contracts/encabezados.md)
+          title: X-Deadline-Ms
+        description: Milisegundos que quien llama seguirá esperando (contracts/encabezados.md)
       responses:
         '200':
           description: Successful Response
@@ -81,6 +92,12 @@ paths:
                 $ref: '#/components/schemas/IdentidadDto'
         '404':
           description: CLIENTE_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '504':
+          description: TIEMPO_AGOTADO (se agotó X-Deadline-Ms o consulta_timeout_ms)
           content:
             application/json:
               schema:

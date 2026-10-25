@@ -383,6 +383,17 @@ paths:
           type: string
           format: uuid
           title: Idempotency-Key
+      - name: X-Deadline-Ms
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          description: Milisegundos que quien llama seguirá esperando (contracts/encabezados.md)
+          title: X-Deadline-Ms
+        description: Milisegundos que quien llama seguirá esperando (contracts/encabezados.md)
       - name: X-Actor-Id
         in: header
         required: false

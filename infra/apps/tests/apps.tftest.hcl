@@ -416,8 +416,12 @@ run "sprint2" {
       (lookup(env, "POLIZAS_BUCKET", "") == "solventa-int-polizas-123456789012") == contains(["polizas", "consulta"], name) &&
       (lookup(env, "POLIZAS_BUCKET_SSE", "") == "AES256") == contains(["polizas", "consulta"], name) &&
       (lookup(env, "CACHE_URL", null) == "rediss://solventa-int-cache.abc.cache.amazonaws.com:6379") == contains(["catalogo", "cotizacion", "consulta"], name) &&
-      contains(keys(env), "LATENCY_BUDGET_MS") == (name == "cotizacion")
-    ]) && jsondecode(local.environment["cotizacion"]["LATENCY_BUDGET_MS"]) == { cotizacion = 700 }
+      # HU-W05: cotizacion fija el deadline; api-socios y bff-web inician X-Deadline-Ms.
+      contains(keys(env), "LATENCY_BUDGET_MS") == contains(["cotizacion", "api-socios", "bff-web"], name)
+      ]) && alltrue([
+      for name in ["cotizacion", "api-socios", "bff-web"] :
+      jsondecode(local.environment[name]["LATENCY_BUDGET_MS"]) == { cotizacion = 700, "socio.cotizar" = 1600, "portal.cotizar" = 1600 }
+    ])
     error_message = "POLIZAS_BUCKET, CACHE_URL y LATENCY_BUDGET_MS solo llegan a los servicios que los usan."
   }
   assert {

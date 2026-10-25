@@ -1,12 +1,19 @@
-"""API de la identidad del cliente (HU-M06)."""
+"""API de la identidad del cliente (HU-M06).
+
+HU-W05: GET /v1/clientes/{id}/identidad (lo pide cotizacion en el recorrido de cotización)
+respeta X-Deadline-Ms: corta en timeout_efectivo_ms(consulta_timeout_ms, deadline) y responde
+504 TIEMPO_AGOTADO. La lectura corre en un hilo: la respuesta sale a tiempo y el hilo termina su
+consulta.
+"""
 
 from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Header, Request
 from pydantic import Field
 from solventa_common.errors import ErrorNegocio
+from solventa_common.resiliencia import TiempoAgotado, acotar
 
 from clientes.adapters.inbound.http.comun import (
     ERRORES_ACTOR,
@@ -25,6 +32,16 @@ from clientes.domain.identidad.modelos import (
 )
 
 router = APIRouter(prefix="/v1/clientes", tags=["identidad"])
+
+CONSULTA_TIMEOUT_MS = 500
+DeadlineMs = Annotated[
+    int | None,
+    Header(
+        alias="X-Deadline-Ms",
+        ge=1,
+        description="Milisegundos que quien llama seguirá esperando (contracts/encabezados.md)",
+    ),
+]
 
 
 class IdentidadDto(Dto):
@@ -76,14 +93,30 @@ async def cliente_actual(request: Request, sub: Titular) -> IdentidadDto:
     response_model=IdentidadDto,
     response_model_by_alias=True,
     summary="Estado de la verificación de identidad del cliente",
-    responses={404: error("CLIENTE_NO_ENCONTRADO")},
+    responses={
+        404: error("CLIENTE_NO_ENCONTRADO"),
+        504: error("TIEMPO_AGOTADO (se agotó X-Deadline-Ms o consulta_timeout_ms)"),
+    },
 )
-async def identidad(cliente_id: UUID, request: Request) -> IdentidadDto:
+async def identidad(
+    cliente_id: UUID, request: Request, x_deadline_ms: DeadlineMs = None
+) -> IdentidadDto:
     consultas: ConsultarCliente = request.app.state.consultar_cliente
     try:
-        return IdentidadDto.desde(await consultas.identidad(cliente_id))
+        cliente = await acotar(
+            lambda: consultas.identidad(cliente_id),
+            operacion="clientes.identidad",
+            proveedor="base-clientes",
+            configurado_ms=getattr(request.app.state, "consulta_timeout_ms", CONSULTA_TIMEOUT_MS),
+            deadline_ms=x_deadline_ms,
+        )
+        return IdentidadDto.desde(cliente)
     except ClienteNoEncontrado as error:
         raise ErrorNegocio("CLIENTE_NO_ENCONTRADO", "El cliente no existe", 404) from error
+    except TiempoAgotado as error:
+        raise ErrorNegocio(
+            "TIEMPO_AGOTADO", "La consulta no terminó dentro del tiempo disponible", 504
+        ) from error
 
 
 @router.post(

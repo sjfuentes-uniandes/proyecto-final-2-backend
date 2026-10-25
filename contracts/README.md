@@ -38,6 +38,7 @@ Contratos que publica el backend para sus consumidores (web, móvil, socios y ot
 | `alcances-perfilamiento.json` | Propósito, alcances (fuentes), tipo, textos es-CO / en-US y campos canónicos | @capbmaster | A mano |
 | `datos-sinteticos/clientes-perfilamiento.json` | Clientes sintéticos C01–C19: identidad, consentimiento, datos declarados, comportamiento del simulador y resultado esperado | @capbmaster | A mano. Después de cambiarlo, regenerar los mapeos de los aliados: `python services/simulador-aliados/scripts/generar_mapeos.py todo`. Las pruebas de módulo de `cotizacion` siembran `clientes` real desde este archivo (`services/cotizacion/tests/module/conftest.py`); `test_clientes_real_decide_lo_que_dicen_los_datos_sinteticos` (`make test-module SERVICE=cotizacion`) falla si la siembra no reproduce un caso |
 | `codigos-error.md` | Códigos de error estables | Todos | A mano |
+| `encabezados.md` | Encabezados entre servicios: `X-Deadline-Ms` (HU-W05), quién lo inicia, lo envía y lo respeta, y por qué es un restante relativo | Todos | A mano |
 | `operaciones.md` | Nombres de operaciones medidas | Todos | A mano |
 
 ## Regenerar un contrato

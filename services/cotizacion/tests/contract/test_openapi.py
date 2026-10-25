@@ -98,7 +98,13 @@ def test_hu_w03_contrato_de_cotizaciones() -> None:
     cotizar = rutas["/v1/cotizaciones"]["post"]
     assert set(cotizar["responses"]) == {"200", "201", "401", "403", "404", "422", "503"}
     encabezados = {p["name"]: p["required"] for p in cotizar["parameters"] if p["in"] == "header"}
-    assert encabezados == {"X-Actor-Id": False, "X-Actor-Rol": False, "Idempotency-Key": True}
+    # HU-W05: X-Deadline-Ms es opcional (aditivo): sin él rige el presupuesto propio.
+    assert encabezados == {
+        "X-Actor-Id": False,
+        "X-Actor-Rol": False,
+        "Idempotency-Key": True,
+        "X-Deadline-Ms": False,
+    }
     leer = rutas["/v1/cotizaciones/{cotizacionId}"]["get"]
     assert set(leer["responses"]) == {"200", "401", "403", "404", "422"}
     condiciones = rutas["/v1/productos/{productoId}/condiciones"]["get"]

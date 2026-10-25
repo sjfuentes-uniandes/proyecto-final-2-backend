@@ -2,9 +2,11 @@
 
 import logging
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from uuid import UUID
 
+from solventa_common import presupuesto
 from solventa_common.resiliencia import DependenciaNoDisponible, Proteccion, TiempoAgotado
 from solventa_common.telemetry import RESULTADO_RECHAZADO, RESULTADO_TIMEOUT, operacion
 
@@ -67,14 +69,17 @@ class ConsultarFuente:
             async def llamada(timeout_s: float) -> object:
                 return await proveedor.obtener(fuente, cliente_id, claves, timeout_s)
 
+            # HU-W05: el X-Deadline-Ms recibido es el presupuesto de esta consulta (traza).
+            recorrido = nullcontext() if deadline_ms is None else presupuesto.iniciar(deadline_ms)
             try:
-                cuerpo = await self._proteccion.ejecutar(
-                    clave=fuente,
-                    grupo=definicion.aliado,
-                    llamada=llamada,
-                    configurado_ms=self._timeouts_ms[definicion.aliado],
-                    deadline_ms=deadline_ms,
-                )
+                with recorrido:
+                    cuerpo = await self._proteccion.ejecutar(
+                        clave=fuente,
+                        grupo=definicion.aliado,
+                        llamada=llamada,
+                        configurado_ms=self._timeouts_ms[definicion.aliado],
+                        deadline_ms=deadline_ms,
+                    )
             except TiempoAgotado:
                 op.marcar(RESULTADO_TIMEOUT)
                 raise

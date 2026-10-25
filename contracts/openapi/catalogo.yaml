@@ -161,6 +161,17 @@ paths:
           type: string
           pattern: ^[a-z0-9-]{1,64}$
           title: Productoid
+      - name: X-Deadline-Ms
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          description: Milisegundos que quien llama seguirá esperando (contracts/encabezados.md)
+          title: X-Deadline-Ms
+        description: Milisegundos que quien llama seguirá esperando (contracts/encabezados.md)
       responses:
         '200':
           description: Successful Response
@@ -176,6 +187,12 @@ paths:
                 $ref: '#/components/schemas/ErrorDto'
         '422':
           description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '504':
+          description: TIEMPO_AGOTADO (se agotó X-Deadline-Ms o consulta_timeout_ms)
           content:
             application/json:
               schema:
@@ -206,6 +223,17 @@ paths:
           description: Instante ISO-8601 con zona; por defecto, ahora
           title: Fecha
         description: Instante ISO-8601 con zona; por defecto, ahora
+      - name: X-Deadline-Ms
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          description: Milisegundos que quien llama seguirá esperando (contracts/encabezados.md)
+          title: X-Deadline-Ms
+        description: Milisegundos que quien llama seguirá esperando (contracts/encabezados.md)
       responses:
         '200':
           description: Successful Response
@@ -222,6 +250,12 @@ paths:
                 $ref: '#/components/schemas/ErrorDto'
         '422':
           description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '504':
+          description: TIEMPO_AGOTADO (se agotó X-Deadline-Ms o consulta_timeout_ms)
           content:
             application/json:
               schema:

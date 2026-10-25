@@ -26,6 +26,9 @@ class Settings(ServiceSettings):
     )
     cache_ttl_s: int = Field(60, ge=0)
     cache_timeout_ms: int = Field(50, ge=1)
+    # HU-W05: tope de la lectura de producto y reglas vigentes; con X-Deadline-Ms corta en
+    # min(este, 700, deadline − 20) y responde 504 TIEMPO_AGOTADO.
+    consulta_timeout_ms: int = Field(500, ge=1)
 
 
 settings = Settings()

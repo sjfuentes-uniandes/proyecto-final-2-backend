@@ -25,7 +25,7 @@ Nombres de `Operation` en `OperationDuration` y `OperationErrors` (`solventa_com
 | `consentimientos.texto_vigente` | `bff-movil` | Caso de uso `ConsultarTextoVigente` (HU-M08) | `ok`, `timeout`, `error`, `rechazado` (propósito o idioma no soportados) |
 | `modelo_riesgo.publicar`, `modelo_riesgo.consultar` | `catalogo` | Casos de uso del modelo | — |
 | `producto.consultar`, `reglas_prima.consultar` | `catalogo` | Consulta del producto y de sus reglas de prima (HU-W03) | `ok`, `rechazado` (inexistente o sin reglas vigentes), `error` |
-| `cotizacion.dependencia.catalogo.producto`, `cotizacion.dependencia.catalogo.reglas_prima`, `cotizacion.dependencia.clientes.identidad`, `cotizacion.dependencia.perfil` | `cotizacion` | Cada dependencia del cálculo de la prima (HU-W03); el "no existe" de una dependencia que respondió es `ok` | `ok`, `timeout`, `error` |
+| `cotizacion.dependencia.catalogo.producto`, `cotizacion.dependencia.catalogo.reglas_prima`, `cotizacion.dependencia.clientes.identidad`, `cotizacion.dependencia.perfil` | `cotizacion` | Cada dependencia del cálculo de la prima (HU-W03); el "no existe" de una dependencia que respondió es `ok`. Desde HU-W05, `timeout` cuando agota su timeout efectivo dentro del presupuesto del recorrido (también el 504 de `catalogo` o `clientes`); el span lleva `solventa.presupuesto_ms`, `solventa.restante_ms` y `solventa.timeout_ms` | `ok`, `timeout`, `error` |
 | `cotizacion.consultar` | `cotizacion` | Lectura de una cotización (HU-W03) | `ok`, `rechazado` (inexistente o de otro socio) |
 | `cotizacion.condiciones` | `cotizacion` | Condiciones del producto para el formulario del portal (HU-W03) | `ok`, `rechazado` (tabla de decisión), `error` |
 | `cache.leer`, `cache.escribir`, `cache.borrar` | `catalogo`, `cotizacion` | Cache-Aside sobre Valkey (`solventa_common.cache`, HU-W03). Una falla nunca se propaga: el servicio va a su fuente de verdad | `ok`, `vacio` (lectura sin la clave), `timeout`, `error` |
@@ -55,6 +55,8 @@ Nombres de `Operation` en `OperationDuration` y `OperationErrors` (`solventa_com
 | `aviso.push` | `avisos` | Prevista (HU-M11): envío de un aviso a un dispositivo (llamada a `adaptador-firma`) | `ok`, `timeout`, `error`, `rechazado` |
 
 `<FUENTE>` ∈ {`FA_PRODUCTOS_VIGENTES`, `FA_HISTORIAL_PAGOS_12M`, `FA_INGRESOS_AGREGADOS`, `DA_REGISTROS_PUBLICOS`}.
+
+**Dependencia que agotó su tiempo (HU-W05):** `logger.warning("dependencia agotó su tiempo", extra={"proveedor": …, "operacion": …, "timeout_ms": …, "restante_ms": …})` (logger `solventa.resiliencia`), con el `correlation_id` que agrega el formateador. Lo emiten `SinProteccion` y `ProteccionDependencia` en todos los servicios que las usan (`cotizacion`, `adaptador-datos`, `adaptador-identidad`, `api-socios`). `proveedor` es el grupo del bulkhead (`catalogo`, `clientes`, `base-cotizacion`, el aliado o `cotizacion`); `operacion`, la dependencia o la fuente. Los spans de dependencia llevan `solventa.timeout_ms` (timeout efectivo), `solventa.restante_ms` (deadline recibido) y `solventa.presupuesto_ms` (presupuesto del recorrido); el span de `cotizacion` y el de `socio.cotizar` llevan `solventa.presupuesto_ms`.
 
 **Log de cierre de la cotización (HU-W03):** `logger.info("cotizacion calculada", extra={"cotizacion_id": …, "producto_id": …, "version_reglas": …, "perfil_id": …, "dependencias": [{"nombre": …, "ms": …, "resultado": …}]})`, solo identificadores: ni montos, ni edad, ni fecha de nacimiento.
 

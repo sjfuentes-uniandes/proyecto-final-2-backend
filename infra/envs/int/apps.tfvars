@@ -55,10 +55,15 @@ ally_timeouts_ms = {
   push           = 2000 # HU-M11
 }
 
-# HU-W05: presupuesto de latencia por operación (LATENCY_BUDGET_MS en cotizacion).
-# 700 ms es el corte del recorrido de DEF-03.
+# HU-W05: presupuesto de latencia por operación (LATENCY_BUDGET_MS). 700 ms es el corte del
+# recorrido de cotización de DEF-03: SOLVENTA_DEPENDENCIA_TIMEOUT_MS (300) debe ser menor.
+# socio.cotizar (api-socios) y portal.cotizar (bff-web) inician el X-Deadline-Ms: cubren el
+# recorrido más los saltos y deben superar su COTIZACION_TIMEOUT_MS (1500 por omisión).
+# Guía: docs/hu-w05-limite-tiempo.md
 latency_budget_ms = {
-  cotizacion = 700
+  cotizacion       = 700
+  "socio.cotizar"  = 1600
+  "portal.cotizar" = 1600
 }
 
 # Umbrales de alertas (HU-W28). Cada meta abre una advertencia en warning_ratio

@@ -204,6 +204,7 @@ def canal(
             ADAPTADOR_DATOS_URL=adaptador_url,
             CLIENTES_URL=app.clientes.url,
             dependencia_timeout_ms=1000,
+            latency_budget_ms={"cotizacion": 1500},
         )
     )
     with servir_app(servida) as url:

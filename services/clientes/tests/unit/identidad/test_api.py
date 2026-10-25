@@ -1,3 +1,4 @@
+import time
 from collections.abc import Callable, Iterator
 from typing import Any
 from uuid import UUID
@@ -206,3 +207,44 @@ def test_health_sin_dependencias(api: Any) -> None:
     cliente, recibidas = api(_veredicto("APROBADO"))
     assert cliente.get("/health").json() == {"status": "ok"}
     assert recibidas == []
+
+
+# --- HU-W05: GET /v1/clientes/{id}/identidad respeta X-Deadline-Ms ------------------------------
+
+CLIENTE_W05 = UUID("00000000-0000-4000-8000-0000000000ff")
+TOLERANCIA_MS = 80
+
+
+def test_con_deadline_corta_y_responde_504(api: Any, repositorio: Any) -> None:
+    cliente, _ = api(_veredicto("APROBADO"))
+
+    def lenta(cliente_id: UUID) -> None:
+        time.sleep(0.4)  # la lectura corre en un hilo: termina después de la respuesta
+
+    repositorio.obtener = lenta
+    inicio = time.perf_counter()
+    respuesta = cliente.get(
+        f"/v1/clientes/{CLIENTE_W05}/identidad", headers={"X-Deadline-Ms": "120"}
+    )
+    duracion_ms = (time.perf_counter() - inicio) * 1000
+    assert respuesta.status_code == 504, respuesta.text
+    assert respuesta.json()["codigo"] == "TIEMPO_AGOTADO"
+    assert duracion_ms <= 100 + TOLERANCIA_MS, duracion_ms
+
+
+def test_con_deadline_holgado_responde_normalmente(api: Any) -> None:
+    cliente, _ = api(_veredicto("APROBADO"))
+    respuesta = cliente.get(
+        f"/v1/clientes/{CLIENTE_W05}/identidad", headers={"X-Deadline-Ms": "600"}
+    )
+    assert respuesta.status_code == 404  # inexistente: el deadline no cambia la respuesta
+    assert respuesta.json()["codigo"] == "CLIENTE_NO_ENCONTRADO"
+
+
+@pytest.mark.parametrize("valor", ["0", "abc"])
+def test_deadline_invalido_es_422(api: Any, valor: str) -> None:
+    cliente, _ = api(_veredicto("APROBADO"))
+    respuesta: httpx.Response = cliente.get(
+        f"/v1/clientes/{CLIENTE_W05}/identidad", headers={"X-Deadline-Ms": valor}
+    )
+    assert respuesta.status_code == 422
