@@ -12,10 +12,13 @@ from solventa_common import correlation
 from solventa_common.errors import registrar_manejadores
 from solventa_common.telemetry import instrumentar
 
-from polizas.adapters.inbound.http import suscripciones
+from polizas.adapters.inbound.http import aceptaciones, suscripciones
 from polizas.adapters.outbound.catalogo_http import CatalogoHttp
 from polizas.adapters.outbound.cotizacion_http import CotizacionHttp
 from polizas.adapters.outbound.reloj import RelojSistema
+from polizas.application.aceptacion.consultar import ConsultarAceptacion
+from polizas.application.aceptacion.puertos import AceptacionesRepositorio
+from polizas.application.aceptacion.registrar import ConfigAceptacion, RegistrarAceptacion
 from polizas.application.suscripcion.comunicar import ComunicarDecision
 from polizas.application.suscripcion.consultar import ConsultarSuscripciones
 from polizas.application.suscripcion.puertos import (
@@ -35,13 +38,15 @@ from polizas.config import Settings
 
 @dataclass(frozen=True, slots=True)
 class Puertos:
-    """Implementaciones de los puertos de la suscripción; las pruebas inyectan dobles."""
+    """Implementaciones de los puertos de la suscripción y la aceptación; las pruebas inyectan
+    dobles."""
 
     insumos: InsumosOfertaPuerto
     reglas: ReglasSuscripcionPuerto
     decisiones: DecisionesRepositorio
     codigos: GeneradorCodigos
     reloj: Reloj
+    aceptaciones: AceptacionesRepositorio
 
 
 def _configurar_casos(app: FastAPI, puertos: Puertos, settings: Settings) -> None:
@@ -69,6 +74,14 @@ def _configurar_casos(app: FastAPI, puertos: Puertos, settings: Settings) -> Non
         settings.compromiso_revision_horas,
         settings.catalogo_timeout_ms,
     )
+    # HU-W15: sin llamadas a otros servicios; todo está en la instantánea de la decisión (DS2-10).
+    app.state.registrar_aceptacion = RegistrarAceptacion(
+        puertos.decisiones,
+        puertos.aceptaciones,
+        puertos.reloj,
+        ConfigAceptacion(version_declaraciones=settings.version_declaraciones),
+    )
+    app.state.consultar_aceptacion = ConsultarAceptacion(puertos.aceptaciones)
 
 
 def crear_app(
@@ -89,6 +102,7 @@ def crear_app(
             elif settings.db_host or settings.database_url_override:
                 from psycopg_pool import AsyncConnectionPool
 
+                from polizas.adapters.outbound.aceptaciones_pg import AceptacionesPg
                 from polizas.adapters.outbound.codigos import CodigosPg
                 from polizas.adapters.outbound.decisiones_pg import DecisionesPg, migrar
 
@@ -127,6 +141,7 @@ def crear_app(
                         decisiones=DecisionesPg(pool),
                         codigos=CodigosPg(pool),
                         reloj=reloj,
+                        aceptaciones=AceptacionesPg(pool),
                     ),
                     settings,
                 )
@@ -139,8 +154,9 @@ def crear_app(
         metric_readers=metric_readers,
     )
     registrar_manejadores(app)
-    # HU-W13: suscripción automática. HU-W15 y HU-W17 agregarán aceptación y emisión.
+    # HU-W13: suscripción automática; HU-W15: aceptación. HU-W17 agregará la emisión.
     app.include_router(suscripciones.router)
+    app.include_router(aceptaciones.router)
 
     @app.get("/health", response_model=None)
     async def health(request: Request) -> dict[str, str] | JSONResponse:

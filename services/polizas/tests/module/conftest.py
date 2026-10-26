@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 import psycopg
 import pytest
+from polizas.adapters.outbound.aceptaciones_pg import AceptacionesPg
 from polizas.adapters.outbound.catalogo_http import CatalogoHttp
 from polizas.adapters.outbound.codigos import CodigosPg
 from polizas.adapters.outbound.cotizacion_http import CotizacionHttp
@@ -49,7 +50,7 @@ def _ejecutar(url: str, sql: str) -> None:
 @pytest.fixture
 def limpia(base: str) -> str:
     # TRUNCATE no dispara el disparador de inmutabilidad (es por fila): solo para las pruebas.
-    _ejecutar(base, "TRUNCATE decisiones_suscripcion, outbox")
+    _ejecutar(base, "TRUNCATE aceptaciones, decisiones_suscripcion, outbox")
     return base
 
 
@@ -94,6 +95,7 @@ async def _api(url: str, proveedores: Proveedores, reloj: Any) -> AsyncIterator[
             decisiones=DecisionesPg(pool),
             codigos=CodigosPg(pool),
             reloj=reloj,
+            aceptaciones=AceptacionesPg(pool),
         )
         app = crear_app(settings, puertos=puertos)
         async with (

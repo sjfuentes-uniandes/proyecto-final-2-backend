@@ -311,3 +311,42 @@ def test_contrato_de_suscripciones() -> None:
     }
     assert set(rutas["/v1/bandeja-suscripcion"]) == {"get"}
     assert set(rutas["/v1/bandeja-suscripcion/resumen"]) == {"get"}
+
+
+# HU-W15: aceptación de la oferta; DTO copiados de polizas.
+ESQUEMAS_ACEPTACION = (
+    "SolicitudAceptacion",
+    "DeclaracionesDto",
+    "Aceptacion",
+    "CanalAceptacion",
+    "SiguientePasoContratacion",
+)
+ACEPTACION = "/v1/cotizaciones/{cotizacionId}/aceptacion"
+
+
+def test_dto_de_aceptacion_iguales_a_polizas() -> None:
+    propios = app.openapi()["components"]["schemas"]
+    de_polizas = yaml.safe_load(POLIZAS.read_text(encoding="utf-8"))["components"]["schemas"]
+    for nombre in ESQUEMAS_ACEPTACION:
+        assert propios[nombre] == de_polizas[nombre], nombre
+
+
+def test_contrato_de_aceptacion() -> None:
+    ruta = app.openapi()["paths"][ACEPTACION]
+    assert set(ruta) == {"get", "post"}
+    registrar = ruta["post"]
+    assert set(registrar["responses"]) == {
+        "200",
+        "201",
+        "401",
+        "403",
+        "404",
+        "409",
+        "422",
+        "503",
+    }
+    assert {p["name"] for p in registrar["parameters"] if p["required"]} == {
+        "cotizacionId",
+        "Idempotency-Key",
+    }
+    assert set(ruta["get"]["responses"]) == {"200", "401", "403", "404", "422", "503"}

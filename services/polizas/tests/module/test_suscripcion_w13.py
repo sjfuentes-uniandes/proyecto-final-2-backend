@@ -188,11 +188,16 @@ async def test_los_logs_no_tienen_pii(api: Any, sinteticos: Any, telemetria: Any
 
 
 async def test_migracion_adelante_y_atras(base: str) -> None:
-    """MT-W13-02: aplicar, revertir (dos veces, idempotente) y volver a aplicar."""
-    reversa = MIGRACIONES.joinpath("down", "001_suscripcion.sql").read_text(encoding="utf-8")
+    """MT-W13-02: aplicar, revertir (dos veces, idempotente) y volver a aplicar. Las reversas van
+    de la más nueva a la más antigua (HU-W15: aceptaciones referencia a las decisiones)."""
+    reversas = [
+        MIGRACIONES.joinpath("down", nombre).read_text(encoding="utf-8")
+        for nombre in ("002_aceptaciones.sql", "001_suscripcion.sql")
+    ]
     with psycopg.connect(base, autocommit=True) as conexion:
-        conexion.execute(reversa)
-        conexion.execute(reversa)
+        for _ in range(2):
+            for reversa in reversas:
+                conexion.execute(reversa)
     existe = "SELECT to_regclass('decisiones_suscripcion') IS NOT NULL"
     assert _filas(base, existe) == [(False,)]
     migrar(base)

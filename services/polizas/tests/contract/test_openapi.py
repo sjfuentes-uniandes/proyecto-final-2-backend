@@ -33,6 +33,7 @@ def test_contrato_de_suscripciones() -> None:
         "/v1/suscripciones/resumen",
         "/v1/suscripciones/{decisionId}",
         "/v1/suscripciones/{decisionId}/reconstruccion",
+        "/v1/cotizaciones/{cotizacionId}/aceptacion",
         "/health",
     }
     esquemas = app.openapi()["components"]["schemas"]
@@ -75,6 +76,51 @@ def test_contrato_de_la_comunicacion() -> None:
         "ESPERAR_REVISION",
     ]
     assert esquemas["CodigoDescriptor"]["enum"] == ["EDAD_MAXIMA", "SIN_LIMITE_EDAD"]
+
+
+def test_contrato_de_la_aceptacion() -> None:
+    """HU-W15: POST con Idempotency-Key obligatoria y sus errores; respuesta cerrada."""
+    ruta = app.openapi()["paths"]["/v1/cotizaciones/{cotizacionId}/aceptacion"]
+    registrar, consultar = ruta["post"], ruta["get"]
+    assert set(registrar["responses"]) == {"200", "201", "401", "403", "404", "409", "422", "503"}
+    assert set(consultar["responses"]) == {"200", "401", "403", "404", "422"}
+    cabeceras = {p["name"]: p["required"] for p in registrar["parameters"] if p["in"] == "header"}
+    assert cabeceras == {"Idempotency-Key": True, "X-Actor-Id": False, "X-Actor-Rol": False}
+    esquemas = app.openapi()["components"]["schemas"]
+    assert set(esquemas["SolicitudAceptacion"]["required"]) == {
+        "decisionId",
+        "versionDeclaraciones",
+        "declaraciones",
+    }
+    assert set(esquemas["DeclaracionesDto"]["required"]) == {
+        "leidoCondiciones",
+        "informacionVeraz",
+        "debitoAutomatico",
+        "avisosElectronicos",
+    }
+    aceptacion = esquemas["Aceptacion"]
+    assert (
+        set(aceptacion["required"])
+        == set(aceptacion["properties"])
+        == {
+            "id",
+            "cotizacionId",
+            "ofertaId",
+            "decisionId",
+            "clienteId",
+            "huellaCalculo",
+            "versionDeclaraciones",
+            "declaraciones",
+            "canal",
+            "actorId",
+            "aceptadaEn",
+            "huellaEvidencia",
+            "recaudoHabilitado",
+            "siguientePaso",
+        }
+    )
+    assert esquemas["CanalAceptacion"]["enum"] == ["PORTAL_ASESOR"]
+    assert esquemas["SiguientePasoContratacion"]["enum"] == ["FIRMA"]
 
 
 def test_una_decision_de_w13_sin_comunicacion_sigue_siendo_valida(

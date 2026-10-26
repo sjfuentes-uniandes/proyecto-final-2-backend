@@ -2028,6 +2028,169 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/cotizaciones/{cotizacionId}/aceptacion:
+    post:
+      tags:
+      - aceptaciones
+      summary: Registrar Aceptacion
+      description: Registra la aceptación de la oferta en nombre del cliente y habilita
+        el recaudo.
+      operationId: registrar_aceptacion_v1_cotizaciones__cotizacionId__aceptacion_post
+      parameters:
+      - name: cotizacionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cotizacionid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Idempotency-Key
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudAceptacion'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Aceptacion'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo asesores o no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '200':
+          description: 'Misma Idempotency-Key: la aceptación existente'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Aceptacion'
+        '404':
+          description: DECISION_NO_ENCONTRADA (la cotización no tiene esa decisión)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: DECISION_NO_APROBADA, OFERTA_VENCIDA (detalles.accion = NUEVA_COTIZACION)
+            u OFERTA_YA_ACEPTADA (detalles.aceptacionId)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA, DECLARACIONES_INCOMPLETAS (detalles.campos),
+            TEXTO_NO_VIGENTE o IDEMPOTENCIA_CONFLICTO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+    get:
+      tags:
+      - aceptaciones
+      summary: Consultar Aceptacion
+      description: La aceptación de la cotización, si existe (confirmación de F01).
+      operationId: consultar_aceptacion_v1_cotizaciones__cotizacionId__aceptacion_get
+      parameters:
+      - name: cotizacionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cotizacionid
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Aceptacion'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo asesores o no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: ACEPTACION_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -2050,6 +2213,75 @@ components:
       - COMPLETAR_CONSENTIMIENTO
       - RECALCULAR
       title: AccionSugerida
+    Aceptacion:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        cotizacionId:
+          type: string
+          format: uuid
+          title: Cotizacionid
+        ofertaId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Ofertaid
+          description: Null si la decisión es anterior a HU-W04
+        decisionId:
+          type: string
+          format: uuid
+          title: Decisionid
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        huellaCalculo:
+          type: string
+          title: Huellacalculo
+        versionDeclaraciones:
+          type: string
+          title: Versiondeclaraciones
+        declaraciones:
+          $ref: '#/components/schemas/DeclaracionesDto'
+        canal:
+          $ref: '#/components/schemas/CanalAceptacion'
+        actorId:
+          type: string
+          title: Actorid
+        aceptadaEn:
+          type: string
+          format: date-time
+          title: Aceptadaen
+        huellaEvidencia:
+          type: string
+          pattern: ^sha256:[0-9a-f]{64}$
+          title: Huellaevidencia
+        recaudoHabilitado:
+          type: boolean
+          title: Recaudohabilitado
+          description: 'Siempre true: la aceptación habilita el recaudo'
+        siguientePaso:
+          $ref: '#/components/schemas/SiguientePasoContratacion'
+      type: object
+      required:
+      - id
+      - cotizacionId
+      - ofertaId
+      - decisionId
+      - clienteId
+      - huellaCalculo
+      - versionDeclaraciones
+      - declaraciones
+      - canal
+      - actorId
+      - aceptadaEn
+      - huellaEvidencia
+      - recaudoHabilitado
+      - siguientePaso
+      title: Aceptacion
     AjusteDto:
       properties:
         codigo:
@@ -2202,6 +2434,11 @@ components:
       - confianza_perfil
       - coincidencias_listas_restrictivas
       title: CampoRegla
+    CanalAceptacion:
+      type: string
+      enum:
+      - PORTAL_ASESOR
+      title: CanalAceptacion
     CanalVenta:
       type: string
       enum:
@@ -3092,6 +3329,29 @@ components:
       title: DecisionSuscripcionVista
       description: La decisión de polizas más el nombre del cliente (E03, E04); null
         si clientes falla.
+    DeclaracionesDto:
+      properties:
+        leidoCondiciones:
+          type: boolean
+          title: Leidocondiciones
+        informacionVeraz:
+          type: boolean
+          title: Informacionveraz
+        debitoAutomatico:
+          type: boolean
+          title: Debitoautomatico
+        avisosElectronicos:
+          type: boolean
+          title: Avisoselectronicos
+      type: object
+      required:
+      - leidoCondiciones
+      - informacionVeraz
+      - debitoAutomatico
+      - avisosElectronicos
+      title: DeclaracionesDto
+      description: 'Declaraciones del tomador (F01). Obligatorias: leidoCondiciones
+        e informacionVeraz.'
     DescriptorAlternativaDto:
       properties:
         codigo:
@@ -4111,6 +4371,11 @@ components:
       - COTIZAR_ALTERNATIVA
       - ESPERAR_REVISION
       title: SiguientePaso
+    SiguientePasoContratacion:
+      type: string
+      enum:
+      - FIRMA
+      title: SiguientePasoContratacion
     SocioCreado:
       properties:
         id:
@@ -4207,6 +4472,26 @@ components:
       - clientId
       - creado
       title: SocioRespuesta
+    SolicitudAceptacion:
+      properties:
+        decisionId:
+          type: string
+          format: uuid
+          title: Decisionid
+        versionDeclaraciones:
+          type: string
+          maxLength: 32
+          minLength: 1
+          title: Versiondeclaraciones
+          description: Versión del texto de las declaraciones que se mostró (DS2-24)
+        declaraciones:
+          $ref: '#/components/schemas/DeclaracionesDto'
+      type: object
+      required:
+      - decisionId
+      - versionDeclaraciones
+      - declaraciones
+      title: SolicitudAceptacion
     SolicitudAltaCliente:
       properties:
         tipoDocumento:

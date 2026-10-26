@@ -50,12 +50,20 @@ def servicio_no_disponible() -> ErrorNegocio:
 
 
 async def _proteger(llamada: Awaitable[Any]) -> Any:
+    return await proteger(llamada, CODIGOS_POLIZAS, _REENVIADOS_5XX)
+
+
+async def proteger(
+    llamada: Awaitable[Any], codigos: frozenset[str], reenviados_5xx: frozenset[str]
+) -> Any:
+    """Falla cerrada (también la usa la aceptación, HU-W15): solo pasan los 4xx de `codigos` y
+    los 503 de `reenviados_5xx`; todo lo demás es 503 SERVICIO_NO_DISPONIBLE."""
     try:
         return await llamada
     except ErrorPolizas as error:
         codigo = error.cuerpo.get("codigo")
-        prometido = (error.status < 500 and codigo in CODIGOS_POLIZAS) or (
-            error.status == 503 and codigo in _REENVIADOS_5XX
+        prometido = (error.status < 500 and codigo in codigos) or (
+            error.status == 503 and codigo in reenviados_5xx
         )
         if not prometido:
             raise servicio_no_disponible() from error

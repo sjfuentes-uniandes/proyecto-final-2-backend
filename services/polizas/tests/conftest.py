@@ -21,6 +21,7 @@ import pytest
 from fastapi.testclient import TestClient
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from polizas.domain.aceptacion.modelos import Aceptacion
 from polizas.domain.suscripcion.errores import (
     CotizacionNoEncontrada,
     ReglasNoVigentes,
@@ -252,6 +253,41 @@ class CodigosMemoria:
         return f"DEC-{anio:04d}-{self.numero:06d}"
 
 
+class AceptacionesMemoria:
+    """AceptacionesRepositorio en memoria, con la unicidad de la tabla (cotización y clave).
+    `eventos` guarda la decisión de cada aceptación insertada (una fila de outbox cada una)."""
+
+    def __init__(self) -> None:
+        self.aceptaciones: list[Aceptacion] = []
+        self.eventos: list[tuple[Aceptacion, Decision]] = []
+        # Simula perder la carrera: no inserta y deja la ganadora configurada.
+        self.ganadora: Aceptacion | None = None
+        self.falla: Exception | None = None
+
+    async def guardar(self, aceptacion: Aceptacion, decision: Decision) -> bool:
+        if self.falla is not None:
+            raise self.falla
+        if self.ganadora is not None:
+            self.aceptaciones.append(self.ganadora)
+            self.ganadora = None
+            return False
+        if any(
+            a.cotizacion_id == aceptacion.cotizacion_id
+            or a.idempotency_key == aceptacion.idempotency_key
+            for a in self.aceptaciones
+        ):
+            return False
+        self.aceptaciones.append(aceptacion)
+        self.eventos.append((aceptacion, decision))
+        return True
+
+    async def por_cotizacion(self, cotizacion_id: UUID) -> Aceptacion | None:
+        return next((a for a in self.aceptaciones if a.cotizacion_id == cotizacion_id), None)
+
+    async def por_idempotencia(self, clave: UUID) -> Aceptacion | None:
+        return next((a for a in self.aceptaciones if a.idempotency_key == clave), None)
+
+
 @dataclass
 class Dobles:
     insumos: InsumosDoble
@@ -259,12 +295,20 @@ class Dobles:
     decisiones: DecisionesMemoria
     codigos: CodigosMemoria
     reloj: RelojFijo
+    aceptaciones: AceptacionesMemoria = field(default_factory=AceptacionesMemoria)
 
     def puertos(self) -> "Puertos":
         # Importación diferida: las pruebas del dominio no necesitan la app.
         from polizas.main import Puertos
 
-        return Puertos(self.insumos, self.reglas, self.decisiones, self.codigos, self.reloj)
+        return Puertos(
+            self.insumos,
+            self.reglas,
+            self.decisiones,
+            self.codigos,
+            self.reloj,
+            self.aceptaciones,
+        )
 
 
 @dataclass(frozen=True)

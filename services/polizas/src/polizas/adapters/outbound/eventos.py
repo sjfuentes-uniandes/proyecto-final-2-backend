@@ -1,22 +1,30 @@
-"""Sobre y payload v1 del evento de auditoría de la suscripción (HU-W13, W13-B03).
+"""Sobre y payloads v1 de los eventos de polizas.
 
-El payload no lleva montos ni datos personales: resultado, reglas, versión y huellas. El esquema
-publicado se regenera con:
+- DecisionSuscripcionRegistrada (HU-W13, W13-B03): auditoría de la decisión; sin montos ni datos
+  personales: resultado, reglas, versión y huellas.
+- OfertaAceptada (HU-W15, W15-B01): habilita el recaudo (HU-W16). Lleva la prima que se cobra,
+  pero ningún dato personal ni de medios de pago; `claveRecaudo` (= `aceptacionId`) es la clave
+  idempotente estable para `dinero`. `type` es el atributo `eventType` que filtra la cola
+  `dinero-aceptaciones`.
+
+Los esquemas publicados se regeneran con:
     uv run python -m polizas.adapters.outbound.eventos
 """
 
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
+from polizas.domain.aceptacion.modelos import CanalAceptacion
 from polizas.domain.suscripcion.modelos import ResultadoDecision, TipoDecision
 
 DECISION_SUSCRIPCION_REGISTRADA = "DecisionSuscripcionRegistrada"
+OFERTA_ACEPTADA = "OfertaAceptada"
 
 
 class _Evento(BaseModel):
@@ -42,7 +50,36 @@ class DecisionSuscripcionRegistradaV1(_Evento):
     decidida_en: datetime
 
 
-class SobreEvento[P: DecisionSuscripcionRegistradaV1](_Evento):
+class PrimaAceptadaV1(_Evento):
+    """La prima de la oferta aceptada; el valor es texto decimal (DS2-16)."""
+
+    valor: Annotated[str, Field(pattern=r"^\d+(\.\d+)?$")]
+    moneda: Annotated[str, Field(pattern=r"^[A-Z]{3}$")]
+    periodicidad: str
+
+
+class OfertaAceptadaV1(_Evento):
+    """Aceptación registrada: habilita el recaudo. Sin datos personales ni de medios de pago."""
+
+    aceptacion_id: UUID
+    cotizacion_id: UUID
+    # Null si la decisión es anterior a HU-W04 (sin oferta propia).
+    oferta_id: UUID | None
+    decision_id: UUID
+    cliente_id: UUID
+    producto_id: str
+    prima: PrimaAceptadaV1
+    # Clave idempotente del recaudo (= aceptacionId): una aceptación, un cobro.
+    clave_recaudo: UUID
+    huella_calculo: str
+    vigente_hasta: datetime
+    version_declaraciones: str
+    aceptada_en: datetime
+    actor_id: str
+    canal: CanalAceptacion
+
+
+class SobreEvento[P: DecisionSuscripcionRegistradaV1 | OfertaAceptadaV1](_Evento):
     """Sobre versionado: el consumidor elige el esquema del payload por `type` y `version`."""
 
     event_id: UUID
@@ -58,6 +95,7 @@ ESQUEMAS: dict[str, type[BaseModel]] = {
     f"{DECISION_SUSCRIPCION_REGISTRADA}.v1.schema.json": SobreEvento[
         DecisionSuscripcionRegistradaV1
     ],
+    f"{OFERTA_ACEPTADA}.v1.schema.json": SobreEvento[OfertaAceptadaV1],
 }
 
 

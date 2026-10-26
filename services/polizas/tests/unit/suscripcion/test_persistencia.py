@@ -275,9 +275,11 @@ def test_migrar_bloquea_aplica_y_libera(monkeypatch: pytest.MonkeyPatch) -> None
     assert conexion.argumentos == {"url": "postgresql://u@h/polizas", "autocommit": True}
     assert "pg_advisory_lock(hashtext('polizas.migraciones'))" in conexion.sentencias[0]
     assert "CREATE TABLE IF NOT EXISTS decisiones_suscripcion" in conexion.sentencias[1]
+    # HU-W15: 002 después de 001 (aceptaciones referencia a las decisiones).
+    assert "CREATE TABLE IF NOT EXISTS aceptaciones" in conexion.sentencias[2]
     assert "pg_advisory_unlock" in conexion.sentencias[-1]
-    # Solo los .sql de la raíz: la reversa (down/) no se aplica al arrancar.
-    assert len(conexion.sentencias) == 3
+    # Solo los .sql de la raíz: las reversas (down/) no se aplican al arrancar.
+    assert len(conexion.sentencias) == 4
 
 
 def test_migrar_libera_el_candado_si_falla(monkeypatch: pytest.MonkeyPatch) -> None:
