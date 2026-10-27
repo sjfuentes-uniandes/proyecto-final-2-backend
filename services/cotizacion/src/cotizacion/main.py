@@ -22,7 +22,12 @@ from cotizacion.adapters.outbound.productos_catalogo import ProductosCatalogo
 from cotizacion.adapters.outbound.reloj import RelojSistema
 from cotizacion.application.cotizacion.calcular_prima import CalcularPrima, ConfigCotizacion
 from cotizacion.application.cotizacion.consultar import ConsultarCondiciones, ConsultarCotizacion
-from cotizacion.application.cotizacion.puertos import PuertoProductos, RepositorioCotizaciones
+from cotizacion.application.cotizacion.puertos import (
+    PuertoProductos,
+    PuertoReglasFallback,
+    RepositorioCotizaciones,
+    RepositorioDecisiones,
+)
 from cotizacion.application.perfilamiento.crear_perfil import ConfigPerfilamiento, CrearPerfil
 from cotizacion.application.perfilamiento.ejecutor_fuentes import EjecutorParalelo
 from cotizacion.application.perfilamiento.puertos import (
@@ -54,6 +59,9 @@ class Puertos:
     # sin ambos, las rutas de la cotización responden 503.
     productos: PuertoProductos | None = None
     cotizaciones: RepositorioCotizaciones | None = None
+    # HU-W06: sin reglas de fallback ninguna fuente es degradable (falla cerrada).
+    reglas_fallback: PuertoReglasFallback | None = None
+    decisiones: RepositorioDecisiones | None = None
 
 
 def _configurar_casos(app: FastAPI, puertos: Puertos, settings: Settings) -> None:
@@ -88,6 +96,8 @@ def _configurar_casos(app: FastAPI, puertos: Puertos, settings: Settings) -> Non
                 presupuesto_recorrido_ms=settings.presupuesto_recorrido_ms,
                 oferta_vigencia_horas=settings.oferta_vigencia_horas,
             ),
+            reglas_fallback=puertos.reglas_fallback,
+            decisiones=puertos.decisiones,
         )
         app.state.consultar_cotizacion = ConsultarCotizacion(puertos.cotizaciones)
         app.state.consultar_condiciones = ConsultarCondiciones(puertos.productos, puertos.reloj)
@@ -157,6 +167,16 @@ def crear_app(
                 clientes = ClientesHttp(
                     cliente, settings.clientes_url, settings.dependencia_timeout_ms, proteccion
                 )
+                productos = ProductosCatalogo(
+                    cliente,
+                    settings.catalogo_url,
+                    settings.dependencia_timeout_ms,
+                    reloj,
+                    cache=cache if settings.cache_url else None,
+                    ttl_s=settings.catalogo_cache_ttl_s,
+                    proteccion=proteccion,
+                )
+                cotizaciones_pg = CotizacionesPg(pool)
                 _configurar_casos(
                     app,
                     Puertos(
@@ -175,16 +195,10 @@ def crear_app(
                         ),
                         perfiles=PerfilesPg(pool),
                         reloj=reloj,
-                        productos=ProductosCatalogo(
-                            cliente,
-                            settings.catalogo_url,
-                            settings.dependencia_timeout_ms,
-                            reloj,
-                            cache=cache if settings.cache_url else None,
-                            ttl_s=settings.catalogo_cache_ttl_s,
-                            proteccion=proteccion,
-                        ),
-                        cotizaciones=CotizacionesPg(pool),
+                        productos=productos,
+                        cotizaciones=cotizaciones_pg,
+                        reglas_fallback=productos,
+                        decisiones=cotizaciones_pg,
                     ),
                     settings,
                 )

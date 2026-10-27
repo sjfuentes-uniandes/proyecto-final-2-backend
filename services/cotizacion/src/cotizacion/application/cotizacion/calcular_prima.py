@@ -18,6 +18,18 @@ Orden de las causas (una sola, estable):
 HU-W04: con la prima se crea la oferta (precio, coberturas, exclusiones y vigencia de las reglas) y
 se guarda con la cotización en una transacción.
 
+HU-W06: si alguna fuente del perfil no se obtuvo (linaje TIEMPO_AGOTADO, NO_DISPONIBLE o
+RESPUESTA_INVALIDA), se piden a catalogo las reglas de fallback vigentes y decide
+`decidir_fallback` (función pura, docs/hu-w06-fallback.md):
+- DEGRADADA: la oferta se crea, marcada, con los datos faltantes y la regla; un ajuste de la regla va
+  como factor del desglose. La decisión y su evento se guardan con la cotización. Resultado
+  `degradado`.
+- PENDIENTE: no hay oferta. La decisión y su evento se guardan solos y se lanza CotizacionPendiente
+  (503 DEPENDENCIA_NO_DISPONIBLE, recuperable). Resultado `pendiente`.
+Las dependencias del recorrido (catalogo, clientes, la base) no admiten sustituto: sin producto,
+reglas o identidad no hay precio que no sea inventado, así que la PoliticaDependencias sigue siendo
+FallaCerrada; también para las reglas de fallback.
+
 El log de cierre lleva solo identificadores: ni montos, ni edad, ni fecha de nacimiento.
 """
 
@@ -47,7 +59,9 @@ from solventa_common.telemetry import (
 from cotizacion.application.cotizacion.puertos import (
     OrigenDato,
     PuertoProductos,
+    PuertoReglasFallback,
     RepositorioCotizaciones,
+    RepositorioDecisiones,
     Resuelto,
 )
 from cotizacion.application.perfilamiento.puertos import (
@@ -69,6 +83,14 @@ from cotizacion.domain.cotizacion.errores import (
     ProductoNoEncontrado,
     ReglasNoVigentes,
     RolNoPermitido,
+)
+from cotizacion.domain.cotizacion.fallback import (
+    CotizacionPendiente,
+    DecisionRegistrada,
+    ReglasFallback,
+    TipoDecision,
+    decidir_fallback,
+    fuentes_fallidas,
 )
 from cotizacion.domain.cotizacion.modelos import (
     Actor,
@@ -106,6 +128,10 @@ DEPENDENCIA_PRODUCTO = "catalogo.producto"
 DEPENDENCIA_REGLAS = "catalogo.reglas_prima"
 DEPENDENCIA_CLIENTE = "clientes.identidad"
 DEPENDENCIA_PERFIL = "perfil"
+DEPENDENCIA_FALLBACK = "catalogo.reglas_fallback"
+# HU-W06: resultados de la operación que no son fallas del servicio (no cuentan en OperationErrors).
+RESULTADO_DEGRADADO = "degradado"
+RESULTADO_PENDIENTE = "pendiente"
 CAMPO_PERFIL = "perfilId"
 # Lo que el límite del caso de uso espera de más sobre el timeout de la dependencia.
 HOLGURA_RED_MS = 10
@@ -115,6 +141,7 @@ PROVEEDORES = {
     DEPENDENCIA_REGLAS: "catalogo",
     DEPENDENCIA_CLIENTE: "clientes",
     DEPENDENCIA_PERFIL: "base-cotizacion",
+    DEPENDENCIA_FALLBACK: "catalogo",
 }
 
 # Errores de negocio (4xx): la operación queda "rechazado", no "error".
@@ -175,10 +202,11 @@ class ResultadoDependencia(StrEnum):
 
 
 class PoliticaDependencias(Protocol):
-    """Punto de extensión de HU-W06 (proveedor degradado).
+    """Punto de extensión para las fallas técnicas de las dependencias del recorrido (HU-W05).
 
-    Recibe cada falla técnica de una dependencia. Hoy toda política lanza; HU-W06 decidirá si
-    alguna dependencia admite un valor sustituto (y cambiará el tipo de retorno).
+    HU-W06 decidió que ninguna admite un valor sustituto (sin producto, reglas o identidad el
+    precio sería inventado): toda política lanza. Lo degradable son las fuentes del perfil, y eso lo
+    decide `decidir_fallback` con las reglas versionadas de catalogo (docs/hu-w06-fallback.md).
     """
 
     def ante_falla(
@@ -274,7 +302,11 @@ class CalcularPrima:
         reloj: Reloj,
         config: ConfigCotizacion,
         politica: PoliticaDependencias | None = None,
+        reglas_fallback: PuertoReglasFallback | None = None,
+        decisiones: RepositorioDecisiones | None = None,
     ) -> None:
+        """HU-W06: sin `reglas_fallback` ninguna fuente es degradable; sin `decisiones` la
+        decisión PENDIENTE no se guarda (solo pruebas que no la usan: la app los conecta)."""
         self._productos = productos
         self._identidad = identidad
         self._perfiles = perfiles
@@ -282,6 +314,8 @@ class CalcularPrima:
         self.reloj = reloj
         self.config = config
         self._politica = politica or FallaCerrada()
+        self._fallback = reglas_fallback
+        self._decisiones = decisiones
         # El perfil es una lectura de la base propia: solo timeout, sin reintento ni circuito.
         self._lectura_local = SinProteccion()
 
@@ -296,10 +330,16 @@ class CalcularPrima:
             except ERRORES_DE_NEGOCIO:
                 op.marcar(RESULTADO_RECHAZADO)
                 raise
+            except CotizacionPendiente:
+                # HU-W06: una fuente del perfil faltó sin fallback permitido; el servicio está bien.
+                op.marcar(RESULTADO_PENDIENTE)
+                raise
             except DependenciaAgotada:
                 # HU-W05: el recorrido falló porque una dependencia agotó su tiempo.
                 op.marcar(RESULTADO_TIMEOUT)
                 raise
+            if resultado[0].degradada:
+                op.marcar(RESULTADO_DEGRADADO)
         return resultado
 
     async def _ejecutar(self, cmd: ComandoCotizacion) -> tuple[Cotizacion, tuple[Paso, ...], bool]:
@@ -322,7 +362,10 @@ class CalcularPrima:
             coberturas_opcionales=tuple(sorted(set(cmd.coberturas_opcionales))),
         )
         validar_entradas(producto.valor, reglas.valor, entradas)
-        desglose = calcular_prima(reglas.valor, entradas)
+        registro = await self._decidir(cmd, producto.valor.id, perfil, ahora, huella, dependencias)
+        desglose = calcular_prima(
+            reglas.valor, entradas, registro.decision.ajustes if registro else ()
+        )
         elegidas = set(entradas.coberturas_opcionales)
         cotizacion = Cotizacion(
             id=uuid4(),
@@ -354,6 +397,7 @@ class CalcularPrima:
             oferta=crear_oferta(
                 cotizacion, reglas.valor, uuid4(), self.config.oferta_vigencia_horas
             ),
+            decision=replace(registro, cotizacion_id=cotizacion.id) if registro else None,
         )
         pasos = self._pasos(producto, reglas, perfil, dependencias, inicio_calculo)
         try:
@@ -373,9 +417,72 @@ class CalcularPrima:
                 "version_reglas": cotizacion.version_reglas,
                 "perfil_id": str(cmd.perfil_id) if cmd.perfil_id else None,
                 "dependencias": dependencias.registros,
+                "fallback": _resumen(cotizacion.decision),
             },
         )
         return cotizacion, pasos, True
+
+    async def _decidir(
+        self,
+        cmd: ComandoCotizacion,
+        producto_id: str,
+        perfil: Perfil | None,
+        ahora: datetime,
+        huella: str,
+        dependencias: _Dependencias,
+    ) -> DecisionRegistrada | None:
+        """HU-W06: la decisión de fallback si alguna fuente del perfil faltó; None si no. Con
+        PENDIENTE la guarda (con su evento) y lanza CotizacionPendiente."""
+        fallidas = fuentes_fallidas(perfil) if perfil is not None else ()
+        if perfil is None or not fallidas:
+            return None
+        reglas = await self._reglas_fallback(producto_id, ahora, dependencias)
+        decision = decidir_fallback(fallidas, reglas, ahora)
+        if decision is None:  # Hay fuentes fallidas: siempre hay decisión.
+            return None
+        registro = DecisionRegistrada(
+            id=uuid4(),
+            decision=decision,
+            perfil_id=perfil.id,
+            producto_id=producto_id,
+            cotizacion_id=None,
+            actor_id=cmd.actor.id,
+            idempotency_key=cmd.idempotency_key,
+            huella_solicitud=huella,
+            correlation_id=cmd.correlation_id,
+            decidido_en=ahora,
+        )
+        if decision.tipo is TipoDecision.DEGRADADA:
+            return registro
+        if self._decisiones is not None:
+            registro = await self._decisiones.registrar_pendiente(registro)
+        logger.warning(
+            "cotizacion pendiente",
+            extra={
+                "decision_id": str(registro.id),
+                "perfil_id": str(perfil.id),
+                "producto_id": producto_id,
+                "fallback": _resumen(registro),
+            },
+        )
+        raise CotizacionPendiente(registro)
+
+    async def _reglas_fallback(
+        self, producto_id: str, ahora: datetime, dependencias: _Dependencias
+    ) -> ReglasFallback | None:
+        """Las reglas vigentes; una falla técnica de catalogo la decide la política (503)."""
+        fallback = self._fallback
+        if fallback is None:
+            return None
+        try:
+            return await self._medir(
+                DEPENDENCIA_FALLBACK,
+                lambda: fallback.reglas_fallback(producto_id, ahora),
+                dependencias,
+            )
+        except DependenciaNoDisponible as error:
+            self._tecnica(DEPENDENCIA_FALLBACK, error)
+            raise
 
     async def _existente(self, cmd: ComandoCotizacion, huella: str) -> Cotizacion | None:
         existente = await self._repo.por_idempotencia(cmd.actor.id, cmd.idempotency_key)
@@ -511,8 +618,31 @@ class CalcularPrima:
         ]
         if perfil is not None:
             pasos.append(Paso("PERFIL_RIESGO", round(duracion[DEPENDENCIA_PERFIL])))
+        if DEPENDENCIA_FALLBACK in duracion:
+            pasos.append(Paso("REGLAS_FALLBACK", round(duracion[DEPENDENCIA_FALLBACK])))
         pasos.append(Paso("CALCULO_PRIMA", round((time.perf_counter() - inicio_calculo) * 1000)))
         return tuple(pasos)
+
+
+def _resumen(registro: DecisionRegistrada | None) -> dict[str, Any] | None:
+    """Lo que el log dice de la decisión: códigos y nombres, nunca valores."""
+    if registro is None:
+        return None
+    decision = registro.decision
+    return {
+        "decision": decision.tipo.value,
+        "decision_id": str(registro.id),
+        "version_reglas": decision.version_reglas,
+        "faltantes": [
+            {
+                "fuente": f.fuente,
+                "dato": f.dato,
+                "motivo": f.motivo.value,
+                "regla": f.regla.id if f.regla else None,
+            }
+            for f in decision.faltantes
+        ],
+    }
 
 
 def _resuelto[V](

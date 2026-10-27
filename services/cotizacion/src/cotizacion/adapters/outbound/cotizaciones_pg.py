@@ -6,6 +6,11 @@ para consultas. La idempotencia es por actor: UNIQUE (actor_id, idempotency_key)
 HU-W04: la oferta se guarda en `ofertas` en la misma transacción que la cotización y se lee con
 ella (LEFT JOIN: las cotizaciones anteriores a la migración 004 no tienen oferta). El código legible
 (COT-AAAA-NNNNN) lo asigna la secuencia `ofertas_codigo_seq` al insertar.
+
+HU-W06: una cotización degradada guarda su decisión de fallback (`decisiones_fallback`) y el evento
+CotizacionDegradada (outbox) en la misma transacción; se lee con ella (LEFT JOIN). Una decisión
+PENDIENTE no tiene cotización: `registrar_pendiente` la guarda con su evento, una vez por actor y
+clave de idempotencia.
 """
 
 import dataclasses
@@ -19,6 +24,17 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
+from cotizacion.adapters.outbound import outbox_pg
+from cotizacion.domain.cotizacion.fallback import (
+    AccionFallback,
+    DecisionFallback,
+    DecisionRegistrada,
+    Faltante,
+    MensajeFallback,
+    MotivoFalla,
+    ReglaAplicada,
+    TipoDecision,
+)
 from cotizacion.domain.cotizacion.modelos import (
     Actor,
     Cobertura,
@@ -38,6 +54,7 @@ from cotizacion.domain.perfilamiento.errores import ConflictoIdempotencia
 from cotizacion.domain.perfilamiento.modelos import NivelRiesgo
 
 _RESTRICCION_IDEMPOTENCIA = "cotizaciones_actor_id_idempotency_key_key"
+_RESTRICCION_PENDIENTE = "decisiones_fallback_pendiente_idempotencia"
 
 COLUMNAS = (
     "id",
@@ -83,12 +100,36 @@ COLUMNAS_OFERTA = (
 )
 
 
-def _insertar(columnas: Sequence[str]) -> str:
+COLUMNAS_DECISION = (
+    "id",
+    "cotizacion_id",
+    "perfil_id",
+    "producto_id",
+    "tipo",
+    "faltantes",
+    "mensaje_codigo",
+    "version_reglas",
+    "hash_reglas",
+    "ajustes",
+    "actor_id",
+    "idempotency_key",
+    "huella_solicitud",
+    "correlation_id",
+    "decidido_en",
+)
+
+
+def _insertar(columnas: Sequence[str], tabla: str = "cotizaciones") -> str:
     marcas = ", ".join(["%s"] * len(columnas))
-    return f"INSERT INTO cotizaciones ({', '.join(columnas)}) VALUES ({marcas})"
+    return f"INSERT INTO {tabla} ({', '.join(columnas)}) VALUES ({marcas})"
 
 
 _INSERTAR = _insertar(COLUMNAS)
+_INSERTAR_DECISION = _insertar(COLUMNAS_DECISION, "decisiones_fallback")
+_PENDIENTE_POR_IDEMPOTENCIA = (
+    f"SELECT {', '.join(COLUMNAS_DECISION)} FROM decisiones_fallback "
+    "WHERE cotizacion_id IS NULL AND actor_id = %s AND idempotency_key = %s"
+)
 # COT-<año UTC de creada_en>-<secuencia, al menos 5 dígitos>.
 _INSERTAR_OFERTA = (
     "WITH s AS (SELECT nextval('ofertas_codigo_seq')::text AS n) "
@@ -99,8 +140,10 @@ _INSERTAR_OFERTA = (
 )
 _SELECT = (
     f"SELECT {', '.join(f'c.{c}' for c in COLUMNAS)}, o.codigo AS oferta_codigo, "
-    f"{', '.join(f'o.{c} AS oferta_{c}' for c in COLUMNAS_OFERTA)} "
-    "FROM cotizaciones c LEFT JOIN ofertas o ON o.cotizacion_id = c.id"
+    f"{', '.join(f'o.{c} AS oferta_{c}' for c in COLUMNAS_OFERTA)}, "
+    f"{', '.join(f'd.{c} AS decision_{c}' for c in COLUMNAS_DECISION)} "
+    "FROM cotizaciones c LEFT JOIN ofertas o ON o.cotizacion_id = c.id "
+    "LEFT JOIN decisiones_fallback d ON d.cotizacion_id = c.id"
 )
 _POR_ID = _SELECT + " WHERE c.id = %s"
 _POR_IDEMPOTENCIA = _SELECT + " WHERE c.actor_id = %s AND c.idempotency_key = %s"
@@ -162,6 +205,92 @@ def fila_oferta(oferta: Oferta) -> dict[str, Any]:
         "creada_en": oferta.creada_en,
         "vigente_hasta": oferta.vigente_hasta,
     }
+
+
+def fila_decision(registro: DecisionRegistrada) -> dict[str, Any]:
+    decision = registro.decision
+    return {
+        "id": registro.id,
+        "cotizacion_id": registro.cotizacion_id,
+        "perfil_id": registro.perfil_id,
+        "producto_id": registro.producto_id,
+        "tipo": decision.tipo.value,
+        "faltantes": Jsonb(
+            [
+                {
+                    "fuente": f.fuente,
+                    "dato": f.dato,
+                    "motivo": f.motivo.value,
+                    "obligatoria": f.obligatoria,
+                    "regla": None
+                    if f.regla is None
+                    else {"id": f.regla.id, "version": f.regla.version, "accion": f.regla.accion},
+                }
+                for f in decision.faltantes
+            ]
+        ),
+        "mensaje_codigo": decision.mensaje_codigo.value,
+        "version_reglas": decision.version_reglas,
+        "hash_reglas": decision.hash_reglas,
+        "ajustes": Jsonb(
+            [
+                {"codigo": a.codigo, "valor": a.valor, "factor": texto(a.factor)}
+                for a in decision.ajustes
+            ]
+        ),
+        "actor_id": registro.actor_id,
+        "idempotency_key": registro.idempotency_key,
+        "huella_solicitud": registro.huella_solicitud,
+        "correlation_id": registro.correlation_id,
+        "decidido_en": registro.decidido_en,
+    }
+
+
+def decision_de(fila: Mapping[str, Any], prefijo: str = "") -> DecisionRegistrada | None:
+    """La decisión de la fila (con `prefijo` si viene del LEFT JOIN); None si no hay."""
+    if fila.get(f"{prefijo}id") is None:
+        return None
+
+    def campo(nombre: str) -> Any:
+        return fila[f"{prefijo}{nombre}"]
+
+    return DecisionRegistrada(
+        id=campo("id"),
+        decision=DecisionFallback(
+            tipo=TipoDecision(campo("tipo")),
+            faltantes=tuple(
+                Faltante(
+                    fuente=f["fuente"],
+                    dato=f["dato"],
+                    motivo=MotivoFalla(f["motivo"]),
+                    obligatoria=f["obligatoria"],
+                    regla=None
+                    if f["regla"] is None
+                    else ReglaAplicada(
+                        f["regla"]["id"],
+                        f["regla"]["version"],
+                        AccionFallback(f["regla"]["accion"]),
+                    ),
+                )
+                for f in campo("faltantes")
+            ),
+            mensaje_codigo=MensajeFallback(campo("mensaje_codigo")),
+            version_reglas=campo("version_reglas"),
+            hash_reglas=campo("hash_reglas"),
+            ajustes=tuple(
+                FactorAplicado(a["codigo"], a["valor"], Decimal(a["factor"]))
+                for a in campo("ajustes")
+            ),
+        ),
+        perfil_id=campo("perfil_id"),
+        producto_id=campo("producto_id"),
+        cotizacion_id=campo("cotizacion_id"),
+        actor_id=campo("actor_id"),
+        idempotency_key=campo("idempotency_key"),
+        huella_solicitud=campo("huella_solicitud"),
+        correlation_id=campo("correlation_id"),
+        decidido_en=campo("decidido_en"),
+    )
 
 
 def _sin_ceros(valor: Decimal) -> Decimal:
@@ -245,6 +374,7 @@ def cotizacion_de(fila: Mapping[str, Any]) -> Cotizacion:
         correlation_id=fila["correlation_id"],
         actor=Actor(fila["actor_id"], RolActor(fila["actor_rol"])),
         oferta=oferta_de(fila),
+        decision=decision_de(fila, "decision_"),
     )
 
 
@@ -255,13 +385,22 @@ class CotizacionesPg:
         self._pool = pool
 
     async def guardar(self, cotizacion: Cotizacion) -> Cotizacion:
-        """Guarda la cotización y su oferta en una transacción; devuelve la oferta con su código."""
+        """Guarda la cotización, su oferta y, si es degradada, su decisión con el evento (HU-W06),
+        en una transacción; devuelve la oferta con su código."""
         fila = fila_cotizacion(cotizacion)
         oferta = cotizacion.oferta
         try:
             # El bloque de la conexión es una transacción: confirma al salir, revierte si falla.
             async with self._pool.connection() as conexion:
                 await conexion.execute(_INSERTAR, [fila[c] for c in COLUMNAS])
+                if cotizacion.decision is not None:
+                    datos_decision = fila_decision(cotizacion.decision)
+                    await conexion.execute(
+                        _INSERTAR_DECISION, [datos_decision[c] for c in COLUMNAS_DECISION]
+                    )
+                    await outbox_pg.insertar(
+                        conexion, [outbox_pg.evento_decision(cotizacion.decision)]
+                    )
                 if oferta is None:
                     return cotizacion
                 datos = fila_oferta(oferta)
@@ -277,6 +416,31 @@ class CotizacionesPg:
                 raise ConflictoIdempotencia() from error
             raise
         return dataclasses.replace(cotizacion, oferta=dataclasses.replace(oferta, codigo=codigo))
+
+    async def registrar_pendiente(self, registro: DecisionRegistrada) -> DecisionRegistrada:
+        """La decisión PENDIENTE con su evento, en una transacción. Repetida (mismo actor y clave),
+        devuelve la guardada sin otro evento; con otra solicitud, ConflictoIdempotencia."""
+        datos = fila_decision(registro)
+        try:
+            async with self._pool.connection() as conexion:
+                await conexion.execute(_INSERTAR_DECISION, [datos[c] for c in COLUMNAS_DECISION])
+                await outbox_pg.insertar(conexion, [outbox_pg.evento_decision(registro)])
+        except psycopg.errors.UniqueViolation as error:
+            if error.diag.constraint_name != _RESTRICCION_PENDIENTE:
+                raise
+            async with self._pool.connection() as conexion:
+                cursor = conexion.cursor(row_factory=dict_row)
+                await cursor.execute(
+                    _PENDIENTE_POR_IDEMPOTENCIA, (registro.actor_id, registro.idempotency_key)
+                )
+                fila = await cursor.fetchone()
+            existente = decision_de(fila) if fila else None
+            if existente is None:  # La única fila que choca con la restricción es esa.
+                raise
+            if existente.huella_solicitud != registro.huella_solicitud:
+                raise ConflictoIdempotencia() from error
+            return existente
+        return registro
 
     async def por_idempotencia(self, actor_id: str, clave: UUID) -> Cotizacion | None:
         return await self._uno(_POR_IDEMPOTENCIA, (actor_id, clave))

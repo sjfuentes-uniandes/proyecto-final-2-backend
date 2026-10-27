@@ -547,6 +547,97 @@ class RepositorioCotizacionesMemoria:
         return self.cotizaciones.get(cotizacion_id)
 
 
+def reglas_fallback_semilla(**cambios: Any) -> Any:
+    """Las reglas de fallback 2026.10.1 de la semilla de catalogo, como las entrega su API."""
+    import hashlib
+
+    from cotizacion.adapters.outbound.productos_catalogo import (
+        ReglasFallbackDto,
+        a_reglas_fallback,
+    )
+
+    definicion = json.loads(
+        (SEMILLAS_CATALOGO / "reglas_fallback_2026_10_1.json").read_text(encoding="utf-8")
+    )
+    canonico = json.dumps(definicion, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    dto = ReglasFallbackDto.model_validate(
+        {
+            "productoId": "vida-hipotecario",
+            "version": "2026.10.1",
+            "vigenteDesde": "2026-10-01T00:00:00Z",
+            "vigenteHasta": None,
+            "hash": "sha256:" + hashlib.sha256(canonico.encode()).hexdigest(),
+            "definicion": definicion,
+        }
+    )
+    return replace(a_reglas_fallback(dto), **cambios)
+
+
+def perfil_con_fallas(
+    perfil: Perfil, modelo: ModeloRiesgo, fallas: dict[Fuente, EstadoFuente], **cambios: Any
+) -> Perfil:
+    """El perfil recalculado por el motor como si esas fuentes no se hubieran obtenido (HU-W06):
+    sin sus campos en los insumos y con su estado en el linaje."""
+    fuentes = tuple(
+        replace(
+            r,
+            estado=fallas[r.fuente],
+            campos={},
+            version_fuente=None,
+            confianza=None,
+            consultada_en=None,
+            proveedor=None,
+        )
+        if r.fuente in fallas
+        else r
+        for r in perfil.fuentes
+    )
+    faltan = {c for f in fallas for c in CAMPOS_FUENTE[f]}
+    insumos = {k: v for k, v in perfil.insumos.items() if k not in faltan}
+    resultado = evaluar(
+        modelo, insumos, {r.fuente: FuenteEvaluada(r.estado, r.confianza) for r in fuentes}
+    )
+    return replace(perfil, insumos=insumos, resultado=resultado, fuentes=fuentes, **cambios)
+
+
+class ReglasFallbackFalsas:
+    """PuertoReglasFallback: la semilla, None (sin reglas vigentes) o un error al pedirlas."""
+
+    def __init__(self) -> None:
+        self.reglas: Any = reglas_fallback_semilla()
+        self.error: BaseException | None = None
+        self.llamadas: list[tuple[str, datetime]] = []
+
+    async def reglas_fallback(self, producto_id: str, en: datetime) -> Any:
+        self.llamadas.append((producto_id, en))
+        if self.error is not None:
+            raise self.error
+        return self.reglas
+
+
+class DecisionesMemoria:
+    """RepositorioDecisiones como CotizacionesPg: una PENDIENTE por actor y clave."""
+
+    def __init__(self) -> None:
+        self.pendientes: list[Any] = []
+
+    async def registrar_pendiente(self, registro: Any) -> Any:
+        existente = next(
+            (
+                d
+                for d in self.pendientes
+                if (d.actor_id, d.idempotency_key) == (registro.actor_id, registro.idempotency_key)
+            ),
+            None,
+        )
+        if existente is None:
+            self.pendientes.append(registro)
+            return registro
+        if existente.huella_solicitud != registro.huella_solicitud:
+            raise ConflictoIdempotencia()
+        return existente
+
+
 @dataclass
 class EscenarioCotizacion:
     productos: ProductosFalsos
@@ -554,6 +645,9 @@ class EscenarioCotizacion:
     perfiles: RepositorioPerfilesMemoria
     repo: RepositorioCotizacionesMemoria
     reloj: RelojFijo
+    # HU-W06.
+    fallback: ReglasFallbackFalsas = field(default_factory=ReglasFallbackFalsas)
+    decisiones: DecisionesMemoria = field(default_factory=DecisionesMemoria)
 
     def caso(self, dependencia_timeout_ms: int = 150) -> Any:
         from cotizacion.application.cotizacion.calcular_prima import (
@@ -568,6 +662,8 @@ class EscenarioCotizacion:
             repo=self.repo,
             reloj=self.reloj,
             config=ConfigCotizacion(dependencia_timeout_ms=dependencia_timeout_ms),
+            reglas_fallback=self.fallback,
+            decisiones=self.decisiones,
         )
 
 

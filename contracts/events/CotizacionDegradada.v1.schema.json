@@ -1,0 +1,256 @@
+{
+  "$defs": {
+    "AccionFallback": {
+      "description": "DEGRADAR: oferta provisional sin el dato. PENDIENTE: sin oferta, estado recuperable.",
+      "enum": [
+        "DEGRADAR",
+        "PENDIENTE"
+      ],
+      "title": "AccionFallback",
+      "type": "string"
+    },
+    "AccionSugerida": {
+      "description": "Con PENDIENTE: reintentar con el mismo perfil no cambia nada; hay que recalcularlo (HU-W12).",
+      "enum": [
+        "RECALCULAR_PERFIL"
+      ],
+      "title": "AccionSugerida",
+      "type": "string"
+    },
+    "CotizacionDegradadaV1": {
+      "description": "Decisi\u00f3n de fallback del recorrido de cotizaci\u00f3n (HU-W06, AC3): DEGRADADA (oferta\nprovisional, con su cotizaci\u00f3n) o PENDIENTE (sin oferta). Solo identificadores y motivos:\nsin cliente, montos ni datos declarados.",
+      "properties": {
+        "accionSugerida": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AccionSugerida"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "actorId": {
+          "title": "Actorid",
+          "type": "string"
+        },
+        "cotizacionId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cotizacionid"
+        },
+        "decididoEn": {
+          "format": "date-time",
+          "title": "Decididoen",
+          "type": "string"
+        },
+        "decision": {
+          "$ref": "#/$defs/TipoDecision"
+        },
+        "decisionId": {
+          "format": "uuid",
+          "title": "Decisionid",
+          "type": "string"
+        },
+        "faltantes": {
+          "items": {
+            "$ref": "#/$defs/FaltanteEvento"
+          },
+          "title": "Faltantes",
+          "type": "array"
+        },
+        "hashReglasFallback": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Hashreglasfallback"
+        },
+        "mensajeCodigo": {
+          "$ref": "#/$defs/MensajeFallback"
+        },
+        "perfilId": {
+          "format": "uuid",
+          "title": "Perfilid",
+          "type": "string"
+        },
+        "productoId": {
+          "title": "Productoid",
+          "type": "string"
+        },
+        "versionReglasFallback": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Versionreglasfallback"
+        }
+      },
+      "required": [
+        "decisionId",
+        "decision",
+        "cotizacionId",
+        "perfilId",
+        "productoId",
+        "faltantes",
+        "mensajeCodigo",
+        "accionSugerida",
+        "versionReglasFallback",
+        "hashReglasFallback",
+        "actorId",
+        "decididoEn"
+      ],
+      "title": "CotizacionDegradadaV1",
+      "type": "object"
+    },
+    "FaltanteEvento": {
+      "description": "Un dato que no se obtuvo: nombres y c\u00f3digos, nunca un valor.",
+      "properties": {
+        "dato": {
+          "title": "Dato",
+          "type": "string"
+        },
+        "fuente": {
+          "title": "Fuente",
+          "type": "string"
+        },
+        "motivo": {
+          "$ref": "#/$defs/MotivoFalla"
+        },
+        "obligatoria": {
+          "title": "Obligatoria",
+          "type": "boolean"
+        },
+        "reglaAccion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AccionFallback"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reglaId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reglaid"
+        },
+        "reglaVersion": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reglaversion"
+        }
+      },
+      "required": [
+        "fuente",
+        "dato",
+        "motivo",
+        "obligatoria",
+        "reglaId",
+        "reglaVersion",
+        "reglaAccion"
+      ],
+      "title": "FaltanteEvento",
+      "type": "object"
+    },
+    "MensajeFallback": {
+      "description": "Clave del texto que muestran el portal y el socio; nunca un texto libre.",
+      "enum": [
+        "FUENTE_OPCIONAL_NO_DISPONIBLE",
+        "FUENTE_REQUERIDA_NO_DISPONIBLE"
+      ],
+      "title": "MensajeFallback",
+      "type": "string"
+    },
+    "MotivoFalla": {
+      "description": "Por qu\u00e9 no se obtuvo la fuente (estado del linaje del perfil).",
+      "enum": [
+        "TIEMPO_AGOTADO",
+        "NO_DISPONIBLE",
+        "RESPUESTA_INVALIDA"
+      ],
+      "title": "MotivoFalla",
+      "type": "string"
+    },
+    "TipoDecision": {
+      "enum": [
+        "DEGRADADA",
+        "PENDIENTE"
+      ],
+      "title": "TipoDecision",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/CotizacionDegradadaV1"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreEvento[CotizacionDegradadaV1]",
+  "type": "object"
+}

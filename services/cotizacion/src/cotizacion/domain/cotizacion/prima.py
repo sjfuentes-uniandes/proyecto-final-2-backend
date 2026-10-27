@@ -82,7 +82,11 @@ def _factor_variable(factor: FactorVariable, valor: Decimal) -> FactorAplicado:
     raise ValueError(f"el factor {factor.codigo} no tiene un tramo abierto")
 
 
-def calcular_prima(reglas: ReglasPrima, entradas: EntradasPrima) -> Desglose:
+def calcular_prima(
+    reglas: ReglasPrima, entradas: EntradasPrima, ajustes: tuple[FactorAplicado, ...] = ()
+) -> Desglose:
+    """`ajustes` son factores explícitos de una regla de fallback (HU-W06): van al desglose después
+    de los de las reglas y multiplican la prima ajustada como los demás."""
     variables = {
         "edad": Decimal(entradas.edad),
         "plazo_credito_meses": Decimal(entradas.plazo_credito_meses),
@@ -94,6 +98,7 @@ def calcular_prima(reglas: ReglasPrima, entradas: EntradasPrima) -> Desglose:
         factores = (
             FactorAplicado(FACTOR_NIVEL, nivel, reglas.factores_nivel[nivel]),
             *(_factor_variable(f, variables[f.variable]) for f in reglas.factores_variables),
+            *ajustes,
         )
         producto_factores = Decimal(1)
         for factor in factores:
