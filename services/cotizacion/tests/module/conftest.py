@@ -165,6 +165,17 @@ class WireMock:
     def reiniciar_escenarios(self) -> None:
         self._admin.post("/scenarios/reset").raise_for_status()
 
+    @contextmanager
+    def sobrescribir(self, mapeo: dict[str, Any]) -> Iterator[None]:
+        """HU-W06: un mapeo de prioridad 1 (gana a los versionados, de prioridad 5) solo durante
+        el bloque; se quita al salir. No toca los mapeos generados del simulador."""
+        creado = self._admin.post("/mappings", json={"priority": 1, **mapeo})
+        creado.raise_for_status()
+        try:
+            yield
+        finally:
+            self._admin.delete(f"/mappings/{creado.json()['id']}").raise_for_status()
+
     def esperar_listo(self, segundos: float = 60) -> None:
         limite = time.monotonic() + segundos
         while time.monotonic() < limite:
