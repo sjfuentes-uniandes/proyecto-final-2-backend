@@ -40,7 +40,7 @@ class Settings(ServiceSettings):
     # Conexiones mínimas del pool de consentimientos; el máximo es `db_pool_size` (DB_POOL_SIZE).
     db_pool_min_size: int = Field(1, ge=1, validation_alias=_env("DB_POOL_MIN_SIZE"))
 
-    # Siembra C01–C19 al arrancar (DEF-01). Solo la activa infra/envs/int/apps.tfvars.
+    # Siembra C01–C27 al arrancar (DEF-01). Solo la activa infra/envs/int/apps.tfvars.
     semilla_sintetica: bool = Field(False, validation_alias=_env("CLIENTES_SEMILLA_SINTETICA"))
 
     @model_validator(mode="after")

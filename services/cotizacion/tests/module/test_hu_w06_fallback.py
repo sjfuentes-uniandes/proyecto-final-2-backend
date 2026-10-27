@@ -23,7 +23,7 @@ from uuid import uuid4
 import pytest
 from jsonschema import Draft202012Validator
 
-from .conftest import ACTOR, DECLARADOS_C01, EVENTOS, cliente_id
+from .conftest import ACTOR, CASOS, DECLARADOS_C01, EVENTOS, cliente_id, nn_de
 
 pytest.importorskip("docker")
 
@@ -31,7 +31,7 @@ PRESUPUESTO = {"fuente_timeout_ms": 300}
 INGRESOS_C07 = "/open-finance/v3/customers/00000000-0000-4000-8000-000000000007/aggregated-income"
 REGISTROS_C07 = "/datos-abiertos/v1/registros/00000000-0000-4000-8000-000000000007"
 HISTORIAL_C07 = "/open-finance/v3/customers/00000000-0000-4000-8000-000000000007/payment-history"
-# Valores de las fuentes (C01–C19) y declarados: nunca en una respuesta degradada ni en un evento.
+# Valores de las fuentes (C01–C27) y declarados: nunca en una respuesta degradada ni en un evento.
 SENSIBLES = ("6500000", "1800000.00", "1990-04-18", "Cliente Prueba")
 ESQUEMA = Draft202012Validator(
     json.loads((EVENTOS / "CotizacionDegradada.v1.schema.json").read_text(encoding="utf-8"))
@@ -293,3 +293,34 @@ def test_n2_c01_nominal_no_degrada_ni_escribe_decision(cotizacion: Any) -> None:
     decision = svc.cliente.get(f"/v1/cotizaciones/{cuerpo['id']}/decision", headers=ACTOR).json()
     assert decision["decision"] == "NOMINAL"
     assert _decisiones(svc, perfil["id"]) == []
+
+
+# --- Casos sintéticos C20–C27 (contracts/datos-sinteticos), de punta a punta -------------------
+
+CASOS_W06 = [c for c in CASOS if "cotizacion" in c["esperado"]]
+
+
+@pytest.mark.parametrize("caso", CASOS_W06, ids=lambda c: c["id"])
+def test_n2_cada_caso_sintetico_de_hu_w06_produce_su_resultado(
+    cotizacion: Any, caso: dict[str, Any]
+) -> None:
+    """La semilla de clientes y los mapeos del simulador reproducen el perfil y la decisión de
+    fallback que declara cada caso (los que se usan para probar HU-W06 a mano)."""
+    svc = cotizacion(**PRESUPUESTO)
+    nn = nn_de(caso["clienteId"])
+    esperado = caso["esperado"]
+    perfil = _perfil(svc, nn)
+    assert perfil["estado"] == esperado["estado"]
+    assert perfil["nivelRiesgo"] == esperado["nivel"]
+    assert perfil["puntaje"] == esperado["puntaje"]
+    estados = {f["fuente"]: f["estado"] for f in perfil["fuentes"]}
+    assert {f: estados[f] for f in esperado["fuentes"]} == esperado["fuentes"]
+    respuesta = _cotizar(svc, nn, perfil["id"])
+    cotizacion_esperada = esperado["cotizacion"]
+    assert respuesta.status_code == cotizacion_esperada["http"], respuesta.text
+    cuerpo = respuesta.json()
+    detalles = cuerpo if respuesta.status_code == 201 else cuerpo["detalles"]
+    reglas = list(dict.fromkeys(f["regla"]["id"] for f in detalles["faltantes"]))
+    assert reglas == cotizacion_esperada["reglasFallback"]
+    [(_, _, tipo, _, _)] = _decisiones(svc, perfil["id"])
+    assert tipo == cotizacion_esperada["decision"]

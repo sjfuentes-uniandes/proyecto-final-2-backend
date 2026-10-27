@@ -173,7 +173,32 @@ Resumen de las corridas en [regresion.txt](evidencias/hu-w06/regresion.txt). Tes
 | Seguridad: minimización (respuesta, logs y evento sin datos personales) | N1 (logs y spans), N2 (payload sin `clienteId` ni valores), `test_zz_centinelas` de la suite de módulo, lista blanca del socio (`DatoFaltanteV1 = {fuente, dato}`) |
 | Seguridad: el registro de auditoría queda en el bucket con Object Lock | **Pendiente** (sección 10): el evento queda en el outbox; faltan el relay y el worker `auditoria` |
 
-## 10. Pendiente
+## 10. Casos sintéticos para probar a mano
+
+`clientes` los siembra al arrancar en `local` e `int` (`CLIENTES_SEMILLA_SINTETICA`). Todos son cédula (`CC`), con fecha de nacimiento 1990-04-18, identidad verificada y consentimiento vigente.
+
+En el portal: "Nueva cotización" → tipo `CC`, el número de la tabla, fecha 1990-04-18, plazo 180 meses, suma 180.000.000 → perfilar → "Calcular la prima". El alta por documento reutiliza el cliente sembrado.
+
+Los casos C20–C27 son de esta historia y declaran su resultado en `esperado.cotizacion` de `contracts/datos-sinteticos/clientes-perfilamiento.json`. El N2 `test_n2_cada_caso_sintetico_de_hu_w06_produce_su_resultado` los recorre de punta a punta.
+
+| Caso | Documento | Fuentes en el simulador | Perfil | Cotización |
+| --- | --- | --- | --- | --- |
+| C01 | 9000000001 | Todas nominales | CALCULADO, BAJO 75,9 | 201 nominal |
+| C07 | 9000000007 | Ingresos agregados caída | DEGRADADO, BAJO 75,0 | 201 degradada (FB-003) |
+| C20 | 9000000020 | Ingresos agregados malformada | DEGRADADO, BAJO 75,0 | 201 degradada, motivo RESPUESTA_INVALIDA (FB-003) |
+| C23 | 9000000023 | Ingresos agregados lenta | DEGRADADO, BAJO 75,0 | 201 degradada, motivo TIEMPO_AGOTADO (FB-003) |
+| C06 | 9000000006 | Registros públicos lenta | DEGRADADO, BAJO 74,09 | 201 degradada (FB-004) |
+| C21 | 9000000021 | Registros públicos caída | DEGRADADO, BAJO 74,09 | 201 degradada (FB-004) |
+| C22 | 9000000022 | Ingresos y registros caídas | DEGRADADO, BAJO 72,67 | 201 degradada con dos faltantes (FB-004, FB-003) |
+| C05 | 9000000005 | Productos vigentes malformada (obligatoria) | INFORMACIÓN INSUFICIENTE | 503 pendiente (FB-001) |
+| C24 | 9000000024 | Productos vigentes caída (obligatoria) | INFORMACIÓN INSUFICIENTE | 503 pendiente (FB-001) |
+| C13 | 9000000013 | Historial de pagos lenta (obligatoria) | INFORMACIÓN INSUFICIENTE | 503 pendiente (FB-002) |
+| C25 | 9000000025 | Historial de pagos malformada (obligatoria) | INFORMACIÓN INSUFICIENTE | 503 pendiente (FB-002) |
+| C26 | 9000000026 | Ingresos y historial caídas | INFORMACIÓN INSUFICIENTE | 503 pendiente (FB-002, FB-003) |
+| C27 | 9000000027 | Las cuatro caídas | INFORMACIÓN INSUFICIENTE | 503 pendiente con las cuatro fuentes |
+| C19 | 9000000019 | Registros públicos lenta la 1.ª vez, nominal después | DEGRADADO; al recalcular, CALCULADO | 201 degradada; tras recalcular, nominal |
+
+## 11. Pendiente
 
 - **Ejecutar en AWS (`int`):**
   1. `make infra-microservicios SERVICES=catalogo,cotizacion,api-socios,bff-web ENV=int`, para las migraciones `004` de `catalogo` y `005` de `cotizacion`, que se aplican al arrancar.

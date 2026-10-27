@@ -1,0 +1,28 @@
+{
+  "name": "open-finance C26 payment-history caido",
+  "request": {
+    "method": "GET",
+    "urlPath": "/open-finance/v3/customers/00000000-0000-4000-8000-00000000001a/payment-history",
+    "queryParameters": {
+      "months": {
+        "equalTo": "12"
+      },
+      "fields": {
+        "equalTo": "lateCount"
+      }
+    },
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "open-finance/c26-payment-history.json",
+    "fixedDelayMilliseconds": 50
+  }
+}
