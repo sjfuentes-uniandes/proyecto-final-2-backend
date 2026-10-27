@@ -466,6 +466,99 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+    get:
+      tags:
+      - cotizaciones
+      summary: Listar
+      description: 'Cotizaciones con oferta, de la más reciente a la más antigua ("Cotizaciones
+        abiertas" del
+
+        portal). `estado` es el de la oferta en el instante de la consulta. Un SOCIO
+        solo ve las
+
+        suyas; un ASESOR, todas.'
+      operationId: listar_v1_cotizaciones_get
+      parameters:
+      - name: estado
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/EstadoOferta'
+          - type: 'null'
+          title: Estado
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 64
+          - type: 'null'
+          description: Parte del código COT-AAAA-NNNNN
+          title: Q
+        description: Parte del código COT-AAAA-NNNNN
+      - name: limite
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limite
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Cursor
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoCotizacionesRespuesta'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de ASESOR o SOCIO
+            (SOC-NNNNNN)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (también un cursor que no entregó cotizacion)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /v1/cotizaciones/{cotizacionId}:
     get:
       tags:
@@ -1557,6 +1650,29 @@ components:
       required:
       - items
       title: ListaPerfiles
+    ListadoCotizacionesRespuesta:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ResumenCotizacionDto'
+          type: array
+          title: Items
+        siguienteCursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Siguientecursor
+          description: 'null: no hay más páginas'
+        total:
+          type: integer
+          title: Total
+          description: Cotizaciones que cumplen los filtros
+      type: object
+      required:
+      - items
+      - siguienteCursor
+      - total
+      title: ListadoCotizacionesRespuesta
     MensajeFallback:
       type: string
       enum:
@@ -1900,6 +2016,89 @@ components:
       - id
       - version
       title: ReglaAplicadaDto
+    ResumenCotizacionDto:
+      properties:
+        cotizacionId:
+          type: string
+          format: uuid
+          title: Cotizacionid
+        codigo:
+          type: string
+          title: Codigo
+          description: COT-AAAA-NNNNN
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        socioId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Socioid
+        productoId:
+          type: string
+          title: Productoid
+        versionProducto:
+          type: string
+          title: Versionproducto
+        moneda:
+          type: string
+          title: Moneda
+        periodicidad:
+          type: string
+          title: Periodicidad
+        sumaAsegurada:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Sumaasegurada
+        prima:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Prima
+          description: El precio de la oferta (prima total)
+        nivelRiesgo:
+          anyOf:
+          - $ref: '#/components/schemas/NivelRiesgo'
+          - type: 'null'
+          description: 'null: cotizada sin perfil'
+        degradada:
+          type: boolean
+          title: Degradada
+          description: Oferta provisional (HU-W06)
+        creadaEn:
+          type: string
+          format: date-time
+          title: Creadaen
+        vigenteHasta:
+          type: string
+          format: date-time
+          title: Vigentehasta
+          description: 'Fin de la vigencia de la oferta (UTC): vigente si ahora <
+            vigenteHasta (DS2-20, HU-W13)'
+        estado:
+          $ref: '#/components/schemas/EstadoOferta'
+      type: object
+      required:
+      - cotizacionId
+      - codigo
+      - clienteId
+      - socioId
+      - productoId
+      - versionProducto
+      - moneda
+      - periodicidad
+      - sumaAsegurada
+      - prima
+      - nivelRiesgo
+      - degradada
+      - creadaEn
+      - vigenteHasta
+      - estado
+      title: ResumenCotizacionDto
+      description: 'Una fila del listado: la oferta y lo mínimo de la cotización (sin
+        datos del asegurado salvo
+
+        la suma asegurada, que ya devuelve la lectura por id).'
     ResumenPerfil:
       properties:
         id:
