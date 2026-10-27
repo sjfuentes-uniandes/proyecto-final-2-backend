@@ -19,7 +19,8 @@
       {"version": "2026.09.1", "vigenteDesde": "2026-09-01T00:00:00Z", "archivo": "reglas_prima_2026_09_1.json"},
       {"version": "2026.10.1", "vigenteDesde": "2026-10-22T00:00:00Z", "archivo": "reglas_prima_2026_10_1.json"}
     ],
-    "reglasSuscripcion": [{"version": "2026.10.1", "vigenteDesde": "2026-10-01T00:00:00Z", "archivo": "reglas_suscripcion_2026_10_1.json"}]
+    "reglasSuscripcion": [{"version": "2026.10.1", "vigenteDesde": "2026-10-01T00:00:00Z", "archivo": "reglas_suscripcion_2026_10_1.json"}],
+    "reglasFallback": [{"version": "2026.10.1", "vigenteDesde": "2026-10-01T00:00:00Z", "vigenteHasta": null, "archivo": "reglas_fallback_2026_10_1.json"}]
   },
   {
     "id": "vida-hipotecario-2025",

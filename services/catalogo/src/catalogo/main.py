@@ -10,9 +10,16 @@ from solventa_common.cache import Cache, crear_cache
 from solventa_common.errors import registrar_manejadores
 from solventa_common.telemetry import instrumentar
 
-from catalogo.adapters.inbound.http import modelos_riesgo, productos, reglas_suscripcion
+from catalogo.adapters.inbound.http import (
+    modelos_riesgo,
+    productos,
+    reglas_fallback,
+    reglas_suscripcion,
+)
 from catalogo.adapters.outbound.productos_cache import ProductosConCache
 from catalogo.adapters.outbound.reloj import RelojSistema
+from catalogo.application.fallback.consultar_reglas import ConsultarReglasFallback
+from catalogo.application.fallback.puertos import RepositorioReglasFallback
 from catalogo.application.productos.consultar_producto import ConsultarProductos
 from catalogo.application.productos.puertos import RepositorioProductos
 from catalogo.application.reglas.consultar_modelo import ConsultarModelo
@@ -25,7 +32,12 @@ from catalogo.config import Settings
 
 async def _abrir_base(
     app: FastAPI, pila: AsyncExitStack, settings: Settings, cache: Cache | None, reloj: Reloj
-) -> tuple[RepositorioModelos, RepositorioProductos, RepositorioReglasSuscripcion]:
+) -> tuple[
+    RepositorioModelos,
+    RepositorioProductos,
+    RepositorioReglasSuscripcion,
+    RepositorioReglasFallback,
+]:
     """Migra, abre el pool y la caché, e invalida los productos de la semilla (HU-W03)."""
     from psycopg_pool import AsyncConnectionPool
 
@@ -38,6 +50,7 @@ async def _abrir_base(
     from catalogo.adapters.outbound.productos_pg import (
         sembrar_qa as sembrar_productos_qa,
     )
+    from catalogo.adapters.outbound.reglas_fallback_pg import ReglasFallbackPg
     from catalogo.adapters.outbound.reglas_suscripcion_pg import ReglasSuscripcionPg
 
     migrar(settings.database_url)
@@ -60,7 +73,7 @@ async def _abrir_base(
     # La semilla pudo cambiar con este despliegue: catalogo invalida la caché (diagramas).
     sembrados = semillas() + (semillas(PRODUCTOS_QA) if settings.productos_qa else [])
     await con_cache.invalidar([p.id for p, _ in sembrados])
-    return ModelosPg(pool), con_cache, ReglasSuscripcionPg(pool)
+    return ModelosPg(pool), con_cache, ReglasSuscripcionPg(pool), ReglasFallbackPg(pool)
 
 
 def crear_app(
@@ -69,6 +82,7 @@ def crear_app(
     repositorio: RepositorioModelos | None = None,
     productos_repo: RepositorioProductos | None = None,
     reglas_suscripcion_repo: RepositorioReglasSuscripcion | None = None,
+    reglas_fallback_repo: RepositorioReglasFallback | None = None,
     cache: Cache | None = None,
     reloj: Reloj | None = None,
     span_exporter: SpanExporter | None = None,
@@ -84,10 +98,10 @@ def crear_app(
         async with AsyncExitStack() as pila:
             app.state.consulta_timeout_ms = settings.consulta_timeout_ms
             repo, repo_productos = repositorio, productos_repo
-            repo_suscripcion = reglas_suscripcion_repo
+            repo_suscripcion, repo_fallback = reglas_suscripcion_repo, reglas_fallback_repo
             # Sin base configurada (pruebas) no se migra ni se abre el pool.
             if repo is None and (settings.db_host or settings.database_url_override):
-                repo, repo_productos, repo_suscripcion = await _abrir_base(
+                repo, repo_productos, repo_suscripcion, repo_fallback = await _abrir_base(
                     app, pila, settings, cache, reloj
                 )
             if repo is not None:
@@ -101,6 +115,11 @@ def crear_app(
                     app.state.consultar_reglas_suscripcion = ConsultarReglasSuscripcion(
                         repo_suscripcion, repo_productos, reloj
                     )
+                if repo_fallback is not None:
+                    # HU-W06: mismo patrón que las reglas de suscripción.
+                    app.state.consultar_reglas_fallback = ConsultarReglasFallback(
+                        repo_fallback, repo_productos, reloj
+                    )
             yield
 
     app = instrumentar(
@@ -113,6 +132,7 @@ def crear_app(
     app.include_router(modelos_riesgo.router)
     app.include_router(productos.router)
     app.include_router(reglas_suscripcion.router)
+    app.include_router(reglas_fallback.router)
 
     @app.get("/health", response_model=None)
     async def health(request: Request) -> dict[str, str] | JSONResponse:
