@@ -15,6 +15,9 @@ HU-W06 (aditivo): `degradada`, `faltantes` (fuente, dato, motivo y la regla apli
 `versionReglasFallback`; nunca el valor de un dato faltante. Una fuente sin fallback permitido
 responde 503 DEPENDENCIA_NO_DISPONIBLE con la decisión en `detalles`. La decisión de una cotización
 se lee en GET /v1/cotizaciones/{id}/decision.
+
+Listado ("Cotizaciones abiertas" del portal): GET /v1/cotizaciones, las cotizaciones con oferta de
+la más reciente a la más antigua, paginadas por cursor y filtradas por estado y código.
 """
 
 import re
@@ -23,7 +26,7 @@ from decimal import Decimal
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Path, Request, Response
+from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 from solventa_common import correlation
@@ -40,10 +43,12 @@ from cotizacion.application.cotizacion.consultar import (
     ConsultarCondiciones,
     ConsultarCotizacion,
 )
+from cotizacion.application.cotizacion.listar import ListarCotizaciones
 from cotizacion.application.cotizacion.puertos import OrigenDato
 from cotizacion.domain.cotizacion.errores import (
     CoberturaNoDisponible,
     CotizacionNoEncontrada,
+    CursorInvalido,
     DatosFueraDeRango,
     OfertaVencida,
     PerfilNoCorresponde,
@@ -61,6 +66,7 @@ from cotizacion.domain.cotizacion.fallback import (
     MensajeFallback,
     MotivoFalla,
 )
+from cotizacion.domain.cotizacion.listado import FiltrosCotizaciones, ResumenCotizacion
 from cotizacion.domain.cotizacion.modelos import (
     Actor,
     Cotizacion,
@@ -319,6 +325,53 @@ class CondicionesProducto(_Dto):
     vigente_hasta: datetime | None
     coberturas: list[CoberturaProductoDto]
     limites: LimitesDto
+
+
+class ResumenCotizacionDto(_Dto):
+    """Una fila del listado: la oferta y lo mínimo de la cotización (sin datos del asegurado salvo
+    la suma asegurada, que ya devuelve la lectura por id)."""
+
+    cotizacion_id: UUID
+    codigo: str = Field(description="COT-AAAA-NNNNN")
+    cliente_id: UUID
+    socio_id: str | None
+    producto_id: str
+    version_producto: str
+    moneda: str
+    periodicidad: str
+    suma_asegurada: TextoDecimal
+    prima: TextoDecimal = Field(description="El precio de la oferta (prima total)")
+    nivel_riesgo: NivelRiesgo | None = Field(description="null: cotizada sin perfil")
+    degradada: bool = Field(description="Oferta provisional (HU-W06)")
+    creada_en: datetime
+    vigente_hasta: datetime = Field(description=DESCRIPCION_VIGENTE_HASTA)
+    estado: EstadoOferta
+
+
+class ListadoCotizacionesRespuesta(_Dto):
+    items: list[ResumenCotizacionDto]
+    siguiente_cursor: str | None = Field(description="null: no hay más páginas")
+    total: int = Field(description="Cotizaciones que cumplen los filtros")
+
+
+def resumen_dto(resumen: ResumenCotizacion, ahora: datetime) -> ResumenCotizacionDto:
+    return ResumenCotizacionDto(
+        cotizacion_id=resumen.cotizacion_id,
+        codigo=resumen.codigo,
+        cliente_id=resumen.cliente_id,
+        socio_id=resumen.socio_id,
+        producto_id=resumen.producto_id,
+        version_producto=resumen.version_producto,
+        moneda=resumen.moneda,
+        periodicidad=resumen.periodicidad,
+        suma_asegurada=texto(resumen.suma_asegurada),
+        prima=texto(resumen.prima),
+        nivel_riesgo=resumen.nivel_riesgo,
+        degradada=resumen.degradada,
+        creada_en=resumen.creada_en.astimezone(UTC),
+        vigente_hasta=resumen.vigente_hasta.astimezone(UTC),
+        estado=resumen.estado(ahora),
+    )
 
 
 def oferta_de(oferta: Oferta, ahora: datetime) -> OfertaDto:
@@ -607,6 +660,11 @@ def _condiciones(request: Request) -> ConsultarCondiciones:
     return caso
 
 
+def _listar(request: Request) -> ListarCotizaciones:
+    caso: ListarCotizaciones = _caso(request, "listar_cotizaciones")
+    return caso
+
+
 ActorCotizacion = Annotated[Actor, Depends(actor_cotizacion)]
 # HU-W05: tiempo restante de quien llama (api-socios, bff-web); acota el presupuesto del recorrido.
 DeadlineMs = Annotated[
@@ -677,6 +735,37 @@ async def cotizar(
         pasos,
         vigencia_horas=config.oferta_vigencia_horas,
         ahora=calcular.reloj.ahora(),
+    )
+
+
+@router.get(
+    "",
+    response_model=ListadoCotizacionesRespuesta,
+    responses={422: _error("SOLICITUD_INVALIDA (también un cursor que no entregó cotizacion)")},
+)
+async def listar(
+    actor: ActorCotizacion,
+    listar: Annotated[ListarCotizaciones, Depends(_listar)],
+    estado: EstadoOferta | None = None,
+    q: Annotated[
+        str | None,
+        Query(min_length=1, max_length=64, description="Parte del código COT-AAAA-NNNNN"),
+    ] = None,
+    limite: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: Annotated[str | None, Query(max_length=200)] = None,
+) -> ListadoCotizacionesRespuesta:
+    """Cotizaciones con oferta, de la más reciente a la más antigua ("Cotizaciones abiertas" del
+    portal). `estado` es el de la oferta en el instante de la consulta. Un SOCIO solo ve las
+    suyas; un ASESOR, todas."""
+    try:
+        pagina = await listar.ejecutar(FiltrosCotizaciones(estado, q), actor, limite, cursor)
+    except CursorInvalido as error:
+        raise ErrorNegocio("SOLICITUD_INVALIDA", "El cursor no es válido", 422) from error
+    ahora = listar.reloj.ahora()
+    return ListadoCotizacionesRespuesta(
+        items=[resumen_dto(r, ahora) for r in pagina.items],
+        siguiente_cursor=pagina.siguiente_cursor,
+        total=pagina.total,
     )
 
 

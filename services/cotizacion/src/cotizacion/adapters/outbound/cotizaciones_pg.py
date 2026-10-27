@@ -11,10 +11,14 @@ HU-W06: una cotización degradada guarda su decisión de fallback (`decisiones_f
 CotizacionDegradada (outbox) en la misma transacción; se lee con ella (LEFT JOIN). Una decisión
 PENDIENTE no tiene cotización: `registrar_pendiente` la guarda con su evento, una vez por actor y
 clave de idempotencia.
+
+Listado del portal ("Cotizaciones abiertas"): `listar` y `contar` leen las cotizaciones con oferta,
+de la más reciente a la más antigua, con los índices de la migración 006.
 """
 
 import dataclasses
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -35,6 +39,7 @@ from cotizacion.domain.cotizacion.fallback import (
     ReglaAplicada,
     TipoDecision,
 )
+from cotizacion.domain.cotizacion.listado import FiltrosCotizaciones, ResumenCotizacion
 from cotizacion.domain.cotizacion.modelos import (
     Actor,
     Cobertura,
@@ -43,6 +48,7 @@ from cotizacion.domain.cotizacion.modelos import (
     Desglose,
     EntradasPrima,
     EstadoCotizacion,
+    EstadoOferta,
     Exclusion,
     FactorAplicado,
     Oferta,
@@ -147,6 +153,63 @@ _SELECT = (
 )
 _POR_ID = _SELECT + " WHERE c.id = %s"
 _POR_IDEMPOTENCIA = _SELECT + " WHERE c.actor_id = %s AND c.idempotency_key = %s"
+
+# Listado ("Cotizaciones abiertas"): solo las cotizaciones con oferta (HU-W04 en adelante).
+_DESDE_LISTADO = (
+    "FROM ofertas o JOIN cotizaciones c ON c.id = o.cotizacion_id "
+    "LEFT JOIN decisiones_fallback d ON d.cotizacion_id = c.id"
+)
+_COLUMNAS_LISTADO = (
+    "c.id AS cotizacion_id, o.codigo, c.cliente_id, c.socio_id, c.producto_id, "
+    "c.version_producto, o.moneda, o.periodicidad, c.entradas->>'sumaAsegurada' AS suma_asegurada, "
+    "o.precio, c.nivel_riesgo, d.id IS NOT NULL AS degradada, o.creada_en, o.vigente_hasta"
+)
+
+
+def _escapar_like(valor: str) -> str:
+    return valor.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def filtros_listado(filtros: FiltrosCotizaciones, ahora: datetime) -> tuple[list[str], list[Any]]:
+    """Condiciones del listado: estado de la oferta en `ahora`, socio y parte del código."""
+    condiciones: list[str] = []
+    parametros: list[Any] = []
+    if filtros.estado is EstadoOferta.VIGENTE:
+        condiciones.append("o.vigente_hasta > %s")
+        parametros.append(ahora)
+    elif filtros.estado is EstadoOferta.VENCIDA:
+        condiciones.append("o.vigente_hasta <= %s")
+        parametros.append(ahora)
+    if filtros.socio_id is not None:
+        condiciones.append("c.socio_id = %s")
+        parametros.append(filtros.socio_id)
+    if filtros.q and filtros.q.strip():
+        condiciones.append("o.codigo ILIKE %s")
+        parametros.append(f"%{_escapar_like(filtros.q.strip())}%")
+    return condiciones, parametros
+
+
+def _donde(condiciones: list[str]) -> str:
+    return f" WHERE {' AND '.join(condiciones)}" if condiciones else ""
+
+
+def resumen_de(fila: Mapping[str, Any]) -> ResumenCotizacion:
+    return ResumenCotizacion(
+        cotizacion_id=fila["cotizacion_id"],
+        codigo=fila["codigo"],
+        cliente_id=fila["cliente_id"],
+        socio_id=fila["socio_id"],
+        producto_id=fila["producto_id"],
+        version_producto=fila["version_producto"],
+        moneda=fila["moneda"],
+        periodicidad=fila["periodicidad"],
+        suma_asegurada=Decimal(fila["suma_asegurada"]),
+        prima=_sin_ceros(fila["precio"]),
+        nivel_riesgo=NivelRiesgo(fila["nivel_riesgo"]) if fila["nivel_riesgo"] else None,
+        degradada=fila["degradada"],
+        creada_en=fila["creada_en"],
+        vigente_hasta=fila["vigente_hasta"],
+    )
 
 
 def fila_cotizacion(cotizacion: Cotizacion) -> dict[str, Any]:
@@ -447,6 +510,35 @@ class CotizacionesPg:
 
     async def por_id(self, cotizacion_id: UUID) -> Cotizacion | None:
         return await self._uno(_POR_ID, (cotizacion_id,))
+
+    async def listar(
+        self,
+        filtros: FiltrosCotizaciones,
+        ahora: datetime,
+        limite: int,
+        despues: tuple[datetime, UUID] | None,
+    ) -> list[ResumenCotizacion]:
+        condiciones, parametros = filtros_listado(filtros, ahora)
+        if despues is not None:
+            condiciones.append("(o.creada_en, c.id) < (%s, %s)")
+            parametros.extend(despues)
+        sql = (
+            f"SELECT {_COLUMNAS_LISTADO} {_DESDE_LISTADO}{_donde(condiciones)} "
+            "ORDER BY o.creada_en DESC, c.id DESC LIMIT %s"
+        )
+        async with self._pool.connection() as conexion:
+            cursor = conexion.cursor(row_factory=dict_row)
+            await cursor.execute(sql, [*parametros, limite])
+            filas = await cursor.fetchall()
+        return [resumen_de(f) for f in filas]
+
+    async def contar(self, filtros: FiltrosCotizaciones, ahora: datetime) -> int:
+        condiciones, parametros = filtros_listado(filtros, ahora)
+        sql = f"SELECT count(*) {_DESDE_LISTADO}{_donde(condiciones)}"
+        async with self._pool.connection() as conexion:
+            cursor = await conexion.execute(sql, parametros)
+            fila = await cursor.fetchone()
+        return int(fila[0]) if fila else 0
 
     async def _uno(self, sql: str, parametros: tuple[Any, ...]) -> Cotizacion | None:
         async with self._pool.connection() as conexion:

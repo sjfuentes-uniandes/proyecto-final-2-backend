@@ -51,6 +51,10 @@ class CotizacionNoEncontrada(Exception):
     """La cotización no existe o es de otro socio: no se distingue (no revela su existencia)."""
 
 
+class CursorInvalido(Exception):
+    """El cursor del listado no lo entregó cotizacion (opaco para quien lo usa)."""
+
+
 class RolNoPermitido(Exception):
     """El rol del actor no permite la operación (un socio no usa perfiles ni otro socioId)."""
 

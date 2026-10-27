@@ -22,7 +22,9 @@ from cotizacion.adapters.outbound.productos_catalogo import ProductosCatalogo
 from cotizacion.adapters.outbound.reloj import RelojSistema
 from cotizacion.application.cotizacion.calcular_prima import CalcularPrima, ConfigCotizacion
 from cotizacion.application.cotizacion.consultar import ConsultarCondiciones, ConsultarCotizacion
+from cotizacion.application.cotizacion.listar import ListarCotizaciones
 from cotizacion.application.cotizacion.puertos import (
+    ListadoCotizaciones,
     PuertoProductos,
     PuertoReglasFallback,
     RepositorioCotizaciones,
@@ -62,6 +64,8 @@ class Puertos:
     # HU-W06: sin reglas de fallback ninguna fuente es degradable (falla cerrada).
     reglas_fallback: PuertoReglasFallback | None = None
     decisiones: RepositorioDecisiones | None = None
+    # Listado del portal: sin él, GET /v1/cotizaciones responde 503.
+    listado: ListadoCotizaciones | None = None
 
 
 def _configurar_casos(app: FastAPI, puertos: Puertos, settings: Settings) -> None:
@@ -101,6 +105,8 @@ def _configurar_casos(app: FastAPI, puertos: Puertos, settings: Settings) -> Non
         )
         app.state.consultar_cotizacion = ConsultarCotizacion(puertos.cotizaciones)
         app.state.consultar_condiciones = ConsultarCondiciones(puertos.productos, puertos.reloj)
+        if puertos.listado is not None:
+            app.state.listar_cotizaciones = ListarCotizaciones(puertos.listado, puertos.reloj)
         # HU-W13: insumos de la oferta para la suscripción de polizas.
         app.state.consultar_insumos = ConsultarInsumos(
             cotizaciones=puertos.cotizaciones,
@@ -197,6 +203,7 @@ def crear_app(
                         reloj=reloj,
                         productos=productos,
                         cotizaciones=cotizaciones_pg,
+                        listado=cotizaciones_pg,
                         reglas_fallback=productos,
                         decisiones=cotizaciones_pg,
                     ),
