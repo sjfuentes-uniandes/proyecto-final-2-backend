@@ -1116,7 +1116,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
         '503':
-          description: SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)
+          description: 'SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia).
+            HU-W06: con dependencia perfil.fuentes, una fuente del perfil faltó sin
+            fallback permitido (detalles de cotizacion: decisionId, faltantes y accionSugerida
+            RECALCULAR_PERFIL)'
           content:
             application/json:
               schema:
@@ -1190,7 +1193,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
         '503':
-          description: SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)
+          description: 'SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia).
+            HU-W06: con dependencia perfil.fuentes, una fuente del perfil faltó sin
+            fallback permitido (detalles de cotizacion: decisionId, faltantes y accionSugerida
+            RECALCULAR_PERFIL)'
           content:
             application/json:
               schema:
@@ -1260,7 +1266,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
         '503':
-          description: SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)
+          description: 'SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia).
+            HU-W06: con dependencia perfil.fuentes, una fuente del perfil faltó sin
+            fallback permitido (detalles de cotizacion: decisionId, faltantes y accionSugerida
+            RECALCULAR_PERFIL)'
           content:
             application/json:
               schema:
@@ -3024,6 +3033,22 @@ components:
           - $ref: '#/components/schemas/OfertaDto'
           - type: 'null'
           description: La oferta de la cotización
+        degradada:
+          type: boolean
+          title: Degradada
+          description: 'Oferta provisional: una fuente opcional faltó y una regla
+            permitió degradar'
+          default: false
+        faltantes:
+          items:
+            $ref: '#/components/schemas/FaltanteDto'
+          type: array
+          title: Faltantes
+        versionReglasFallback:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Versionreglasfallback
       type: object
       required:
       - id
@@ -3630,6 +3655,31 @@ components:
       - valor
       - factor
       title: FactorPrimaDto
+    FaltanteDto:
+      properties:
+        fuente:
+          type: string
+          title: Fuente
+        dato:
+          type: string
+          title: Dato
+        motivo:
+          $ref: '#/components/schemas/MotivoFalla'
+        regla:
+          anyOf:
+          - $ref: '#/components/schemas/ReglaAplicadaDto'
+          - type: 'null'
+          description: Regla de fallback aplicada; null si la fuente no tenía regla
+            vigente
+      type: object
+      required:
+      - fuente
+      - dato
+      - motivo
+      - regla
+      title: FaltanteDto
+      description: 'Un dato que no se obtuvo (HU-W06). Solo su nombre: el valor no
+        existe y no se inventa.'
     Fuente:
       type: string
       enum:
@@ -3811,6 +3861,14 @@ components:
       - FUENTE_NO_DISPONIBLE
       - RESPUESTA_INVALIDA
       title: MotivoDato
+    MotivoFalla:
+      type: string
+      enum:
+      - TIEMPO_AGOTADO
+      - NO_DISPONIBLE
+      - RESPUESTA_INVALIDA
+      title: MotivoFalla
+      description: Por qué no se obtuvo la fuente (estado del linaje del perfil).
     NivelRiesgo:
       type: string
       enum:
@@ -4151,6 +4209,19 @@ components:
       - tasa
       - valor
       title: RecargoPrimaDto
+    ReglaAplicadaDto:
+      properties:
+        id:
+          type: string
+          title: Id
+        version:
+          type: string
+          title: Version
+      type: object
+      required:
+      - id
+      - version
+      title: ReglaAplicadaDto
     ReglaEvaluadaDto:
       properties:
         codigo:

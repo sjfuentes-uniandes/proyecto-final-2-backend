@@ -33,7 +33,11 @@ _RESPUESTAS: dict[int | str, dict[str, Any]] = {
     401: _error("ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado"),
     403: _error("ROL_NO_AUTORIZADO: falta el grupo asesores o no es del back-office"),
     422: _error("SOLICITUD_INVALIDA (detalles.campos)"),
-    503: _error("SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)"),
+    503: _error(
+        "SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia). HU-W06: con "
+        "dependencia perfil.fuentes, una fuente del perfil faltó sin fallback permitido (detalles "
+        "de cotizacion: decisionId, faltantes y accionSugerida RECALCULAR_PERFIL)"
+    ),
 }
 router = APIRouter(
     prefix="/v1/cotizaciones",
@@ -179,6 +183,30 @@ class OfertaDto(_Dto):
     estado: EstadoOferta
 
 
+class MotivoFalla(StrEnum):
+    """Por qué no se obtuvo la fuente (estado del linaje del perfil)."""
+
+    TIEMPO_AGOTADO = "TIEMPO_AGOTADO"
+    NO_DISPONIBLE = "NO_DISPONIBLE"
+    RESPUESTA_INVALIDA = "RESPUESTA_INVALIDA"
+
+
+class ReglaAplicadaDto(_Dto):
+    id: str
+    version: str
+
+
+class FaltanteDto(_Dto):
+    """Un dato que no se obtuvo (HU-W06). Solo su nombre: el valor no existe y no se inventa."""
+
+    fuente: str
+    dato: str
+    motivo: MotivoFalla
+    regla: ReglaAplicadaDto | None = Field(
+        description="Regla de fallback aplicada; null si la fuente no tenía regla vigente"
+    )
+
+
 class CotizacionRespuesta(_Dto):
     id: UUID
     cliente_id: UUID
@@ -211,6 +239,13 @@ class CotizacionRespuesta(_Dto):
     )
     # HU-W04: aditivo y opcional, copia del campo de cotizacion (C04 y C08 del portal).
     oferta: OfertaDto | None = Field(default=None, description="La oferta de la cotización")
+    # HU-W06: aditivos, copia de cotizacion (C07 del portal: oferta provisional).
+    degradada: bool = Field(
+        default=False,
+        description="Oferta provisional: una fuente opcional faltó y una regla permitió degradar",
+    )
+    faltantes: list[FaltanteDto] = Field(default_factory=list)
+    version_reglas_fallback: str | None = None
 
 
 class RangoDto(_Dto):
