@@ -4,7 +4,8 @@ El socio es el actor: `X-Actor-Id` = su id (SOC-NNNNNN) y `X-Actor-Rol: SOCIO`; 
 cotiza para él y solo le deja leer sus cotizaciones (la de otro socio responde 404, como si no
 existiera). El correlationId y la traza se propagan con el cliente de `solventa_common`.
 
-Lector tolerante: de la respuesta solo se valida lo que el socio recibe (`productoId` y `oferta`),
+Lector tolerante: de la respuesta solo se valida lo que el socio recibe (`productoId`, `oferta` y,
+desde HU-W06, `degradada` y `faltantes`, opcionales),
 así un campo nuevo de `cotizacion` no rompe al canal. Los rechazos de negocio de `cotizacion` pasan
 al socio con el mismo código y, de los detalles, solo `campos` (rutas, nunca valores). Cualquier
 otra cosa (timeout, 5xx, un código que el socio no conoce o un cuerpo fuera del contrato) es
@@ -27,6 +28,7 @@ from api_socios.domain.ofertas import (
     CoberturaOferta,
     CotizacionNoDisponible,
     CotizacionRechazada,
+    DatoFaltante,
     EstadoOferta,
     ExclusionResumida,
     Oferta,
@@ -84,9 +86,17 @@ class OfertaLeida(_Leido):
     estado: EstadoOferta
 
 
+class FaltanteLeido(_Leido):
+    fuente: str
+    dato: str
+
+
 class CotizacionLeida(_Leido):
     producto_id: str
     oferta: OfertaLeida | None = None
+    # HU-W06: ausentes en las respuestas anteriores (lector tolerante).
+    degradada: bool = False
+    faltantes: list[FaltanteLeido] = Field(default_factory=list)
 
 
 def a_oferta(leida: CotizacionLeida) -> Oferta | None:
@@ -112,6 +122,8 @@ def a_oferta(leida: CotizacionLeida) -> Oferta | None:
         creada_en=o.creada_en,
         vigente_hasta=o.vigente_hasta,
         estado=o.estado,
+        degradada=leida.degradada,
+        faltantes=tuple(DatoFaltante(f.fuente, f.dato) for f in leida.faltantes),
     )
 
 
