@@ -1,5 +1,6 @@
 """HU-W03: cálculo de la prima desde el portal (mockups "Nueva cotización", "Revisa los datos" y
-"Calculando tu oferta"). Solo el grupo asesores.
+"Calculando tu oferta"). Solo el grupo asesores. GET /v1/cotizaciones: "Cotizaciones abiertas", el
+listado de cotizacion con el nombre del cliente (ResumenCotizacionVista).
 
 Los DTO son copia de los de cotizacion (contracts/openapi/cotizacion.yaml) con los mismos
 nombres: tests/contract/test_openapi.py verifica que sus esquemas sean iguales. El asesor es el
@@ -12,7 +13,7 @@ from functools import lru_cache
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Path, Response
+from fastapi import APIRouter, Depends, Header, Path, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 from solventa_common.errors import RutaB2
@@ -20,6 +21,7 @@ from solventa_common.errors import RutaB2
 from bff_web.adapters.inbound.autorizacion import requerir_grupo
 from bff_web.adapters.inbound.perfilamiento import NivelRiesgo, actor
 from bff_web.adapters.inbound.socios import ErrorDto
+from bff_web.adapters.outbound.clientes import ClientesCliente
 from bff_web.adapters.outbound.cotizacion import CotizacionCliente
 from bff_web.application.cotizaciones import Cotizaciones
 from bff_web.config import settings
@@ -273,6 +275,34 @@ class CondicionesProducto(_Dto):
     limites: LimitesDto
 
 
+class ResumenCotizacionVista(_Dto):
+    """Una fila de "Cotizaciones abiertas": el ResumenCotizacionDto de cotizacion más el nombre del
+    cliente, que compone este BFF (null si clientes no lo dio a tiempo)."""
+
+    cotizacion_id: UUID
+    codigo: str = Field(description="COT-AAAA-NNNNN")
+    cliente_id: UUID
+    cliente_nombre: str | None
+    socio_id: str | None
+    producto_id: str
+    version_producto: str
+    moneda: str
+    periodicidad: str
+    suma_asegurada: TextoDecimal
+    prima: TextoDecimal = Field(description="El precio de la oferta (prima total)")
+    nivel_riesgo: NivelRiesgo | None = Field(description="null: cotizada sin perfil")
+    degradada: bool = Field(description="Oferta provisional (HU-W06)")
+    creada_en: datetime
+    vigente_hasta: datetime
+    estado: EstadoOferta
+
+
+class ListadoCotizacionesVista(_Dto):
+    items: list[ResumenCotizacionVista]
+    siguiente_cursor: str | None = Field(description="null: no hay más páginas")
+    total: int = Field(description="Cotizaciones que cumplen los filtros")
+
+
 # --- Dependencias y rutas -------------------------------------------------------------------
 
 
@@ -283,7 +313,9 @@ def cotizaciones() -> Cotizaciones:
             settings.cotizacion_url,
             settings.cotizacion_timeout_ms,
             presupuesto_ms=settings.presupuesto_cotizar_ms,
-        )
+        ),
+        ClientesCliente(settings.clientes_url, settings.clientes_timeout_ms),
+        settings.nombre_cliente_timeout_ms,
     )
 
 
@@ -322,6 +354,28 @@ async def cotizar(
     )
     http.status_code = estado
     return cotizacion
+
+
+@router.get(
+    "",
+    response_model=ListadoCotizacionesVista,
+    responses={422: _error("SOLICITUD_INVALIDA (también un cursor que no entregó cotizacion)")},
+)
+async def listar_cotizaciones(
+    servicio: Servicio,
+    asesor: Actor,
+    estado: EstadoOferta | None = None,
+    q: Annotated[
+        str | None,
+        Query(min_length=1, max_length=64, description="Parte del código COT-AAAA-NNNNN"),
+    ] = None,
+    limite: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: Annotated[str | None, Query(max_length=200)] = None,
+) -> dict[str, Any]:
+    """Cotizaciones con oferta de la más reciente a la más antigua ("Cotizaciones abiertas"), con
+    el nombre del cliente. `estado` es el de la oferta en el instante de la consulta."""
+    parametros = {"estado": estado, "q": q, "limite": limite, "cursor": cursor}
+    return await servicio.listar({k: v for k, v in parametros.items() if v is not None}, asesor)
 
 
 @router.get(
