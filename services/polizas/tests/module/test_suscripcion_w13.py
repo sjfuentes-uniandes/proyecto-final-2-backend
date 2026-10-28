@@ -8,15 +8,21 @@ resumen sobre SQL real, logs sin PII y migraciones adelante y atrás.
 """
 
 import asyncio
+import itertools
 import json
+import logging
+import re
 import time
+from datetime import UTC, datetime
 from importlib import resources
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
 import psycopg
 import pytest
 from polizas.adapters.outbound.decisiones_pg import migrar
+from solventa_common import telemetry
 
 docker = pytest.importorskip("docker")
 pytestmark = pytest.mark.anyio
@@ -182,9 +188,72 @@ async def test_los_logs_no_tienen_pii(api: Any, sinteticos: Any, telemetria: Any
     await api.get(f"{BASE}/{respuesta.json()['id']}", headers=SUSCRIPTOR)
     texto = telemetria.texto_logs()
     assert "suscripcion decidida" in texto
-    for centinela in ("620000000", "403620", "1968-05-02", '"edad"', "0.61"):
-        assert centinela not in texto, centinela
+    _comprobar_sin_pii(telemetria)
     assert json.dumps("suscripcion.evaluar") in texto
+
+
+_CENTINELAS = ("620000000", "403620", "1968-05-02", '"edad"', "0.61")
+
+
+# Hora de `FormateadorJson`: se quita y la fecha se conserva.
+_HORA = re.compile(r"(\d{4}-\d{2}-\d{2})T\d{2}:\d{2}:\d{2}\.\d{3}\+00:00")
+
+
+def _sin_mediciones(log: dict[str, Any]) -> dict[str, Any]:
+    """El log sin lo que mide el reloj (la duración y la hora): un número medido puede coincidir
+    con un centinela sin ser una fuga (16.1b). La duración solo se quita en los registros del
+    logger de `telemetry.registrar`. Lo demás, claves incluidas, se conserva."""
+    duracion, hora = log.get("duration_ms"), _HORA.fullmatch(str(log.get("timestamp")))
+    medida = log.get("logger") == "solventa.telemetria" and isinstance(duracion, int | float)
+    return {
+        **log,
+        "duration_ms": None if medida else duracion,
+        "timestamp": hora.group(1) if hora else log.get("timestamp"),
+    }
+
+
+def _comprobar_sin_pii(telemetria: Any) -> None:
+    logs = (json.dumps(_sin_mediciones(log), ensure_ascii=False) for log in telemetria.logs())
+    texto = "\n".join(logs)
+    for centinela in _CENTINELAS:
+        assert centinela not in texto, centinela
+
+
+def _medir_como(monkeypatch: pytest.MonkeyPatch, medicion: str, valor: str) -> str:
+    """Fija el reloj para que `medicion` valga `valor` en los logs; devuelve el texto esperado."""
+    if medicion == "duration_ms":
+        # perf_counter de la telemetría a pasos fijos: la operación sin otras dentro mide `valor`.
+        pasos, paso = itertools.count(), float(valor) / 1000
+        monkeypatch.setattr(
+            telemetry, "time", SimpleNamespace(perf_counter=lambda: next(pasos) * paso)
+        )
+        return f'"duration_ms": {valor}'
+    # Hora del registro «…:10.<decimales>0»: el segundo 10 y los milisegundos forman `valor`.
+    instante = datetime(2026, 10, 28, 15, 9, 10, int(float(valor) * 1e6) + 500, UTC).timestamp()
+    monkeypatch.setattr(
+        logging, "time", SimpleNamespace(time=lambda: instante, time_ns=lambda: int(instante * 1e9))
+    )
+    return f":10.{valor[2:]}0+00:00"
+
+
+@pytest.mark.parametrize("medicion", ["duration_ms", "timestamp"])
+async def test_una_medicion_igual_a_un_centinela_no_es_fuga(
+    medicion: str, api: Any, sinteticos: Any, telemetria: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """16.1b: la duración o la hora de un log pueden valer «0.61», la confianza de S05, sin que
+    sea una fuga."""
+    esperado = _medir_como(monkeypatch, medicion, "0.61")
+    assert (await _solicitar(api, sinteticos, "S05")).status_code == 201
+    assert esperado in telemetria.texto_logs()  # la coincidencia está armada
+    _comprobar_sin_pii(telemetria)
+
+
+async def test_una_duracion_fuera_de_la_telemetria_es_fuga(telemetria: Any) -> None:
+    """16.1b: solo se ignora la duración de `solventa.telemetria`; en otro logger, un
+    `duration_ms` igual al centinela es una fuga."""
+    logging.getLogger("polizas.suscripcion").info("fuga", extra={"duration_ms": 0.61})
+    with pytest.raises(AssertionError, match="0.61"):
+        _comprobar_sin_pii(telemetria)
 
 
 async def test_migracion_adelante_y_atras(base: str) -> None:
