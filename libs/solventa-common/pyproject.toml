@@ -16,6 +16,11 @@ dependencies = [
     "pydantic-settings>=2.6",
 ]
 
+[project.optional-dependencies]
+# Relay del outbox (SNS) y consumidor del inbox (SQS); solo lo piden los servicios que publican o
+# consumen eventos. boto3 es síncrono: el código asíncrono lo llama en un hilo (`to_thread`).
+mensajeria = ["boto3>=1.35"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
