@@ -4,6 +4,9 @@ simulado de httpx con los contratos publicados).
 
 `api` es la app sobre la base limpia; `abrir_api` abre otra instancia sobre la misma base (con
 cachés nuevas), para probar lecturas con los proveedores en otro estado.
+
+psycopg asíncrono no corre sobre el ProactorEventLoop de Windows: las pruebas corren en un
+SelectorEventLoop (en Linux es el bucle por defecto), como `cotizacion`, `bff-movil` y `clientes`.
 """
 
 import asyncio
@@ -25,6 +28,12 @@ from polizas.config import Settings
 from polizas.main import Puertos, crear_app
 
 docker = pytest.importorskip("docker")
+
+
+@pytest.fixture
+def anyio_backend() -> tuple[str, dict[str, Any]]:
+    # psycopg async no corre sobre el ProactorEventLoop de Windows.
+    return "asyncio", {"loop_factory": asyncio.SelectorEventLoop}
 
 
 @pytest.fixture(scope="module")
