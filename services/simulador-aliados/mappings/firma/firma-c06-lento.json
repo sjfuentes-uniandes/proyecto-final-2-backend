@@ -1,0 +1,52 @@
+{
+  "name": "firma por cliente, C06 lento (supera el timeout de 5 s; la firma sí ocurre)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/firma/v1/firmas",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.firmante",
+          "equalTo": "00000000-0000-4000-8000-000000000006"
+        }
+      },
+      {
+        "matchesJsonPath": {
+          "expression": "$.documentoId",
+          "matches": "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+        }
+      },
+      {
+        "matchesJsonPath": {
+          "expression": "$.huella",
+          "matches": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      },
+      "Idempotency-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "documentoId": "{{jsonPath request.body '$.documentoId'}}",
+      "estado": "FIRMADO",
+      "firmaId": "FIR-SINT-C06",
+      "selloTiempo": "2026-01-01T00:00:00Z",
+      "huella": "{{jsonPath request.body '$.huella'}}"
+    },
+    "transformers": [
+      "response-template"
+    ],
+    "fixedDelayMilliseconds": 8000
+  }
+}
