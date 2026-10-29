@@ -812,5 +812,471 @@
         "conPerfilAnterior": true
       }
     }
+  },
+  {
+    "id": "C20",
+    "clienteId": "00000000-0000-4000-8000-000000000014",
+    "identidad": "VERIFICADO",
+    "consentimiento": {
+      "decision": "PERMITIDO",
+      "consentimientoId": "00000000-0000-4000-9000-000000000014",
+      "causa": null,
+      "alcancesPermitidos": [
+        "FA_PRODUCTOS_VIGENTES",
+        "FA_HISTORIAL_PAGOS_12M",
+        "FA_INGRESOS_AGREGADOS",
+        "DA_REGISTROS_PUBLICOS"
+      ]
+    },
+    "datosDeclarados": {
+      "fechaNacimiento": "1990-04-18",
+      "plazoCreditoMeses": 180,
+      "sumaAsegurada": 180000000
+    },
+    "simulador": {
+      "FA_PRODUCTOS_VIGENTES": {
+        "comportamiento": "nominal"
+      },
+      "FA_HISTORIAL_PAGOS_12M": {
+        "comportamiento": "nominal"
+      },
+      "FA_INGRESOS_AGREGADOS": {
+        "comportamiento": "malformada"
+      },
+      "DA_REGISTROS_PUBLICOS": {
+        "comportamiento": "nominal"
+      }
+    },
+    "esperado": {
+      "http": 201,
+      "estado": "DEGRADADO",
+      "nivel": "BAJO",
+      "puntaje": 75.0,
+      "confianza": 0.78,
+      "llamadasAliados": 4,
+      "fuentes": {
+        "FA_INGRESOS_AGREGADOS": "RESPUESTA_INVALIDA"
+      },
+      "cotizacion": {
+        "http": 201,
+        "decision": "DEGRADADA",
+        "reglasFallback": [
+          "FB-003"
+        ]
+      }
+    }
+  },
+  {
+    "id": "C21",
+    "clienteId": "00000000-0000-4000-8000-000000000015",
+    "identidad": "VERIFICADO",
+    "consentimiento": {
+      "decision": "PERMITIDO",
+      "consentimientoId": "00000000-0000-4000-9000-000000000015",
+      "causa": null,
+      "alcancesPermitidos": [
+        "FA_PRODUCTOS_VIGENTES",
+        "FA_HISTORIAL_PAGOS_12M",
+        "FA_INGRESOS_AGREGADOS",
+        "DA_REGISTROS_PUBLICOS"
+      ]
+    },
+    "datosDeclarados": {
+      "fechaNacimiento": "1990-04-18",
+      "plazoCreditoMeses": 180,
+      "sumaAsegurada": 180000000
+    },
+    "simulador": {
+      "FA_PRODUCTOS_VIGENTES": {
+        "comportamiento": "nominal"
+      },
+      "FA_HISTORIAL_PAGOS_12M": {
+        "comportamiento": "nominal"
+      },
+      "FA_INGRESOS_AGREGADOS": {
+        "comportamiento": "nominal"
+      },
+      "DA_REGISTROS_PUBLICOS": {
+        "comportamiento": "caido"
+      }
+    },
+    "esperado": {
+      "http": 201,
+      "estado": "DEGRADADO",
+      "nivel": "BAJO",
+      "puntaje": 74.09,
+      "confianza": 0.79,
+      "llamadasAliados": null,
+      "fuentes": {
+        "DA_REGISTROS_PUBLICOS": "NO_DISPONIBLE"
+      },
+      "cotizacion": {
+        "http": 201,
+        "decision": "DEGRADADA",
+        "reglasFallback": [
+          "FB-004"
+        ]
+      }
+    }
+  },
+  {
+    "id": "C22",
+    "clienteId": "00000000-0000-4000-8000-000000000016",
+    "identidad": "VERIFICADO",
+    "consentimiento": {
+      "decision": "PERMITIDO",
+      "consentimientoId": "00000000-0000-4000-9000-000000000016",
+      "causa": null,
+      "alcancesPermitidos": [
+        "FA_PRODUCTOS_VIGENTES",
+        "FA_HISTORIAL_PAGOS_12M",
+        "FA_INGRESOS_AGREGADOS",
+        "DA_REGISTROS_PUBLICOS"
+      ]
+    },
+    "datosDeclarados": {
+      "fechaNacimiento": "1990-04-18",
+      "plazoCreditoMeses": 180,
+      "sumaAsegurada": 180000000
+    },
+    "simulador": {
+      "FA_PRODUCTOS_VIGENTES": {
+        "comportamiento": "nominal"
+      },
+      "FA_HISTORIAL_PAGOS_12M": {
+        "comportamiento": "nominal"
+      },
+      "FA_INGRESOS_AGREGADOS": {
+        "comportamiento": "caido"
+      },
+      "DA_REGISTROS_PUBLICOS": {
+        "comportamiento": "caido"
+      }
+    },
+    "esperado": {
+      "http": 201,
+      "estado": "DEGRADADO",
+      "nivel": "BAJO",
+      "puntaje": 72.67,
+      "confianza": 0.65,
+      "llamadasAliados": null,
+      "fuentes": {
+        "FA_INGRESOS_AGREGADOS": "NO_DISPONIBLE",
+        "DA_REGISTROS_PUBLICOS": "NO_DISPONIBLE"
+      },
+      "cotizacion": {
+        "http": 201,
+        "decision": "DEGRADADA",
+        "reglasFallback": [
+          "FB-004",
+          "FB-003"
+        ]
+      }
+    }
+  },
+  {
+    "id": "C23",
+    "clienteId": "00000000-0000-4000-8000-000000000017",
+    "identidad": "VERIFICADO",
+    "consentimiento": {
+      "decision": "PERMITIDO",
+      "consentimientoId": "00000000-0000-4000-9000-000000000017",
+      "causa": null,
+      "alcancesPermitidos": [
+        "FA_PRODUCTOS_VIGENTES",
+        "FA_HISTORIAL_PAGOS_12M",
+        "FA_INGRESOS_AGREGADOS",
+        "DA_REGISTROS_PUBLICOS"
+      ]
+    },
+    "datosDeclarados": {
+      "fechaNacimiento": "1990-04-18",
+      "plazoCreditoMeses": 180,
+      "sumaAsegurada": 180000000
+    },
+    "simulador": {
+      "FA_PRODUCTOS_VIGENTES": {
+        "comportamiento": "nominal"
+      },
+      "FA_HISTORIAL_PAGOS_12M": {
+        "comportamiento": "nominal"
+      },
+      "FA_INGRESOS_AGREGADOS": {
+        "comportamiento": "lento"
+      },
+      "DA_REGISTROS_PUBLICOS": {
+        "comportamiento": "nominal"
+      }
+    },
+    "esperado": {
+      "http": 201,
+      "estado": "DEGRADADO",
+      "nivel": "BAJO",
+      "puntaje": 75.0,
+      "confianza": 0.78,
+      "llamadasAliados": 4,
+      "fuentes": {
+        "FA_INGRESOS_AGREGADOS": "TIEMPO_AGOTADO"
+      },
+      "cotizacion": {
+        "http": 201,
+        "decision": "DEGRADADA",
+        "reglasFallback": [
+          "FB-003"
+        ]
+      }
+    }
+  },
+  {
+    "id": "C24",
+    "clienteId": "00000000-0000-4000-8000-000000000018",
+    "identidad": "VERIFICADO",
+    "consentimiento": {
+      "decision": "PERMITIDO",
+      "consentimientoId": "00000000-0000-4000-9000-000000000018",
+      "causa": null,
+      "alcancesPermitidos": [
+        "FA_PRODUCTOS_VIGENTES",
+        "FA_HISTORIAL_PAGOS_12M",
+        "FA_INGRESOS_AGREGADOS",
+        "DA_REGISTROS_PUBLICOS"
+      ]
+    },
+    "datosDeclarados": {
+      "fechaNacimiento": "1990-04-18",
+      "plazoCreditoMeses": 180,
+      "sumaAsegurada": 180000000
+    },
+    "simulador": {
+      "FA_PRODUCTOS_VIGENTES": {
+        "comportamiento": "caido"
+      },
+      "FA_HISTORIAL_PAGOS_12M": {
+        "comportamiento": "nominal"
+      },
+      "FA_INGRESOS_AGREGADOS": {
+        "comportamiento": "nominal"
+      },
+      "DA_REGISTROS_PUBLICOS": {
+        "comportamiento": "nominal"
+      }
+    },
+    "esperado": {
+      "http": 201,
+      "estado": "INFORMACION_INSUFICIENTE",
+      "nivel": null,
+      "puntaje": null,
+      "confianza": null,
+      "llamadasAliados": null,
+      "fuentes": {
+        "FA_PRODUCTOS_VIGENTES": "NO_DISPONIBLE"
+      },
+      "accionSugerida": "RECALCULAR",
+      "datosRequeridos": [
+        {
+          "campo": "cuota_mensual_obligaciones",
+          "motivo": "FUENTE_NO_DISPONIBLE"
+        }
+      ],
+      "cotizacion": {
+        "http": 503,
+        "decision": "PENDIENTE",
+        "reglasFallback": [
+          "FB-001"
+        ]
+      }
+    }
+  },
+  {
+    "id": "C25",
+    "clienteId": "00000000-0000-4000-8000-000000000019",
+    "identidad": "VERIFICADO",
+    "consentimiento": {
+      "decision": "PERMITIDO",
+      "consentimientoId": "00000000-0000-4000-9000-000000000019",
+      "causa": null,
+      "alcancesPermitidos": [
+        "FA_PRODUCTOS_VIGENTES",
+        "FA_HISTORIAL_PAGOS_12M",
+        "FA_INGRESOS_AGREGADOS",
+        "DA_REGISTROS_PUBLICOS"
+      ]
+    },
+    "datosDeclarados": {
+      "fechaNacimiento": "1990-04-18",
+      "plazoCreditoMeses": 180,
+      "sumaAsegurada": 180000000
+    },
+    "simulador": {
+      "FA_PRODUCTOS_VIGENTES": {
+        "comportamiento": "nominal"
+      },
+      "FA_HISTORIAL_PAGOS_12M": {
+        "comportamiento": "malformada"
+      },
+      "FA_INGRESOS_AGREGADOS": {
+        "comportamiento": "nominal"
+      },
+      "DA_REGISTROS_PUBLICOS": {
+        "comportamiento": "nominal"
+      }
+    },
+    "esperado": {
+      "http": 201,
+      "estado": "INFORMACION_INSUFICIENTE",
+      "nivel": null,
+      "puntaje": null,
+      "confianza": null,
+      "llamadasAliados": 4,
+      "fuentes": {
+        "FA_HISTORIAL_PAGOS_12M": "RESPUESTA_INVALIDA"
+      },
+      "accionSugerida": "RECALCULAR",
+      "datosRequeridos": [
+        {
+          "campo": "moras_12m",
+          "motivo": "RESPUESTA_INVALIDA"
+        }
+      ],
+      "cotizacion": {
+        "http": 503,
+        "decision": "PENDIENTE",
+        "reglasFallback": [
+          "FB-002"
+        ]
+      }
+    }
+  },
+  {
+    "id": "C26",
+    "clienteId": "00000000-0000-4000-8000-00000000001a",
+    "identidad": "VERIFICADO",
+    "consentimiento": {
+      "decision": "PERMITIDO",
+      "consentimientoId": "00000000-0000-4000-9000-00000000001a",
+      "causa": null,
+      "alcancesPermitidos": [
+        "FA_PRODUCTOS_VIGENTES",
+        "FA_HISTORIAL_PAGOS_12M",
+        "FA_INGRESOS_AGREGADOS",
+        "DA_REGISTROS_PUBLICOS"
+      ]
+    },
+    "datosDeclarados": {
+      "fechaNacimiento": "1990-04-18",
+      "plazoCreditoMeses": 180,
+      "sumaAsegurada": 180000000
+    },
+    "simulador": {
+      "FA_PRODUCTOS_VIGENTES": {
+        "comportamiento": "nominal"
+      },
+      "FA_HISTORIAL_PAGOS_12M": {
+        "comportamiento": "caido"
+      },
+      "FA_INGRESOS_AGREGADOS": {
+        "comportamiento": "caido"
+      },
+      "DA_REGISTROS_PUBLICOS": {
+        "comportamiento": "nominal"
+      }
+    },
+    "esperado": {
+      "http": 201,
+      "estado": "INFORMACION_INSUFICIENTE",
+      "nivel": null,
+      "puntaje": null,
+      "confianza": null,
+      "llamadasAliados": null,
+      "fuentes": {
+        "FA_INGRESOS_AGREGADOS": "NO_DISPONIBLE",
+        "FA_HISTORIAL_PAGOS_12M": "NO_DISPONIBLE"
+      },
+      "accionSugerida": "RECALCULAR",
+      "datosRequeridos": [
+        {
+          "campo": "moras_12m",
+          "motivo": "FUENTE_NO_DISPONIBLE"
+        }
+      ],
+      "cotizacion": {
+        "http": 503,
+        "decision": "PENDIENTE",
+        "reglasFallback": [
+          "FB-002",
+          "FB-003"
+        ]
+      }
+    }
+  },
+  {
+    "id": "C27",
+    "clienteId": "00000000-0000-4000-8000-00000000001b",
+    "identidad": "VERIFICADO",
+    "consentimiento": {
+      "decision": "PERMITIDO",
+      "consentimientoId": "00000000-0000-4000-9000-00000000001b",
+      "causa": null,
+      "alcancesPermitidos": [
+        "FA_PRODUCTOS_VIGENTES",
+        "FA_HISTORIAL_PAGOS_12M",
+        "FA_INGRESOS_AGREGADOS",
+        "DA_REGISTROS_PUBLICOS"
+      ]
+    },
+    "datosDeclarados": {
+      "fechaNacimiento": "1990-04-18",
+      "plazoCreditoMeses": 180,
+      "sumaAsegurada": 180000000
+    },
+    "simulador": {
+      "FA_PRODUCTOS_VIGENTES": {
+        "comportamiento": "caido"
+      },
+      "FA_HISTORIAL_PAGOS_12M": {
+        "comportamiento": "caido"
+      },
+      "FA_INGRESOS_AGREGADOS": {
+        "comportamiento": "caido"
+      },
+      "DA_REGISTROS_PUBLICOS": {
+        "comportamiento": "caido"
+      }
+    },
+    "esperado": {
+      "http": 201,
+      "estado": "INFORMACION_INSUFICIENTE",
+      "nivel": null,
+      "puntaje": null,
+      "confianza": null,
+      "llamadasAliados": null,
+      "fuentes": {
+        "FA_PRODUCTOS_VIGENTES": "NO_DISPONIBLE",
+        "FA_HISTORIAL_PAGOS_12M": "NO_DISPONIBLE",
+        "FA_INGRESOS_AGREGADOS": "NO_DISPONIBLE",
+        "DA_REGISTROS_PUBLICOS": "NO_DISPONIBLE"
+      },
+      "accionSugerida": "RECALCULAR",
+      "datosRequeridos": [
+        {
+          "campo": "cuota_mensual_obligaciones",
+          "motivo": "FUENTE_NO_DISPONIBLE"
+        },
+        {
+          "campo": "moras_12m",
+          "motivo": "FUENTE_NO_DISPONIBLE"
+        }
+      ],
+      "cotizacion": {
+        "http": 503,
+        "decision": "PENDIENTE",
+        "reglasFallback": [
+          "FB-004",
+          "FB-002",
+          "FB-003",
+          "FB-001"
+        ]
+      }
+    }
   }
 ]

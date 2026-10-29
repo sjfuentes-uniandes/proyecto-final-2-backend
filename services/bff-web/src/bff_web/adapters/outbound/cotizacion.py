@@ -115,6 +115,12 @@ class CotizacionCliente:
             1
         ]
 
+    async def cotizaciones(self, parametros: dict[str, Any], actor: str) -> dict[str, Any]:
+        """Listado de cotizaciones con oferta ("Cotizaciones abiertas")."""
+        return (
+            await self._llamar("GET", "", actor, prefijo="/v1/cotizaciones", params=parametros)
+        )[1]
+
     async def condiciones(self, producto_id: str, actor: str) -> dict[str, Any]:
         ruta = f"/{producto_id}/condiciones"
         return (await self._llamar("GET", ruta, actor, prefijo="/v1/productos"))[1]

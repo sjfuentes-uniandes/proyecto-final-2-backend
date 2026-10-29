@@ -1,0 +1,25 @@
+{
+  "name": "datos-abiertos C27 registros caido",
+  "request": {
+    "method": "GET",
+    "urlPath": "/datos-abiertos/v1/registros/00000000-0000-4000-8000-00000000001b",
+    "queryParameters": {
+      "campos": {
+        "equalTo": "listasRestrictivas"
+      }
+    },
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "datos-abiertos/c27-registros.json",
+    "fixedDelayMilliseconds": 50
+  }
+}

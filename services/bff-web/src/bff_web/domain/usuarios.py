@@ -10,6 +10,7 @@ GRUPOS = {
     "administradores-socios": "Gestiona socios, credenciales y cuotas",
     "asesores": "Perfila clientes y prepara ofertas",
     "operacion": "Consulta tableros, trazas y alertas",
+    "suscriptores": "Decide los casos de suscripción en revisión",
 }
 _CORREO = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 

@@ -390,6 +390,97 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/productos/{productoId}/reglas-fallback/vigente:
+    get:
+      tags:
+      - reglas-fallback
+      summary: Reglas Fallback Vigentes
+      description: 'Las reglas de fallback del producto con el mayor vigenteDesde
+        ≤ fecha, si no vencieron
+
+        (HU-W06). Una fuente sin regla aquí no es degradable.'
+      operationId: reglas_fallback_vigentes_v1_productos__productoId__reglas_fallback_vigente_get
+      parameters:
+      - name: productoId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-z0-9-]{1,64}$
+          title: Productoid
+      - name: fecha
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          description: Instante ISO-8601 con zona; por defecto, ahora
+          title: Fecha
+        description: Instante ISO-8601 con zona; por defecto, ahora
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReglasFallbackRespuesta'
+        '404':
+          description: PRODUCTO_NO_ENCONTRADO o REGLAS_NO_VIGENTES (ninguna vigente
+            en la fecha)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/productos/{productoId}/reglas-fallback/{version}:
+    get:
+      tags:
+      - reglas-fallback
+      summary: Reglas Fallback Por Version
+      description: Una versión publicada de las reglas de fallback; no cambia nunca
+        (explicación, AC3).
+      operationId: reglas_fallback_por_version_v1_productos__productoId__reglas_fallback__version__get
+      parameters:
+      - name: productoId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-z0-9-]{1,64}$
+          title: Productoid
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^\d{4}\.\d{2}\.\d+$
+          title: Version
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReglasFallbackRespuesta'
+        '404':
+          description: PRODUCTO_NO_ENCONTRADO o REGLAS_NO_VIGENTES (no existe la versión)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -402,6 +493,14 @@ paths:
               schema: {}
 components:
   schemas:
+    AccionFallback:
+      type: string
+      enum:
+      - DEGRADAR
+      - PENDIENTE
+      title: AccionFallback
+      description: 'DEGRADAR: oferta provisional sin el dato. PENDIENTE: sin oferta,
+        estado recuperable.'
     Ajuste:
       properties:
         codigo:
@@ -677,6 +776,25 @@ components:
       - niveles
       - confianza
       title: DefinicionModelo
+    DefinicionReglasFallback:
+      properties:
+        productoId:
+          type: string
+          pattern: ^[a-z0-9-]{1,64}$
+          title: Productoid
+        reglas:
+          items:
+            $ref: '#/components/schemas/ReglaFallback'
+          type: array
+          maxItems: 50
+          minItems: 1
+          title: Reglas
+      additionalProperties: false
+      type: object
+      required:
+      - productoId
+      - reglas
+      title: DefinicionReglasFallback
     DefinicionReglasPrima:
       properties:
         productoId:
@@ -966,6 +1084,14 @@ components:
       - plazoCreditoMeses
       - edad
       title: Limites
+    MensajeFallback:
+      type: string
+      enum:
+      - FUENTE_OPCIONAL_NO_DISPONIBLE
+      - FUENTE_REQUERIDA_NO_DISPONIBLE
+      title: MensajeFallback
+      description: Clave del texto que muestran el portal y el socio; nunca un texto
+        libre.
     ModeloRiesgoRespuesta:
       properties:
         version:
@@ -1154,6 +1280,44 @@ components:
       - contribucion
       - direccion
       title: Regla
+    ReglaFallback:
+      properties:
+        id:
+          type: string
+          pattern: ^FB-\d{3}$
+          title: Id
+        fuente:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]{1,63}$
+          title: Fuente
+        obligatoria:
+          type: boolean
+          title: Obligatoria
+        accion:
+          $ref: '#/components/schemas/AccionFallback'
+        ajuste:
+          anyOf:
+          - type: string
+            pattern: ^\d+(\.\d+)?$
+          - type: 'null'
+          title: Ajuste
+        mensajeCodigo:
+          $ref: '#/components/schemas/MensajeFallback'
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - fuente
+      - obligatoria
+      - accion
+      - ajuste
+      - mensajeCodigo
+      title: ReglaFallback
+      description: 'Qué hace la cotización si la fuente no se obtuvo. `obligatoria`
+        debe coincidir con el
+
+        modelo de riesgo; `ajuste` es un factor sobre la prima ajustada, solo con
+        DEGRADAR.'
     ReglaSuscripcion:
       properties:
         codigo:
@@ -1206,6 +1370,38 @@ components:
 
         y `en`, una lista de textos; su coherencia con el operador se valida en el
         dominio.'
+    ReglasFallbackRespuesta:
+      properties:
+        productoId:
+          type: string
+          title: Productoid
+        version:
+          type: string
+          title: Version
+        vigenteDesde:
+          type: string
+          format: date-time
+          title: Vigentedesde
+        vigenteHasta:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Vigentehasta
+        hash:
+          type: string
+          title: Hash
+        definicion:
+          $ref: '#/components/schemas/DefinicionReglasFallback'
+      type: object
+      required:
+      - productoId
+      - version
+      - vigenteDesde
+      - vigenteHasta
+      - hash
+      - definicion
+      title: ReglasFallbackRespuesta
     ReglasPrimaRespuesta:
       properties:
         productoId:

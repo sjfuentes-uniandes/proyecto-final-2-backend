@@ -458,7 +458,103 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
         '503':
-          description: DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)
+          description: 'DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia). HU-W06:
+            con dependencia perfil.fuentes, una fuente del perfil faltó sin fallback
+            permitido; detalles trae decisionId, faltantes, versionReglasFallback
+            y accionSugerida RECALCULAR_PERFIL'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+    get:
+      tags:
+      - cotizaciones
+      summary: Listar
+      description: 'Cotizaciones con oferta, de la más reciente a la más antigua ("Cotizaciones
+        abiertas" del
+
+        portal). `estado` es el de la oferta en el instante de la consulta. Un SOCIO
+        solo ve las
+
+        suyas; un ASESOR, todas.'
+      operationId: listar_v1_cotizaciones_get
+      parameters:
+      - name: estado
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/EstadoOferta'
+          - type: 'null'
+          title: Estado
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 64
+          - type: 'null'
+          description: Parte del código COT-AAAA-NNNNN
+          title: Q
+        description: Parte del código COT-AAAA-NNNNN
+      - name: limite
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limite
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Cursor
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoCotizacionesRespuesta'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de ASESOR o SOCIO
+            (SOC-NNNNNN)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (también un cursor que no entregó cotizacion)
           content:
             application/json:
               schema:
@@ -504,6 +600,72 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CotizacionRespuesta'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de ASESOR o SOCIO
+            (SOC-NNNNNN)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: COTIZACION_NO_ENCONTRADA (también si es de otro socio)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/cotizaciones/{cotizacionId}/decision:
+    get:
+      tags:
+      - cotizaciones
+      summary: Decision
+      description: 'La decisión de fallback de la cotización (HU-W06, AC3): las fuentes
+        y datos faltantes, el
+
+        motivo y la regla aplicada con su versión. Para el asesor o el socio dueño.'
+      operationId: decision_v1_cotizaciones__cotizacionId__decision_get
+      parameters:
+      - name: cotizacionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cotizacionid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionCotizacionRespuesta'
         '401':
           description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
           content:
@@ -898,6 +1060,22 @@ components:
           - $ref: '#/components/schemas/OfertaDto'
           - type: 'null'
           description: La oferta de la cotización
+        degradada:
+          type: boolean
+          title: Degradada
+          description: 'Oferta provisional: una fuente opcional faltó y una regla
+            permitió degradar'
+          default: false
+        faltantes:
+          items:
+            $ref: '#/components/schemas/FaltanteDto'
+          type: array
+          title: Faltantes
+        versionReglasFallback:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Versionreglasfallback
       type: object
       required:
       - id
@@ -989,6 +1167,61 @@ components:
       - PERMITIDO_PARCIAL
       - RECHAZADO
       title: DecisionConsentimiento
+    DecisionCotizacionRespuesta:
+      properties:
+        cotizacionId:
+          type: string
+          format: uuid
+          title: Cotizacionid
+        decision:
+          type: string
+          title: Decision
+          description: NOMINAL o DEGRADADA
+        decisionId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Decisionid
+        perfilId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Perfilid
+        faltantes:
+          items:
+            $ref: '#/components/schemas/FaltanteDto'
+          type: array
+          title: Faltantes
+        versionReglasFallback:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Versionreglasfallback
+        mensajeCodigo:
+          anyOf:
+          - $ref: '#/components/schemas/MensajeFallback'
+          - type: 'null'
+        decididoEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Decididoen
+      type: object
+      required:
+      - cotizacionId
+      - decision
+      - decisionId
+      - perfilId
+      - faltantes
+      - versionReglasFallback
+      - mensajeCodigo
+      - decididoEn
+      title: DecisionCotizacionRespuesta
+      description: La decisión de fallback de una cotización (HU-W06, AC3). NOMINAL
+        si ninguna fuente faltó.
     DesglosePrimaDto:
       properties:
         primaBase:
@@ -1202,6 +1435,31 @@ components:
       - valor
       - factor
       title: FactorPrimaDto
+    FaltanteDto:
+      properties:
+        fuente:
+          type: string
+          title: Fuente
+        dato:
+          type: string
+          title: Dato
+        motivo:
+          $ref: '#/components/schemas/MotivoFalla'
+        regla:
+          anyOf:
+          - $ref: '#/components/schemas/ReglaAplicadaDto'
+          - type: 'null'
+          description: Regla de fallback aplicada; null si la fuente no tenía regla
+            vigente
+      type: object
+      required:
+      - fuente
+      - dato
+      - motivo
+      - regla
+      title: FaltanteDto
+      description: 'Un dato que no se obtuvo (HU-W06). Solo su nombre: el valor no
+        existe y no se inventa.'
     Fuente:
       type: string
       enum:
@@ -1392,6 +1650,37 @@ components:
       required:
       - items
       title: ListaPerfiles
+    ListadoCotizacionesRespuesta:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ResumenCotizacionDto'
+          type: array
+          title: Items
+        siguienteCursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Siguientecursor
+          description: 'null: no hay más páginas'
+        total:
+          type: integer
+          title: Total
+          description: Cotizaciones que cumplen los filtros
+      type: object
+      required:
+      - items
+      - siguienteCursor
+      - total
+      title: ListadoCotizacionesRespuesta
+    MensajeFallback:
+      type: string
+      enum:
+      - FUENTE_OPCIONAL_NO_DISPONIBLE
+      - FUENTE_REQUERIDA_NO_DISPONIBLE
+      title: MensajeFallback
+      description: Clave del texto que muestran el portal y el socio; nunca un texto
+        libre.
     MotivoDato:
       type: string
       enum:
@@ -1401,6 +1690,14 @@ components:
       - FUENTE_NO_DISPONIBLE
       - RESPUESTA_INVALIDA
       title: MotivoDato
+    MotivoFalla:
+      type: string
+      enum:
+      - TIEMPO_AGOTADO
+      - NO_DISPONIBLE
+      - RESPUESTA_INVALIDA
+      title: MotivoFalla
+      description: Por qué no se obtuvo la fuente (estado del linaje del perfil).
     NivelRiesgo:
       type: string
       enum:
@@ -1706,6 +2003,102 @@ components:
       - versionModelo
       - hashModelo
       title: Reconstruccion
+    ReglaAplicadaDto:
+      properties:
+        id:
+          type: string
+          title: Id
+        version:
+          type: string
+          title: Version
+      type: object
+      required:
+      - id
+      - version
+      title: ReglaAplicadaDto
+    ResumenCotizacionDto:
+      properties:
+        cotizacionId:
+          type: string
+          format: uuid
+          title: Cotizacionid
+        codigo:
+          type: string
+          title: Codigo
+          description: COT-AAAA-NNNNN
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        socioId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Socioid
+        productoId:
+          type: string
+          title: Productoid
+        versionProducto:
+          type: string
+          title: Versionproducto
+        moneda:
+          type: string
+          title: Moneda
+        periodicidad:
+          type: string
+          title: Periodicidad
+        sumaAsegurada:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Sumaasegurada
+        prima:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Prima
+          description: El precio de la oferta (prima total)
+        nivelRiesgo:
+          anyOf:
+          - $ref: '#/components/schemas/NivelRiesgo'
+          - type: 'null'
+          description: 'null: cotizada sin perfil'
+        degradada:
+          type: boolean
+          title: Degradada
+          description: Oferta provisional (HU-W06)
+        creadaEn:
+          type: string
+          format: date-time
+          title: Creadaen
+        vigenteHasta:
+          type: string
+          format: date-time
+          title: Vigentehasta
+          description: 'Fin de la vigencia de la oferta (UTC): vigente si ahora <
+            vigenteHasta (DS2-20, HU-W13)'
+        estado:
+          $ref: '#/components/schemas/EstadoOferta'
+      type: object
+      required:
+      - cotizacionId
+      - codigo
+      - clienteId
+      - socioId
+      - productoId
+      - versionProducto
+      - moneda
+      - periodicidad
+      - sumaAsegurada
+      - prima
+      - nivelRiesgo
+      - degradada
+      - creadaEn
+      - vigenteHasta
+      - estado
+      title: ResumenCotizacionDto
+      description: 'Una fila del listado: la oferta y lo mínimo de la cotización (sin
+        datos del asegurado salvo
+
+        la suma asegurada, que ya devuelve la lectura por id).'
     ResumenPerfil:
       properties:
         id:

@@ -251,3 +251,45 @@ def test_la_oferta_llega_al_portal_tal_cual(cotizacion: CotizacionFalsa) -> None
     con_oferta = {**COTIZACION, "vigenteHasta": OFERTA["vigenteHasta"], "oferta": OFERTA}
     cotizacion.respuesta = httpx.Response(201, json=con_oferta)
     assert _cotizar().json()["oferta"] == OFERTA
+
+
+# --- HU-W06: oferta degradada y cotización pendiente (C07) ----------------------------------
+
+FALTANTE = {
+    "fuente": "FA_INGRESOS_AGREGADOS",
+    "dato": "ingreso_mensual_estimado",
+    "motivo": "NO_DISPONIBLE",
+    "regla": {"id": "FB-003", "version": "2026.10.1"},
+}
+
+
+def test_hu_w06_la_oferta_degradada_llega_al_portal(cotizacion: CotizacionFalsa) -> None:
+    cotizacion.respuesta = httpx.Response(
+        201,
+        json=COTIZACION
+        | {"degradada": True, "faltantes": [FALTANTE], "versionReglasFallback": "2026.10.1"},
+    )
+    cuerpo = _cotizar().json()
+    assert (cuerpo["degradada"], cuerpo["faltantes"], cuerpo["versionReglasFallback"]) == (
+        True,
+        [FALTANTE],
+        "2026.10.1",
+    )
+
+
+def test_hu_w06_la_cotizacion_pendiente_pasa_con_su_decision(cotizacion: CotizacionFalsa) -> None:
+    detalles = {
+        "dependencia": "perfil.fuentes",
+        "decisionId": "00000000-0000-4000-e000-000000000001",
+        "accionSugerida": "RECALCULAR_PERFIL",
+        "mensajeCodigo": "FUENTE_REQUERIDA_NO_DISPONIBLE",
+        "versionReglasFallback": "2026.10.1",
+        "faltantes": [FALTANTE | {"dato": "moras_12m", "fuente": "FA_HISTORIAL_PAGOS_12M"}],
+    }
+    cotizacion.respuesta = httpx.Response(
+        503, json={"codigo": "DEPENDENCIA_NO_DISPONIBLE", "mensaje": "m", "detalles": detalles}
+    )
+    resultado = _cotizar()
+    assert resultado.status_code == 503
+    assert resultado.json()["codigo"] == "DEPENDENCIA_NO_DISPONIBLE"
+    assert resultado.json()["detalles"] == detalles

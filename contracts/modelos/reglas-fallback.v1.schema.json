@@ -1,0 +1,93 @@
+{
+  "$defs": {
+    "AccionFallback": {
+      "description": "DEGRADAR: oferta provisional sin el dato. PENDIENTE: sin oferta, estado recuperable.",
+      "enum": [
+        "DEGRADAR",
+        "PENDIENTE"
+      ],
+      "title": "AccionFallback",
+      "type": "string"
+    },
+    "MensajeFallback": {
+      "description": "Clave del texto que muestran el portal y el socio; nunca un texto libre.",
+      "enum": [
+        "FUENTE_OPCIONAL_NO_DISPONIBLE",
+        "FUENTE_REQUERIDA_NO_DISPONIBLE"
+      ],
+      "title": "MensajeFallback",
+      "type": "string"
+    },
+    "ReglaFallback": {
+      "additionalProperties": false,
+      "description": "Qu\u00e9 hace la cotizaci\u00f3n si la fuente no se obtuvo. `obligatoria` debe coincidir con el\nmodelo de riesgo; `ajuste` es un factor sobre la prima ajustada, solo con DEGRADAR.",
+      "properties": {
+        "accion": {
+          "$ref": "#/$defs/AccionFallback"
+        },
+        "ajuste": {
+          "anyOf": [
+            {
+              "pattern": "^\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ajuste"
+        },
+        "fuente": {
+          "pattern": "^[A-Z][A-Z0-9_]{1,63}$",
+          "title": "Fuente",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^FB-\\d{3}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "mensajeCodigo": {
+          "$ref": "#/$defs/MensajeFallback"
+        },
+        "obligatoria": {
+          "title": "Obligatoria",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "fuente",
+        "obligatoria",
+        "accion",
+        "ajuste",
+        "mensajeCodigo"
+      ],
+      "title": "ReglaFallback",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "productoId": {
+      "pattern": "^[a-z0-9-]{1,64}$",
+      "title": "Productoid",
+      "type": "string"
+    },
+    "reglas": {
+      "items": {
+        "$ref": "#/$defs/ReglaFallback"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "title": "Reglas",
+      "type": "array"
+    }
+  },
+  "required": [
+    "productoId",
+    "reglas"
+  ],
+  "title": "DefinicionReglasFallback",
+  "type": "object"
+}

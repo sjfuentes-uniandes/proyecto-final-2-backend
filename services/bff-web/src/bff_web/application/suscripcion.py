@@ -12,7 +12,6 @@ falla, la vista sale con `clienteNombre = null` y no se rompe. DS2-07: para un a
 suscriptor, las reglas RESERVADA se devuelven sin `valorCaso` aunque polizas no las haya filtrado.
 """
 
-import asyncio
 from collections.abc import Awaitable
 from typing import Any
 from uuid import UUID
@@ -21,8 +20,9 @@ import httpx
 from solventa_common.errors import ErrorNegocio
 from solventa_common.telemetry import RESULTADO_RECHAZADO, operacion
 
-from bff_web.adapters.outbound.clientes import ClientesCliente, ErrorClientes
+from bff_web.adapters.outbound.clientes import ClientesCliente
 from bff_web.adapters.outbound.polizas import ROL_SUSCRIPTOR, ErrorPolizas, PolizasCliente
+from bff_web.application.nombres import nombres_de_clientes
 
 SERVICIO_NO_DISPONIBLE = "SERVICIO_NO_DISPONIBLE"
 CODIGOS_POLIZAS = frozenset(
@@ -158,16 +158,4 @@ class Suscripciones:
 
     async def _nombres(self, clientes: list[Any], actor: str) -> dict[str, str | None]:
         """Nombre de cada cliente distinto, en paralelo; None si clientes no lo da a tiempo."""
-        unicos = list(dict.fromkeys(str(c) for c in clientes if c))
-        nombres = await asyncio.gather(*(self._nombre(c, actor) for c in unicos))
-        return dict(zip(unicos, nombres, strict=True))
-
-    async def _nombre(self, cliente_id: str, actor: str) -> str | None:
-        try:
-            cliente = await asyncio.wait_for(
-                self.clientes.obtener(UUID(cliente_id), actor), self._nombre_timeout_s
-            )
-        except (TimeoutError, ErrorClientes, httpx.HTTPError, ValueError):
-            return None
-        nombre = cliente.get("nombreCompleto") if isinstance(cliente, dict) else None
-        return nombre if isinstance(nombre, str) else None
+        return await nombres_de_clientes(self.clientes, clientes, actor, self._nombre_timeout_s)

@@ -5,7 +5,7 @@
 - WireMock 3.9.2 con los mapeos versionados del simulador (aliados).
 - Las apps reales de catalogo, adaptador-datos y `clientes` (HU-W31, PR 3.7: sustituye al doble
   de WireMock de las PR 3.6 y 3.4), servidas con uvicorn en hilos. Antes de cada prueba,
-  `clientes` se siembra por SQL con los clientes sintéticos C01–C19
+  `clientes` se siembra por SQL con los clientes sintéticos C01–C27
   (`contracts/datos-sinteticos/clientes-perfilamiento.json`): su identidad y un consentimiento
   que produce la decisión del caso. Solo `adaptador-identidad` es simulado (no se usa).
 - cotizacion con TestClient, apuntada a todo lo anterior y sin caché del modelo.
@@ -164,6 +164,17 @@ class WireMock:
 
     def reiniciar_escenarios(self) -> None:
         self._admin.post("/scenarios/reset").raise_for_status()
+
+    @contextmanager
+    def sobrescribir(self, mapeo: dict[str, Any]) -> Iterator[None]:
+        """HU-W06: un mapeo de prioridad 1 (gana a los versionados, de prioridad 5) solo durante
+        el bloque; se quita al salir. No toca los mapeos generados del simulador."""
+        creado = self._admin.post("/mappings", json={"priority": 1, **mapeo})
+        creado.raise_for_status()
+        try:
+            yield
+        finally:
+            self._admin.delete(f"/mappings/{creado.json()['id']}").raise_for_status()
 
     def esperar_listo(self, segundos: float = 60) -> None:
         limite = time.monotonic() + segundos
@@ -350,7 +361,7 @@ class Clientes:
     base: str
 
     def sembrar(self, sin_consentimiento: Collection[str] = ()) -> None:
-        """Deja la base con C01–C19 y nada más. Por caso: el cliente con su identidad y el
+        """Deja la base con C01–C27 y nada más. Por caso: el cliente con su identidad y el
         consentimiento que produce su decisión (vigente con los alcances permitidos, revocado,
         `ACTIVO` ya vencido sin materializar, o ninguno). `sin_consentimiento`: casos (`nn`) que
         se siembran sin consentimiento, para otorgarlo por la API."""
@@ -566,7 +577,7 @@ def cotizacion(
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[Callable[..., Cotizacion]]:
     """Fábrica: una app de cotizacion nueva por prueba; **cambios sobrescribe Settings.
-    `clientes` se vuelve a sembrar con C01–C19 antes de cada prueba."""
+    `clientes` se vuelve a sembrar con C01–C27 antes de cada prueba."""
     from cotizacion.config import Settings
     from cotizacion.main import crear_app
 

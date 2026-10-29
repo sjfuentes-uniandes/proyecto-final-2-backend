@@ -67,6 +67,7 @@ El error no imprime la configuración (`hide_input_in_errors`; se probó con `DB
 - Una dependencia obligatoria que agota su tiempo responde **503 `DEPENDENCIA_NO_DISPONIBLE`** (`detalles.dependencia`), que es recuperable. En el dominio es `DependenciaAgotada`, una subclase de `DependenciaNoDisponible`: quien no la distingue la trata igual.
 - `CalcularPrima(..., politica=PoliticaDependencias)` recibe cada falla técnica con un `ResultadoDependencia`, `TIEMPO_AGOTADO` o `NO_DISPONIBLE`. La política por omisión, `FallaCerrada`, lanza el 503.
 - **Para el dueño de HU-W06:** implementa una política que, para las dependencias que admitan un sustituto, devuelva un valor en lugar de lanzar. Hoy el protocolo declara `NoReturn`; cambia el tipo de retorno y que `_consultar` use el sustituto. La prueba `test_la_politica_de_hu_w06_recibe_el_resultado_de_la_dependencia` muestra cómo se inyecta.
+- **Resuelto en HU-W06:** ninguna dependencia del recorrido admite sustituto y `FallaCerrada` se mantiene. Lo degradable son las fuentes del perfil, con reglas versionadas de `catalogo`. Ver [hu-w06-fallback.md](hu-w06-fallback.md).
 
 ## 5. Configuración por ambiente y conexiones
 

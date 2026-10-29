@@ -44,6 +44,14 @@ class ExclusionResumida:
 
 
 @dataclass(frozen=True, slots=True)
+class DatoFaltante:
+    """Un dato que una fuente no entregó (HU-W06): su nombre, nunca un valor."""
+
+    fuente: str
+    dato: str
+
+
+@dataclass(frozen=True, slots=True)
 class Oferta:
     id: UUID
     codigo: str
@@ -59,6 +67,10 @@ class Oferta:
     creada_en: datetime
     vigente_hasta: datetime
     estado: EstadoOferta
+    # HU-W06: oferta provisional, calculada sin los datos de `faltantes` porque una regla de
+    # fallback vigente lo permitió. Hoy un socio cotiza sin perfil: siempre False y vacío.
+    degradada: bool = False
+    faltantes: tuple[DatoFaltante, ...] = ()
 
 
 class OfertaNoEncontrada(Exception):

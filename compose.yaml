@@ -107,7 +107,7 @@ services:
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
       DB_HOST: postgres
       ADAPTADOR_IDENTIDAD_URL: http://adaptador-identidad:8080
-      # HU-W13: clientes sintéticos C01–C19 para recorrer la suscripción en local (solo int o local).
+      # HU-W13: clientes sintéticos C01–C27 para recorrer la suscripción y el fallback (HU-W06) en local (solo int o local).
       CLIENTES_SEMILLA_SINTETICA: "true"
 
   adaptador-identidad:

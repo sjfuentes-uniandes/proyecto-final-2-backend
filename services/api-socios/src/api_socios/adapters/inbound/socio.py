@@ -166,6 +166,13 @@ class ExclusionResumidaV1(_V1):
     descripcion: str
 
 
+class DatoFaltanteV1(_V1):
+    """Un dato que una fuente de información no entregó (HU-W06). Nunca su valor."""
+
+    fuente: str
+    dato: str
+
+
 class OfertaV1(_V1):
     """La oferta que el socio presenta al cliente (HU-W04)."""
 
@@ -185,6 +192,15 @@ class OfertaV1(_V1):
     version: int = Field(description="Versión del documento de la oferta")
     version_reglas: str = Field(description="Versión de las reglas de prima con que se calculó")
     creada_en: datetime
+    # HU-W06: opcionales y aditivos (compatibles con v1).
+    degradada: bool = Field(
+        default=False,
+        description="Oferta provisional: se calculó sin los datos de `faltantes` porque una regla "
+        "vigente lo permite",
+    )
+    faltantes: list[DatoFaltanteV1] = Field(
+        default_factory=list, description="Datos que no se obtuvieron; vacío si no es degradada"
+    )
 
 
 def oferta_v1(oferta: Oferta) -> OfertaV1:
@@ -214,6 +230,8 @@ def oferta_v1(oferta: Oferta) -> OfertaV1:
         version=oferta.version,
         version_reglas=oferta.version_reglas,
         creada_en=oferta.creada_en.astimezone(UTC),
+        degradada=oferta.degradada,
+        faltantes=[DatoFaltanteV1(fuente=f.fuente, dato=f.dato) for f in oferta.faltantes],
     )
 
 

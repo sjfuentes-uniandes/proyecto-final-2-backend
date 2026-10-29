@@ -84,9 +84,17 @@ def test_hu_w04_la_oferta_publica_no_expone_campos_internos() -> None:
         "version",
         "versionReglas",
         "creadaEn",
+        # HU-W06: opcionales y aditivos.
+        "degradada",
+        "faltantes",
     }
+    assert "degradada" not in esquemas["OfertaV1"].get("required", [])
+    assert "faltantes" not in esquemas["OfertaV1"].get("required", [])
+    # Del fallback, el socio solo ve qué dato faltó: ni la regla, ni el motivo, ni un valor.
+    assert set(esquemas["DatoFaltanteV1"]["properties"]) == {"fuente", "dato"}
     internos = {"huellaCalculo", "hashReglas", "entradas", "desglose", "perfilId", "socioId"}
-    for nombre in ("OfertaV1", "CoberturaOfertaV1", "ExclusionResumidaV1"):
+    internos |= {"regla", "versionReglasFallback", "valor"}
+    for nombre in ("OfertaV1", "CoberturaOfertaV1", "ExclusionResumidaV1", "DatoFaltanteV1"):
         assert not internos & set(esquemas[nombre]["properties"]), nombre
     # La solicitud no admite perfil ni socio: el socio es la credencial.
     solicitud = esquemas["SolicitudCotizacionV1"]

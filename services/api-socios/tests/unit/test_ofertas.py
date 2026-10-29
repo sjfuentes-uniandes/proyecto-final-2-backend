@@ -102,7 +102,12 @@ CAMPOS_V1 = {
     "version",
     "versionReglas",
     "creadaEn",
+    # HU-W06: opcionales y aditivos.
+    "degradada",
+    "faltantes",
 }
+# HU-W06: un socio cotiza sin perfil; su oferta nunca es degradada.
+SIN_FALLBACK = {"degradada": False, "faltantes": []}
 INTERNOS = {
     "huellaCalculo",
     "hashReglas",
@@ -198,8 +203,39 @@ def test_ac1_cotizar_devuelve_la_oferta_publica(
     # AC1 y la regla "solo los datos necesarios": exactamente la lista blanca.
     assert set(oferta) == CAMPOS_V1
     assert not INTERNOS & _claves(oferta)
-    assert {k: v for k, v in oferta.items() if k != "productoId"} == OFERTA
+    assert {k: v for k, v in oferta.items() if k != "productoId"} == OFERTA | SIN_FALLBACK
     assert oferta["productoId"] == "vida-hipotecario"
+
+
+def test_hu_w06_una_oferta_degradada_dice_que_dato_falto_y_nada_mas(
+    entorno: Any, socio: dict[str, str], cotizacion: CotizacionFalsa
+) -> None:
+    faltante = {
+        "fuente": "FA_INGRESOS_AGREGADOS",
+        "dato": "ingreso_mensual_estimado",
+        "motivo": "NO_DISPONIBLE",
+        "regla": {"id": "FB-003", "version": "2026.10.1"},
+    }
+    degradada = COTIZACION | {
+        "degradada": True,
+        "faltantes": [faltante],
+        "versionReglasFallback": "2026.10.1",
+    }
+    cotizacion.post = _respuesta(degradada)
+    oferta = _cotizar(entorno, socio).json()
+    assert (oferta["degradada"], oferta["faltantes"]) == (
+        True,
+        [{"fuente": "FA_INGRESOS_AGREGADOS", "dato": "ingreso_mensual_estimado"}],
+    )
+    assert not {"regla", "motivo", "versionReglasFallback"} & _claves(oferta)
+
+
+def test_hu_w06_una_respuesta_anterior_sin_los_campos_se_lee_igual(
+    entorno: Any, socio: dict[str, str], cotizacion: CotizacionFalsa
+) -> None:
+    """Lector tolerante: cotizacion sin `degradada` ni `faltantes` (antes de HU-W06)."""
+    oferta = entorno.cliente.get(f"/cotizaciones/{COTIZACION_ID}", headers=socio).json()
+    assert {k: oferta[k] for k in SIN_FALLBACK} == SIN_FALLBACK
 
 
 def test_reenvia_como_socio_con_la_clave_y_sin_campos_del_back_office(

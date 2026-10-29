@@ -10,10 +10,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from cotizacion.domain.cotizacion.errores import OfertaVencida
 from cotizacion.domain.perfilamiento.modelos import NivelRiesgo
+
+if TYPE_CHECKING:
+    from cotizacion.domain.cotizacion.fallback import DecisionRegistrada
 
 # Factor de las reglas cuando la cotización no utiliza un perfil con nivel (0..1 del dominio).
 SIN_PERFIL = "SIN_PERFIL"
@@ -244,3 +248,11 @@ class Cotizacion:
     actor: Actor
     # HU-W04: None en las cotizaciones calculadas antes de la migración 004.
     oferta: Oferta | None = None
+    # HU-W06: la decisión de fallback si alguna fuente del perfil faltó (oferta degradada);
+    # None en el recorrido nominal. Es una `fallback.DecisionRegistrada` (import diferido: el
+    # módulo de fallback depende de este).
+    decision: "DecisionRegistrada | None" = None
+
+    @property
+    def degradada(self) -> bool:
+        return self.decision is not None
