@@ -44,9 +44,9 @@ PROPOSITO = "PERFILAMIENTO_PRECIO"
 TODOS_LOS_ALCANCES = [f.value for f in Fuente]
 # `Clientes` del conftest (clientes real): siembra, outbox y API del titular.
 Clientes = Any
-# Un cliente fuera de C01–C19, con un consentimiento vigente de otro propósito (`proposito` no
+# Un cliente fuera de C01–C27, con un consentimiento vigente de otro propósito (`proposito` no
 # tiene CHECK en la migración 002; el dominio solo conoce uno).
-C20 = "00000000-0000-4000-8000-000000000014"
+C99 = "00000000-0000-4000-8000-000000000063"
 OTRO_PROPOSITO = "PROPOSITO_SINTETICO_OTRO"
 
 
@@ -86,16 +86,16 @@ def _sin_valores_sensibles(texto: str, centinelas: tuple[str, ...]) -> None:
 def _sembrar_otro_proposito(clientes: Clientes) -> None:
     clientes.filas(
         "INSERT INTO cliente (id, sub, estado, verificado_en) "
-        "VALUES (%s, 'sub-sintetico-14', 'VERIFICADO', %s)",
-        C20,
+        "VALUES (%s, 'sub-sintetico-63', 'VERIFICADO', %s)",
+        C99,
         datetime(2026, 10, 1, tzinfo=UTC),
     )
     clientes.filas(
         "INSERT INTO consentimiento (id, cliente_id, proposito, alcances, version_texto, idioma, "
         "estado, otorgado_en, vigente_hasta) VALUES (%s, %s, %s, %s, '2026-10-17.1', 'es-CO', "
         "'ACTIVO', %s, %s)",
-        consentimiento_id("14"),
-        C20,
+        consentimiento_id("63"),
+        C99,
         OTRO_PROPOSITO,
         TODOS_LOS_ALCANCES,
         datetime(2026, 10, 1, tzinfo=UTC),
@@ -227,15 +227,15 @@ def test_r2_alcance_no_autorizado_rechaza_solo_ese_acceso(
         (cliente_id("08"), "REVOCADO", consentimiento_id("08")),
         (cliente_id("09"), "VENCIDO", consentimiento_id("09")),
         (cliente_id("0a"), "SIN_CONSENTIMIENTO", None),
-        (C20, "PROPOSITO_NO_AUTORIZADO", None),
+        (C99, "PROPOSITO_NO_AUTORIZADO", None),
     ],
-    ids=["C08-revocado", "C09-vencido", "C10-sin-consentimiento", "C20-otro-proposito"],
+    ids=["C08-revocado", "C09-vencido", "C10-sin-consentimiento", "C99-otro-proposito"],
 )
 def test_r2_fallo_rechazo_con_causa_estable_sin_llamar_al_proveedor(
     cotizacion: Any, cliente: str, causa: str, evaluado: str | None
 ) -> None:
     svc = cotizacion()
-    if cliente == C20:
+    if cliente == C99:
         _sembrar_otro_proposito(svc.clientes)
 
     respuesta = svc.enviar(cliente[-2:])

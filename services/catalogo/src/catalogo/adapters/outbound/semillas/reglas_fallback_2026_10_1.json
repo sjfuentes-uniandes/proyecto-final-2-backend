@@ -1,0 +1,13 @@
+{
+  "productoId": "vida-hipotecario",
+  "reglas": [
+    {"id": "FB-001", "fuente": "FA_PRODUCTOS_VIGENTES", "obligatoria": true, "accion": "PENDIENTE",
+     "ajuste": null, "mensajeCodigo": "FUENTE_REQUERIDA_NO_DISPONIBLE"},
+    {"id": "FB-002", "fuente": "FA_HISTORIAL_PAGOS_12M", "obligatoria": true, "accion": "PENDIENTE",
+     "ajuste": null, "mensajeCodigo": "FUENTE_REQUERIDA_NO_DISPONIBLE"},
+    {"id": "FB-003", "fuente": "FA_INGRESOS_AGREGADOS", "obligatoria": false, "accion": "DEGRADAR",
+     "ajuste": null, "mensajeCodigo": "FUENTE_OPCIONAL_NO_DISPONIBLE"},
+    {"id": "FB-004", "fuente": "DA_REGISTROS_PUBLICOS", "obligatoria": false, "accion": "DEGRADAR",
+     "ajuste": null, "mensajeCodigo": "FUENTE_OPCIONAL_NO_DISPONIBLE"}
+  ]
+}

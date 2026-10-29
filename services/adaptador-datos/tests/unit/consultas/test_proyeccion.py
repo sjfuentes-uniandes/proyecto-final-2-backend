@@ -183,3 +183,22 @@ def test_solo_se_proyectan_los_autorizados() -> None:
     assert set(campos) == {"cuota_mensual_obligaciones"}
     assert descartados == 2
     assert "creditorCount" not in repr(campos)
+
+
+@pytest.mark.parametrize(
+    "cambio",
+    [
+        {"creditorCount": "dos"},
+        {"totalMonthlyInstallment": {"amount": "no-es-monto", "currency": "COP"}},
+        {"oldestProductYears": -1},
+    ],
+)
+def test_hu_w06_un_campo_invalido_invalida_toda_la_respuesta(cambio: dict[str, Any]) -> None:
+    """HU-W06: ningún campo parcial entra al dominio. Con los demás campos válidos, la respuesta se
+    rechaza completa (RESPUESTA_INVALIDA) y no se devuelve ninguno."""
+    cuerpo = _nominal(P)
+    cuerpo["data"].update(cambio)
+    resultado: Any = None
+    with pytest.raises(RespuestaInvalida):
+        resultado = proyectar(P, CATALOGO[P].campos, cuerpo)
+    assert resultado is None

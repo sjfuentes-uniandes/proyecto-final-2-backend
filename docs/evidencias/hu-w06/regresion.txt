@@ -1,0 +1,102 @@
+## make test-unit
+libs/solventa-common/tests/unit/test_errors.py ................          [ 93%]
+====================== 2840 passed, 3 warnings in 16.58s =======================
+
+## make test-cov SERVICE=cotizacion
+services/cotizacion/src/cotizacion/domain/perfilamiento/errores.py                      15      0      0      0   100%
+======================== 656 passed, 1 warning in 4.04s ========================
+cotizacion: líneas 98.85 % (mín. 90), ramas 96.65 % (mín. 85)
+
+## make test-cov SERVICE=catalogo
+services/catalogo/src/catalogo/domain/suscripcion/errores.py                      5      0      0      0   100%
+======================== 265 passed, 1 warning in 1.15s ========================
+catalogo: líneas 99.22 % (mín. 90), ramas 97.29 % (mín. 85)
+
+## make test-cov SERVICE=api-socios
+services/api-socios/src/api_socios/adapters/inbound/errores.py                28      0      0      0   100%
+======================== 184 passed, 1 warning in 1.15s ========================
+api-socios: líneas 99.31 % (mín. 90), ramas 97.83 % (mín. 85)
+
+## make test-cov SERVICE=bff-web
+======================== 297 passed, 1 warning in 3.56s ========================
+bff-web: líneas 98.42 % (mín. 85), ramas 92.35 % (mín. 0)
+
+## make test-cov SERVICE=adaptador-datos
+======================== 92 passed, 2 warnings in 0.29s ========================
+adaptador-datos: líneas 100.00 % (mín. 90), ramas 100.00 % (mín. 0)
+
+## make test-module SERVICE=cotizacion
+======================= 102 passed, 1 warning in 21.57s ========================
+
+## make test-module SERVICE=catalogo
+======================== 29 passed, 1 warning in 7.64s =========================
+
+## make test-module SERVICE=adaptador-datos
+======================== 19 passed, 1 warning in 6.88s =========================
+
+## make test-contract SERVICE=cotizacion
+======================== 27 passed, 1 warning in 4.80s =========================
+
+## make test-contract SERVICE=catalogo
+======================== 27 passed, 1 warning in 4.38s =========================
+
+## make test-contract SERVICE=api-socios
+======================== 38 passed, 1 warning in 4.14s =========================
+
+## make test-contract SERVICE=bff-web
+============================== 26 passed in 1.45s ==============================
+
+## make test-contract SERVICE=adaptador-datos
+========================= 4 passed, 1 warning in 0.62s =========================
+
+## make lint SERVICE=cotizacion
+All checks passed!
+99 files already formatted
+
+## make typecheck SERVICE=cotizacion
+Success: no issues found in 60 source files
+
+## make lint SERVICE=catalogo
+All checks passed!
+86 files already formatted
+
+## make typecheck SERVICE=catalogo
+Success: no issues found in 65 source files
+
+## make lint SERVICE=api-socios
+All checks passed!
+45 files already formatted
+
+## make typecheck SERVICE=api-socios
+services/api-socios/src/api_socios/adapters/inbound/dependencias.py:12: error: Unused "type: ignore" comment  [unused-ignore]
+services/api-socios/src/api_socios/adapters/inbound/dependencias.py:42: error: Unused "type: ignore" comment  [unused-ignore]
+Found 2 errors in 1 file (checked 36 source files)
+
+## make lint SERVICE=bff-web
+All checks passed!
+55 files already formatted
+
+## make typecheck SERVICE=bff-web
+Success: no issues found in 49 source files
+
+## make lint SERVICE=adaptador-datos
+All checks passed!
+33 files already formatted
+
+## make typecheck SERVICE=adaptador-datos
+Success: no issues found in 32 source files
+
+## uv run pytest tests/e2e/test_hu_w06_r1_fallback.py tests/e2e/test_hu_w05_r1_limite_tiempo.py -q -rs
+6 skipped in 5.20s
+
+## terraform fmt -check, validate y test (infra/apps)
+
+Success! 8 passed, 0 failed.
+
+## frontend: npm run test:ci (proyecto-final-2-frontend/web)
+TOTAL: 501 SUCCESS
+Statements   : 95.36% ( 2427/2545 )
+Branches     : 86.06% ( 889/1033 )
+Functions    : 94.64% ( 936/989 )
+Lines        : 95.7% ( 2251/2352 )
+ng build: Application bundle generation complete

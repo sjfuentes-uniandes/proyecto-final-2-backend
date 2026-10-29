@@ -11,16 +11,20 @@ from psycopg import AsyncConnection
 from psycopg.types.json import Jsonb
 
 from cotizacion.adapters.outbound.eventos import (
+    COTIZACION_DEGRADADA,
     DATOS_CONSENTIDOS_CONSULTADOS,
     PERFIL_RIESGO_CALCULADO,
     ComprobacionFinalEvento,
+    CotizacionDegradadaV1,
     DatoRequeridoEvento,
     DatosConsentidosConsultadosV1,
     FactorEvento,
+    FaltanteEvento,
     FuenteConsultadaEvento,
     PerfilRiesgoCalculadoV1,
     SobreEvento,
 )
+from cotizacion.domain.cotizacion.fallback import DecisionRegistrada
 from cotizacion.domain.perfilamiento.modelos import (
     PROPOSITO_PERFILAMIENTO,
     EstadoCampo,
@@ -102,6 +106,44 @@ def eventos_de(perfil: Perfil, correlation_id: str) -> list[SobreEvento[Any]]:
             payload=consultados,
         ),
     ]
+
+
+def evento_decision(registro: DecisionRegistrada) -> SobreEvento[CotizacionDegradadaV1]:
+    """CotizacionDegradada (HU-W06): el agregado es la cotización si la hay; si no, la decisión."""
+    decision = registro.decision
+    return SobreEvento[CotizacionDegradadaV1](
+        event_id=uuid4(),
+        aggregate_id=registro.cotizacion_id or registro.id,
+        type=COTIZACION_DEGRADADA,
+        version=1,
+        occurred_at=registro.decidido_en,
+        correlation_id=registro.correlation_id,
+        payload=CotizacionDegradadaV1(
+            decision_id=registro.id,
+            decision=decision.tipo,
+            cotizacion_id=registro.cotizacion_id,
+            perfil_id=registro.perfil_id,
+            producto_id=registro.producto_id,
+            faltantes=[
+                FaltanteEvento(
+                    fuente=f.fuente,
+                    dato=f.dato,
+                    motivo=f.motivo,
+                    obligatoria=f.obligatoria,
+                    regla_id=f.regla.id if f.regla else None,
+                    regla_version=f.regla.version if f.regla else None,
+                    regla_accion=f.regla.accion if f.regla else None,
+                )
+                for f in decision.faltantes
+            ],
+            mensaje_codigo=decision.mensaje_codigo,
+            accion_sugerida=decision.accion_sugerida,
+            version_reglas_fallback=decision.version_reglas,
+            hash_reglas_fallback=decision.hash_reglas,
+            actor_id=registro.actor_id,
+            decidido_en=registro.decidido_en,
+        ),
+    )
 
 
 async def insertar(conexion: AsyncConnection[Any], sobres: Sequence[SobreEvento[Any]]) -> None:

@@ -1,0 +1,32 @@
+{
+    "eventId": "83148957-1198-441f-9de4-90873bd27c66",
+    "aggregateId": "6dce891b-150c-4150-848e-509ab238517f",
+    "type": "CotizacionDegradada",
+    "version": 1,
+    "occurredAt": "2026-10-27T14:53:56.715328Z",
+    "correlationId": "a7fe30a8-2ad7-40f4-8b75-aa5c36721eb6",
+    "payload": {
+        "actorId": "asesor-sintetico",
+        "decision": "DEGRADADA",
+        "perfilId": "af076fd7-cc42-43a8-a7c4-f7d0793c9a8d",
+        "faltantes": [
+            {
+                "dato": "ingreso_mensual_estimado",
+                "fuente": "FA_INGRESOS_AGREGADOS",
+                "motivo": "NO_DISPONIBLE",
+                "reglaId": "FB-003",
+                "obligatoria": false,
+                "reglaAccion": "DEGRADAR",
+                "reglaVersion": "2026.10.1"
+            }
+        ],
+        "decididoEn": "2026-10-27T14:53:56.715328Z",
+        "decisionId": "7e267c1a-e706-41a1-8063-9d334fc8c0b8",
+        "productoId": "vida-hipotecario",
+        "cotizacionId": "6dce891b-150c-4150-848e-509ab238517f",
+        "mensajeCodigo": "FUENTE_OPCIONAL_NO_DISPONIBLE",
+        "accionSugerida": null,
+        "hashReglasFallback": "sha256:cf7647bc7da2f81948620758e6b19e2b9b0779b2af37a5b52f05b6febe31ae5c",
+        "versionReglasFallback": "2026.10.1"
+    }
+}

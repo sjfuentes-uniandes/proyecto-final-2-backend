@@ -1,4 +1,4 @@
-"""Puertos de la cotización (HU-W03).
+"""Puertos de la cotización (HU-W03; HU-W06: reglas de fallback y decisiones; listado del portal).
 
 PuertoProductos lanza ProductoNoEncontrado, ReglasNoVigentes y DependenciaNoDisponible.
 RepositorioCotizaciones.guardar lanza ConflictoIdempotencia y asigna el código de la oferta. La identidad del cliente y los
@@ -11,6 +11,8 @@ from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
 
+from cotizacion.domain.cotizacion.fallback import DecisionRegistrada, ReglasFallback
+from cotizacion.domain.cotizacion.listado import FiltrosCotizaciones, ResumenCotizacion
 from cotizacion.domain.cotizacion.modelos import Cotizacion, Producto, ReglasPrima
 
 
@@ -49,3 +51,35 @@ class RepositorioCotizaciones(Protocol):
         ...
 
     async def por_id(self, cotizacion_id: UUID) -> Cotizacion | None: ...
+
+
+class ListadoCotizaciones(Protocol):
+    """Lectura paginada de las cotizaciones con oferta, de la más reciente a la más antigua.
+
+    `despues` es la última (creada_en, cotizacion_id) entregada; el estado se evalúa en `ahora`.
+    """
+
+    async def listar(
+        self,
+        filtros: FiltrosCotizaciones,
+        ahora: datetime,
+        limite: int,
+        despues: tuple[datetime, UUID] | None,
+    ) -> list[ResumenCotizacion]: ...
+
+    async def contar(self, filtros: FiltrosCotizaciones, ahora: datetime) -> int: ...
+
+
+class PuertoReglasFallback(Protocol):
+    async def reglas_fallback(self, producto_id: str, en: datetime) -> ReglasFallback | None:
+        """Las reglas de fallback del producto vigentes en el instante; None si no hay (ninguna
+        fuente es degradable). Lanza DependenciaNoDisponible si catalogo no responde."""
+        ...
+
+
+class RepositorioDecisiones(Protocol):
+    async def registrar_pendiente(self, registro: DecisionRegistrada) -> DecisionRegistrada:
+        """Guarda una decisión PENDIENTE (sin cotización) con su evento en una transacción. Si el
+        actor ya la registró con la misma clave de idempotencia, devuelve esa (sin otro evento);
+        lanza ConflictoIdempotencia si la clave se usó con otra solicitud."""
+        ...

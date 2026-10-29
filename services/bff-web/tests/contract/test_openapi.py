@@ -110,6 +110,10 @@ ESQUEMAS_COTIZACION = (
     "CoberturaOfertaDto",
     "ExclusionDto",
     "EstadoOferta",
+    # HU-W06
+    "FaltanteDto",
+    "ReglaAplicadaDto",
+    "MotivoFalla",
 )
 
 

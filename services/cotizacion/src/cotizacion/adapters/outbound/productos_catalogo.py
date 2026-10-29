@@ -11,6 +11,11 @@ Caché (diagramas: catálogo actualiza / invalida, cotización lectura):
 - Sin `CACHE_URL`, una caché TTL en memoria por réplica, como CatalogoHttp (con 0 no se guarda).
 Las reglas guardadas solo se usan si su vigenteDesde ≤ la fecha pedida.
 
+HU-W06: las reglas de fallback (`/reglas-fallback/vigente`) solo se piden si una fuente del perfil
+faltó. catalogo no las escribe en Valkey: se guardan en la memoria de la réplica (el mismo TTL) y
+solo se usan mientras sigan vigentes. `DefinicionReglasFallbackCotizacion` es la copia del esquema
+publicado en contracts/modelos/reglas-fallback.v1.schema.json (verificada en contrato).
+
 HU-W05: cada GET a catalogo pasa por la `Proteccion` (por omisión SinProteccion; en la app,
 ProteccionDependencia: reintento acotado ante conexión o 5xx, circuito por recurso y bulkhead
 "catalogo") con el restante del presupuesto del recorrido, y envía ese timeout en X-Deadline-Ms.
@@ -33,8 +38,10 @@ from solventa_common.cache import Cache
 from cotizacion.adapters.outbound.http_protegido import llamar_protegido
 from cotizacion.application.cotizacion.puertos import OrigenDato, Resuelto
 from cotizacion.application.perfilamiento.puertos import Reloj
+from cotizacion.domain.cotizacion import fallback
 from cotizacion.domain.cotizacion import modelos as dominio
 from cotizacion.domain.cotizacion.errores import ProductoNoEncontrado, ReglasNoVigentes
+from cotizacion.domain.cotizacion.fallback import AccionFallback, MensajeFallback, ReglasFallback
 from cotizacion.domain.cotizacion.modelos import Cobertura, EstadoProducto, Producto, ReglasPrima
 from cotizacion.domain.perfilamiento.errores import DependenciaNoDisponible
 
@@ -42,6 +49,7 @@ DEPENDENCIA = "catalogo.productos"
 GRUPO = "catalogo"
 CLAVE_PRODUCTO = "catalogo.producto"
 CLAVE_REGLAS = "catalogo.reglas_prima"
+CLAVE_FALLBACK = "catalogo.reglas_fallback"
 PREFIJO = "catalogo:v1"
 VARIABLES = frozenset({"edad", "plazo_credito_meses", "suma_asegurada"})
 
@@ -144,6 +152,24 @@ class DefinicionReglasPrimaCotizacion(_Estricto):
     oferta: CondicionesOferta | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
+class ReglaFallback(_Estricto):
+    """Qué hace la cotización si la fuente no se obtuvo. `obligatoria` debe coincidir con el
+    modelo de riesgo; `ajuste` es un factor sobre la prima ajustada, solo con DEGRADAR."""
+
+    id: Annotated[str, Field(pattern=r"^FB-\d{3}$")]
+    fuente: Annotated[str, Field(pattern=r"^[A-Z][A-Z0-9_]{1,63}$")]
+    obligatoria: bool
+    accion: AccionFallback
+    ajuste: Annotated[str, Field(pattern=r"^\d+(\.\d+)?$")] | None
+    mensaje_codigo: MensajeFallback
+
+
+class DefinicionReglasFallbackCotizacion(_Estricto):
+    model_config = ConfigDict(title="DefinicionReglasFallback")
+    producto_id: Annotated[str, Field(pattern=r"^[a-z0-9-]{1,64}$")]
+    reglas: Annotated[list[ReglaFallback], Field(min_length=1, max_length=50)]
+
+
 class _Dto(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
@@ -173,6 +199,36 @@ class ReglasPrimaDto(_Dto):
     vigente_desde: datetime
     hash: str
     definicion: DefinicionReglasPrimaCotizacion
+
+
+class ReglasFallbackDto(_Dto):
+    producto_id: str
+    version: str
+    vigente_desde: datetime
+    vigente_hasta: datetime | None
+    hash: str
+    definicion: DefinicionReglasFallbackCotizacion
+
+
+def a_reglas_fallback(dto: ReglasFallbackDto) -> ReglasFallback:
+    return ReglasFallback(
+        producto_id=dto.producto_id,
+        version=dto.version,
+        hash=dto.hash,
+        vigente_desde=dto.vigente_desde,
+        vigente_hasta=dto.vigente_hasta,
+        reglas=tuple(
+            fallback.ReglaFallback(
+                id=r.id,
+                fuente=r.fuente,
+                obligatoria=r.obligatoria,
+                accion=r.accion,
+                ajuste=Decimal(r.ajuste) if r.ajuste is not None else None,
+                mensaje_codigo=r.mensaje_codigo,
+            )
+            for r in dto.definicion.reglas
+        ),
+    )
 
 
 def a_producto(dto: ProductoDto) -> Producto:
@@ -255,6 +311,13 @@ def _reglas_de(contenido: bytes) -> ReglasPrima:
     return a_reglas(ReglasPrimaDto.model_validate_json(contenido))
 
 
+def _fallback_de(contenido: bytes) -> ReglasFallback:
+    return a_reglas_fallback(ReglasFallbackDto.model_validate_json(contenido))
+
+
+Valor = Producto | ReglasPrima | ReglasFallback
+
+
 class ProductosCatalogo:
     def __init__(
         self,
@@ -275,7 +338,7 @@ class ProductosCatalogo:
         self._cache = cache
         self._ttl = timedelta(seconds=ttl_s)
         # clave → (valor, vence en).
-        self._memoria: dict[str, tuple[Producto | ReglasPrima, datetime]] = {}
+        self._memoria: dict[str, tuple[Valor, datetime]] = {}
         self._candados: dict[str, asyncio.Lock] = {}
 
     async def producto(self, producto_id: str) -> Resuelto[Producto]:
@@ -304,21 +367,43 @@ class ProductosCatalogo:
             raise DependenciaNoDisponible(DEPENDENCIA)
         return Resuelto(resuelto.valor, resuelto.origen)
 
+    async def reglas_fallback(self, producto_id: str, en: datetime) -> ReglasFallback | None:
+        """HU-W06. None si catalogo responde REGLAS_NO_VIGENTES: ninguna fuente es degradable."""
+        try:
+            resuelto = await self._resolver(
+                f"{PREFIJO}:reglas-fallback:{producto_id}:vigente",
+                lambda: self._pedir(
+                    CLAVE_FALLBACK,
+                    f"/v1/productos/{producto_id}/reglas-fallback/vigente",
+                    {"fecha": en.isoformat()},
+                    _fallback_de,
+                ),
+                _fallback_de,
+                vigente_en=en,
+                solo_memoria=True,
+            )
+        except (ReglasNoVigentes, ProductoNoEncontrado):
+            return None
+        if not isinstance(resuelto.valor, ReglasFallback):
+            raise DependenciaNoDisponible(DEPENDENCIA)
+        return resuelto.valor
+
     async def _resolver(
         self,
         clave: str,
-        pedir: Callable[[], Awaitable[Producto | ReglasPrima]],
-        decodificar: Callable[[bytes], Producto | ReglasPrima],
+        pedir: Callable[[], Awaitable[Valor]],
+        decodificar: Callable[[bytes], Valor],
         vigente_en: datetime | None = None,
-    ) -> Resuelto[Producto | ReglasPrima]:
-        def utilizable(valor: Producto | ReglasPrima) -> bool:
-            return not (
-                vigente_en is not None
-                and isinstance(valor, ReglasPrima)
-                and valor.vigente_desde > vigente_en
-            )
+        solo_memoria: bool = False,
+    ) -> Resuelto[Valor]:
+        def utilizable(valor: Valor) -> bool:
+            if vigente_en is None:
+                return True
+            if isinstance(valor, ReglasFallback):
+                return valor.vigentes_en(vigente_en)
+            return not (isinstance(valor, ReglasPrima) and valor.vigente_desde > vigente_en)
 
-        if self._cache is not None:
+        if self._cache is not None and not solo_memoria:
             guardado = await self._cache.leer(clave)
             if guardado is not None:
                 try:
@@ -341,7 +426,7 @@ class ProductosCatalogo:
             self._memoria[clave] = (valor, self._reloj.ahora() + self._ttl)
         return Resuelto(valor, OrigenDato.CATALOGO)
 
-    def _en_memoria(self, clave: str) -> Producto | ReglasPrima | None:
+    def _en_memoria(self, clave: str) -> Valor | None:
         guardado = self._memoria.get(clave)
         if guardado is None:
             return None
@@ -353,8 +438,8 @@ class ProductosCatalogo:
         clave: str,
         ruta: str,
         parametros: dict[str, str] | None,
-        decodificar: Callable[[bytes], Producto | ReglasPrima],
-    ) -> Producto | ReglasPrima:
+        decodificar: Callable[[bytes], Valor],
+    ) -> Valor:
         respuesta = await llamar_protegido(
             self._cliente,
             self._proteccion,

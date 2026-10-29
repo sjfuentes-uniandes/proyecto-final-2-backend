@@ -1,4 +1,7 @@
-"""Semilla de los clientes sintéticos C01–C19 (01 §3.5) para demostrar el perfilamiento en `int`.
+"""Semilla de los clientes sintéticos C01–C27 (01 §3.5) para demostrar el perfilamiento en `int`.
+
+C20–C27 (HU-W06) solo cambian el comportamiento de sus fuentes en el simulador (caída,
+malformada o lenta): aquí son clientes verificados con consentimiento vigente y todos los alcances.
 
 Los datos de los proveedores del simulador solo existen para estos UUID; sin la semilla, un
 cliente dado de alta por documento recibe un UUID aleatorio y ningún consentimiento. Solo corre
@@ -77,7 +80,7 @@ class ClienteSintetico:
 
     @property
     def numero_documento(self) -> str:
-        # NN decimal: CC 9000000001 … CC 9000000019.
+        # NN decimal: CC 9000000001 … CC 9000000027.
         return f"90000000{self.numero:02d}"
 
     @property
@@ -99,7 +102,11 @@ _EXCEPCIONES = {
     16: ClienteSintetico(16, alcances=_sin("FA_HISTORIAL_PAGOS_12M")),
     17: ClienteSintetico(17, alcances=("DA_REGISTROS_PUBLICOS",)),
 }
-CLIENTES_SINTETICOS = tuple(_EXCEPCIONES.get(n, ClienteSintetico(n)) for n in range(1, 20))
+# HU-W06: C20–C27, casos de fallback (contracts/datos-sinteticos/clientes-perfilamiento.json).
+ULTIMO_CASO = 27
+CLIENTES_SINTETICOS = tuple(
+    _EXCEPCIONES.get(n, ClienteSintetico(n)) for n in range(1, ULTIMO_CASO + 1)
+)
 
 # Sin destino en ON CONFLICT: ni un `id` ni un documento existentes se pisan.
 _CLIENTE = (

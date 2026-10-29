@@ -66,3 +66,13 @@ def test_contrato_de_reglas_de_suscripcion() -> None:
         "hash",
         "definicion",
     }
+
+
+def test_contrato_de_reglas_de_fallback() -> None:
+    """HU-W06: solo lectura, con el patrón de las reglas de suscripción."""
+    rutas = app.openapi()["paths"]
+    base = "/v1/productos/{productoId}/reglas-fallback"
+    assert set(rutas[f"{base}/vigente"]) == {"get"}
+    assert set(rutas[f"{base}/{{version}}"]) == {"get"}
+    for ruta in (f"{base}/vigente", f"{base}/{{version}}"):
+        assert set(rutas[ruta]["get"]["responses"]) == {"200", "404", "422"}

@@ -1116,7 +1116,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
         '503':
-          description: SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)
+          description: 'SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia).
+            HU-W06: con dependencia perfil.fuentes, una fuente del perfil faltó sin
+            fallback permitido (detalles de cotizacion: decisionId, faltantes y accionSugerida
+            RECALCULAR_PERFIL)'
           content:
             application/json:
               schema:
@@ -1129,6 +1132,104 @@ paths:
                 $ref: '#/components/schemas/CotizacionRespuesta'
         '404':
           description: CLIENTE_NO_ENCONTRADO o PERFIL_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+    get:
+      tags:
+      - cotizaciones
+      summary: Listar Cotizaciones
+      description: 'Cotizaciones con oferta de la más reciente a la más antigua ("Cotizaciones
+        abiertas"), con
+
+        el nombre del cliente. `estado` es el de la oferta en el instante de la consulta.'
+      operationId: listar_cotizaciones_v1_cotizaciones_get
+      parameters:
+      - name: estado
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/EstadoOferta'
+          - type: 'null'
+          title: Estado
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 64
+          - type: 'null'
+          description: Parte del código COT-AAAA-NNNNN
+          title: Q
+        description: Parte del código COT-AAAA-NNNNN
+      - name: limite
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limite
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Cursor
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoCotizacionesVista'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo asesores o no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (también un cursor que no entregó cotizacion)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia).
+            HU-W06: con dependencia perfil.fuentes, una fuente del perfil faltó sin
+            fallback permitido (detalles de cotizacion: decisionId, faltantes y accionSugerida
+            RECALCULAR_PERFIL)'
           content:
             application/json:
               schema:
@@ -1190,7 +1291,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
         '503':
-          description: SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)
+          description: 'SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia).
+            HU-W06: con dependencia perfil.fuentes, una fuente del perfil faltó sin
+            fallback permitido (detalles de cotizacion: decisionId, faltantes y accionSugerida
+            RECALCULAR_PERFIL)'
           content:
             application/json:
               schema:
@@ -1260,7 +1364,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
         '503':
-          description: SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)
+          description: 'SERVICIO_NO_DISPONIBLE o DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia).
+            HU-W06: con dependencia perfil.fuentes, una fuente del perfil faltó sin
+            fallback permitido (detalles de cotizacion: decisionId, faltantes y accionSugerida
+            RECALCULAR_PERFIL)'
           content:
             application/json:
               schema:
@@ -3024,6 +3131,22 @@ components:
           - $ref: '#/components/schemas/OfertaDto'
           - type: 'null'
           description: La oferta de la cotización
+        degradada:
+          type: boolean
+          title: Degradada
+          description: 'Oferta provisional: una fuente opcional faltó y una regla
+            permitió degradar'
+          default: false
+        faltantes:
+          items:
+            $ref: '#/components/schemas/FaltanteDto'
+          type: array
+          title: Faltantes
+        versionReglasFallback:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Versionreglasfallback
       type: object
       required:
       - id
@@ -3630,6 +3753,31 @@ components:
       - valor
       - factor
       title: FactorPrimaDto
+    FaltanteDto:
+      properties:
+        fuente:
+          type: string
+          title: Fuente
+        dato:
+          type: string
+          title: Dato
+        motivo:
+          $ref: '#/components/schemas/MotivoFalla'
+        regla:
+          anyOf:
+          - $ref: '#/components/schemas/ReglaAplicadaDto'
+          - type: 'null'
+          description: Regla de fallback aplicada; null si la fuente no tenía regla
+            vigente
+      type: object
+      required:
+      - fuente
+      - dato
+      - motivo
+      - regla
+      title: FaltanteDto
+      description: 'Un dato que no se obtuvo (HU-W06). Solo su nombre: el valor no
+        existe y no se inventa.'
     Fuente:
       type: string
       enum:
@@ -3793,6 +3941,29 @@ components:
       required:
       - items
       title: ListaPerfiles
+    ListadoCotizacionesVista:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ResumenCotizacionVista'
+          type: array
+          title: Items
+        siguienteCursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Siguientecursor
+          description: 'null: no hay más páginas'
+        total:
+          type: integer
+          title: Total
+          description: Cotizaciones que cumplen los filtros
+      type: object
+      required:
+      - items
+      - siguienteCursor
+      - total
+      title: ListadoCotizacionesVista
     MotivoCliente:
       type: string
       enum:
@@ -3811,6 +3982,14 @@ components:
       - FUENTE_NO_DISPONIBLE
       - RESPUESTA_INVALIDA
       title: MotivoDato
+    MotivoFalla:
+      type: string
+      enum:
+      - TIEMPO_AGOTADO
+      - NO_DISPONIBLE
+      - RESPUESTA_INVALIDA
+      title: MotivoFalla
+      description: Por qué no se obtuvo la fuente (estado del linaje del perfil).
     NivelRiesgo:
       type: string
       enum:
@@ -4151,6 +4330,19 @@ components:
       - tasa
       - valor
       title: RecargoPrimaDto
+    ReglaAplicadaDto:
+      properties:
+        id:
+          type: string
+          title: Id
+        version:
+          type: string
+          title: Version
+      type: object
+      required:
+      - id
+      - version
+      title: ReglaAplicadaDto
     ReglaEvaluadaDto:
       properties:
         codigo:
@@ -4262,6 +4454,93 @@ components:
       - compromisoRevisionHoras
       title: ResumenBandeja
       description: Indicadores de E01 (DS2-14) en [desde, hasta).
+    ResumenCotizacionVista:
+      properties:
+        cotizacionId:
+          type: string
+          format: uuid
+          title: Cotizacionid
+        codigo:
+          type: string
+          title: Codigo
+          description: COT-AAAA-NNNNN
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        clienteNombre:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Clientenombre
+        socioId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Socioid
+        productoId:
+          type: string
+          title: Productoid
+        versionProducto:
+          type: string
+          title: Versionproducto
+        moneda:
+          type: string
+          title: Moneda
+        periodicidad:
+          type: string
+          title: Periodicidad
+        sumaAsegurada:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Sumaasegurada
+        prima:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Prima
+          description: El precio de la oferta (prima total)
+        nivelRiesgo:
+          anyOf:
+          - $ref: '#/components/schemas/NivelRiesgo'
+          - type: 'null'
+          description: 'null: cotizada sin perfil'
+        degradada:
+          type: boolean
+          title: Degradada
+          description: Oferta provisional (HU-W06)
+        creadaEn:
+          type: string
+          format: date-time
+          title: Creadaen
+        vigenteHasta:
+          type: string
+          format: date-time
+          title: Vigentehasta
+        estado:
+          $ref: '#/components/schemas/EstadoOferta'
+      type: object
+      required:
+      - cotizacionId
+      - codigo
+      - clienteId
+      - clienteNombre
+      - socioId
+      - productoId
+      - versionProducto
+      - moneda
+      - periodicidad
+      - sumaAsegurada
+      - prima
+      - nivelRiesgo
+      - degradada
+      - creadaEn
+      - vigenteHasta
+      - estado
+      title: ResumenCotizacionVista
+      description: 'Una fila de "Cotizaciones abiertas": el ResumenCotizacionDto de
+        cotizacion más el nombre del
+
+        cliente, que compone este BFF (null si clientes no lo dio a tiempo).'
     ResumenDecision:
       properties:
         id:

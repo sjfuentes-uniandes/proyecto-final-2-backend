@@ -11,7 +11,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
-from catalogo.adapters.outbound import productos_pg, reglas_suscripcion_pg
+from catalogo.adapters.outbound import productos_pg, reglas_fallback_pg, reglas_suscripcion_pg
 from catalogo.domain.reglas.errores import DefinicionInvalida, VersionExistente
 from catalogo.domain.reglas.hash import hash_canonico
 from catalogo.domain.reglas.modelo import ModeloPublicado
@@ -50,7 +50,7 @@ def definicion_semilla() -> dict[str, Any]:
 
 def migrar(url: str) -> None:
     """Aplica los .sql en orden y siembra el modelo candidato, los productos (HU-W03) y sus reglas
-    de suscripción (HU-W13).
+    de suscripción (HU-W13) y de fallback (HU-W06, validadas contra el modelo sembrado).
 
     Idempotente y serializado.
     """
@@ -78,6 +78,7 @@ def migrar(url: str) -> None:
             )
             productos_pg.sembrar(conexion)
             reglas_suscripcion_pg.sembrar(conexion)
+            reglas_fallback_pg.sembrar(conexion, {SEMILLA_PRODUCTO: definicion})
         finally:
             conexion.execute(_UNLOCK)
 

@@ -50,6 +50,9 @@ CAMPOS_V1 = {
     "version",
     "versionReglas",
     "creadaEn",
+    # HU-W06: opcionales y aditivos (el socio cotiza sin perfil: false y vacío).
+    "degradada",
+    "faltantes",
 }
 
 

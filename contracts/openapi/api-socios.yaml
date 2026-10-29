@@ -808,6 +808,21 @@ components:
       title: ConsumoRespuesta
       description: 'Solo datos del socio consultado: nunca su API key ni los de otro
         socio.'
+    DatoFaltanteV1:
+      properties:
+        fuente:
+          type: string
+          title: Fuente
+        dato:
+          type: string
+          title: Dato
+      type: object
+      required:
+      - fuente
+      - dato
+      title: DatoFaltanteV1
+      description: Un dato que una fuente de información no entregó (HU-W06). Nunca
+        su valor.
     DatosAseguradoV1:
       properties:
         fechaNacimiento:
@@ -973,6 +988,18 @@ components:
           type: string
           format: date-time
           title: Creadaen
+        degradada:
+          type: boolean
+          title: Degradada
+          description: 'Oferta provisional: se calculó sin los datos de `faltantes`
+            porque una regla vigente lo permite'
+          default: false
+        faltantes:
+          items:
+            $ref: '#/components/schemas/DatoFaltanteV1'
+          type: array
+          title: Faltantes
+          description: Datos que no se obtuvieron; vacío si no es degradada
       type: object
       required:
       - id

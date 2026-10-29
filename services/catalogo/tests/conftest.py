@@ -5,9 +5,11 @@ from importlib.resources import files
 from typing import Any
 
 import pytest
-from catalogo.adapters.outbound import reglas_suscripcion_pg
+from catalogo.adapters.outbound import reglas_fallback_pg, reglas_suscripcion_pg
+from catalogo.adapters.outbound.modelos_pg import SEMILLA_PRODUCTO, definicion_semilla
 from catalogo.adapters.outbound.productos_pg import semillas
 from catalogo.config import Settings
+from catalogo.domain.fallback.reglas import ReglasFallback
 from catalogo.domain.productos.producto import Producto, ReglasPrima
 from catalogo.domain.reglas.errores import VersionExistente
 from catalogo.domain.reglas.hash import hash_canonico
@@ -146,11 +148,44 @@ def reglas_suscripcion_repo() -> ReglasSuscripcionMemoria:
     return ReglasSuscripcionMemoria()
 
 
+class ReglasFallbackMemoria:
+    """RepositorioReglasFallback con la semilla de HU-W06 (vida-hipotecario 2026.10.1)."""
+
+    def __init__(self) -> None:
+        self.reglas = [
+            ReglasFallback(p, v, desde, hasta, d, hash_canonico(d), "migracion")
+            for p, v, desde, hasta, d in reglas_fallback_pg.semillas(
+                {SEMILLA_PRODUCTO: definicion_semilla()}
+            )
+        ]
+
+    async def vigentes(self, producto_id: str, en: datetime) -> ReglasFallback | None:
+        candidatas = [
+            r for r in self.reglas if r.producto_id == producto_id and r.vigente_desde <= en
+        ]
+        ultima = max(candidatas, key=lambda r: r.vigente_desde, default=None)
+        if ultima is None or (ultima.vigente_hasta is not None and en >= ultima.vigente_hasta):
+            return None
+        return ultima
+
+    async def por_version(self, producto_id: str, version: str) -> ReglasFallback | None:
+        return next(
+            (r for r in self.reglas if r.producto_id == producto_id and r.version == version),
+            None,
+        )
+
+
+@pytest.fixture
+def reglas_fallback_repo() -> ReglasFallbackMemoria:
+    return ReglasFallbackMemoria()
+
+
 @pytest.fixture
 def api(
     repositorio: RepositorioMemoria,
     productos_repo: ProductosMemoria,
     reglas_suscripcion_repo: ReglasSuscripcionMemoria,
+    reglas_fallback_repo: ReglasFallbackMemoria,
     reloj: RelojFijo,
 ) -> Iterator[TestClient]:
     """App con los repositorios en memoria y el reloj fijo, con su lifespan arrancado."""
@@ -159,6 +194,7 @@ def api(
         repositorio=repositorio,
         productos_repo=productos_repo,
         reglas_suscripcion_repo=reglas_suscripcion_repo,
+        reglas_fallback_repo=reglas_fallback_repo,
         reloj=reloj,
     )
     with TestClient(app) as cliente:

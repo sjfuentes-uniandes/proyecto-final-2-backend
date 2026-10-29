@@ -10,6 +10,14 @@ reglas (minimización, como el perfil): sí su versión y la huella del cálculo
 HU-W04: la respuesta trae la oferta (`oferta`, aditivo) con su estado al momento de la consulta.
 Una oferta vencida se sigue leyendo aquí (200 con `estado: VENCIDA`, para el portal); el 410 al
 socio lo decide api-socios.
+
+HU-W06 (aditivo): `degradada`, `faltantes` (fuente, dato, motivo y la regla aplicada) y
+`versionReglasFallback`; nunca el valor de un dato faltante. Una fuente sin fallback permitido
+responde 503 DEPENDENCIA_NO_DISPONIBLE con la decisión en `detalles`. La decisión de una cotización
+se lee en GET /v1/cotizaciones/{id}/decision.
+
+Listado ("Cotizaciones abiertas" del portal): GET /v1/cotizaciones, las cotizaciones con oferta de
+la más reciente a la más antigua, paginadas por cursor y filtradas por estado y código.
 """
 
 import re
@@ -18,7 +26,7 @@ from decimal import Decimal
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Path, Request, Response
+from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 from solventa_common import correlation
@@ -35,10 +43,12 @@ from cotizacion.application.cotizacion.consultar import (
     ConsultarCondiciones,
     ConsultarCotizacion,
 )
+from cotizacion.application.cotizacion.listar import ListarCotizaciones
 from cotizacion.application.cotizacion.puertos import OrigenDato
 from cotizacion.domain.cotizacion.errores import (
     CoberturaNoDisponible,
     CotizacionNoEncontrada,
+    CursorInvalido,
     DatosFueraDeRango,
     OfertaVencida,
     PerfilNoCorresponde,
@@ -48,6 +58,15 @@ from cotizacion.domain.cotizacion.errores import (
     ReglasNoVigentes,
     RolNoPermitido,
 )
+from cotizacion.domain.cotizacion.fallback import (
+    AccionSugerida,
+    CotizacionPendiente,
+    DecisionRegistrada,
+    Faltante,
+    MensajeFallback,
+    MotivoFalla,
+)
+from cotizacion.domain.cotizacion.listado import FiltrosCotizaciones, ResumenCotizacion
 from cotizacion.domain.cotizacion.modelos import (
     Actor,
     Cotizacion,
@@ -218,6 +237,22 @@ class OfertaDto(_Dto):
     estado: EstadoOferta
 
 
+class ReglaAplicadaDto(_Dto):
+    id: str
+    version: str
+
+
+class FaltanteDto(_Dto):
+    """Un dato que no se obtuvo (HU-W06). Solo su nombre: el valor no existe y no se inventa."""
+
+    fuente: str
+    dato: str
+    motivo: MotivoFalla
+    regla: ReglaAplicadaDto | None = Field(
+        description="Regla de fallback aplicada; null si la fuente no tenía regla vigente"
+    )
+
+
 class CotizacionRespuesta(_Dto):
     id: UUID
     cliente_id: UUID
@@ -245,6 +280,26 @@ class CotizacionRespuesta(_Dto):
     vigente_hasta: datetime | None = Field(default=None, description=DESCRIPCION_VIGENTE_HASTA)
     # HU-W04: aditivo y opcional; null en las cotizaciones anteriores a la migración 004.
     oferta: OfertaDto | None = Field(default=None, description="La oferta de la cotización")
+    # HU-W06: aditivos; false, vacío y null en el recorrido nominal y antes de la migración 005.
+    degradada: bool = Field(
+        default=False,
+        description="Oferta provisional: una fuente opcional faltó y una regla permitió degradar",
+    )
+    faltantes: list[FaltanteDto] = Field(default_factory=list)
+    version_reglas_fallback: str | None = None
+
+
+class DecisionCotizacionRespuesta(_Dto):
+    """La decisión de fallback de una cotización (HU-W06, AC3). NOMINAL si ninguna fuente faltó."""
+
+    cotizacion_id: UUID
+    decision: str = Field(description="NOMINAL o DEGRADADA")
+    decision_id: UUID | None
+    perfil_id: UUID | None
+    faltantes: list[FaltanteDto]
+    version_reglas_fallback: str | None
+    mensaje_codigo: MensajeFallback | None
+    decidido_en: datetime | None
 
 
 class RangoDto(_Dto):
@@ -272,6 +327,53 @@ class CondicionesProducto(_Dto):
     limites: LimitesDto
 
 
+class ResumenCotizacionDto(_Dto):
+    """Una fila del listado: la oferta y lo mínimo de la cotización (sin datos del asegurado salvo
+    la suma asegurada, que ya devuelve la lectura por id)."""
+
+    cotizacion_id: UUID
+    codigo: str = Field(description="COT-AAAA-NNNNN")
+    cliente_id: UUID
+    socio_id: str | None
+    producto_id: str
+    version_producto: str
+    moneda: str
+    periodicidad: str
+    suma_asegurada: TextoDecimal
+    prima: TextoDecimal = Field(description="El precio de la oferta (prima total)")
+    nivel_riesgo: NivelRiesgo | None = Field(description="null: cotizada sin perfil")
+    degradada: bool = Field(description="Oferta provisional (HU-W06)")
+    creada_en: datetime
+    vigente_hasta: datetime = Field(description=DESCRIPCION_VIGENTE_HASTA)
+    estado: EstadoOferta
+
+
+class ListadoCotizacionesRespuesta(_Dto):
+    items: list[ResumenCotizacionDto]
+    siguiente_cursor: str | None = Field(description="null: no hay más páginas")
+    total: int = Field(description="Cotizaciones que cumplen los filtros")
+
+
+def resumen_dto(resumen: ResumenCotizacion, ahora: datetime) -> ResumenCotizacionDto:
+    return ResumenCotizacionDto(
+        cotizacion_id=resumen.cotizacion_id,
+        codigo=resumen.codigo,
+        cliente_id=resumen.cliente_id,
+        socio_id=resumen.socio_id,
+        producto_id=resumen.producto_id,
+        version_producto=resumen.version_producto,
+        moneda=resumen.moneda,
+        periodicidad=resumen.periodicidad,
+        suma_asegurada=texto(resumen.suma_asegurada),
+        prima=texto(resumen.prima),
+        nivel_riesgo=resumen.nivel_riesgo,
+        degradada=resumen.degradada,
+        creada_en=resumen.creada_en.astimezone(UTC),
+        vigente_hasta=resumen.vigente_hasta.astimezone(UTC),
+        estado=resumen.estado(ahora),
+    )
+
+
 def oferta_de(oferta: Oferta, ahora: datetime) -> OfertaDto:
     return OfertaDto(
         id=oferta.id,
@@ -295,6 +397,61 @@ def oferta_de(oferta: Oferta, ahora: datetime) -> OfertaDto:
         vigente_hasta=oferta.vigente_hasta.astimezone(UTC),
         estado=oferta.estado(ahora),
     )
+
+
+def faltantes_de(faltantes: tuple[Faltante, ...]) -> list[FaltanteDto]:
+    return [
+        FaltanteDto(
+            fuente=f.fuente,
+            dato=f.dato,
+            motivo=f.motivo,
+            regla=None
+            if f.regla is None
+            else ReglaAplicadaDto(id=f.regla.id, version=f.regla.version),
+        )
+        for f in faltantes
+    ]
+
+
+def decision_respuesta(cotizacion: Cotizacion) -> DecisionCotizacionRespuesta:
+    registro = cotizacion.decision
+    if registro is None:
+        return DecisionCotizacionRespuesta(
+            cotizacion_id=cotizacion.id,
+            decision="NOMINAL",
+            decision_id=None,
+            perfil_id=cotizacion.perfil_id,
+            faltantes=[],
+            version_reglas_fallback=None,
+            mensaje_codigo=None,
+            decidido_en=None,
+        )
+    decision = registro.decision
+    return DecisionCotizacionRespuesta(
+        cotizacion_id=cotizacion.id,
+        decision=decision.tipo.value,
+        decision_id=registro.id,
+        perfil_id=registro.perfil_id,
+        faltantes=faltantes_de(decision.faltantes),
+        version_reglas_fallback=decision.version_reglas,
+        mensaje_codigo=decision.mensaje_codigo,
+        decidido_en=registro.decidido_en.astimezone(UTC),
+    )
+
+
+def detalles_pendiente(registro: DecisionRegistrada) -> dict[str, Any]:
+    """Los detalles del 503 de una cotización PENDIENTE: la decisión, sin valores."""
+    decision = registro.decision
+    return {
+        "dependencia": CotizacionPendiente(registro).dependencia,
+        "decisionId": str(registro.id),
+        "accionSugerida": AccionSugerida.RECALCULAR_PERFIL.value,
+        "mensajeCodigo": decision.mensaje_codigo.value,
+        "versionReglasFallback": decision.version_reglas,
+        "faltantes": [
+            f.model_dump(mode="json", by_alias=True) for f in faltantes_de(decision.faltantes)
+        ],
+    }
 
 
 def respuesta_de(
@@ -336,6 +493,13 @@ def respuesta_de(
         oferta=None
         if cotizacion.oferta is None
         else oferta_de(cotizacion.oferta, ahora or datetime.now(UTC)),
+        degradada=cotizacion.degradada,
+        faltantes=faltantes_de(cotizacion.decision.decision.faltantes)
+        if cotizacion.decision
+        else [],
+        version_reglas_fallback=cotizacion.decision.decision.version_reglas
+        if cotizacion.decision
+        else None,
     )
 
 
@@ -434,6 +598,14 @@ def error_cotizacion(error: Exception, producto_en_ruta: bool = False) -> ErrorN
                 409,
                 {"accion": ACCION_OFERTA_VENCIDA},
             )
+        case CotizacionPendiente(registro=registro):
+            # HU-W06: el mismo código recuperable de HU-W04/W05, con la decisión registrada.
+            return ErrorNegocio(
+                "DEPENDENCIA_NO_DISPONIBLE",
+                "Falta una fuente de datos y no hay una respuesta degradada permitida",
+                503,
+                detalles_pendiente(registro),
+            )
         case DependenciaNoDisponible(dependencia=dependencia):
             return ErrorNegocio(
                 "DEPENDENCIA_NO_DISPONIBLE",
@@ -488,6 +660,11 @@ def _condiciones(request: Request) -> ConsultarCondiciones:
     return caso
 
 
+def _listar(request: Request) -> ListarCotizaciones:
+    caso: ListarCotizaciones = _caso(request, "listar_cotizaciones")
+    return caso
+
+
 ActorCotizacion = Annotated[Actor, Depends(actor_cotizacion)]
 # HU-W05: tiempo restante de quien llama (api-socios, bff-web); acota el presupuesto del recorrido.
 DeadlineMs = Annotated[
@@ -514,7 +691,11 @@ DeadlineMs = Annotated[
             "DATOS_FUERA_DE_RANGO, COBERTURA_NO_DISPONIBLE o PERFIL_NO_CORRESPONDE "
             "(detalles.campos, sin valores)"
         ),
-        503: _error("DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia)"),
+        503: _error(
+            "DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia). HU-W06: con dependencia "
+            "perfil.fuentes, una fuente del perfil faltó sin fallback permitido; detalles trae "
+            "decisionId, faltantes, versionReglasFallback y accionSugerida RECALCULAR_PERFIL"
+        ),
     },
 )
 async def cotizar(
@@ -558,6 +739,37 @@ async def cotizar(
 
 
 @router.get(
+    "",
+    response_model=ListadoCotizacionesRespuesta,
+    responses={422: _error("SOLICITUD_INVALIDA (también un cursor que no entregó cotizacion)")},
+)
+async def listar(
+    actor: ActorCotizacion,
+    listar: Annotated[ListarCotizaciones, Depends(_listar)],
+    estado: EstadoOferta | None = None,
+    q: Annotated[
+        str | None,
+        Query(min_length=1, max_length=64, description="Parte del código COT-AAAA-NNNNN"),
+    ] = None,
+    limite: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: Annotated[str | None, Query(max_length=200)] = None,
+) -> ListadoCotizacionesRespuesta:
+    """Cotizaciones con oferta, de la más reciente a la más antigua ("Cotizaciones abiertas" del
+    portal). `estado` es el de la oferta en el instante de la consulta. Un SOCIO solo ve las
+    suyas; un ASESOR, todas."""
+    try:
+        pagina = await listar.ejecutar(FiltrosCotizaciones(estado, q), actor, limite, cursor)
+    except CursorInvalido as error:
+        raise ErrorNegocio("SOLICITUD_INVALIDA", "El cursor no es válido", 422) from error
+    ahora = listar.reloj.ahora()
+    return ListadoCotizacionesRespuesta(
+        items=[resumen_dto(r, ahora) for r in pagina.items],
+        siguiente_cursor=pagina.siguiente_cursor,
+        total=pagina.total,
+    )
+
+
+@router.get(
     "/{cotizacionId}",
     response_model=CotizacionRespuesta,
     responses={
@@ -584,6 +796,28 @@ async def obtener(
         vigencia_horas=config.oferta_vigencia_horas,
         ahora=calcular.reloj.ahora(),
     )
+
+
+@router.get(
+    "/{cotizacionId}/decision",
+    response_model=DecisionCotizacionRespuesta,
+    responses={
+        404: _error("COTIZACION_NO_ENCONTRADA (también si es de otro socio)"),
+        422: _error("SOLICITUD_INVALIDA"),
+    },
+)
+async def decision(
+    actor: ActorCotizacion,
+    consultar: Annotated[ConsultarCotizacion, Depends(_consultar)],
+    cotizacion_id: Annotated[UUID, Path(alias="cotizacionId")],
+) -> DecisionCotizacionRespuesta:
+    """La decisión de fallback de la cotización (HU-W06, AC3): las fuentes y datos faltantes, el
+    motivo y la regla aplicada con su versión. Para el asesor o el socio dueño."""
+    try:
+        cotizacion = await consultar.ejecutar(cotizacion_id, actor)
+    except CotizacionNoEncontrada as error:
+        raise error_cotizacion(error) from error
+    return decision_respuesta(cotizacion)
 
 
 @router_productos.get(
