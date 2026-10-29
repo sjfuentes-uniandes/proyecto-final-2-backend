@@ -1,4 +1,5 @@
-"""PagosPuerto sobre `POST /v1/cobros` de adaptador-pagos (HU-W16, 16.10; ADR 0013, decisión 5).
+"""PagosPuerto sobre `POST /v1/cobros` (16.10) y `GET /v1/cobros/{claveRecaudo}?pagadorRef` (16.11,
+la consulta de la conciliación) de adaptador-pagos (HU-W16; ADR 0013, decisión 5).
 
 Solo un 200 con el `CobroDto` de `contracts/openapi/adaptador-pagos.yaml` y la misma `claveRecaudo`
 es una respuesta definitiva (APROBADO con `transaccionId`, o RECHAZADO). Todo lo demás es incierto
@@ -14,12 +15,17 @@ El timeout (6,5 s por defecto) supera al del adaptador hacia el proveedor (5 s):
 respuesta definitiva o su 504. Se aplica por fase en HTTPX y como corte total de la llamada. Sin
 reintentos: la incertidumbre la resuelve la conciliación (16.11) con la misma `claveRecaudo`.
 
+La consulta responde igual que el cobro, con una respuesta más: `404 COBRO_NO_ENCONTRADO` (con ese
+código en el cuerpo) es `CobroNoEncontrado`, que la conciliación reintenta con la misma clave. Un
+404 sin ese código es incierto, como en el cobro.
+
 El monto viaja como texto decimal (`format(monto, "f")`, sin notación científica ni `float`).
 Propaga `X-Correlation-Id` del movimiento. Nunca registra el pagador ni los cuerpos.
 """
 
 import asyncio
-from typing import Annotated, Literal
+from collections.abc import Coroutine
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import httpx
@@ -30,8 +36,11 @@ from solventa_common.correlation import CORRELATION_HEADER
 from dinero.application.recaudo.puertos import (
     CobroAprobado,
     CobroIncierto,
+    CobroNoEncontrado,
     CobroRechazado,
+    ConsultaCobro,
     ResultadoCobro,
+    ResultadoConsulta,
     SolicitudCobro,
 )
 from dinero.domain.recaudo.modelos import CODIGO, LARGO_TRANSACCION
@@ -39,6 +48,8 @@ from dinero.domain.recaudo.modelos import CODIGO, LARGO_TRANSACCION
 TIEMPO_AGOTADO = "ADAPTADOR_TIEMPO_AGOTADO"
 NO_DISPONIBLE = "ADAPTADOR_NO_DISPONIBLE"
 RESPUESTA_INVALIDA = "ADAPTADOR_RESPUESTA_INVALIDA"
+# El código del catálogo que adaptador-pagos responde con 404 en la consulta.
+COBRO_NO_ENCONTRADO = "COBRO_NO_ENCONTRADO"
 
 Transaccion = Annotated[str, Field(min_length=1, max_length=LARGO_TRANSACCION)]
 
@@ -79,33 +90,63 @@ class AdaptadorPagosHttp:
         self._timeout_s = timeout_ms / 1000
 
     async def cobrar(self, solicitud: SolicitudCobro) -> ResultadoCobro:
+        respuesta = await self._llamar(
+            self._cliente.post(
+                f"{self._base_url}/v1/cobros",
+                json={
+                    "claveRecaudo": str(solicitud.clave_recaudo),
+                    "monto": format(solicitud.monto, "f"),
+                    "moneda": solicitud.moneda,
+                    "pagadorRef": str(solicitud.pagador_ref),
+                },
+                headers={CORRELATION_HEADER: solicitud.correlation_id},
+                timeout=self._timeout_s,
+            )
+        )
+        if isinstance(respuesta, CobroIncierto):
+            return respuesta
+        return _resultado(respuesta, solicitud.clave_recaudo)
+
+    async def consultar(self, consulta: ConsultaCobro) -> ResultadoConsulta:
+        respuesta = await self._llamar(
+            self._cliente.get(
+                f"{self._base_url}/v1/cobros/{consulta.clave_recaudo}",
+                params={"pagadorRef": str(consulta.pagador_ref)},
+                headers={CORRELATION_HEADER: consulta.correlation_id},
+                timeout=self._timeout_s,
+            )
+        )
+        if isinstance(respuesta, CobroIncierto):
+            return respuesta
+        if respuesta.status_code == 404 and _codigo_de(respuesta) == COBRO_NO_ENCONTRADO:
+            return CobroNoEncontrado()
+        return _resultado(respuesta, consulta.clave_recaudo)
+
+    async def _llamar(
+        self, peticion: Coroutine[Any, Any, httpx.Response]
+    ) -> httpx.Response | CobroIncierto:
+        """La respuesta, o el incierto si no llegó a tiempo o no hubo conexión."""
         try:
             async with asyncio.timeout(self._timeout_s):
-                respuesta = await self._cliente.post(
-                    f"{self._base_url}/v1/cobros",
-                    json={
-                        "claveRecaudo": str(solicitud.clave_recaudo),
-                        "monto": format(solicitud.monto, "f"),
-                        "moneda": solicitud.moneda,
-                        "pagadorRef": str(solicitud.pagador_ref),
-                    },
-                    headers={CORRELATION_HEADER: solicitud.correlation_id},
-                    timeout=self._timeout_s,
-                )
+                return await peticion
         except (TimeoutError, httpx.TimeoutException):
             return CobroIncierto(TIEMPO_AGOTADO)
         except httpx.HTTPError:
             return CobroIncierto(NO_DISPONIBLE)
-        if respuesta.status_code != 200:
-            return CobroIncierto(_codigo_de(respuesta))
-        try:
-            cobro = _CobroDto.model_validate_json(respuesta.content)
-        except ValidationError:
-            return CobroIncierto(RESPUESTA_INVALIDA)
-        if cobro.clave_recaudo != solicitud.clave_recaudo:
-            return CobroIncierto(RESPUESTA_INVALIDA)
-        if cobro.estado == "RECHAZADO":
-            return CobroRechazado(motivo=cobro.motivo, transaccion_id=cobro.transaccion_id)
-        if cobro.transaccion_id is None:
-            return CobroIncierto(RESPUESTA_INVALIDA)
-        return CobroAprobado(cobro.transaccion_id)
+
+
+def _resultado(respuesta: httpx.Response, clave_recaudo: UUID) -> ResultadoCobro:
+    """Solo un 200 con el `CobroDto` de la misma clave es definitivo."""
+    if respuesta.status_code != 200:
+        return CobroIncierto(_codigo_de(respuesta))
+    try:
+        cobro = _CobroDto.model_validate_json(respuesta.content)
+    except ValidationError:
+        return CobroIncierto(RESPUESTA_INVALIDA)
+    if cobro.clave_recaudo != clave_recaudo:
+        return CobroIncierto(RESPUESTA_INVALIDA)
+    if cobro.estado == "RECHAZADO":
+        return CobroRechazado(motivo=cobro.motivo, transaccion_id=cobro.transaccion_id)
+    if cobro.transaccion_id is None:
+        return CobroIncierto(RESPUESTA_INVALIDA)
+    return CobroAprobado(cobro.transaccion_id)

@@ -26,6 +26,7 @@ from dinero.application.recaudo.puertos import (
     EventosRecaudo,
     PagosPuerto,
     RecaudosRepositorio,
+    RegistroResultados,
     Reloj,
     ResultadoCobro,
     SolicitudCobro,
@@ -120,11 +121,14 @@ class RecaudarPrima[T]:
                 correlation_id=recaudo.correlation_id,
             )
         )
-        resuelto = _aplicar(recaudo, resultado, self._reloj)
-        async with self._transacciones.transaccion() as tx:
-            cambiadas = await self._recaudos.registrar_resultado(resuelto, tx)
-            if cambiadas and resuelto.final:
-                await self._eventos.agregar(resuelto, tx)
+        resuelto, cambiadas = await aplicar_resultado(
+            recaudo,
+            resultado,
+            recaudos=self._recaudos,
+            transacciones=self._transacciones,
+            eventos=self._eventos,
+            reloj=self._reloj,
+        )
         if not cambiadas:
             logger.info(MENSAJE_YA_RESUELTO, extra=_ids(resuelto))
         elif resuelto.final:
@@ -145,6 +149,26 @@ class RecaudarPrima[T]:
                     "codigo": resuelto.ultimo_incierto,
                 },
             )
+
+
+async def aplicar_resultado[T](
+    recaudo: Recaudo,
+    resultado: ResultadoCobro,
+    *,
+    recaudos: RegistroResultados[T],
+    transacciones: Transacciones[T],
+    eventos: EventosRecaudo[T],
+    reloj: Reloj,
+) -> tuple[Recaudo, int]:
+    """Aplica el resultado con la guarda de PENDIENTE y, en la misma transacción, escribe el
+    evento si cambió la fila y el estado es final. La usan la continuación y la conciliación
+    (16.11). Devuelve el movimiento resuelto y las filas cambiadas."""
+    resuelto = _aplicar(recaudo, resultado, reloj)
+    async with transacciones.transaccion() as tx:
+        cambiadas = await recaudos.registrar_resultado(resuelto, tx)
+        if cambiadas and resuelto.final:
+            await eventos.agregar(resuelto, tx)
+    return resuelto, cambiadas
 
 
 def _aplicar(recaudo: Recaudo, resultado: ResultadoCobro, reloj: Reloj) -> Recaudo:

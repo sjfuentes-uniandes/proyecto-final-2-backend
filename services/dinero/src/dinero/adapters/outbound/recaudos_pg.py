@@ -11,12 +11,16 @@
   `tx`, toma una conexión del pool con su propia transacción, solo mientras dura la operación.
 - `transaccion()` (16.10) abre una transacción para varias operaciones: la continuación del cobro
   escribe en ella el resultado y el evento del outbox, juntos.
+- `pendientes` (16.11) lee los PENDIENTE más antiguos para la conciliación, sin bloquearlos: la
+  conexión se devuelve antes de llamar al adaptador. Sin índice propio (no hay migraciones nuevas
+  en este paso): la tabla es pequeña y el lote, acotado.
 - psycopg devuelve `numeric` como `Decimal`: el monto no pasa por `float`.
 """
 
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import datetime
 from importlib import resources
 from typing import Any, Protocol
 from uuid import UUID
@@ -68,6 +72,13 @@ _POR_CLAVE = f"SELECT {', '.join(COLUMNAS)} FROM recaudos WHERE clave_recaudo = 
 _REGISTRAR = (
     f"UPDATE recaudos SET {', '.join(f'{c} = %s' for c in _RESULTADO)} "
     f"WHERE recaudo_id = %s AND estado = '{EstadoRecaudo.PENDIENTE.value}'"
+)
+# Sin FOR UPDATE: la conciliación no retiene filas mientras llama al adaptador. El desempate por
+# recaudo_id da un orden estable entre tareas.
+_PENDIENTES = (
+    f"SELECT {', '.join(COLUMNAS)} FROM recaudos "
+    f"WHERE estado = '{EstadoRecaudo.PENDIENTE.value}' AND actualizado_en < %s "
+    "ORDER BY actualizado_en, recaudo_id LIMIT %s"
 )
 
 
@@ -128,7 +139,8 @@ class TransaccionPg:
 
 
 class RecaudosPg:
-    """Implementa RecaudosRepositorio[ConTransaccion] y Transacciones[ConTransaccion]."""
+    """Implementa RecaudosRepositorio, PendientesRepositorio y Transacciones, con
+    ConTransaccion."""
 
     def __init__(self, pool: "AsyncConnectionPool[Any]") -> None:
         self._pool = pool
@@ -174,6 +186,12 @@ class RecaudosPg:
                 _REGISTRAR, (*(fila[c] for c in _RESULTADO), recaudo.recaudo_id)
             )
             return cursor.rowcount
+
+    async def pendientes(self, antes_de: datetime, lote: int) -> list[Recaudo]:
+        async with self._conexion(None) as conexion:
+            cursor = conexion.cursor(row_factory=dict_row)
+            await cursor.execute(_PENDIENTES, (antes_de, lote))
+            return [recaudo_de(fila) for fila in await cursor.fetchall()]
 
     @staticmethod
     async def _por_clave(conexion: AsyncConnection[Any], clave_recaudo: UUID) -> Recaudo | None:

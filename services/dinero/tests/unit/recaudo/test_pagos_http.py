@@ -21,7 +21,9 @@ from dinero.adapters.outbound.pagos_http import AdaptadorPagosHttp
 from dinero.application.recaudo.puertos import (
     CobroAprobado,
     CobroIncierto,
+    CobroNoEncontrado,
     CobroRechazado,
+    ConsultaCobro,
     SolicitudCobro,
 )
 from solventa_common import correlation
@@ -288,3 +290,118 @@ async def test_no_registra_el_pagador_ni_los_cuerpos(logs: Any) -> None:
     texto = logs.texto()
     assert str(PAGADOR) not in texto
     assert "Juan" not in texto and "4111" not in texto
+
+
+# --- HU-W16 (16.11): consulta para la conciliación ----------------------------------------------------
+def consulta(**cambios: Any) -> ConsultaCobro:
+    datos: dict[str, Any] = {
+        "clave_recaudo": uuid4(),
+        "pagador_ref": PAGADOR,
+        "correlation_id": "corr-w16-consulta",
+    }
+    datos.update(cambios)
+    return ConsultaCobro(**datos)
+
+
+async def consultar(
+    responder: Responder, entrada: ConsultaCobro | None = None, timeout_ms: int = 6500
+) -> tuple[Any, Registro]:
+    registro = Registro(responder)
+    entrada = entrada or consulta()
+    async with correlation.cliente_async(transport=httpx.MockTransport(registro)) as cliente:
+        resultado = await AdaptadorPagosHttp(cliente, BASE + "/", timeout_ms).consultar(entrada)
+    return resultado, registro
+
+
+def eco_consulta(estado: str, transaccion: Any, motivo: Any = None) -> Responder:
+    def responder(request: httpx.Request) -> httpx.Response:
+        clave = request.url.path.rsplit("/", 1)[-1]
+        return httpx.Response(200, json=cobro(clave, estado, transaccion, motivo))
+
+    return responder
+
+
+def _error(estado: int, codigo: str) -> Responder:
+    def responder(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            estado, json={"codigo": codigo, "mensaje": "x", "correlationId": "c", "detalles": None}
+        )
+
+    return responder
+
+
+async def test_la_consulta_sigue_el_contrato() -> None:
+    entrada = consulta()
+    _, registro = await consultar(eco_consulta("APROBADO", "TX-SINT-C06"), entrada)
+    [request] = registro.solicitudes
+    assert request.method == "GET"
+    assert request.url.path == f"/v1/cobros/{entrada.clave_recaudo}"
+    assert dict(request.url.params) == {"pagadorRef": str(PAGADOR)}
+    assert request.content == b""
+    assert request.headers["X-Correlation-Id"] == "corr-w16-consulta"
+    [timeout] = registro.timeouts
+    assert timeout == {"connect": 6.5, "read": 6.5, "write": 6.5, "pool": 6.5}
+
+
+async def test_consulta_aprobada_y_rechazada() -> None:
+    aprobado, _ = await consultar(eco_consulta("APROBADO", "TX-SINT-C06"))
+    rechazado, _ = await consultar(eco_consulta("RECHAZADO", None, "FONDOS_INSUFICIENTES"))
+    assert aprobado == CobroAprobado("TX-SINT-C06")
+    assert rechazado == CobroRechazado(motivo="FONDOS_INSUFICIENTES", transaccion_id=None)
+
+
+async def test_un_404_cobro_no_encontrado_es_no_encontrado() -> None:
+    resultado, _ = await consultar(_error(404, "COBRO_NO_ENCONTRADO"))
+    assert resultado == CobroNoEncontrado()
+
+
+@pytest.mark.parametrize(
+    ("estado", "codigo"),
+    [
+        (404, "NO_ENCONTRADO"),  # otro 404 (una ruta inexistente): no es «el cobro no existe»
+        (504, "TIEMPO_AGOTADO"),
+        (503, "FUENTE_NO_DISPONIBLE"),
+        (502, "RESPUESTA_INVALIDA"),
+        (422, "SOLICITUD_INVALIDA"),
+        (200, "COBRO_NO_ENCONTRADO"),  # un 200 con el error no es un cobro
+    ],
+)
+async def test_lo_demas_es_incierto_nunca_no_encontrado(estado: int, codigo: str) -> None:
+    resultado, _ = await consultar(_error(estado, codigo))
+    esperado = pagos_http.RESPUESTA_INVALIDA if estado == 200 else codigo
+    assert resultado == CobroIncierto(esperado)
+
+
+async def test_un_404_sin_codigo_es_incierto_http() -> None:
+    resultado, _ = await consultar(lambda _: httpx.Response(404, content=b"Not Found"))
+    assert resultado == CobroIncierto("HTTP_404")
+
+
+async def test_la_consulta_de_otra_clave_es_incierta() -> None:
+    otra = uuid4()
+    resultado, _ = await consultar(
+        lambda _: httpx.Response(200, json=cobro(otra, "APROBADO", "TX-SINT-C06"))
+    )
+    assert resultado == CobroIncierto(pagos_http.RESPUESTA_INVALIDA)
+
+
+async def test_timeout_y_conexion_en_la_consulta_son_inciertos() -> None:
+    def lento(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("lento", request=request)
+
+    def caido(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("sin conexión", request=request)
+
+    assert (await consultar(lento))[0] == CobroIncierto(pagos_http.TIEMPO_AGOTADO)
+    assert (await consultar(caido))[0] == CobroIncierto(pagos_http.NO_DISPONIBLE)
+
+
+async def test_la_consulta_que_no_termina_dentro_del_corte_total_es_incierta() -> None:
+    class Lento(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            await asyncio.sleep(5)
+            raise AssertionError("no debió esperar tanto")
+
+    async with httpx.AsyncClient(transport=Lento()) as cliente:
+        resultado = await AdaptadorPagosHttp(cliente, BASE, 50).consultar(consulta())
+    assert resultado == CobroIncierto(pagos_http.TIEMPO_AGOTADO)

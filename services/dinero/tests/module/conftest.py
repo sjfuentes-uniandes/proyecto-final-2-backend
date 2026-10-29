@@ -6,7 +6,8 @@ las migraciones del servicio.
 
 Desde la 16.10, también LocalStack 4.14.0 (`nueva_cola`: una cola con su DLQ, como
 `dinero-aceptaciones`) y un WireMock 3.9.2 en lugar de adaptador-pagos (`adaptador`), con respuestas
-fijas según su contrato, elegidas por `pagadorRef`; su journal cuenta los cobros.
+fijas según su contrato, elegidas por `pagadorRef`; su journal cuenta los cobros. Desde la 16.11
+responde también la consulta de la conciliación y su journal cuenta las consultas.
 
 psycopg asíncrono no corre sobre el ProactorEventLoop de Windows: las pruebas corren en un
 SelectorEventLoop (en Linux es el bucle por defecto), como `polizas`, `cotizacion` y `bff-movil`.
@@ -90,17 +91,25 @@ C01 = "00000000-0000-4000-8000-000000000001"  # aprobado
 C02 = "00000000-0000-4000-8000-000000000002"  # rechazado
 C06 = "00000000-0000-4000-8000-000000000006"  # lento (8000 ms): dinero corta a los 6,5 s
 C07 = "00000000-0000-4000-8000-000000000007"  # el adaptador responde 503 FUENTE_NO_DISPONIBLE
+# 16.11: la consulta (GET /v1/cobros/{claveRecaudo}?pagadorRef), como el simulador: C01 aprobado,
+# C02 rechazado, C06 aprobado (el cobro lento sí ocurrió) y C07 404 COBRO_NO_ENCONTRADO (nunca
+# llegó). Dos pagadores solo de estas pruebas, fuera del catálogo del simulador:
+R01 = "00000000-0000-4000-9000-000000000001"  # consulta 404; el reintento del cobro, aprobado
+L01 = "00000000-0000-4000-9000-000000000002"  # cobro y consulta aprobados, con 500 ms de retardo
+RETARDO_L01_MS = 500
+I01 = "00000000-0000-4000-9000-000000000003"  # la consulta responde 503 (incierto)
 _CLAVE = "{{jsonPath request.body '$.claveRecaudo'}}"
+_CLAVE_EN_RUTA = "{{request.pathSegments.[2]}}"
 
 
-def _cobro(estado: str, transaccion: str | None, motivo: str | None) -> str:
+def _cobro(estado: str, transaccion: str | None, motivo: str | None, clave: str = _CLAVE) -> str:
     # CobroDto de contracts/openapi/adaptador-pagos.yaml, con la claveRecaudo recibida.
     return json.dumps(
-        {"claveRecaudo": _CLAVE, "estado": estado, "transaccionId": transaccion, "motivo": motivo}
+        {"claveRecaudo": clave, "estado": estado, "transaccionId": transaccion, "motivo": motivo}
     )
 
 
-def _stub(pagador: str, estado: int, cuerpo: str, retardo_ms: int = 0) -> dict[str, Any]:
+def _respuesta(estado: int, cuerpo: str, retardo_ms: int) -> dict[str, Any]:
     respuesta: dict[str, Any] = {
         "status": estado,
         "headers": {"Content-Type": "application/json"},
@@ -109,6 +118,35 @@ def _stub(pagador: str, estado: int, cuerpo: str, retardo_ms: int = 0) -> dict[s
     }
     if retardo_ms:
         respuesta["fixedDelayMilliseconds"] = retardo_ms
+    return respuesta
+
+
+def _stub_consulta(pagador: str, estado: int, cuerpo: str, retardo_ms: int = 0) -> dict[str, Any]:
+    return {
+        "request": {
+            "method": "GET",
+            "urlPathPattern": "/v1/cobros/[0-9a-f-]{36}",
+            "queryParameters": {"pagadorRef": {"equalTo": pagador}},
+        },
+        "response": _respuesta(estado, cuerpo, retardo_ms),
+    }
+
+
+def _consultado(estado: str, transaccion: str | None, motivo: str | None) -> str:
+    return _cobro(estado, transaccion, motivo, clave=_CLAVE_EN_RUTA)
+
+
+NO_ENCONTRADO = json.dumps(
+    {
+        "codigo": "COBRO_NO_ENCONTRADO",
+        "mensaje": "El proveedor no tiene un cobro con esa clave",
+        "correlationId": None,
+        "detalles": None,
+    }
+)
+
+
+def _stub(pagador: str, estado: int, cuerpo: str, retardo_ms: int = 0) -> dict[str, Any]:
     return {
         "request": {
             "method": "POST",
@@ -117,26 +155,35 @@ def _stub(pagador: str, estado: int, cuerpo: str, retardo_ms: int = 0) -> dict[s
                 {"matchesJsonPath": {"expression": "$.pagadorRef", "equalTo": pagador}}
             ],
         },
-        "response": respuesta,
+        "response": _respuesta(estado, cuerpo, retardo_ms),
     }
 
+
+NO_DISPONIBLE = json.dumps(
+    {
+        "codigo": "FUENTE_NO_DISPONIBLE",
+        "mensaje": "El proveedor no está disponible",
+        "correlationId": None,
+        "detalles": {"motivo": "ERROR", "circuito": "CERRADO"},
+    }
+)
 
 STUBS = [
     _stub(C01, 200, _cobro("APROBADO", "TX-SINT-C01", None)),
     _stub(C02, 200, _cobro("RECHAZADO", None, "FONDOS_INSUFICIENTES")),
     _stub(C06, 200, _cobro("APROBADO", "TX-SINT-C06", None), retardo_ms=8000),
-    _stub(
-        C07,
-        503,
-        json.dumps(
-            {
-                "codigo": "FUENTE_NO_DISPONIBLE",
-                "mensaje": "El proveedor no está disponible",
-                "correlationId": None,
-                "detalles": {"motivo": "ERROR", "circuito": "CERRADO"},
-            }
-        ),
+    _stub(C07, 503, NO_DISPONIBLE),
+    _stub(R01, 200, _cobro("APROBADO", "TX-SINT-R01", None)),
+    _stub(L01, 200, _cobro("APROBADO", "TX-SINT-L01", None), retardo_ms=RETARDO_L01_MS),
+    _stub_consulta(C01, 200, _consultado("APROBADO", "TX-SINT-C01", None)),
+    _stub_consulta(C02, 200, _consultado("RECHAZADO", None, "FONDOS_INSUFICIENTES")),
+    _stub_consulta(C06, 200, _consultado("APROBADO", "TX-SINT-C06", None)),
+    _stub_consulta(C07, 404, NO_ENCONTRADO),
+    _stub_consulta(R01, 404, NO_ENCONTRADO),
+    _stub_consulta(
+        L01, 200, _consultado("APROBADO", "TX-SINT-L01", None), retardo_ms=RETARDO_L01_MS
     ),
+    _stub_consulta(I01, 503, NO_DISPONIBLE),
 ]
 
 
@@ -172,6 +219,15 @@ class WireMock:
             s["request"]
             for s in reversed(solicitudes)
             if s["request"]["method"] == "POST" and s["request"]["url"] == "/v1/cobros"
+        ]
+
+    def consultas(self) -> list[dict[str, Any]]:
+        """Las solicitudes a GET /v1/cobros/{claveRecaudo} (16.11), en orden de llegada."""
+        solicitudes = self._admin.get("/requests").json()["requests"]
+        return [
+            s["request"]
+            for s in reversed(solicitudes)
+            if s["request"]["method"] == "GET" and s["request"]["url"].startswith("/v1/cobros/")
         ]
 
 

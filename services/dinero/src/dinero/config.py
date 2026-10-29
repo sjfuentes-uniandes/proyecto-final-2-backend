@@ -5,6 +5,8 @@ from solventa_common.settings import ServiceSettings
 # Timeout de adaptador-pagos hacia el proveedor: ALLY_PAGOS_TIMEOUT_MS (5000 ms en
 # infra/apps/variables.tf, ally_timeouts_ms). dinero debe esperar más que eso.
 TIMEOUT_ADAPTADOR_PAGOS_MS = 5000
+# visibility_timeout de dinero-aceptaciones (infra/platform/catalog.tf:145).
+VISIBILIDAD_ACEPTACIONES_S = 60
 
 
 def _env(nombre: str) -> AliasChoices:
@@ -34,6 +36,22 @@ class Settings(ServiceSettings):
     )
     consumidor_max_mensajes: int = Field(2, ge=1, le=2)
     consumidor_espera_larga_s: int = Field(10, ge=1, le=10)
+    # HU-W16 (16.11): conciliación de los PENDIENTE (ADR 0013, decisión 5). Encendida por defecto:
+    # en los ambientes no se puede fijar una variable nueva sin cambiar infra/, y un PENDIENTE cuyo
+    # mensaje ya se borró no aparece en ninguna alarma. Solo SOLVENTA_CONCILIACION_* la ajusta.
+    # - Intervalo de 2 min: cada tarea lee la base cada 2 min (barato) y solo consulta al proveedor
+    #   por los PENDIENTE antiguos; un incierto se resuelve en unos 5 a 7 min.
+    # - Antigüedad de 5 min: muy por encima de la continuación (hasta 6,5 s) y de la visibilidad de
+    #   la cola (60 s); así no compite con un cobro en curso. Piso: dos visibilidades.
+    # - Lote de 10: acota las llamadas al proveedor por ciclo y tarea (10 consultas, más los
+    #   reintentos), también durante una caída. La parada se atiende entre movimientos.
+    conciliacion_habilitada: bool = True
+    conciliacion_intervalo_s: float = Field(120, gt=0)
+    conciliacion_antiguedad_min_s: int = Field(300, ge=2 * VISIBILIDAD_ACEPTACIONES_S)
+    conciliacion_lote: int = Field(10, ge=1, le=50)
+    # Un incierto con más de 1 h desde creado_en se mide como error: suma en OperationErrors, que
+    # vigila la alarma de tasa de error de dinero (infra/apps/alarms.tf:163). Sin tope.
+    conciliacion_alerta_tras_s: int = Field(3600, gt=0)
     # Outbox, como polizas (16.6): la infraestructura pone OUTBOX_ENABLED="true" y el tópico a todo
     # servicio que publica (`publishes`); sin la variable (local y pruebas) el relay no arranca.
     outbox_enabled: bool = Field(False, validation_alias=_env("OUTBOX_ENABLED"))

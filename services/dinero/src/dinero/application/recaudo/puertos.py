@@ -29,7 +29,14 @@ class Creacion:
     nuevo: bool
 
 
-class RecaudosRepositorio[T](Protocol):
+class RegistroResultados[T](Protocol):
+    async def registrar_resultado(self, recaudo: Recaudo, tx: T | None = None) -> int:
+        """Escribe el estado y el resultado de `recaudo` solo si la fila sigue PENDIENTE. Devuelve
+        las filas cambiadas: 0 si otra tarea ya lo resolvió."""
+        ...
+
+
+class RecaudosRepositorio[T](RegistroResultados[T], Protocol):
     async def crear_pendiente(self, recaudo: Recaudo, tx: T | None = None) -> Creacion:
         """Inserta el movimiento PENDIENTE. Si ya hay uno con su `claveRecaudo`, no inserta nada y
         devuelve el existente con `nuevo = False`."""
@@ -37,9 +44,11 @@ class RecaudosRepositorio[T](Protocol):
 
     async def por_clave(self, clave_recaudo: UUID, tx: T | None = None) -> Recaudo | None: ...
 
-    async def registrar_resultado(self, recaudo: Recaudo, tx: T | None = None) -> int:
-        """Escribe el estado y el resultado de `recaudo` solo si la fila sigue PENDIENTE. Devuelve
-        las filas cambiadas: 0 si otra tarea ya lo resolvió."""
+
+class PendientesRepositorio[T](RegistroResultados[T], Protocol):
+    async def pendientes(self, antes_de: datetime, lote: int) -> list[Recaudo]:
+        """Hasta `lote` movimientos PENDIENTE con `actualizado_en` anterior a `antes_de`, los más
+        antiguos primero. Sin bloquear filas: la guarda de `registrar_resultado` basta (16.11)."""
         ...
 
 
@@ -91,7 +100,30 @@ class CobroIncierto:
 type ResultadoCobro = CobroAprobado | CobroRechazado | CobroIncierto
 
 
+# --- Consulta por adaptador-pagos (conciliación, 16.11) ---------------------------------------------
+@dataclass(frozen=True, slots=True)
+class ConsultaCobro:
+    """Lo que se envía a `GET /v1/cobros/{claveRecaudo}?pagadorRef`: el proveedor elige el caso por
+    el pagador, así que la consulta lo necesita. Nunca va a los logs."""
+
+    clave_recaudo: UUID
+    pagador_ref: UUID
+    correlation_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class CobroNoEncontrado:
+    """`404 COBRO_NO_ENCONTRADO`: el cobro nunca llegó al proveedor. No es un rechazo (P16-3)."""
+
+
+type ResultadoConsulta = ResultadoCobro | CobroNoEncontrado
+
+
 class PagosPuerto(Protocol):
     async def cobrar(self, solicitud: SolicitudCobro) -> ResultadoCobro:
         """No lanza por fallos del adaptador: los devuelve como `CobroIncierto`."""
+        ...
+
+    async def consultar(self, consulta: ConsultaCobro) -> ResultadoConsulta:
+        """Como `cobrar`: no lanza por fallos del adaptador."""
         ...

@@ -7,8 +7,10 @@ La infraestructura entrega a dinero (`infra/apps/ecs.tf` y `platform/catalog.tf`
 
 - Consumidor activo si llega la cola, con lote 2 y espera larga de 10 s.
 - Relay como en polizas (16.6): apagado por defecto.
-- Al cerrar se detiene el consumidor, después el relay y al final se cierra el pool, cada tarea con
-  su límite; la suma cabe en los 30 s del `stopTimeout` de ECS.
+- Conciliación (16.11): encendida por defecto, sobre el pool y el mismo cliente del adaptador.
+- Al cerrar se señalizan a la vez el consumidor y la conciliación y se espera a los dos en paralelo,
+  cada uno con su límite; después se detiene el relay y al final se cierra el pool. La suma cabe en
+  los 30 s del `stopTimeout` de ECS.
 - Sin cola, tópico, base o cliente, o si una tarea falla, se registra y la app sigue sirviendo.
 """
 
@@ -22,7 +24,7 @@ import psycopg_pool
 import pytest
 from dinero import main
 from dinero.adapters.outbound import recaudos_pg
-from dinero.config import TIMEOUT_ADAPTADOR_PAGOS_MS, Settings
+from dinero.config import TIMEOUT_ADAPTADOR_PAGOS_MS, VISIBILIDAD_ACEPTACIONES_S, Settings
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from solventa_common import inbox, outbox
@@ -44,6 +46,11 @@ _SIN_ALIAS = (
     "OUTBOX_LOTE",
     "OUTBOX_INTERVALO_S",
     "OUTBOX_MAX_INTENTOS",
+    "CONCILIACION_HABILITADA",
+    "CONCILIACION_INTERVALO_S",
+    "CONCILIACION_ANTIGUEDAD_MIN_S",
+    "CONCILIACION_LOTE",
+    "CONCILIACION_ALERTA_TRAS_S",
 )
 
 
@@ -69,6 +76,46 @@ def test_por_omision() -> None:
         outbox.MAX_INTENTOS,
     )
     assert (settings.aws_region, settings.aws_endpoint_url) == ("us-east-1", None)
+
+
+def test_la_conciliacion_va_encendida_por_defecto() -> None:
+    """ADR 0013, decisión 5: en los ambientes no se puede fijar una variable nueva sin cambiar
+    `infra/`, y un PENDIENTE cuyo mensaje ya se borró no aparece en ninguna alarma."""
+    settings = Settings()
+    assert settings.conciliacion_habilitada is True
+    assert settings.conciliacion_intervalo_s == 120
+    assert settings.conciliacion_antiguedad_min_s == 300
+    assert settings.conciliacion_lote == 10
+    # Un PENDIENTE de más de 1 h se mide como error (sin tope: se sigue conciliando).
+    assert settings.conciliacion_alerta_tras_s == 3600
+
+
+def test_la_antiguedad_minima_supera_la_continuacion_y_la_visibilidad_de_la_cola() -> None:
+    """Un PENDIENTE recién creado lo cobra su continuación (hasta 6,5 s) y su mensaje se puede
+    reentregar tras la visibilidad (60 s): la conciliación no compite con ellos."""
+    settings = Settings()
+    continuacion_s = settings.adaptador_pagos_timeout_ms / 1000
+    assert VISIBILIDAD_ACEPTACIONES_S == 60
+    assert settings.conciliacion_antiguedad_min_s > 4 * VISIBILIDAD_ACEPTACIONES_S
+    assert settings.conciliacion_antiguedad_min_s > 40 * continuacion_s
+    # El piso configurable: dos visibilidades (con holgura sobre la continuación).
+    with pytest.raises(ValueError):
+        Settings(conciliacion_antiguedad_min_s=2 * VISIBILIDAD_ACEPTACIONES_S - 1)
+    assert Settings(conciliacion_antiguedad_min_s=120).conciliacion_antiguedad_min_s == 120
+
+
+def test_la_conciliacion_se_configura_con_solventa(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SOLVENTA_CONCILIACION_HABILITADA", "false")
+    monkeypatch.setenv("SOLVENTA_CONCILIACION_INTERVALO_S", "30")
+    monkeypatch.setenv("SOLVENTA_CONCILIACION_ANTIGUEDAD_MIN_S", "600")
+    monkeypatch.setenv("SOLVENTA_CONCILIACION_LOTE", "5")
+    monkeypatch.setenv("SOLVENTA_CONCILIACION_ALERTA_TRAS_S", "7200")
+    settings = Settings()
+    assert settings.conciliacion_habilitada is False
+    assert settings.conciliacion_intervalo_s == 30
+    assert settings.conciliacion_antiguedad_min_s == 600
+    assert settings.conciliacion_lote == 5
+    assert settings.conciliacion_alerta_tras_s == 7200
 
 
 def test_las_variables_como_las_pone_ecs(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -124,6 +171,10 @@ def test_el_timeout_de_dinero_supera_al_del_adaptador() -> None:
         {"outbox_lote": 0},
         {"outbox_max_intentos": 0},
         {"outbox_intervalo_s": 0},
+        {"conciliacion_intervalo_s": 0},
+        {"conciliacion_lote": 0},
+        {"conciliacion_lote": 51},
+        {"conciliacion_alerta_tras_s": 0},
     ],
 )
 def test_limites_de_la_configuracion(campo: dict[str, int]) -> None:
@@ -168,6 +219,10 @@ class Tarea:
             await asyncio.sleep(3600)
         await parada.wait()
         self.parada_vista = True
+        if type(self).comportamiento == "lento":
+            # Termina lo que tenía en curso antes de parar (un cobro o una consulta).
+            Bitacora.eventos.append(f"{type(self).nombre} señalizado")
+            await asyncio.sleep(0.1)
         Bitacora.eventos.append(f"{type(self).nombre} parado")
 
 
@@ -179,6 +234,11 @@ class RelayFalso(Tarea):
 class ConsumidorFalso(Tarea):
     creados: ClassVar[list["ConsumidorFalso"]] = []
     nombre = "consumidor"
+
+
+class ConciliacionFalsa(Tarea):
+    creados: ClassVar[list["ConciliacionFalsa"]] = []
+    nombre = "conciliacion"
 
 
 def _cliente_sqs_falso(read_timeout: float) -> Any:
@@ -211,6 +271,15 @@ def tareas(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setattr(main, "RelayOutbox", RelayFalso)
     monkeypatch.setattr(main, "ConsumidorInbox", ConsumidorFalso)
     yield
+
+
+@pytest.fixture
+def conciliacion(monkeypatch: pytest.MonkeyPatch, tareas: None) -> None:
+    """La conciliación falsa. Sin este fixture corre la real, que espera su intervalo (minutos)
+    antes del primer ciclo: en estas pruebas no llega a consultar nada."""
+    ConciliacionFalsa.creados = []
+    ConciliacionFalsa.comportamiento = "espera"
+    monkeypatch.setattr(main, "ConciliarRecaudos", ConciliacionFalsa)
 
 
 @pytest.fixture
@@ -525,12 +594,165 @@ def test_se_detiene_el_consumidor_luego_el_relay_y_al_final_el_pool(
 
 
 def test_los_limites_de_parada_caben_en_el_stop_timeout_de_ecs() -> None:
-    """infra/apps/ecs.tf:141: stopTimeout = 30 s entre SIGTERM y SIGKILL. Se detienen en serie:
-    el consumidor (una espera larga de 10 s más un cobro de hasta 6,5 s, con margen) y después el
-    relay (un ciclo normal tarda ms). Quedan 5 s para que uvicorn termine las solicitudes y se
-    cierre el pool."""
+    """infra/apps/ecs.tf:141: stopTimeout = 30 s entre SIGTERM y SIGKILL.
+
+    - Fase 1, en paralelo: el consumidor (una espera larga de 10 s más un cobro de hasta 6,5 s,
+      con margen) y la conciliación (el movimiento en curso: una consulta y un reintento de hasta
+      6,5 s cada uno, con margen). Dura lo que el mayor de los dos límites.
+    - Fase 2: el relay (un ciclo normal tarda ms), para que publique los últimos eventos.
+
+    max(20, 15) + 5 = 25 s: quedan 5 s para uvicorn y el cierre del pool. En serie serían 40 s."""
     settings = Settings()
     cobro_s = settings.adaptador_pagos_timeout_ms / 1000
     assert main.PARADA_CONSUMIDOR_S >= settings.consumidor_espera_larga_s + cobro_s
-    assert main.PARADA_CONSUMIDOR_S + main.PARADA_RELAY_S <= 25
-    assert (main.PARADA_CONSUMIDOR_S, main.PARADA_RELAY_S) == (20, 5)
+    assert main.PARADA_CONCILIACION_S >= 2 * cobro_s
+    fase_1 = max(main.PARADA_CONSUMIDOR_S, main.PARADA_CONCILIACION_S)
+    assert fase_1 + main.PARADA_RELAY_S <= 25
+    assert (main.PARADA_CONSUMIDOR_S, main.PARADA_CONCILIACION_S, main.PARADA_RELAY_S) == (
+        20,
+        15,
+        5,
+    )
+
+
+# --- Conciliación (16.11) --------------------------------------------------------------------------
+@pytest.mark.usefixtures("conciliacion")
+def test_la_conciliacion_arranca_por_defecto_con_el_pool_y_el_cliente_del_adaptador(
+    crear: Callable[..., tuple[FastAPI, Any]], aws: dict[str, list[Any]]
+) -> None:
+    app, logs = crear(
+        ADAPTADOR_PAGOS_URL="http://adaptador-pagos:8080",
+        conciliacion_intervalo_s=30,
+        conciliacion_antiguedad_min_s=600,
+        conciliacion_lote=4,
+        conciliacion_alerta_tras_s=7200,
+    )
+    with TestClient(app) as cliente:
+        tarea = app.state.conciliacion
+        assert isinstance(tarea, asyncio.Task) and not tarea.done()
+        assert cliente.get("/health").json() == {"status": "ok"}
+        pool, pagos = app.state.pool, app.state.pagos
+    [conciliacion] = ConciliacionFalsa.creados
+    opciones = conciliacion.opciones
+    assert isinstance(opciones["recaudos"], recaudos_pg.RecaudosPg)
+    assert opciones["recaudos"]._pool is pool and opciones["transacciones"] is opciones["recaudos"]
+    assert opciones["pagos"] is pagos and pagos._base_url == "http://adaptador-pagos:8080"
+    assert opciones["reloj"].ahora().utcoffset() is not None
+    claves = ("intervalo_s", "antiguedad_min_s", "lote", "alerta_tras_s")
+    assert {k: opciones[k] for k in claves} == {
+        "intervalo_s": 30,
+        "antiguedad_min_s": 600,
+        "lote": 4,
+        "alerta_tras_s": 7200,
+    }
+    assert tarea.done() and not tarea.cancelled()
+    assert Bitacora.eventos == ["conciliacion parado", "pool cerrado"]
+    # Sin cola solo avisa el consumidor; la conciliación no depende de ella.
+    assert [r["message"] for r in logs.de_nivel("WARNING")] == [main.MENSAJE_CONSUMIDOR_SIN_COLA]
+    assert logs.de_nivel("ERROR") == []
+
+
+@pytest.mark.usefixtures("conciliacion")
+def test_la_conciliacion_apagada_no_crea_la_tarea(
+    crear: Callable[..., tuple[FastAPI, Any]], aws: dict[str, list[Any]]
+) -> None:
+    app, _ = crear(conciliacion_habilitada=False)
+    with TestClient(app) as cliente:
+        assert cliente.get("/health").json() == {"status": "ok"}
+        assert getattr(app.state, "conciliacion", None) is None
+    assert ConciliacionFalsa.creados == []
+
+
+@pytest.mark.usefixtures("conciliacion")
+def test_sin_base_la_conciliacion_no_arranca_y_se_avisa(
+    crear: Callable[..., tuple[FastAPI, Any]], aws: dict[str, list[Any]]
+) -> None:
+    app, logs = crear(con_base=False)
+    with TestClient(app) as cliente:
+        assert cliente.get("/health").json() == {"status": "ok"}
+        assert getattr(app.state, "conciliacion", None) is None
+    assert ConciliacionFalsa.creados == []
+    [aviso] = [
+        r for r in logs.de_nivel("WARNING") if r["message"] == main.MENSAJE_CONCILIACION_SIN_BASE
+    ]
+    assert aviso["missing"] == "base"
+
+
+@pytest.mark.usefixtures("conciliacion")
+def test_una_conciliacion_que_falla_no_tumba_la_aplicacion(
+    crear: Callable[..., tuple[FastAPI, Any]], aws: dict[str, list[Any]]
+) -> None:
+    ConciliacionFalsa.comportamiento = "falla"
+    app, logs = crear()
+    with TestClient(app) as cliente:
+        tarea = app.state.conciliacion
+        _esperar(lambda: tarea.done())
+        assert cliente.get("/health").json() == {"status": "ok"}
+    [error] = logs.de_nivel("ERROR")
+    assert (error["message"], error["error_type"]) == (
+        main.MENSAJE_CONCILIACION_DETENIDA,
+        "RuntimeError",
+    )
+    assert "datos sensibles" not in logs.texto()
+
+
+@pytest.mark.usefixtures("conciliacion")
+def test_la_parada_de_la_conciliacion_espera_con_limite_y_luego_cancela(
+    crear: Callable[..., tuple[FastAPI, Any]],
+    aws: dict[str, list[Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ConciliacionFalsa.comportamiento = "ignora_parada"
+    monkeypatch.setattr(main, "PARADA_CONCILIACION_S", 0.05)
+    app, logs = crear()
+    with TestClient(app):
+        tarea = app.state.conciliacion
+    assert tarea.cancelled()
+    [aviso] = [
+        r for r in logs.de_nivel("WARNING") if r["message"] == main.MENSAJE_CONCILIACION_SIN_PARAR
+    ]
+    assert aviso["limit_s"] == 0.05
+    assert Bitacora.eventos == ["pool cerrado"]
+
+
+# --- Parada conjunta (16.11) -----------------------------------------------------------------------
+@pytest.mark.usefixtures("conciliacion")
+def test_consumidor_y_conciliacion_se_senalizan_a_la_vez_y_luego_para_el_relay(
+    crear: Callable[..., tuple[FastAPI, Any]], aws: dict[str, list[Any]]
+) -> None:
+    """Cada uno tarda 0,1 s en terminar lo que tenía en curso: en serie, la conciliación no sabría
+    de la parada hasta que acabe el consumidor."""
+    ConsumidorFalso.comportamiento = "lento"
+    ConciliacionFalsa.comportamiento = "lento"
+    app, _ = crear(SQS_DINERO_ACEPTACIONES_URL=COLA, OUTBOX_ENABLED=True, EVENTS_TOPIC_ARN=TOPICO)
+    with TestClient(app):
+        pass
+    primeros, intermedios, ultimos = (
+        Bitacora.eventos[:2],
+        Bitacora.eventos[2:4],
+        Bitacora.eventos[4:],
+    )
+    assert sorted(primeros) == ["conciliacion señalizado", "consumidor señalizado"]
+    assert sorted(intermedios) == ["conciliacion parado", "consumidor parado"]
+    # El relay para después: publica los eventos del último cobro y de la última conciliación.
+    assert ultimos == ["relay parado", "pool cerrado"]
+
+
+@pytest.mark.usefixtures("conciliacion")
+def test_los_limites_de_la_primera_fase_corren_en_paralelo(
+    crear: Callable[..., tuple[FastAPI, Any]],
+    aws: dict[str, list[Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ConsumidorFalso.comportamiento = "ignora_parada"
+    ConciliacionFalsa.comportamiento = "ignora_parada"
+    monkeypatch.setattr(main, "PARADA_CONSUMIDOR_S", 0.5)
+    monkeypatch.setattr(main, "PARADA_CONCILIACION_S", 0.5)
+    app, logs = crear(SQS_DINERO_ACEPTACIONES_URL=COLA)
+    with TestClient(app):
+        consumidor, conciliacion = app.state.consumidor_ofertas, app.state.conciliacion
+        inicio = time.monotonic()
+    assert time.monotonic() - inicio < 0.9  # en serie serían 1,0 s o más
+    assert consumidor.cancelled() and conciliacion.cancelled()
+    avisos = {r["message"] for r in logs.de_nivel("WARNING")}
+    assert {main.MENSAJE_CONSUMIDOR_SIN_PARAR, main.MENSAJE_CONCILIACION_SIN_PARAR} <= avisos

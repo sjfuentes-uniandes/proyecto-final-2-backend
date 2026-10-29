@@ -1,4 +1,5 @@
-"""HU-W16 (16.10): `adaptador-pagos` verifica como proveedor el pacto de `dinero` (el cobro).
+"""HU-W16: `adaptador-pagos` verifica como proveedor el pacto de `dinero`: el cobro (16.10) y la
+consulta de la conciliación (16.11).
 
 La app real (rutas, caso de uso, validación y traducción de la respuesta del proveedor) se sirve con
 uvicorn en un hilo; el proveedor de pagos externo se simula con `httpx.MockTransport`, como en el
@@ -23,7 +24,8 @@ from fastapi import FastAPI
 from pact import Verifier
 
 PACTO = Path(__file__).parents[4] / "contracts" / "pact" / "dinero-adaptador-pagos.json"
-Respuesta = Callable[[str], dict[str, object]]
+# Un cuerpo es un 200 del proveedor; un httpx.Response, cualquier otra respuesta (16.11).
+Respuesta = Callable[[str], dict[str, object] | httpx.Response]
 
 
 def _aprobado(referencia: str) -> dict[str, object]:
@@ -44,9 +46,18 @@ def _rechazado(referencia: str) -> dict[str, object]:
     }
 
 
+def _no_encontrado(referencia: str) -> httpx.Response:
+    # El proveedor (simulador, consulta de C07): el cobro nunca llegó.
+    return httpx.Response(404, json={"error": "cobro_no_encontrado"})
+
+
 ESTADOS: dict[str, Respuesta] = {
     "el proveedor de pagos aprueba el cobro": _aprobado,
     "el proveedor de pagos rechaza el cobro por fondos insuficientes": _rechazado,
+    # 16.11: la consulta (GET /pagos/v1/cobros?referencia=&pagador=).
+    "el proveedor de pagos tiene el cobro aprobado": _aprobado,
+    "el proveedor de pagos tiene el cobro rechazado por fondos insuficientes": _rechazado,
+    "el proveedor de pagos no tiene el cobro": _no_encontrado,
 }
 
 
@@ -82,8 +93,14 @@ def test_adaptador_pagos_cumple_el_pacto_de_dinero() -> None:
 
     def proveedor(request: httpx.Request) -> httpx.Response:
         recibidas.append(request)
-        referencia = json.loads(request.content)["referencia"]
-        return httpx.Response(200, json=actual["respuesta"](referencia))
+        if request.method == "GET":
+            referencia = request.url.params["referencia"]
+        else:
+            referencia = json.loads(request.content)["referencia"]
+        respuesta = actual["respuesta"](referencia)
+        if isinstance(respuesta, httpx.Response):
+            return respuesta
+        return httpx.Response(200, json=respuesta)
 
     def estado(state: str, action: str) -> None:
         """Un estado por interacción; uno desconocido falla la verificación."""
@@ -101,8 +118,11 @@ def test_adaptador_pagos_cumple_el_pacto_de_dinero() -> None:
             url=url
         ).state_handler(estado, teardown=True).verify()
     assert sorted(vistos) == sorted(ESTADOS)
-    # El adaptador llamó al proveedor una vez por interacción, con la clave como idempotencia.
+    # El adaptador llamó al proveedor una vez por interacción; el cobro, con la clave como
+    # idempotencia, y la consulta, sin ella.
     assert len(recibidas) == len(ESTADOS)
-    assert all(
-        r.headers["Idempotency-Key"] == json.loads(r.content)["referencia"] for r in recibidas
-    )
+    cobros = [r for r in recibidas if r.method == "POST"]
+    consultas = [r for r in recibidas if r.method == "GET"]
+    assert (len(cobros), len(consultas)) == (2, 3)
+    assert all(r.headers["Idempotency-Key"] == json.loads(r.content)["referencia"] for r in cobros)
+    assert all("Idempotency-Key" not in r.headers for r in consultas)

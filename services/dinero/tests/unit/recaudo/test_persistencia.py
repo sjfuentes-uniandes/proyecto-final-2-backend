@@ -35,6 +35,10 @@ class Cursor:
     async def fetchone(self) -> Any:
         return self.filas.pop(0) if self.filas else None
 
+    async def fetchall(self) -> list[Any]:
+        filas, self.filas = self.filas, []
+        return filas
+
 
 class Conexion:
     def __init__(self, filas: list[Any], rowcount: int = 1) -> None:
@@ -247,3 +251,26 @@ async def test_transaccion_propia_expone_su_conexion(pendiente: Fabrica) -> None
         assert await repo.registrar_resultado(recaudo, tx) == 1
     # Con la tx dada, registrar_resultado no pidió otra conexión ni otra transacción.
     assert (pool.prestamos, pool.conexion.transacciones) == (1, 1)
+
+
+# --- HU-W16 (16.11): pendientes para la conciliación ------------------------------------------------
+async def test_pendientes_toma_los_mas_antiguos_hasta_el_lote_sin_bloquear(
+    pendiente: Fabrica,
+) -> None:
+    """Sin `FOR UPDATE`: la conciliación no mantiene bloqueos durante la llamada al adaptador; la
+    guarda de `registrar_resultado` evita efectos dobles entre tareas."""
+    antiguo, otro = pendiente(), pendiente()
+    repo, pool = _repo([fila_recaudo(antiguo), fila_recaudo(otro)])
+    assert await repo.pendientes(DESPUES, 10) == [antiguo, otro]
+    [(leer, parametros)] = pool.conexion.cursor_.sentencias
+    assert leer.startswith(f"SELECT {', '.join(COLUMNAS)} FROM recaudos")
+    assert "WHERE estado = 'PENDIENTE' AND actualizado_en < %s" in leer
+    assert leer.endswith("ORDER BY actualizado_en, recaudo_id LIMIT %s")
+    assert "FOR UPDATE" not in leer
+    assert parametros == (DESPUES, 10)
+    assert pool.prestamos == 1
+
+
+async def test_pendientes_sin_filas(pendiente: Fabrica) -> None:
+    repo, _ = _repo([])
+    assert await repo.pendientes(DESPUES, 5) == []
