@@ -24,9 +24,7 @@
    - Después publica `RecaudoConfirmado` o `RecaudoRechazado` v1, que las colas existentes enrutan a `polizas`, `avisos` y `auditoria`.
 3. **Orden del recorrido R3:** aceptación → recaudo → firma de Solventa y emisión (HU-W17). La firma de las condiciones por el cliente queda fuera de alcance mientras no exista una historia para ella.
 4. **Idempotencia:** `claveRecaudo` es la clave única del movimiento (índice único) y la clave idempotente hacia el proveedor. Una entrega duplicada o concurrente no cobra dos veces.
-5. **Incertidumbre:**
-   - Un timeout, un 5xx o una respuesta inválida dejan el movimiento `PENDIENTE`; nunca se asume rechazo.
-   - Una conciliación dentro de `dinero`, apagada por defecto, consulta el estado por `claveRecaudo`. Solo una respuesta definitiva cambia el estado.
+5. **Incertidumbre:** un timeout, un 5xx o una respuesta inválida dejan el movimiento `PENDIENTE`; nunca se asume rechazo. Una conciliación dentro de `dinero`, **encendida por defecto**, consulta de forma periódica el estado por `claveRecaudo` de los movimientos `PENDIENTE` con cierta antigüedad. Solo una respuesta definitiva cambia el estado. Si el proveedor responde que el cobro no existe, se reintenta el cobro con la misma `claveRecaudo`, que es idempotente en el proveedor. Va encendida por defecto por dos razones: en los ambientes no se puede fijar una variable nueva sin cambiar `infra/`, y un `PENDIENTE` cuyo mensaje ya se borró de la cola no aparece en ninguna alarma.
 6. **Medio de pago:** ningún dato de tarjeta ni de cuenta entra en Solventa. En el MVP, el proveedor simulado emula una domiciliación previa y elige el caso por un pagador sintético que envía `dinero`.
 7. **Alcance:** solo el primer cobro de la prima. Los cobros recurrentes y la compensación (devolución) quedan fuera.
 8. **Relay e inbox:** se implementan en `solventa_common` y se cablean solo en `polizas` y `dinero`. Lo hace esta historia, como Plataforma habilitante.
@@ -60,5 +58,6 @@
   - El flujo que muestran los mockups y el indicador de pasos de la web (`siguientePaso = FIRMA`).
   - El cobro empieza sin confirmación del asesor y sin firma del cliente.
   - La consistencia del recorrido es eventual.
+  - La conciliación corre en cada tarea de `dinero` y consulta al proveedor aunque no haya pendientes antiguos; la guarda `WHERE estado = 'PENDIENTE'` evita efectos dobles entre tareas.
 - **Hay que cambiar (otra persona, en `infra/`), si se quiere el flujo del mockup más adelante:** `bff-web.calls` += `dinero`, o un filtro nuevo en `dinero-aceptaciones`, y un canal para el medio de pago. Para el recorrido en `int` ya hacía falta EXT-01 (`polizas.calls` += `cotizacion`, `catalogo`).
 - Si el equipo no ratifica esta ADR, el plan de HU-W16 se detiene después de los pasos de Plataforma (16.1–16.6), que sirven con cualquier flujo.
