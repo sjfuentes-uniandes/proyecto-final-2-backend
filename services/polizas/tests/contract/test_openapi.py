@@ -34,6 +34,7 @@ def test_contrato_de_suscripciones() -> None:
         "/v1/suscripciones/{decisionId}",
         "/v1/suscripciones/{decisionId}/reconstruccion",
         "/v1/cotizaciones/{cotizacionId}/aceptacion",
+        "/v1/cotizaciones/{cotizacionId}/recaudo",
         "/health",
     }
     esquemas = app.openapi()["components"]["schemas"]
@@ -121,6 +122,42 @@ def test_contrato_de_la_aceptacion() -> None:
     )
     assert esquemas["CanalAceptacion"]["enum"] == ["PORTAL_ASESOR"]
     assert esquemas["SiguientePasoContratacion"]["enum"] == ["FIRMA"]
+
+
+def test_contrato_del_recaudo() -> None:
+    """HU-W16 (16.13): solo lectura, con los encabezados y errores de GET …/aceptacion; respuesta
+    cerrada, con los opcionales como nulos y el monto como texto decimal."""
+    rutas = app.openapi()["paths"]
+    ruta = rutas["/v1/cotizaciones/{cotizacionId}/recaudo"]
+    assert set(ruta) == {"get"}
+    consultar = ruta["get"]
+    aceptacion = rutas["/v1/cotizaciones/{cotizacionId}/aceptacion"]["get"]
+    assert set(consultar["responses"]) == set(aceptacion["responses"])
+    assert consultar["parameters"] == aceptacion["parameters"]
+    assert consultar["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/EstadoRecaudo"
+    }
+    esquemas = app.openapi()["components"]["schemas"]
+    estado = esquemas["EstadoRecaudo"]
+    assert (
+        set(estado["required"])
+        == set(estado["properties"])
+        == {
+            "estado",
+            "claveRecaudo",
+            "monto",
+            "moneda",
+            "transaccionId",
+            "motivo",
+            "actualizadoEn",
+        }
+    )
+    assert estado["properties"]["monto"]["type"] == "string"
+    assert estado["properties"]["monto"]["pattern"] == r"^-?\d+(\.\d+)?$"
+    for nullable in ("transaccionId", "motivo"):
+        tipos = {t.get("type") for t in estado["properties"][nullable]["anyOf"]}
+        assert tipos == {"string", "null"}, nullable
+    assert esquemas["SituacionRecaudo"]["enum"] == ["PENDIENTE", "CONFIRMADO", "RECHAZADO"]
 
 
 def test_una_decision_de_w13_sin_comunicacion_sigue_siendo_valida(

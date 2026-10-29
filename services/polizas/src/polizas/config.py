@@ -1,5 +1,5 @@
 from pydantic import AliasChoices, Field
-from solventa_common import outbox
+from solventa_common import inbox, outbox
 from solventa_common.settings import ServiceSettings
 
 
@@ -38,6 +38,18 @@ class Settings(ServiceSettings):
     aws_region: str = Field("us-east-1", validation_alias=_env("AWS_REGION"))
     # Solo local y pruebas (LocalStack, compose.yaml); en AWS no se define.
     aws_endpoint_url: str | None = Field(None, validation_alias=_env("AWS_ENDPOINT_URL"))
+    # HU-W16 (16.13): consumidor de polizas-recaudos (RecaudoConfirmado y RecaudoRechazado). La
+    # infraestructura entrega la cola a polizas (`consumes`, infra/apps/ecs.tf:82); sin ella (local
+    # y pruebas) no arranca.
+    # - Lote: el de la librería (5). Cada mensaje es una transacción corta (inbox y proyección, ms),
+    #   muy por debajo de los 120 s de visibilidad de la cola.
+    # - Espera larga de 10 s (no 20): la parada se atiende entre ciclos, y con el relay (10 s) debe
+    #   caber en el stopTimeout de 30 s (ecs.tf:141). Por eso el tope.
+    sqs_polizas_recaudos_url: str | None = Field(
+        None, validation_alias=_env("SQS_POLIZAS_RECAUDOS_URL")
+    )
+    consumidor_max_mensajes: int = Field(inbox.MAX_MENSAJES, ge=1, le=10)
+    consumidor_espera_larga_s: int = Field(10, ge=1, le=10)
 
 
 settings = Settings()

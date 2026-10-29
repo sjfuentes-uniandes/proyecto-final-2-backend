@@ -261,7 +261,7 @@ async def test_migracion_adelante_y_atras(base: str) -> None:
     de la más nueva a la más antigua (HU-W15: aceptaciones referencia a las decisiones)."""
     reversas = [
         MIGRACIONES.joinpath("down", nombre).read_text(encoding="utf-8")
-        for nombre in ("002_aceptaciones.sql", "001_suscripcion.sql")
+        for nombre in ("003_recaudos.sql", "002_aceptaciones.sql", "001_suscripcion.sql")
     ]
     with psycopg.connect(base, autocommit=True) as conexion:
         for _ in range(2):

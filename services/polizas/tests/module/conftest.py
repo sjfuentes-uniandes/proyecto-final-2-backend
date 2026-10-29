@@ -9,6 +9,9 @@ HU-W16 (16.6): `mensajeria` crea en LocalStack (la imagen de las pruebas de mód
 `solventa-common`) un tópico con dos colas en crudo, una con el filtro de `dinero-aceptaciones` y
 otra sin filtro, como `auditoria`; `abrir_api_con_relay` abre la app con el relay apuntando ahí.
 
+HU-W16 (16.13): `cola_recaudos` crea otro tópico con `polizas-recaudos` (filtro por el prefijo
+`Recaudo`) y su DLQ; `abrir_api_con_consumidor` abre la app con el consumidor sobre esa cola.
+
 psycopg asíncrono no corre sobre el ProactorEventLoop de Windows: las pruebas corren en un
 SelectorEventLoop (en Linux es el bucle por defecto), como `cotizacion`, `bff-movil` y `clientes`.
 """
@@ -33,6 +36,7 @@ from polizas.adapters.outbound.catalogo_http import CatalogoHttp
 from polizas.adapters.outbound.codigos import CodigosPg
 from polizas.adapters.outbound.cotizacion_http import CotizacionHttp
 from polizas.adapters.outbound.decisiones_pg import DecisionesPg, migrar
+from polizas.adapters.outbound.recaudos_pg import RecaudosPg
 from polizas.config import Settings
 from polizas.main import Puertos, crear_app
 
@@ -42,6 +46,8 @@ IMAGEN_LOCALSTACK = "localstack/localstack:4.14.0"
 REGION = "us-east-1"
 # Filtro de dinero-aceptaciones en infra/platform/catalog.tf.
 FILTRO_ACEPTACIONES = {"eventType": ["OfertaAceptada"]}
+# HU-W16 (16.13): filtro de polizas-recaudos en catalog.tf.
+FILTRO_RECAUDOS = {"eventType": [{"prefix": "Recaudo"}]}
 
 
 @pytest.fixture
@@ -77,7 +83,10 @@ def _ejecutar(url: str, sql: str) -> None:
 @pytest.fixture
 def limpia(base: str) -> str:
     # TRUNCATE no dispara el disparador de inmutabilidad (es por fila): solo para las pruebas.
-    _ejecutar(base, "TRUNCATE aceptaciones, decisiones_suscripcion, outbox")
+    _ejecutar(
+        base,
+        "TRUNCATE aceptaciones, decisiones_suscripcion, outbox, inbox, recaudos_aceptacion",
+    )
     return base
 
 
@@ -125,6 +134,7 @@ async def _api(
             codigos=CodigosPg(pool),
             reloj=reloj,
             aceptaciones=AceptacionesPg(pool),
+            recaudos=RecaudosPg(pool),
         )
         app = crear_app(settings, puertos=puertos, pool=pool)
         async with (
@@ -226,6 +236,81 @@ def mensajeria(localstack: str, credenciales: None) -> Mensajeria:
         topic_arn=topic_arn,
         aceptaciones=cola("dinero-aceptaciones", FILTRO_ACEPTACIONES),
         auditoria=cola("auditoria", None),
+    )
+
+
+@dataclass
+class ColaRecaudos:
+    """HU-W16 (16.13): un tópico nuevo por prueba con `polizas-recaudos` (filtro de catalog.tf,
+    entrega en crudo) y su DLQ. Visibilidad de 1 s y 2 recepciones antes de la DLQ (en infra/, 120 s
+    y 5), para que un envenenado llegue a la DLQ en segundos."""
+
+    sns: Any
+    sqs: Any
+    topic_arn: str
+    cola: str
+    dlq: str
+
+    def publicar(self, sobre: dict[str, Any]) -> None:
+        """Publica el sobre como el relay: el cuerpo en crudo y `eventType` = `type`."""
+        self.sns.publish(
+            TopicArn=self.topic_arn,
+            Message=json.dumps(sobre),
+            MessageAttributes={"eventType": {"DataType": "String", "StringValue": sobre["type"]}},
+        )
+
+    def pendientes(self, cola: str) -> int:
+        """Mensajes visibles y en vuelo de la cola (sin recibirlos)."""
+        atributos = self.sqs.get_queue_attributes(
+            QueueUrl=cola,
+            AttributeNames=["ApproximateNumberOfMessages", "ApproximateNumberOfMessagesNotVisible"],
+        )["Attributes"]
+        return sum(int(valor) for valor in atributos.values())
+
+
+@pytest.fixture
+def cola_recaudos(localstack: str, credenciales: None) -> ColaRecaudos:
+    sns = boto3.client("sns", region_name=REGION, endpoint_url=localstack)
+    sqs = boto3.client("sqs", region_name=REGION, endpoint_url=localstack)
+    sufijo = uuid4().hex[:8]
+    topic_arn = sns.create_topic(Name=f"eventos-{sufijo}")["TopicArn"]
+    dlq: str = sqs.create_queue(QueueName=f"polizas-recaudos-dlq-{sufijo}")["QueueUrl"]
+    dlq_arn = sqs.get_queue_attributes(QueueUrl=dlq, AttributeNames=["QueueArn"])["Attributes"][
+        "QueueArn"
+    ]
+    cola: str = sqs.create_queue(
+        QueueName=f"polizas-recaudos-{sufijo}",
+        Attributes={
+            "VisibilityTimeout": "1",
+            "RedrivePolicy": json.dumps({"deadLetterTargetArn": dlq_arn, "maxReceiveCount": "2"}),
+        },
+    )["QueueUrl"]
+    arn = sqs.get_queue_attributes(QueueUrl=cola, AttributeNames=["QueueArn"])["Attributes"][
+        "QueueArn"
+    ]
+    sns.subscribe(
+        TopicArn=topic_arn,
+        Protocol="sqs",
+        Endpoint=arn,
+        Attributes={"RawMessageDelivery": "true", "FilterPolicy": json.dumps(FILTRO_RECAUDOS)},
+    )
+    return ColaRecaudos(sns=sns, sqs=sqs, topic_arn=topic_arn, cola=cola, dlq=dlq)
+
+
+@pytest.fixture
+def abrir_api_con_consumidor(
+    limpia: str, sinteticos: Any, dobles: Any, localstack: str, cola_recaudos: ColaRecaudos
+) -> Callable[[], AbstractAsyncContextManager[httpx.AsyncClient]]:
+    """La app con el consumidor de `polizas-recaudos` sobre la cola de `cola_recaudos` (espera
+    larga de 1 s, para que la parada sea rápida)."""
+    return lambda: _api(
+        limpia,
+        Proveedores(sinteticos),
+        dobles.reloj,
+        SQS_POLIZAS_RECAUDOS_URL=cola_recaudos.cola,
+        AWS_REGION=REGION,
+        AWS_ENDPOINT_URL=localstack,
+        consumidor_espera_larga_s=1,
     )
 
 
