@@ -24,7 +24,7 @@ SUBCOMANDOS = list(gm.GENERADORES)
 
 def _versionados(carpetas: tuple[str, ...]) -> dict[str, str]:
     return {
-        str(ruta.relative_to(SIMULADOR)): ruta.read_text(encoding="utf-8")
+        ruta.relative_to(SIMULADOR).as_posix(): ruta.read_text(encoding="utf-8")
         for carpeta in carpetas
         for ruta in sorted((SIMULADOR / carpeta).glob("*.json"))
     }
