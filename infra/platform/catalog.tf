@@ -53,7 +53,7 @@ locals {
     # Suscripción, aceptación y emisión; inicia la Saga de recaudo, firma y emisión.
     "polizas" = {
       tier     = "nucleo", listener_port = null, database = true, publishes = true, cache = false
-      calls    = ["adaptador-firma"]
+      calls    = ["adaptador-firma", "cotizacion", "catalogo"]
       consumes = ["polizas-recaudos"], allies = []
       stories  = ["HU-W13", "HU-W14", "HU-W15", "HU-W17"]
     }
