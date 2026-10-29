@@ -9,7 +9,13 @@ from uuid import UUID, uuid4
 
 import pytest
 from dinero.domain.recaudo.errores import RecaudoInvalido, TransicionInvalida
-from dinero.domain.recaudo.modelos import EstadoRecaudo, Moneda, Recaudo
+from dinero.domain.recaudo.modelos import (
+    MOTIVO_NO_INFORMADO,
+    EstadoRecaudo,
+    Moneda,
+    Recaudo,
+    motivo_de_rechazo,
+)
 
 AHORA = datetime(2026, 10, 28, 15, 0, tzinfo=UTC)
 DESPUES = AHORA + timedelta(seconds=3)
@@ -41,11 +47,19 @@ def test_el_recaudo_id_se_puede_fijar(pendiente: Fabrica) -> None:
     assert pendiente(recaudo_id=fijo).recaudo_id == fijo
 
 
-@pytest.mark.parametrize("texto", ["64638", "0.01", "999999999.99", "64638.00", "1.005"])
+@pytest.mark.parametrize("texto", ["64638", "0.01", "999999999.99", "64638.00", "64638.0", "1E+3"])
 def test_el_monto_se_conserva_exacto(pendiente: Fabrica, texto: str) -> None:
     recaudo = pendiente(monto=Decimal(texto))
     assert recaudo.monto == Decimal(texto)
     assert str(recaudo.monto) == texto  # ni redondeo ni cambio de escala
+
+
+@pytest.mark.parametrize("texto", ["1.005", "64638.001", "0.001", "64638.000"])
+def test_el_monto_tiene_a_lo_sumo_2_decimales(pendiente: Fabrica, texto: str) -> None:
+    r"""16.10: adaptador-pagos y el proveedor no admiten más (^[0-9]+(\.[0-9]{1,2})?$). Se cuenta la
+    escala del texto, no el valor: "64638.000" también se rechaza."""
+    with pytest.raises(RecaudoInvalido, match="monto"):
+        pendiente(monto=Decimal(texto))
 
 
 @pytest.mark.parametrize(
@@ -261,3 +275,22 @@ def test_el_dominio_no_tiene_float_ni_datos_de_pago() -> None:
     assert "float" not in " ".join(str(t) for t in tipos.values())
     prohibidos = ("tarjeta", "cuenta", "card", "pan", "cvv", "iban", "nombre", "documento")
     assert not [c for c in tipos for p in prohibidos if p in c.lower()]
+
+
+# --- Motivo del rechazo (16.10) -----------------------------------------------------------------
+@pytest.mark.parametrize("motivo", ["FONDOS_INSUFICIENTES", "CUENTA_BLOQUEADA", "R01"])
+def test_el_motivo_con_forma_de_codigo_se_conserva(motivo: str) -> None:
+    assert motivo_de_rechazo(motivo) == motivo
+
+
+@pytest.mark.parametrize(
+    "motivo",
+    [None, "", "fondos insuficientes", "Juan Pérez sin saldo", "FONDOS-INSUFICIENTES", "A" * 65],
+)
+def test_sin_motivo_o_sin_forma_de_codigo_es_motivo_no_informado(
+    pendiente: Fabrica, motivo: str | None
+) -> None:
+    # Así no entra texto libre del proveedor (ni PII) en el movimiento ni en el evento.
+    assert motivo_de_rechazo(motivo) == MOTIVO_NO_INFORMADO == "MOTIVO_NO_INFORMADO"
+    rechazado = pendiente().rechazar(motivo_de_rechazo(motivo), DESPUES)
+    assert rechazado.motivo == MOTIVO_NO_INFORMADO

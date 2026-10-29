@@ -235,3 +235,15 @@ def test_recaudo_de_convierte_estado_y_moneda(pendiente: Fabrica) -> None:
     leido = recaudo_de(fila)
     assert leido.estado is EstadoRecaudo.PENDIENTE
     assert leido.moneda.value == "COP"
+
+
+async def test_transaccion_propia_expone_su_conexion(pendiente: Fabrica) -> None:
+    """16.10: la continuación abre otra transacción para el resultado y el evento del outbox."""
+    recaudo = pendiente().confirmar("TX-SINT-C01", DESPUES)
+    repo, pool = _repo([], rowcount=1)
+    async with repo.transaccion() as tx:
+        assert tx.conexion is pool.conexion
+        assert pool.conexion.transacciones == 1
+        assert await repo.registrar_resultado(recaudo, tx) == 1
+    # Con la tx dada, registrar_resultado no pidió otra conexión ni otra transacción.
+    assert (pool.prestamos, pool.conexion.transacciones) == (1, 1)

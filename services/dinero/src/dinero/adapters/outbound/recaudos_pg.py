@@ -9,11 +9,14 @@
 - Toda operación acepta la transacción de otro (`tx`, con su `conexion`: la `TransaccionInboxPg` de
   `solventa_common.inbox`), para que el movimiento y la fila del inbox se confirmen juntos. Sin
   `tx`, toma una conexión del pool con su propia transacción, solo mientras dura la operación.
+- `transaccion()` (16.10) abre una transacción para varias operaciones: la continuación del cobro
+  escribe en ella el resultado y el evento del outbox, juntos.
 - psycopg devuelve `numeric` como `Decimal`: el monto no pasa por `float`.
 """
 
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from importlib import resources
 from typing import Any, Protocol
 from uuid import UUID
@@ -117,8 +120,15 @@ class ConTransaccion(Protocol):
     def conexion(self) -> AsyncConnection[Any]: ...
 
 
+@dataclass(frozen=True)
+class TransaccionPg:
+    """Una transacción propia de dinero, con la misma forma que la del inbox."""
+
+    conexion: AsyncConnection[Any]
+
+
 class RecaudosPg:
-    """Implementa RecaudosRepositorio[ConTransaccion]."""
+    """Implementa RecaudosRepositorio[ConTransaccion] y Transacciones[ConTransaccion]."""
 
     def __init__(self, pool: "AsyncConnectionPool[Any]") -> None:
         self._pool = pool
@@ -131,6 +141,11 @@ class RecaudosPg:
             return
         async with self._pool.connection() as conexion, conexion.transaction():
             yield conexion
+
+    @asynccontextmanager
+    async def transaccion(self) -> AsyncIterator[ConTransaccion]:
+        async with self._pool.connection() as conexion, conexion.transaction():
+            yield TransaccionPg(conexion)
 
     async def crear_pendiente(self, recaudo: Recaudo, tx: ConTransaccion | None = None) -> Creacion:
         if recaudo.estado is not EstadoRecaudo.PENDIENTE:

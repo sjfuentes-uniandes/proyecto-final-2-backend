@@ -7,7 +7,8 @@ Puro: sin Pydantic ni E/S.
 - Solo una respuesta definitiva lo lleva a `CONFIRMADO` (con `transaccionId`) o a `RECHAZADO` (con
   `motivo`). Un incierto (timeout, 5xx o respuesta inválida) lo deja `PENDIENTE` y registra el
   código: nunca se asume rechazo. De un estado final no se sale.
-- El monto es `Decimal`, nunca `float`. Ningún dato de tarjeta ni de cuenta.
+- El monto es `Decimal`, nunca `float`, con a lo sumo 2 decimales en su escala (16.10): es lo que
+  admiten adaptador-pagos y el proveedor. Ningún dato de tarjeta ni de cuenta.
 - Los códigos (`motivo`, `ultimo_incierto`) tienen forma de código: así no entra texto libre del
   proveedor ni PII.
 """
@@ -18,7 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Self
+from typing import Self, TypeGuard
 from uuid import UUID, uuid4
 
 from dinero.domain.recaudo.errores import RecaudoInvalido, TransicionInvalida
@@ -26,6 +27,10 @@ from dinero.domain.recaudo.errores import RecaudoInvalido, TransicionInvalida
 # El mismo patrón que los CHECK de la migración 001.
 CODIGO = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 LARGO_TRANSACCION = 128
+# Escala máxima del monto: la de `monto` en contracts/openapi/adaptador-pagos.yaml.
+DECIMALES_MAX = 2
+# Un RECHAZADO sin motivo, o con un texto que no es un código (16.10).
+MOTIVO_NO_INFORMADO = "MOTIVO_NO_INFORMADO"
 
 
 class EstadoRecaudo(StrEnum):
@@ -43,12 +48,17 @@ def _con_zona(instante: object) -> bool:
     return isinstance(instante, datetime) and instante.utcoffset() is not None
 
 
-def _es_codigo(valor: object) -> bool:
+def _es_codigo(valor: object) -> TypeGuard[str]:
     return isinstance(valor, str) and CODIGO.fullmatch(valor) is not None
 
 
 def _es_transaccion(valor: object) -> bool:
     return isinstance(valor, str) and bool(valor.strip()) and len(valor) <= LARGO_TRANSACCION
+
+
+def motivo_de_rechazo(motivo: str | None) -> str:
+    """El motivo del proveedor si tiene forma de código; si no, `MOTIVO_NO_INFORMADO`."""
+    return motivo if _es_codigo(motivo) else MOTIVO_NO_INFORMADO
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +87,9 @@ class Recaudo:
         monto = self.monto
         if type(monto) is not Decimal or not monto.is_finite() or monto <= 0:
             raise RecaudoInvalido("monto: se espera un Decimal finito mayor que 0")
+        exponente = monto.as_tuple().exponent
+        if isinstance(exponente, int) and exponente < -DECIMALES_MAX:
+            raise RecaudoInvalido(f"monto: como máximo {DECIMALES_MAX} decimales")
         if not isinstance(self.moneda, Moneda):
             raise RecaudoInvalido("moneda: se espera una Moneda")
         if not isinstance(self.estado, EstadoRecaudo):

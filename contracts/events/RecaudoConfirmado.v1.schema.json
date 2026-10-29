@@ -1,0 +1,113 @@
+{
+  "$defs": {
+    "MontoV1": {
+      "description": "El monto cobrado; el valor es texto decimal con a lo sumo 2 decimales (nunca un n\u00famero).",
+      "properties": {
+        "moneda": {
+          "pattern": "^[A-Z]{3}$",
+          "title": "Moneda",
+          "type": "string"
+        },
+        "valor": {
+          "pattern": "^[0-9]+(\\.[0-9]{1,2})?$",
+          "title": "Valor",
+          "type": "string"
+        }
+      },
+      "required": [
+        "valor",
+        "moneda"
+      ],
+      "title": "MontoV1",
+      "type": "object"
+    },
+    "RecaudoConfirmadoV1": {
+      "description": "El primer cobro de la prima qued\u00f3 confirmado. Sin datos del pagador.",
+      "properties": {
+        "claveRecaudo": {
+          "format": "uuid",
+          "title": "Claverecaudo",
+          "type": "string"
+        },
+        "confirmadoEn": {
+          "format": "date-time",
+          "title": "Confirmadoen",
+          "type": "string"
+        },
+        "cotizacionId": {
+          "format": "uuid",
+          "title": "Cotizacionid",
+          "type": "string"
+        },
+        "monto": {
+          "$ref": "#/$defs/MontoV1"
+        },
+        "recaudoId": {
+          "format": "uuid",
+          "title": "Recaudoid",
+          "type": "string"
+        },
+        "transaccionId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Transaccionid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "recaudoId",
+        "claveRecaudo",
+        "cotizacionId",
+        "monto",
+        "transaccionId",
+        "confirmadoEn"
+      ],
+      "title": "RecaudoConfirmadoV1",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/RecaudoConfirmadoV1"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreEvento[RecaudoConfirmadoV1]",
+  "type": "object"
+}
