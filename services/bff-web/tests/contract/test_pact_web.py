@@ -394,6 +394,11 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
             (MISMA_CLAVE, "S01"),
             (APROBADA_VENCIDA, "S01"),
             (RECHAZADA, "S02"),
+            # HU-W16: 200 PENDIENTE, CONFIRMADO y RECHAZADO, y el 404 sin aceptación.
+            (RECAUDO_PENDIENTE, None),
+            (RECAUDO_CONFIRMADO, None),
+            (RECAUDO_RECHAZADO, None),
+            (SIN_ACEPTACION, None),
         ],
         key=str,
     )
