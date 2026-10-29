@@ -1,0 +1,36 @@
+{
+  "name": "pagos consulta de estado por pagador, C01 aprobado",
+  "request": {
+    "method": "GET",
+    "urlPath": "/pagos/v1/cobros",
+    "queryParameters": {
+      "pagador": {
+        "equalTo": "00000000-0000-4000-8000-000000000001"
+      },
+      "referencia": {
+        "matches": "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+      }
+    },
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "referencia": "{{request.query.referencia}}",
+      "estado": "APROBADO",
+      "transaccionId": "TX-SINT-C01",
+      "motivo": null
+    },
+    "transformers": [
+      "response-template"
+    ],
+    "fixedDelayMilliseconds": 50
+  }
+}
