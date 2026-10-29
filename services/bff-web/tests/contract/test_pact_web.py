@@ -8,8 +8,10 @@ proveedor siembra la decisión que polizas devolvería para el caso sintético (
 las alternativas salen de la semilla de reglas 2026.10.1 de catalogo y la comunicación es la de
 docs/hu-w14-comunicacion.md §1.1. HU-W15: los estados de la aceptación hacen que polizas responda
 lo que responde en ese caso (201, 200 con la misma clave, 409 OFERTA_VENCIDA o DECISION_NO_APROBADA y
-422 DECLARACIONES_INCOMPLETAS si faltan las declaraciones obligatorias). El verificador envía los
-encabezados que pone API Gateway para un usuario del grupo `asesores`.
+422 DECLARACIONES_INCOMPLETAS si faltan las declaraciones obligatorias). HU-W16 (16.14): los estados
+del recaudo hacen que polizas responda el EstadoRecaudo de ese estado o el 404
+ACEPTACION_NO_ENCONTRADA; las interacciones las agrega el portal en la 16.15. El verificador envía
+los encabezados que pone API Gateway para un usuario del grupo `asesores`.
 """
 
 import asyncio
@@ -27,14 +29,17 @@ import httpx
 import pytest
 import uvicorn
 from bff_web.adapters.inbound import aceptaciones as ruta_aceptacion
+from bff_web.adapters.inbound import recaudos as ruta_recaudo
 from bff_web.adapters.inbound import suscripciones as ruta
 from bff_web.adapters.outbound.clientes import ClientesCliente
 from bff_web.adapters.outbound.polizas import PolizasCliente
 from bff_web.application.aceptacion import Aceptaciones
+from bff_web.application.recaudo import Recaudos
 from bff_web.application.suscripcion import Suscripciones
 from bff_web.config import settings
 from bff_web.main import app
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from pact import Verifier
 
 RAIZ = Path(__file__).parents[4]
@@ -54,6 +59,14 @@ MISMA_CLAVE = "la cotización ya tiene una aceptación con la misma clave"
 APROBADA_VENCIDA = "existe una decisión aprobada con la oferta vencida"
 RECHAZADA = "existe una decisión rechazada"
 ESTADOS_ACEPTACION = {APROBADA_VIGENTE, MISMA_CLAVE, APROBADA_VENCIDA, RECHAZADA}
+# HU-W16 (16.14): estados del recaudo, para las interacciones del paso 3 que agrega la 16.15
+# (GET /v1/cotizaciones/{cotizacionId}/recaudo, parámetro `cotizacionId`).
+RECAUDO_PENDIENTE = "la aceptación tiene el recaudo pendiente"
+RECAUDO_CONFIRMADO = "la aceptación tiene el recaudo confirmado"
+RECAUDO_RECHAZADO = "la aceptación tiene el recaudo rechazado"
+SIN_ACEPTACION = "la cotización no tiene aceptación"
+ESTADOS_RECAUDO = {RECAUDO_PENDIENTE, RECAUDO_CONFIRMADO, RECAUDO_RECHAZADO, SIN_ACEPTACION}
+COTIZACION_RECAUDO = "00000000-0000-4000-a000-000000000001"
 SIN_DATOS: dict[str, Any] = {
     "vigenteHasta": None,
     "motivoCliente": None,
@@ -213,13 +226,40 @@ def _aceptacion(cotizacion_id: str, cuerpo: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _recaudo(estado: str) -> httpx.Response:
+    """El EstadoRecaudo que polizas devuelve en el estado (claveRecaudo = id de la aceptación de
+    `_aceptacion`, monto y moneda de S01), o el 404 si la cotización no tiene aceptación."""
+    pendiente = {
+        "estado": "PENDIENTE",
+        "claveRecaudo": "00000000-0000-4000-f000-000000000001",
+        "monto": "64638",
+        "moneda": "COP",
+        "transaccionId": None,
+        "motivo": None,
+        "actualizadoEn": "2026-10-24T15:00:00.123456Z",
+    }
+    resuelto = {**pendiente, "actualizadoEn": "2026-10-24T15:00:01.250000Z"}
+    match estado:
+        case "la aceptación tiene el recaudo pendiente":
+            return httpx.Response(200, json=pendiente)
+        case "la aceptación tiene el recaudo confirmado":
+            cuerpo = {**resuelto, "estado": "CONFIRMADO", "transaccionId": "TX-SINTETICA-0001"}
+            return httpx.Response(200, json=cuerpo)
+        case "la aceptación tiene el recaudo rechazado":
+            cuerpo = {**resuelto, "estado": "RECHAZADO", "motivo": "FONDOS_INSUFICIENTES"}
+            return httpx.Response(200, json=cuerpo)
+    return _error("ACEPTACION_NO_ENCONTRADA", 404)
+
+
 class PolizasSimulado:
     """GET /v1/suscripciones/{id}: la decisión sembrada por el estado, o 404 en formato B2.
-    POST /v1/cotizaciones/{id}/aceptacion (HU-W15): lo que polizas responde en el estado sembrado."""
+    POST /v1/cotizaciones/{id}/aceptacion (HU-W15): lo que polizas responde en el estado sembrado.
+    GET /v1/cotizaciones/{id}/recaudo (HU-W16): el estado del recaudo sembrado, o 404."""
 
     def __init__(self) -> None:
         self.decision: dict[str, Any] | None = None
         self.aceptacion: str | None = None
+        self.recaudo: str | None = None
         self.roles: list[str] = []
 
     def aceptar(self, pedido: httpx.Request) -> httpx.Response:
@@ -244,6 +284,8 @@ class PolizasSimulado:
 
     def responder(self, pedido: httpx.Request) -> httpx.Response:
         self.roles.append(pedido.headers.get("X-Actor-Rol", ""))
+        if pedido.url.path.endswith("/recaudo"):
+            return _recaudo(self.recaudo or SIN_ACEPTACION)
         if pedido.url.path.endswith("/aceptacion"):
             return self.aceptar(pedido)
         decision_id = pedido.url.path.rsplit("/", 1)[-1]
@@ -283,6 +325,24 @@ def _servir(aplicacion: FastAPI) -> Iterator[str]:
         hilo.join(timeout=15)
 
 
+def _sembrar(polizas: PolizasSimulado, state: str, parametros: dict[str, Any]) -> None:
+    """Siembra en polizas lo que el estado del proveedor describe; uno desconocido falla."""
+    polizas.decision = None
+    polizas.aceptacion = None
+    polizas.recaudo = None
+    if state in ESTADOS_ACEPTACION:
+        polizas.aceptacion = state
+        return
+    if state in ESTADOS_RECAUDO:
+        polizas.recaudo = state
+        return
+    if state == NO_EXISTE:
+        return
+    if state != EXISTE:
+        raise AssertionError(f"estado del proveedor sin sembrar: {state!r}")
+    polizas.decision = _decision(str(parametros["decisionId"]), str(parametros["caso"]))
+
+
 def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> None:
     assert PACTO.exists(), "Copiar el pacto del portal (web/pacts/portal-web-bff-web.json)"
     monkeypatch.setattr(settings, "jwt_issuers", {"backoffice": EMISOR})
@@ -297,6 +357,7 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
         cliente_polizas, ClientesCliente("http://clientes:8080", 1500, clientes), 200
     )
     app.dependency_overrides[ruta_aceptacion.aceptaciones] = lambda: Aceptaciones(cliente_polizas)
+    app.dependency_overrides[ruta_recaudo.recaudos] = lambda: Recaudos(cliente_polizas)
     vistos: list[tuple[str, str | None]] = []
 
     def estado(state: str, action: str, parameters: dict[str, Any] | None) -> None:
@@ -305,16 +366,7 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
             return
         parametros = parameters or {}
         vistos.append((state, parametros.get("caso")))
-        polizas.decision = None
-        polizas.aceptacion = None
-        if state in ESTADOS_ACEPTACION:
-            polizas.aceptacion = state
-            return
-        if state == NO_EXISTE:
-            return
-        if state != EXISTE:
-            raise AssertionError(f"estado del proveedor sin sembrar: {state!r}")
-        polizas.decision = _decision(str(parametros["decisionId"]), str(parametros["caso"]))
+        _sembrar(polizas, state, parametros)
 
     try:
         with _servir(app) as url:
@@ -356,3 +408,46 @@ def test_el_pacto_no_lleva_codigos_de_regla_en_la_comunicacion() -> None:
         cuerpo = interaccion["response"].get("body", {}).get("content", {})
         comunicacion = json.dumps(cuerpo.get("comunicacion", {}))
         assert not re.search(r"SUS-\d{3}", comunicacion), interaccion["description"]
+
+
+@pytest.mark.parametrize(
+    ("state", "status", "estado"),
+    [
+        (RECAUDO_PENDIENTE, 200, "PENDIENTE"),
+        (RECAUDO_CONFIRMADO, 200, "CONFIRMADO"),
+        (RECAUDO_RECHAZADO, 200, "RECHAZADO"),
+        (SIN_ACEPTACION, 404, None),
+    ],
+)
+def test_los_estados_del_recaudo_responden_lo_que_promete_bff_web(
+    monkeypatch: pytest.MonkeyPatch, state: str, status: int, estado: str | None
+) -> None:
+    """HU-W16 (16.14): los estados que usará la 16.15 ya existen y pasan por la app real (DTO,
+    lista blanca y rol) antes de que el pacto los traiga."""
+    monkeypatch.setattr(settings, "jwt_issuers", {"backoffice": EMISOR})
+    polizas = PolizasSimulado()
+    cliente_polizas = PolizasCliente(
+        "http://polizas:8080", 1500, httpx.MockTransport(polizas.responder)
+    )
+    app.dependency_overrides[ruta_recaudo.recaudos] = lambda: Recaudos(cliente_polizas)
+    _sembrar(polizas, state, {"cotizacionId": COTIZACION_RECAUDO})
+    try:
+        respuesta = TestClient(app).get(
+            f"/v1/cotizaciones/{COTIZACION_RECAUDO}/recaudo",
+            headers={
+                "X-Authenticated-Sub": "sub-asesor-pact",
+                "X-Authenticated-Groups": "[asesores]",
+                "X-Authenticated-Issuer": EMISOR,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert respuesta.status_code == status
+    cuerpo = respuesta.json()
+    if estado is None:
+        assert cuerpo["codigo"] == "ACEPTACION_NO_ENCONTRADA"
+    else:
+        assert cuerpo["estado"] == estado
+        assert (cuerpo["transaccionId"] is not None) == (estado == "CONFIRMADO")
+        assert (cuerpo["motivo"] is not None) == (estado == "RECHAZADO")
+    assert polizas.roles == ["ASESOR"]

@@ -2191,6 +2191,75 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/cotizaciones/{cotizacionId}/recaudo:
+    get:
+      tags:
+      - recaudos
+      summary: Consultar Recaudo
+      description: El estado del primer cobro de la prima aceptada (paso 3 del portal,
+        solo lectura).
+      operationId: consultar_recaudo_v1_cotizaciones__cotizacionId__recaudo_get
+      parameters:
+      - name: cotizacionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cotizacionid
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoRecaudo'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo asesores o no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: ACEPTACION_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -3563,6 +3632,56 @@ components:
       - DEGRADADO
       - INFORMACION_INSUFICIENTE
       title: EstadoPerfil
+    EstadoRecaudo:
+      properties:
+        estado:
+          $ref: '#/components/schemas/SituacionRecaudo'
+          description: PENDIENTE mientras dinero no publica un estado final
+        claveRecaudo:
+          type: string
+          format: uuid
+          title: Claverecaudo
+          description: El id de la aceptación
+        monto:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Monto
+          description: Lo cobrado si está CONFIRMADO; si no, la prima de la oferta
+            aceptada
+        moneda:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Moneda
+        transaccionId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transaccionid
+          description: Solo en CONFIRMADO
+        motivo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Motivo
+          description: Código del rechazo; solo en RECHAZADO
+        actualizadoEn:
+          type: string
+          format: date-time
+          title: Actualizadoen
+          description: Cuándo dinero resolvió el cobro; si está PENDIENTE, cuándo
+            se aceptó
+      type: object
+      required:
+      - estado
+      - claveRecaudo
+      - monto
+      - moneda
+      - transaccionId
+      - motivo
+      - actualizadoEn
+      title: EstadoRecaudo
+      description: El estado del primer cobro de la prima de la aceptación (ADR 0013,
+        decisión 9).
     ExclusionDto:
       properties:
         codigo:
@@ -4376,6 +4495,13 @@ components:
       enum:
       - FIRMA
       title: SiguientePasoContratacion
+    SituacionRecaudo:
+      type: string
+      enum:
+      - PENDIENTE
+      - CONFIRMADO
+      - RECHAZADO
+      title: SituacionRecaudo
     SocioCreado:
       properties:
         id:
