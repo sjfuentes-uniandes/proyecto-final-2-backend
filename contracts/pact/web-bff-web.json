@@ -2378,6 +2378,356 @@
         "status": 200
       },
       "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la consulta del recaudo de la prima · CONFIRMADO",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "la aceptación tiene el recaudo confirmado",
+          "params": {
+            "cotizacionId": "00000000-0000-4000-a000-000000000001"
+          }
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": [
+            "application/json"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/cotizaciones/00000000-0000-4000-a000-000000000001/recaudo"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "actualizadoEn": "2026-10-24T15:00:01Z",
+            "claveRecaudo": "00000000-0000-4000-f000-000000000001",
+            "estado": "CONFIRMADO",
+            "moneda": "COP",
+            "monto": "64638",
+            "motivo": null,
+            "transaccionId": "TX-SINTETICA-0001"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.actualizadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.claveRecaudo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.moneda": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z]{3}$"
+                }
+              ]
+            },
+            "$.monto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.transaccionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la consulta del recaudo de la prima · PENDIENTE",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "la aceptación tiene el recaudo pendiente",
+          "params": {
+            "cotizacionId": "00000000-0000-4000-a000-000000000001"
+          }
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": [
+            "application/json"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/cotizaciones/00000000-0000-4000-a000-000000000001/recaudo"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "actualizadoEn": "2026-10-24T15:00:00Z",
+            "claveRecaudo": "00000000-0000-4000-f000-000000000001",
+            "estado": "PENDIENTE",
+            "moneda": "COP",
+            "monto": "64638",
+            "motivo": null,
+            "transaccionId": null
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.actualizadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.claveRecaudo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.moneda": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z]{3}$"
+                }
+              ]
+            },
+            "$.monto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la consulta del recaudo de la prima · RECHAZADO",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "la aceptación tiene el recaudo rechazado",
+          "params": {
+            "cotizacionId": "00000000-0000-4000-a000-000000000001"
+          }
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": [
+            "application/json"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/cotizaciones/00000000-0000-4000-a000-000000000001/recaudo"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "actualizadoEn": "2026-10-24T15:00:01Z",
+            "claveRecaudo": "00000000-0000-4000-f000-000000000001",
+            "estado": "RECHAZADO",
+            "moneda": "COP",
+            "monto": "64638",
+            "motivo": "FONDOS_INSUFICIENTES",
+            "transaccionId": null
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.actualizadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.claveRecaudo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.moneda": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z]{3}$"
+                }
+              ]
+            },
+            "$.monto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.motivo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z][A-Z0-9_]*$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la consulta del recaudo de una cotización sin aceptación",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "la cotización no tiene aceptación",
+          "params": {
+            "cotizacionId": "00000000-0000-4000-a000-000000000001"
+          }
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": [
+            "application/json"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/cotizaciones/00000000-0000-4000-a000-000000000001/recaudo"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "ACEPTACION_NO_ENCONTRADA",
+            "correlationId": "corr-pact",
+            "detalles": {},
+            "mensaje": "mensaje"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
+      },
+      "type": "Synchronous/HTTP"
     }
   ],
   "metadata": {

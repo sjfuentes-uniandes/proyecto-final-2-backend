@@ -1,0 +1,87 @@
+{
+  "$defs": {
+    "RecaudoRechazadoV1": {
+      "description": "El proveedor rechaz\u00f3 el cobro; `motivo` es un c\u00f3digo. Sin datos del pagador.",
+      "properties": {
+        "claveRecaudo": {
+          "format": "uuid",
+          "title": "Claverecaudo",
+          "type": "string"
+        },
+        "cotizacionId": {
+          "format": "uuid",
+          "title": "Cotizacionid",
+          "type": "string"
+        },
+        "motivo": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "title": "Motivo",
+          "type": "string"
+        },
+        "recaudoId": {
+          "format": "uuid",
+          "title": "Recaudoid",
+          "type": "string"
+        },
+        "rechazadoEn": {
+          "format": "date-time",
+          "title": "Rechazadoen",
+          "type": "string"
+        }
+      },
+      "required": [
+        "recaudoId",
+        "claveRecaudo",
+        "cotizacionId",
+        "motivo",
+        "rechazadoEn"
+      ],
+      "title": "RecaudoRechazadoV1",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/RecaudoRechazadoV1"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreEvento[RecaudoRechazadoV1]",
+  "type": "object"
+}

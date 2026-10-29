@@ -1,0 +1,30 @@
+{
+  "name": "pagos consulta de estado por pagador, C07 caído: el cobro nunca llegó",
+  "request": {
+    "method": "GET",
+    "urlPath": "/pagos/v1/cobros",
+    "queryParameters": {
+      "pagador": {
+        "equalTo": "00000000-0000-4000-8000-000000000007"
+      },
+      "referencia": {
+        "matches": "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+      }
+    },
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "error": "cobro_no_encontrado"
+    },
+    "fixedDelayMilliseconds": 50
+  }
+}

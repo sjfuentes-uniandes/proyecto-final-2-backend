@@ -17,7 +17,7 @@ dev = [
     "ruff>=0.8",
     "schemathesis>=3.38",
     "pytest-cov>=7.1.0",
-    "testcontainers[postgres]>=4.15.0",
+    "testcontainers[postgres,localstack]>=4.15.0",
     "respx>=0.22",
     "moto[cognitoidp,apigateway]>=5.0",
     "pact-python>=2.2",
@@ -39,7 +39,7 @@ warn_redundant_casts = true
 show_error_codes = true
 # Layout src/ del workspace: los módulos se nombran desde estas raíces.
 # HU-W13: catalogo, polizas, cotizacion y bff-web también, para `make typecheck SERVICE=<servicio>` (fuera de la CI,
-# ADR 0008).
+# ADR 0008). HU-W16: dinero y adaptador-pagos.
 mypy_path = [
   "libs/solventa-common/src",
   "services/clientes/src",
@@ -48,6 +48,8 @@ mypy_path = [
   "services/polizas/src",
   "services/cotizacion/src",
   "services/bff-web/src",
+  "services/dinero/src",
+  "services/adaptador-pagos/src",
 ]
 explicit_package_bases = true
 

@@ -1,0 +1,290 @@
+{
+  "consumer": {
+    "name": "dinero"
+  },
+  "interactions": [
+    {
+      "description": "un cobro que el proveedor aprueba",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el proveedor de pagos aprueba el cobro"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "claveRecaudo": "00000000-0000-4000-b000-000000000001",
+            "moneda": "COP",
+            "monto": "64638.00",
+            "pagadorRef": "00000000-0000-4000-8000-000000000001"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "X-Correlation-Id": [
+            "corr-pacto-dinero"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/cobros"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "claveRecaudo": "00000000-0000-4000-b000-000000000001",
+            "estado": "APROBADO",
+            "motivo": null,
+            "transaccionId": "TX-SINT-C01"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.transaccionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "un cobro que el proveedor rechaza",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el proveedor de pagos rechaza el cobro por fondos insuficientes"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "claveRecaudo": "00000000-0000-4000-b000-000000000002",
+            "moneda": "COP",
+            "monto": "64638.00",
+            "pagadorRef": "00000000-0000-4000-8000-000000000002"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "X-Correlation-Id": [
+            "corr-pacto-dinero"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/cobros"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "claveRecaudo": "00000000-0000-4000-b000-000000000002",
+            "estado": "RECHAZADO",
+            "motivo": "FONDOS_INSUFICIENTES",
+            "transaccionId": null
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.motivo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una consulta de un cobro que el proveedor aprobó",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el proveedor de pagos tiene el cobro aprobado"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Correlation-Id": [
+            "corr-pacto-dinero"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/cobros/00000000-0000-4000-b000-000000000011",
+        "query": {
+          "pagadorRef": [
+            "00000000-0000-4000-8000-000000000001"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "content": {
+            "claveRecaudo": "00000000-0000-4000-b000-000000000011",
+            "estado": "APROBADO",
+            "motivo": null,
+            "transaccionId": "TX-SINT-C01"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.transaccionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una consulta de un cobro que el proveedor rechazó",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el proveedor de pagos tiene el cobro rechazado por fondos insuficientes"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Correlation-Id": [
+            "corr-pacto-dinero"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/cobros/00000000-0000-4000-b000-000000000012",
+        "query": {
+          "pagadorRef": [
+            "00000000-0000-4000-8000-000000000002"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "content": {
+            "claveRecaudo": "00000000-0000-4000-b000-000000000012",
+            "estado": "RECHAZADO",
+            "motivo": "FONDOS_INSUFICIENTES",
+            "transaccionId": null
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.motivo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una consulta de un cobro que nunca llegó al proveedor",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el proveedor de pagos no tiene el cobro"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Correlation-Id": [
+            "corr-pacto-dinero"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/cobros/00000000-0000-4000-b000-000000000017",
+        "query": {
+          "pagadorRef": [
+            "00000000-0000-4000-8000-000000000007"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "COBRO_NO_ENCONTRADO"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "status": 404
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactRust": {
+      "ffi": "0.5.8",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    }
+  },
+  "provider": {
+    "name": "adaptador-pagos"
+  }
+}

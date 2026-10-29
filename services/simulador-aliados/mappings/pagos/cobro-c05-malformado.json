@@ -1,0 +1,43 @@
+{
+  "name": "pagos cobro por pagador, C05 malformado (JSON inválido)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/pagos/v1/cobros",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.pagador",
+          "equalTo": "00000000-0000-4000-8000-000000000005"
+        }
+      },
+      {
+        "matchesJsonPath": {
+          "expression": "$.referencia",
+          "matches": "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+        }
+      },
+      {
+        "matchesJsonPath": "$.monto"
+      },
+      {
+        "matchesJsonPath": "$.moneda"
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      },
+      "Idempotency-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"estado\": ",
+    "fixedDelayMilliseconds": 50
+  }
+}

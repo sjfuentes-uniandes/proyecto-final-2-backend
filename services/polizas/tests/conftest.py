@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from polizas.domain.aceptacion.modelos import Aceptacion
+from polizas.domain.recaudo.modelos import ResultadoRecaudo
 from polizas.domain.suscripcion.errores import (
     CotizacionNoEncontrada,
     ReglasNoVigentes,
@@ -288,6 +289,30 @@ class AceptacionesMemoria:
         return next((a for a in self.aceptaciones if a.idempotency_key == clave), None)
 
 
+class RecaudosMemoria:
+    """RecaudosRepositorio y ProyeccionRecaudos en memoria (HU-W16, 16.13), con la clave primaria
+    de la tabla: se queda el primer estado final. `transacciones` registra con qué `tx` se
+    escribió; `aceptaciones` son las claves conocidas."""
+
+    def __init__(self, aceptaciones: AceptacionesMemoria | None = None) -> None:
+        self.resultados: dict[UUID, ResultadoRecaudo] = {}
+        self.transacciones: list[Any] = []
+        self._aceptaciones = aceptaciones or AceptacionesMemoria()
+
+    async def por_clave(self, clave_recaudo: UUID) -> ResultadoRecaudo | None:
+        return self.resultados.get(clave_recaudo)
+
+    async def guardar(self, resultado: ResultadoRecaudo, tx: Any) -> ResultadoRecaudo | None:
+        self.transacciones.append(tx)
+        previo = self.resultados.get(resultado.clave_recaudo)
+        if previo is None:
+            self.resultados[resultado.clave_recaudo] = resultado
+        return previo
+
+    async def aceptacion_conocida(self, clave_recaudo: UUID, tx: Any) -> bool:
+        return any(a.id == clave_recaudo for a in self._aceptaciones.aceptaciones)
+
+
 @dataclass
 class Dobles:
     insumos: InsumosDoble
@@ -296,6 +321,11 @@ class Dobles:
     codigos: CodigosMemoria
     reloj: RelojFijo
     aceptaciones: AceptacionesMemoria = field(default_factory=AceptacionesMemoria)
+    recaudos: RecaudosMemoria | None = None
+
+    def __post_init__(self) -> None:
+        if self.recaudos is None:
+            self.recaudos = RecaudosMemoria(self.aceptaciones)
 
     def puertos(self) -> "Puertos":
         # Importación diferida: las pruebas del dominio no necesitan la app.
@@ -308,6 +338,7 @@ class Dobles:
             self.codigos,
             self.reloj,
             self.aceptaciones,
+            self.recaudos,
         )
 
 

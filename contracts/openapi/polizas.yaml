@@ -602,6 +602,68 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/cotizaciones/{cotizacionId}/recaudo:
+    get:
+      tags:
+      - recaudos
+      summary: Consultar
+      description: El estado del recaudo de la prima aceptada (ASESOR o SUSCRIPTOR).
+      operationId: consultar_v1_cotizaciones__cotizacionId__recaudo_get
+      parameters:
+      - name: cotizacionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cotizacionid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoRecaudo'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol no permite la operación'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: ACEPTACION_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -1138,6 +1200,56 @@ components:
       - correlationId
       - detalles
       title: ErrorDto
+    EstadoRecaudo:
+      properties:
+        estado:
+          $ref: '#/components/schemas/SituacionRecaudo'
+          description: PENDIENTE mientras dinero no publica un estado final
+        claveRecaudo:
+          type: string
+          format: uuid
+          title: Claverecaudo
+          description: El id de la aceptación
+        monto:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Monto
+          description: Lo cobrado si está CONFIRMADO; si no, la prima de la oferta
+            aceptada
+        moneda:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Moneda
+        transaccionId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transaccionid
+          description: Solo en CONFIRMADO
+        motivo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Motivo
+          description: Código del rechazo; solo en RECHAZADO
+        actualizadoEn:
+          type: string
+          format: date-time
+          title: Actualizadoen
+          description: Cuándo dinero resolvió el cobro; si está PENDIENTE, cuándo
+            se aceptó
+      type: object
+      required:
+      - estado
+      - claveRecaudo
+      - monto
+      - moneda
+      - transaccionId
+      - motivo
+      - actualizadoEn
+      title: EstadoRecaudo
+      description: El estado del primer cobro de la prima de la aceptación (ADR 0013,
+        decisión 9).
     ListaDecisiones:
       properties:
         items:
@@ -1354,6 +1466,13 @@ components:
       enum:
       - FIRMA
       title: SiguientePasoContratacion
+    SituacionRecaudo:
+      type: string
+      enum:
+      - PENDIENTE
+      - CONFIRMADO
+      - RECHAZADO
+      title: SituacionRecaudo
     SolicitudAceptacion:
       properties:
         decisionId:

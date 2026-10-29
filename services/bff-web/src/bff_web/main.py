@@ -9,6 +9,7 @@ from bff_web.adapters.inbound import (
     cotizaciones,
     operacion,
     perfilamiento,
+    recaudos,
     socios,
     suscripciones,
     usuarios,
@@ -41,6 +42,8 @@ app.include_router(suscripciones.router)
 app.include_router(suscripciones.router_bandeja)
 # HU-W15: aceptación de la oferta (polizas).
 app.include_router(aceptaciones.router)
+# HU-W16: estado del recaudo de la prima aceptada (polizas).
+app.include_router(recaudos.router)
 
 
 @app.get("/health")

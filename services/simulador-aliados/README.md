@@ -57,6 +57,41 @@ timeout del aliado en `ally_timeouts_ms` (`infra/envs/int/apps.tfvars`).
 
 El caído responde `{"error": "unavailable"}`; el malformado, el cuerpo `{"estado": ` con `Content-Type: application/json`.
 
+## Pagos por pagador sintético (`/pagos`), HU-W16
+
+`adaptador-pagos` cobra el primer recaudo de la prima con `referencia` = `claveRecaudo` (uuid) y `pagador` = el
+`clienteId` sintético de `OfertaAceptada` (ADR 0013, decisión 6: el proveedor emula una domiciliación previa; ningún
+dato de tarjeta ni de cuenta). El caso lo elige el `pagador`, uno por cliente de
+`contracts/datos-sinteticos/clientes-perfilamiento.json`. Los mapeos por `referencia` fija de la tabla anterior siguen
+igual y no se solapan: estos exigen una `referencia` uuid.
+
+**Cobro:** `POST /pagos/v1/cobros` con `X-Api-Key` e `Idempotency-Key` (cualquier valor) y el cuerpo
+`{"referencia": "<uuid>", "monto": "64638", "moneda": "COP", "pagador": "<clienteId>"}`. La respuesta devuelve la
+`referencia` recibida (plantilla de respuestas de WireMock, activa por mapeo con `"transformers": ["response-template"]`).
+
+**Consulta de estado** (conciliación, P16-3): `GET /pagos/v1/cobros?referencia=<uuid>&pagador=<clienteId>` con
+`X-Api-Key`. Responde el estado del cobro de ese pagador, sin memoria de los cobros hechos.
+
+| Caso | Cliente (`pagador`) | Cobro | Consulta de estado |
+| --- | --- | --- | --- |
+| Aprobado | C01 `00000000-0000-4000-8000-000000000001` | 200 `{"referencia", "estado": "APROBADO", "transaccionId": "TX-SINT-C01", "motivo": null}`, 50 ms | 200, el mismo cuerpo |
+| Rechazado | C02 `00000000-0000-4000-8000-000000000002` | 200 `{"referencia", "estado": "RECHAZADO", "transaccionId": null, "motivo": "FONDOS_INSUFICIENTES"}`, 50 ms | 200, el mismo cuerpo |
+| Malformado | C05 `00000000-0000-4000-8000-000000000005` | 200 con el cuerpo `{"estado": ` (JSON inválido) | 404 `referencia_no_reconocida` (respaldo) |
+| Lento (incierto) | C06 `00000000-0000-4000-8000-000000000006` | 200 `APROBADO` (`TX-SINT-C06`) en 8000 ms, por encima del timeout de 5 s | 200 `APROBADO` (`TX-SINT-C06`): el cobro sí ocurrió |
+| Caído | C07 `00000000-0000-4000-8000-000000000007` | 503 `{"error": "unavailable"}` | 404 `{"error": "cobro_no_encontrado"}`: el cobro nunca llegó |
+| Otro pagador, sin encabezados, `referencia` que no es uuid o sin `monto` ni `moneda` | — | 404 `referencia_no_reconocida` (respaldo) | 404 `referencia_no_reconocida` (respaldo) |
+
+Los números de caso coinciden con el comportamiento de cada cliente en Open Finance y Datos Abiertos (C05 malformada,
+C06 lenta y C07 caída). Solo C01 tiene un caso de suscripción aprobada en `cotizaciones-suscripcion.json` (S01);
+los demás no tienen uno.
+
+Pruebas de los mapeos contra WireMock 3.9.2 real, desde la raíz del repositorio. Necesitan Docker: sin él fallan, no se
+omiten (también las incluye `pytest services/simulador-aliados/tests`):
+
+```bash
+uv run pytest services/simulador-aliados/tests/module
+```
+
 ## Aliados (`/open-finance` y `/datos-abiertos`)
 
 Cada mapeo exige `X-Api-Key` (cualquier valor) y el parámetro de campos **exacto** de la fuente. Una solicitud que no coincide (otro cliente, otros campos o sin `X-Api-Key`) cae en el respaldo de prioridad 10: 404 `{"error":"customer_not_found"}`.

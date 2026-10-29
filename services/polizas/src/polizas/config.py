@@ -1,4 +1,5 @@
 from pydantic import AliasChoices, Field
+from solventa_common import inbox, outbox
 from solventa_common.settings import ServiceSettings
 
 
@@ -25,9 +26,30 @@ class Settings(ServiceSettings):
     # HU-W15, DS2-24: versión vigente del texto de las declaraciones del tomador (F01). Una
     # solicitud con otra versión responde 422 TEXTO_NO_VIGENTE.
     version_declaraciones: str = Field("2026.10.1", min_length=1, max_length=32)
-    # Outbox: la tabla se escribe siempre; la publicación es del relay (EXT-04).
+    # Outbox: la tabla se escribe siempre; la publicación es del relay (EXT-04). HU-W16 (16.6,
+    # P16-1): la infraestructura pone OUTBOX_ENABLED="true" y el tópico a todo servicio que publica
+    # (infra/apps/ecs.tf); sin la variable (local y pruebas) el relay no arranca.
     outbox_enabled: bool = Field(False, validation_alias=_env("OUTBOX_ENABLED"))
     events_topic_arn: str | None = Field(None, validation_alias=_env("EVENTS_TOPIC_ARN"))
+    # Valores por defecto de solventa_common.outbox.
+    outbox_lote: int = Field(outbox.LOTE, ge=1)
+    outbox_intervalo_s: float = Field(outbox.INTERVALO_S, gt=0)
+    outbox_max_intentos: int = Field(outbox.MAX_INTENTOS, ge=1)
+    aws_region: str = Field("us-east-1", validation_alias=_env("AWS_REGION"))
+    # Solo local y pruebas (LocalStack, compose.yaml); en AWS no se define.
+    aws_endpoint_url: str | None = Field(None, validation_alias=_env("AWS_ENDPOINT_URL"))
+    # HU-W16 (16.13): consumidor de polizas-recaudos (RecaudoConfirmado y RecaudoRechazado). La
+    # infraestructura entrega la cola a polizas (`consumes`, infra/apps/ecs.tf:82); sin ella (local
+    # y pruebas) no arranca.
+    # - Lote: el de la librería (5). Cada mensaje es una transacción corta (inbox y proyección, ms),
+    #   muy por debajo de los 120 s de visibilidad de la cola.
+    # - Espera larga de 10 s (no 20): la parada se atiende entre ciclos, y con el relay (10 s) debe
+    #   caber en el stopTimeout de 30 s (ecs.tf:141). Por eso el tope.
+    sqs_polizas_recaudos_url: str | None = Field(
+        None, validation_alias=_env("SQS_POLIZAS_RECAUDOS_URL")
+    )
+    consumidor_max_mensajes: int = Field(inbox.MAX_MENSAJES, ge=1, le=10)
+    consumidor_espera_larga_s: int = Field(10, ge=1, le=10)
 
 
 settings = Settings()

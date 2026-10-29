@@ -1,5 +1,5 @@
-"""Cliente HTTP de la API interna de polizas: /v1/suscripciones (HU-W13) y
-/v1/cotizaciones/{cotizacionId}/aceptacion (HU-W15).
+"""Cliente HTTP de la API interna de polizas: /v1/suscripciones (HU-W13),
+/v1/cotizaciones/{cotizacionId}/aceptacion (HU-W15) y …/recaudo (HU-W16).
 
 El actor es el usuario del back-office (X-Authenticated-Sub) con el rol que corresponde a su grupo:
 `ASESOR` o `SUSCRIPTOR` (polizas oculta el valor de las reglas RESERVADA a quien no es
@@ -94,4 +94,10 @@ class PolizasCliente:
 
     async def aceptacion(self, cotizacion_id: UUID, actor: str) -> dict[str, Any]:
         prefijo = f"/v1/cotizaciones/{cotizacion_id}/aceptacion"
+        return (await self._llamar("GET", "", actor, ROL_ASESOR, prefijo=prefijo))[1]
+
+    # --- HU-W16: estado del recaudo de la prima aceptada (solo lectura) -----------------------
+
+    async def recaudo(self, cotizacion_id: UUID, actor: str) -> dict[str, Any]:
+        prefijo = f"/v1/cotizaciones/{cotizacion_id}/recaudo"
         return (await self._llamar("GET", "", actor, ROL_ASESOR, prefijo=prefijo))[1]

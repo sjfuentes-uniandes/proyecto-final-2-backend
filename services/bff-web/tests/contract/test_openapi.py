@@ -354,3 +354,26 @@ def test_contrato_de_aceptacion() -> None:
         "Idempotency-Key",
     }
     assert set(ruta["get"]["responses"]) == {"200", "401", "403", "404", "422", "503"}
+
+
+# HU-W16 (16.14): estado del recaudo; DTO copiados de polizas.
+ESQUEMAS_RECAUDO = ("EstadoRecaudo", "SituacionRecaudo")
+RECAUDO = "/v1/cotizaciones/{cotizacionId}/recaudo"
+
+
+def test_dto_de_recaudo_iguales_a_polizas() -> None:
+    propios = app.openapi()["components"]["schemas"]
+    de_polizas = yaml.safe_load(POLIZAS.read_text(encoding="utf-8"))["components"]["schemas"]
+    for nombre in ESQUEMAS_RECAUDO:
+        assert propios[nombre] == de_polizas[nombre], nombre
+
+
+def test_contrato_de_recaudo() -> None:
+    ruta = app.openapi()["paths"][RECAUDO]
+    assert set(ruta) == {"get"}
+    consultar = ruta["get"]
+    assert set(consultar["responses"]) == {"200", "401", "403", "404", "422", "503"}
+    assert consultar["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/EstadoRecaudo"
+    }
+    assert {p["name"] for p in consultar["parameters"] if p["required"]} == {"cotizacionId"}
