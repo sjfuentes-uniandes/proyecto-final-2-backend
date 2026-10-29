@@ -160,6 +160,7 @@ resource "aws_cognito_user_group" "backoffice" {
     administradores-socios = "Gestiona socios, credenciales y cuotas"
     asesores               = "Perfila clientes y prepara ofertas"
     operacion              = "Consulta tableros, trazas y alertas"
+    suscriptores           = "Decide los casos de suscripción en revisión"
   }
   name         = each.key
   description  = each.value

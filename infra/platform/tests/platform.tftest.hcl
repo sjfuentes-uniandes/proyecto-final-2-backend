@@ -89,7 +89,7 @@ run "minimo_costo" {
     error_message = "Solo los administradores crean usuarios del back-office (grupo administradores)."
   }
   assert {
-    condition     = toset(keys(aws_cognito_user_group.backoffice)) == toset(["administradores", "administradores-socios", "asesores", "operacion"])
+    condition     = toset(keys(aws_cognito_user_group.backoffice)) == toset(["administradores", "administradores-socios", "asesores", "operacion", "suscriptores"])
     error_message = "Los grupos del pool backoffice deben coincidir con los que asigna el portal (bff_web.domain.usuarios.GRUPOS)."
   }
   assert {
@@ -289,7 +289,7 @@ run "sprint2" {
     condition = (
       local.catalog["bff-web"].calls == ["clientes", "cotizacion", "api-socios", "polizas", "consulta"] &&
       local.catalog["bff-movil"].calls == ["clientes", "consulta", "avisos"] &&
-      local.catalog["dinero"].calls == ["adaptador-pagos"] && local.catalog["polizas"].calls == ["adaptador-firma"] &&
+      local.catalog["dinero"].calls == ["adaptador-pagos"] && local.catalog["polizas"].calls == ["adaptador-firma", "cotizacion", "catalogo"] &&
       alltrue([for name in ["polizas", "consulta", "avisos", "adaptador-pagos", "adaptador-firma"] : contains(local.discoverable, name)]) &&
       !contains(local.discoverable, "dinero")
     )
