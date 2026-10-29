@@ -1,0 +1,217 @@
+openapi: 3.1.0
+info:
+  title: adaptador-pagos
+  version: 0.1.0
+paths:
+  /v1/cobros:
+    post:
+      tags:
+      - cobros
+      summary: Cobrar
+      description: Cobra con `claveRecaudo` como clave idempotente hacia el proveedor.
+      operationId: cobrar_v1_cobros_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudCobro'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CobroDto'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '502':
+          description: RESPUESTA_INVALIDA (también un 404 o un estado no previsto
+            del proveedor)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: FUENTE_NO_DISPONIBLE (detalles.motivo y detalles.circuito)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '504':
+          description: TIEMPO_AGOTADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/cobros/{claveRecaudo}:
+    get:
+      tags:
+      - cobros
+      summary: Consultar
+      description: Consulta el estado del cobro en el proveedor, para conciliar un
+        movimiento pendiente.
+      operationId: consultar_v1_cobros__claveRecaudo__get
+      parameters:
+      - name: claveRecaudo
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Claverecaudo
+      - name: pagadorRef
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Pagadorref
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CobroDto'
+        '404':
+          description: 'COBRO_NO_ENCONTRADO: el proveedor no tiene ese cobro'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '502':
+          description: RESPUESTA_INVALIDA (también un 404 o un estado no previsto
+            del proveedor)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: FUENTE_NO_DISPONIBLE (detalles.motivo y detalles.circuito)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '504':
+          description: TIEMPO_AGOTADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Health Get
+components:
+  schemas:
+    CobroDto:
+      properties:
+        claveRecaudo:
+          type: string
+          format: uuid
+          title: Claverecaudo
+        estado:
+          $ref: '#/components/schemas/EstadoCobro'
+        transaccionId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transaccionid
+        motivo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Motivo
+      type: object
+      required:
+      - claveRecaudo
+      - estado
+      - transaccionId
+      - motivo
+      title: CobroDto
+    ErrorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        mensaje:
+          type: string
+          title: Mensaje
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          type: object
+          title: Detalles
+      type: object
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
+    EstadoCobro:
+      type: string
+      enum:
+      - APROBADO
+      - RECHAZADO
+      title: EstadoCobro
+      description: 'Respuesta definitiva del proveedor: solo estas dos cambian el
+        movimiento en `dinero`.'
+    SolicitudCobro:
+      properties:
+        claveRecaudo:
+          type: string
+          format: uuid
+          title: Claverecaudo
+        monto:
+          type: string
+          pattern: ^[0-9]+(\.[0-9]{1,2})?$
+          title: Monto
+          examples:
+          - '64638.00'
+        moneda:
+          type: string
+          const: COP
+          title: Moneda
+        pagadorRef:
+          type: string
+          format: uuid
+          title: Pagadorref
+      type: object
+      required:
+      - claveRecaudo
+      - monto
+      - moneda
+      - pagadorRef
+      title: SolicitudCobro
