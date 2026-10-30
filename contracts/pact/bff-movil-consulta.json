@@ -1,0 +1,652 @@
+{
+  "consumer": {
+    "name": "bff-movil"
+  },
+  "interactions": [
+    {
+      "description": "el detalle de una póliza de otro cliente",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "la póliza pertenece a otro cliente"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/clientes/00000000-0000-4000-8000-000000000001/polizas/00000000-0000-4000-8000-0000000000b2"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "POLIZA_NO_AUTORIZADA",
+            "correlationId": "c0rr3l4c10n",
+            "detalles": {},
+            "mensaje": "Mensaje genérico"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 403
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "el detalle de una póliza del cliente",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el cliente tiene una póliza"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/clientes/00000000-0000-4000-8000-000000000001/polizas/00000000-0000-4000-8000-0000000000b1"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "coberturas": [
+              {
+                "codigo": "MUERTE",
+                "nombre": "Muerte",
+                "obligatoria": true
+              }
+            ],
+            "documentoHuella": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "emitidaEn": "2026-10-24T15:00:01.250000Z",
+            "estado": "ACTIVA",
+            "firmaId": "FIRMA-0001",
+            "moneda": "COP",
+            "numero": "100-2026-000001",
+            "periodicidad": "MENSUAL",
+            "polizaId": "00000000-0000-4000-8000-0000000000b1",
+            "prima": "64638.10",
+            "productoId": "vida-deudor",
+            "productoNombre": "Vida deudor",
+            "productoVersion": "1.0.0",
+            "ramo": "VIDA",
+            "sumaAsegurada": "50000000",
+            "vigencia": {
+              "desde": "2026-10-25",
+              "hasta": "2027-10-24"
+            },
+            "vigente": true
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.coberturas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.coberturas[*].codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.coberturas[*].nombre": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.coberturas[*].obligatoria": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.documentoHuella": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.emitidaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.firmaId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.moneda": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.numero": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.periodicidad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.polizaId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.prima": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.productoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.productoNombre": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.productoVersion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.ramo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.sumaAsegurada": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.vigencia.desde": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}$"
+                }
+              ]
+            },
+            "$.vigencia.hasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}$"
+                }
+              ]
+            },
+            "$.vigente": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "el detalle de una póliza inexistente",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "la póliza no existe"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/clientes/00000000-0000-4000-8000-000000000001/polizas/00000000-0000-4000-8000-0000000000b3"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "POLIZA_NO_ENCONTRADA",
+            "correlationId": "c0rr3l4c10n",
+            "detalles": {},
+            "mensaje": "Mensaje genérico"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la lista de pólizas del cliente",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el cliente tiene una póliza"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/clientes/00000000-0000-4000-8000-000000000001/polizas"
+      },
+      "response": {
+        "body": {
+          "content": [
+            {
+              "coberturas": [
+                {
+                  "codigo": "MUERTE",
+                  "nombre": "Muerte",
+                  "obligatoria": true
+                }
+              ],
+              "documentoHuella": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "emitidaEn": "2026-10-24T15:00:01.250000Z",
+              "estado": "ACTIVA",
+              "firmaId": "FIRMA-0001",
+              "moneda": "COP",
+              "numero": "100-2026-000001",
+              "periodicidad": "MENSUAL",
+              "polizaId": "00000000-0000-4000-8000-0000000000b1",
+              "prima": "64638.10",
+              "productoId": "vida-deudor",
+              "productoNombre": "Vida deudor",
+              "productoVersion": "1.0.0",
+              "ramo": "VIDA",
+              "sumaAsegurada": "50000000",
+              "vigencia": {
+                "desde": "2026-10-25",
+                "hasta": "2027-10-24"
+              },
+              "vigente": true
+            }
+          ],
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$[0].coberturas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[0].coberturas[*].codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[0].coberturas[*].nombre": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[0].coberturas[*].obligatoria": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[0].documentoHuella": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[0].emitidaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$[0].estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[0].firmaId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[0].moneda": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[0].numero": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[0].periodicidad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[0].polizaId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$[0].prima": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[0].productoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[0].productoNombre": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[0].productoVersion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[0].ramo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[0].sumaAsegurada": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$[0].vigencia.desde": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}$"
+                }
+              ]
+            },
+            "$[0].vigencia.hasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}$"
+                }
+              ]
+            },
+            "$[0].vigente": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la lista de un cliente sin pólizas",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el cliente no tiene pólizas"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/clientes/00000000-0000-4000-8000-000000000001/polizas"
+      },
+      "response": {
+        "body": {
+          "content": [],
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactRust": {
+      "ffi": "0.5.8",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    }
+  },
+  "provider": {
+    "name": "consulta"
+  }
+}

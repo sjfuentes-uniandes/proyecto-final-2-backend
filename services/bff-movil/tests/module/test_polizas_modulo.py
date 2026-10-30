@@ -148,3 +148,50 @@ def test_no_registra_numero_huella_ni_cliente_id(
     registrado = caplog.text + entorno.telemetria.texto_logs() + entorno.telemetria.texto_spans()
     for secreto in ("POL-2026-000001", "huella-completa-sintetica", str(CLIENTE_ID)):
         assert secreto not in registrado
+
+
+def test_el_sub_del_token_distinto_al_encabezado_responde_401(
+    crear_entorno: Callable[..., Entorno],
+) -> None:
+    consulta = ConsultaFalsa()
+    entorno = crear_entorno(consulta_polizas=consulta)
+
+    for ruta in ("/v1/polizas", f"/v1/polizas/{POLIZA_ID}"):
+        respuesta = entorno.pedir("GET", ruta, sub="otro-titular")
+        assert respuesta.status_code == 401
+        assert "POL-2026-000001" not in respuesta.text
+    assert consulta.llamadas == []
+
+
+def test_se_ignora_el_cliente_id_enviado_por_el_movil(
+    crear_entorno: Callable[..., Entorno],
+) -> None:
+    consulta = ConsultaFalsa()
+    entorno = crear_entorno(consulta_polizas=consulta)
+    ajeno = "00000000-0000-4000-8000-0000000000ff"
+
+    entorno.pedir(
+        "GET",
+        "/v1/polizas",
+        params={"clienteId": ajeno, "cliente_id": ajeno},
+        encabezados={"X-Cliente-Id": ajeno, "X-Actor-Id": ajeno},
+    )
+    entorno.pedir(
+        "GET",
+        f"/v1/polizas/{POLIZA_ID}",
+        params={"clienteId": ajeno},
+        encabezados={"X-Cliente-Id": ajeno},
+    )
+
+    assert consulta.llamadas == [(CLIENTE_ID, entorno.sub)] * 2
+
+
+def test_sin_cliente_la_falla_es_cerrada_y_sin_datos(
+    crear_entorno: Callable[..., Entorno],
+) -> None:
+    entorno = crear_entorno(con_cliente=False, consulta_polizas=ConsultaFalsa())
+
+    respuesta = entorno.pedir("GET", "/v1/polizas")
+
+    assert respuesta.status_code == 404
+    assert "POL-2026-000001" not in respuesta.text

@@ -46,7 +46,7 @@ override_data {
           "dinero"              = { tier = "nucleo", listener_port = null, database = true, publishes = true, cache = false, calls = ["adaptador-pagos"], consumes = ["dinero-aceptaciones"], allies = [], stories = [], discoverable = false, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/dinero", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/dinero", name = "solventa-int/dinero" } }
           "adaptador-pagos"     = { tier = "adaptador", listener_port = null, database = false, publishes = false, cache = false, calls = ["simulador-aliados"], consumes = [], allies = ["pagos"], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/adaptador-pagos", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/adaptador-pagos", name = "solventa-int/adaptador-pagos" } }
           "adaptador-firma"     = { tier = "adaptador", listener_port = null, database = false, publishes = false, cache = false, calls = ["simulador-aliados"], consumes = [], allies = ["firma", "push"], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/adaptador-firma", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/adaptador-firma", name = "solventa-int/adaptador-firma" } }
-          "consulta"            = { tier = "proyeccion", listener_port = null, database = true, publishes = false, cache = true, calls = [], consumes = ["consulta-proyeccion"], allies = [], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/consulta", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/consulta", name = "solventa-int/consulta" } }
+          "consulta"            = { tier = "proyeccion", listener_port = null, database = true, publishes = false, cache = true, calls = ["catalogo"], consumes = ["consulta-proyeccion"], allies = [], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/consulta", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/consulta", name = "solventa-int/consulta" } }
           "avisos"              = { tier = "worker", listener_port = null, database = true, publishes = false, cache = false, calls = ["adaptador-firma"], consumes = ["avisos"], allies = [], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/avisos", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/avisos", name = "solventa-int/avisos" } }
           "auditoria"           = { tier = "worker", listener_port = null, database = false, publishes = false, cache = false, calls = [], consumes = ["auditoria"], allies = [], stories = [], discoverable = false, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/auditoria", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/auditoria", name = "solventa-int/auditoria" } }
           "simulador-aliados"   = { tier = "soporte", listener_port = null, database = false, publishes = false, cache = false, calls = [], consumes = [], allies = [], stories = [], discoverable = true, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/simulador-aliados", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/simulador-aliados", name = "solventa-int/simulador-aliados" } }
@@ -151,8 +151,8 @@ run "todos_los_servicios" {
     # HU-S02: los servicios nuevos no cambian la capa de bff-web (5) ni la de bff-movil (3),
     # así que sus servicios ECS no se recrean (module.layer_N conserva la dirección).
     condition = local.depth == {
-      "simulador-aliados" = 0, auditoria = 0, catalogo = 0, consulta = 0
-      "adaptador-datos"   = 1, "adaptador-identidad" = 1, "adaptador-pagos" = 1, "adaptador-firma" = 1
+      "simulador-aliados" = 0, auditoria = 0, catalogo = 0
+      "adaptador-datos"   = 1, "adaptador-identidad" = 1, "adaptador-pagos" = 1, "adaptador-firma" = 1, consulta = 1
       clientes            = 2, polizas = 2, dinero = 2, avisos = 2
       "bff-movil"         = 3, cotizacion = 3
       "api-socios"        = 4, "bff-web" = 5
@@ -439,6 +439,7 @@ run "sprint2" {
       local.environment["avisos"]["ADAPTADOR_FIRMA_URL"] == "http://adaptador-firma:8080" &&
       local.environment["bff-web"]["POLIZAS_URL"] == "http://polizas:8080" && local.environment["bff-web"]["CONSULTA_URL"] == "http://consulta:8080" &&
       local.environment["bff-movil"]["CONSULTA_URL"] == "http://consulta:8080" && local.environment["bff-movil"]["AVISOS_URL"] == "http://avisos:8080" &&
+      local.environment["consulta"]["CATALOGO_URL"] == "http://catalogo:8080" &&
       local.environment["dinero"]["SQS_DINERO_ACEPTACIONES_URL"] == "https://sqs.us-east-1.amazonaws.com/123456789012/solventa-int-dinero-aceptaciones" &&
       local.environment["polizas"]["SQS_POLIZAS_RECAUDOS_URL"] != "" && local.environment["consulta"]["SQS_CONSULTA_PROYECCION_URL"] != "" && local.environment["avisos"]["SQS_AVISOS_URL"] != "" &&
       local.environment["polizas"]["EVENTS_TOPIC_ARN"] != "" && local.environment["dinero"]["OUTBOX_ENABLED"] == "true" && !contains(keys(local.environment["consulta"]), "EVENTS_TOPIC_ARN")
