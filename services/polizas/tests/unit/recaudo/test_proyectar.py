@@ -291,6 +291,38 @@ async def test_el_primer_confirmado_crea_la_poliza_emitiendo_en_la_misma_transac
     assert [log for log in _logs(salida) if log["level"] in ("WARNING", "ERROR")] == []
 
 
+async def test_la_poliza_guarda_el_correlation_id_del_recaudo_confirmado(dobles: Any) -> None:
+    # HU-W17 (17.8): el que lleva PolizaEmitida y el que la emisión propaga a adaptador-firma.
+    clave = await _aceptar(dobles)
+    await _manejar(dobles)(_evento(_sobre("RecaudoConfirmado", clave)), TX)
+    assert dobles.polizas.polizas[clave].correlation_id == "corr-recaudo-1"
+
+
+async def test_un_correlation_id_invalido_no_se_guarda(dobles: Any) -> None:
+    # El inbox valida su forma (solventa_common.correlation): uno inválido llega como None.
+    clave = await _aceptar(dobles)
+    sobre = _sobre("RecaudoConfirmado", clave) | {"correlationId": "con espacios y ñ"}
+    await _manejar(dobles)(_evento(sobre), TX)
+    assert dobles.polizas.polizas[clave].correlation_id is None
+
+
+async def test_proyectar_sin_correlation_id_crea_la_poliza_sin_el(dobles: Any) -> None:
+    clave = await _aceptar(dobles)
+    caso = ProyectarRecaudo(dobles.recaudos, dobles.polizas, dobles.reloj)
+    resultado = ResultadoRecaudo(
+        clave_recaudo=clave,
+        recaudo_id=uuid4(),
+        estado=SituacionRecaudo.CONFIRMADO,
+        monto=Decimal(MONTO),
+        moneda="COP",
+        transaccion_id=TRANSACCION,
+        motivo=None,
+        ocurrido_en=ACEPTADA_EN,
+    )
+    await caso.ejecutar(resultado, TX)
+    assert dobles.polizas.polizas[clave].correlation_id is None
+
+
 async def test_un_rechazado_no_crea_poliza(dobles: Any) -> None:
     clave = await _aceptar(dobles)
     await _manejar(dobles)(_evento(_sobre("RecaudoRechazado", clave)), TX)

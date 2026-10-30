@@ -173,6 +173,8 @@ def crear(
     monkeypatch.setattr(psycopg_pool, "AsyncConnectionPool", PoolFalso)
 
     def _crear(con_base: bool = True, **cambios: Any) -> tuple[FastAPI, io.StringIO]:
+        # HU-W17 (17.8): la tarea emisora se prueba en test_emisora.py.
+        cambios = {"emision_habilitada": False} | cambios
         settings = Settings(DB_HOST="rds.interno" if con_base else None, **cambios)
         app = main.crear_app(settings)
         return app, capturar_logs()

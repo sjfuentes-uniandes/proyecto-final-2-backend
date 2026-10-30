@@ -9,10 +9,27 @@ registrados. Las migraciones las aplica `decisiones_pg.migrar` (todos los .sql e
 
 HU-W17 (17.7): `fuente_documento` lee, en la misma transacción, lo que el PDF toma de la aceptación,
 de la instantánea de su decisión y del recaudo confirmado.
+
+HU-W17 (17.8), la tarea emisora:
+- `pendientes` (índice parcial `polizas_emitiendo` de 005), sin `FOR UPDATE`: no se bloquean filas
+  durante las llamadas. Solo las que no tienen una reserva vigente: sin fallo (nunca intentadas, o
+  de una tarea que cayó y cuya reserva venció), o con un fallo de hace más de `reintento_s`.
+- `reservar` (17.8, ajuste) fija `reservada_hasta` si sigue EMITIENDO y no hay una reserva
+  vigente, y devuelve la póliza al día; `liberar` borra solo la propia (por su hora). Al quedar
+  ACTIVA, `actualizar` la libera en la misma escritura.
+- La guarda de `actualizar` exige, además de EMITIENDO, que cada punto de control ya registrado
+  sea el de la copia que se escribe. Si otra tarea registró otro documento u otra firma (o los
+  registró y esta copia no los tiene), no cambia nada: la tarea relee, en lugar de chocar con el
+  disparador de 004 o de pisar lo registrado con un fallo.
+- `correlation_id` (005) es identidad: se escribe al crear y no está en `MUTABLES`.
+- `TransaccionesPg` abre las transacciones cortas de la tarea sobre el pool.
 """
 
-from collections.abc import Mapping
-from typing import Any, Protocol
+from collections.abc import AsyncIterator, Mapping
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from datetime import datetime
+from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID
 
 from psycopg import AsyncConnection
@@ -30,6 +47,9 @@ from polizas.domain.poliza.modelos import (
     Vigencia,
 )
 from polizas.domain.suscripcion.insumos import insumos_de
+
+if TYPE_CHECKING:
+    from psycopg_pool import AsyncConnectionPool
 
 # Lo que cambia una transición; la identidad (el resto) no cambia nunca.
 MUTABLES = (
@@ -69,6 +89,7 @@ COLUMNAS = (
     "ultimo_fallo",
     "creada_en",
     "actualizada_en",
+    "correlation_id",
 )
 _INSERTAR = (
     f"INSERT INTO polizas ({', '.join(COLUMNAS)}) "
@@ -76,9 +97,34 @@ _INSERTAR = (
     "ON CONFLICT (aceptacion_id) DO NOTHING RETURNING poliza_id"
 )
 _POR_ACEPTACION = f"SELECT {', '.join(COLUMNAS)} FROM polizas WHERE aceptacion_id = %s"
+_POR_ID = f"SELECT {', '.join(COLUMNAS)} FROM polizas WHERE poliza_id = %s"
+# Un `= NULL` no es verdadero: una copia sin el punto de control solo pasa si sigue vacío. Al
+# quedar ACTIVA se libera la reserva (después, el disparador de 004 no deja cambiar nada).
 _ACTUALIZAR = (
-    f"UPDATE polizas SET {', '.join(f'{c} = %s' for c in MUTABLES)} "
-    "WHERE poliza_id = %s AND estado = 'EMITIENDO' RETURNING poliza_id"
+    f"UPDATE polizas SET {', '.join(f'{c} = %s' for c in MUTABLES)}, "
+    "reservada_hasta = CASE WHEN %s::text = 'ACTIVA' THEN NULL ELSE reservada_hasta END "
+    "WHERE poliza_id = %s AND estado = 'EMITIENDO' "
+    "AND (documento_version_id IS NULL OR documento_version_id = %s) "
+    "AND (firma_id IS NULL OR (firma_id, firma_sello_tiempo) = (%s, %s)) "
+    "RETURNING poliza_id"
+)
+# HU-W17 (17.8): sin reserva vigente; las sin fallo primero y de inmediato, las fallidas si el fallo
+# es anterior a `reintento_antes_de`.
+_SIN_RESERVA = "(reservada_hasta IS NULL OR reservada_hasta < %s)"
+_PENDIENTES = (
+    f"SELECT {', '.join(COLUMNAS)} FROM polizas "
+    f"WHERE estado = 'EMITIENDO' AND {_SIN_RESERVA} "
+    "AND (ultimo_fallo IS NULL OR actualizada_en < %s) "
+    "ORDER BY ultimo_fallo IS NOT NULL, actualizada_en, poliza_id LIMIT %s"
+)
+_RESERVAR = (
+    "UPDATE polizas SET reservada_hasta = %s "
+    f"WHERE poliza_id = %s AND estado = 'EMITIENDO' AND {_SIN_RESERVA} "
+    f"RETURNING {', '.join(COLUMNAS)}"
+)
+_LIBERAR = (
+    "UPDATE polizas SET reservada_hasta = NULL "
+    "WHERE poliza_id = %s AND estado = 'EMITIENDO' AND reservada_hasta = %s"
 )
 _SIGUIENTE = "SELECT nextval('polizas_numero')"
 # El producto y su versión, de la instantánea de la decisión aceptada (DS2-10).
@@ -130,6 +176,7 @@ def fila_poliza(poliza: Poliza) -> dict[str, Any]:
         "ultimo_fallo": poliza.ultimo_fallo,
         "creada_en": poliza.creada_en,
         "actualizada_en": poliza.actualizada_en,
+        "correlation_id": poliza.correlation_id,
     }
 
 
@@ -167,7 +214,28 @@ def poliza_de(fila: Mapping[str, Any]) -> Poliza:
         ultimo_fallo=fila["ultimo_fallo"],
         creada_en=fila["creada_en"],
         actualizada_en=fila["actualizada_en"],
+        correlation_id=fila.get("correlation_id"),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class TransaccionPolizasPg:
+    """Una transacción de la tarea emisora (implementa TransaccionPg)."""
+
+    conexion: AsyncConnection[Any]
+
+
+class TransaccionesPg:
+    """Implementa Transacciones[TransaccionPolizasPg] (HU-W17, 17.8): una conexión del pool por
+    transacción corta; commit al salir y rollback con una excepción."""
+
+    def __init__(self, pool: "AsyncConnectionPool[Any]") -> None:
+        self._pool = pool
+
+    @asynccontextmanager
+    async def transaccion(self) -> AsyncIterator[TransaccionPolizasPg]:
+        async with self._pool.connection() as conexion, conexion.transaction():
+            yield TransaccionPolizasPg(conexion)
 
 
 class PolizasPg:
@@ -208,10 +276,41 @@ class PolizasPg:
 
     async def actualizar(self, poliza: Poliza, tx: TransaccionPg) -> bool:
         fila = fila_poliza(poliza)
+        guarda = [
+            poliza.poliza_id,
+            fila["documento_version_id"],
+            fila["firma_id"],
+            fila["firma_sello_tiempo"],
+        ]
         cursor = await tx.conexion.execute(
-            _ACTUALIZAR, [*(fila[c] for c in MUTABLES), poliza.poliza_id]
+            _ACTUALIZAR, [*(fila[c] for c in MUTABLES), fila["estado"], *guarda]
         )
         return await cursor.fetchone() is not None
+
+    async def por_id(self, poliza_id: UUID, tx: TransaccionPg) -> Poliza | None:
+        cursor = tx.conexion.cursor(row_factory=dict_row)
+        await cursor.execute(_POR_ID, (poliza_id,))
+        fila = await cursor.fetchone()
+        return None if fila is None else poliza_de(fila)
+
+    async def pendientes(
+        self, ahora: datetime, reintento_antes_de: datetime, lote: int, tx: TransaccionPg
+    ) -> list[Poliza]:
+        """Implementa EmisionesRepositorio[TransaccionPg] (HU-W17, 17.8)."""
+        cursor = tx.conexion.cursor(row_factory=dict_row)
+        await cursor.execute(_PENDIENTES, (ahora, reintento_antes_de, lote))
+        return [poliza_de(fila) for fila in await cursor.fetchall()]
+
+    async def reservar(
+        self, poliza_id: UUID, ahora: datetime, hasta: datetime, tx: TransaccionPg
+    ) -> Poliza | None:
+        cursor = tx.conexion.cursor(row_factory=dict_row)
+        await cursor.execute(_RESERVAR, (hasta, poliza_id, ahora))
+        fila = await cursor.fetchone()
+        return None if fila is None else poliza_de(fila)
+
+    async def liberar(self, poliza_id: UUID, hasta: datetime, tx: TransaccionPg) -> None:
+        await tx.conexion.execute(_LIBERAR, (poliza_id, hasta))
 
     async def fuente_documento(
         self, aceptacion_id: UUID, tx: TransaccionPg

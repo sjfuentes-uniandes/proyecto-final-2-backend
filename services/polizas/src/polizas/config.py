@@ -4,6 +4,10 @@ from pydantic import AliasChoices, Field
 from solventa_common import inbox, outbox
 from solventa_common.settings import ServiceSettings
 
+# Timeout de adaptador-firma hacia el proveedor: ALLY_FIRMA_TIMEOUT_MS (5000 ms en
+# infra/apps/variables.tf, ally_timeouts_ms). polizas debe esperar más que eso.
+TIMEOUT_ADAPTADOR_FIRMA_MS = 5000
+
 
 def _env(nombre: str) -> AliasChoices:
     # Nombre que entrega la infraestructura y su variante SOLVENTA_ (S1-A6).
@@ -69,6 +73,32 @@ class Settings(ServiceSettings):
     adaptador_firma_url: str = Field(
         "http://localhost:8092", validation_alias=_env("ADAPTADOR_FIRMA_URL")
     )
+    # HU-W17 (17.8): supera al del adaptador (si no, se perdería su firma o su 504). Sin reintentos.
+    adaptador_firma_timeout_ms: int = Field(6500, gt=TIMEOUT_ADAPTADOR_FIRMA_MS, le=10000)
+    # HU-W17 (17.8): la tarea emisora (ADR 0014, decisión 1), que es también la reconciliación.
+    # Encendida por defecto: en los ambientes no se puede fijar una variable nueva sin cambiar
+    # infra/, y una póliza EMITIENDO no avanza por ningún otro camino. Solo SOLVENTA_EMISION_* la
+    # ajusta. Sin base, sin bucket o sin la URL de adaptador-firma no arranca (WARNING).
+    # - Intervalo de 1 s: la meta p95 de `emision` es de 1500 ms (latency_targets de int) y se mide
+    #   desde que se toma la póliza; la espera hasta tomarla (de 0 a 1 s) es lo que ve el asesor
+    #   además. Cada ciclo es una lectura por el índice parcial de las EMITIENDO (barata).
+    # - Lote de 10, en serie: acota las llamadas a adaptador-firma por ciclo y tarea, también durante
+    #   una caída (las fallidas esperan `reintento_s`). La parada se atiende entre pólizas.
+    # - Reintento a los 30 s: una fallida se retoma pasado ese tiempo desde su fallo. Piso de 15 s,
+    #   para no insistir contra una dependencia caída.
+    # - Reserva de 60 s (17.8, ajuste): mientras está vigente, ninguna otra tarea toma la póliza, y
+    #   se libera al terminar. Debe superar el peor intento: datos y PDF (ms), PutObject con dos
+    #   intentos de 1 + 5 s (12 s, más el backoff) y la firma (6,5 s), unos 19 s; 60 s da margen
+    #   para esperas del pool. Es también lo que espera una póliza cuya tarea cayó sin liberarla.
+    #   Piso de 30 s (y mayor que la parada de la tarea, 15 s).
+    # - Alerta a 1 h desde la creación: se mide como `error` (suma en OperationErrors, que vigila la
+    #   alarma de tasa de error de polizas). Sin tope ni compensación.
+    emision_habilitada: bool = True
+    emision_intervalo_s: float = Field(1.0, gt=0, le=60)
+    emision_lote: int = Field(10, ge=1, le=50)
+    emision_reintento_s: int = Field(30, ge=15)
+    emision_reserva_s: int = Field(60, ge=30)
+    emision_alerta_tras_s: int = Field(3600, gt=0)
 
 
 settings = Settings()

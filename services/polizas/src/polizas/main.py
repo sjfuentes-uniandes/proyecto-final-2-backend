@@ -21,12 +21,19 @@ from polizas.adapters.inbound.http import aceptaciones, recaudos, suscripciones
 from polizas.adapters.inbound.sqs.recaudos import manejador_recaudos
 from polizas.adapters.outbound.catalogo_http import CatalogoHttp
 from polizas.adapters.outbound.cotizacion_http import CotizacionHttp
-from polizas.adapters.outbound.polizas_pg import PolizasPg
+from polizas.adapters.outbound.documento_pdf import GeneradorPdf
+from polizas.adapters.outbound.documentos_s3 import almacen_desde
+from polizas.adapters.outbound.firma_http import AdaptadorFirmaHttp
+from polizas.adapters.outbound.outbox_pg import OutboxPolizasPg
+from polizas.adapters.outbound.polizas_pg import PolizasPg, TransaccionesPg
 from polizas.adapters.outbound.recaudos_pg import RecaudosPg
 from polizas.adapters.outbound.reloj import RelojSistema
 from polizas.application.aceptacion.consultar import ConsultarAceptacion
 from polizas.application.aceptacion.puertos import AceptacionesRepositorio
 from polizas.application.aceptacion.registrar import ConfigAceptacion, RegistrarAceptacion
+from polizas.application.poliza.documento import ReunirDatosDocumento
+from polizas.application.poliza.emitir import EmitirPolizas
+from polizas.application.poliza.puertos import AlmacenDocumentos
 from polizas.application.recaudo.consultar import ConsultarRecaudo
 from polizas.application.recaudo.proyectar import ProyectarRecaudo
 from polizas.application.recaudo.puertos import RecaudosRepositorio
@@ -49,19 +56,24 @@ from polizas.config import Settings
 if TYPE_CHECKING:
     from psycopg_pool import AsyncConnectionPool
 
-# Al cerrar, en serie: primero el consumidor de recaudos (HU-W16, 16.13) y después el relay; cada
-# uno se espera hasta su límite y luego se cancela. Después se cierran el pool y el cliente HTTP.
-# ECS da 30 s entre SIGTERM y SIGKILL (stopTimeout, infra/apps/ecs.tf:141); antes del lifespan
-# uvicorn termina las solicitudes en curso.
-# - Consumidor, 15 s: la parada se atiende entre ciclos; un ciclo es una espera larga (10 s) más el
-#   lote (5 transacciones cortas, ms). Uno cortado hace rollback y el mensaje vuelve tras la
-#   visibilidad; el inbox evita el doble efecto.
-# - Relay, 10 s: un ciclo normal (lote 50, unos ms por publish) cabe de sobra; uno cortado hace
-#   rollback y el siguiente relay republica sus filas con el mismo eventId (al menos una vez; un
-#   publish ya en vuelo puede llegar igual).
-# Primero el consumidor: desde HU-W17 su efecto escribirá eventos en el outbox, y el relay los
-# publica en su último ciclo. 15 + 10 = 25 s, con 5 s de margen para uvicorn y los cierres.
+# Al cerrar (HU-W17, 17.8), en dos fases, como dinero (16.11); luego se cierran el cliente de
+# adaptador-firma, el pool y el cliente HTTP. ECS da 30 s entre SIGTERM y SIGKILL (stopTimeout,
+# infra/apps/ecs.tf:141); antes del lifespan uvicorn termina las solicitudes en curso.
+# - Fase 1: se señalizan a la vez el consumidor y la tarea emisora, y se espera a los dos en
+#   paralelo, cada uno con su límite; dura lo que el mayor. Si un límite vence, se cancela.
+#   - Consumidor, 15 s: la parada se atiende entre ciclos; un ciclo es una espera larga (10 s) más
+#     el lote (5 transacciones cortas, ms). Uno cortado hace rollback y el mensaje vuelve tras la
+#     visibilidad; el inbox evita el doble efecto.
+#   - Tarea emisora, 15 s: la parada se atiende entre pólizas; la que está en curso hace una
+#     subida a S3 (1 + 5 s por intento) y una firma (6,5 s). Una cortada sigue EMITIENDO con sus
+#     puntos de control (una transacción cortada hace rollback); la cancelación libera su reserva
+#     al salir y otra tarea la retoma (si no llega a liberarla, al vencer: 60 s).
+# - Fase 2: el relay, 10 s, para publicar lo que dejaron en el outbox (la última PolizaEmitida). Un
+#   ciclo normal (lote 50, unos ms por publish) cabe de sobra; uno cortado hace rollback y el
+#   siguiente relay republica sus filas con el mismo eventId (al menos una vez).
+# max(15, 15) + 10 = 25 s, con 5 s de margen para uvicorn y los cierres. En serie serían 40 s.
 PARADA_CONSUMIDOR_S = 15.0
+PARADA_EMISION_S = 15.0
 PARADA_RELAY_S = 10.0
 MENSAJE_RELAY_SIN_CONFIGURACION = "outbox: relay habilitado sin configuración; no se publica"
 MENSAJE_RELAY_NO_ARRANCO = "outbox: el relay no arrancó"
@@ -72,9 +84,13 @@ MENSAJE_CONSUMIDOR_SIN_CONFIGURACION = "inbox: consumidor sin configuración; no
 MENSAJE_CONSUMIDOR_NO_ARRANCO = "inbox: el consumidor no arrancó"
 MENSAJE_CONSUMIDOR_DETENIDO = "inbox: el consumidor se detuvo"
 MENSAJE_CONSUMIDOR_SIN_PARAR = "inbox: el consumidor no se detuvo a tiempo; se cancela"
+MENSAJE_EMISION_SIN_CONFIGURACION = "emision: tarea emisora sin configuración; no se emiten pólizas"
+MENSAJE_EMISION_DETENIDA = "emision: la tarea emisora se detuvo"
+MENSAJE_EMISION_SIN_PARAR = "emision: la tarea emisora no se detuvo a tiempo; se cancela"
 
 logger = logging.getLogger("polizas.outbox")
 logger_inbox = logging.getLogger("polizas.inbox")
+logger_emision = logging.getLogger("polizas.emision")
 
 Ejecutar = Callable[[asyncio.Event], Awaitable[None]]
 
@@ -135,8 +151,18 @@ def _configurar_casos(app: FastAPI, puertos: Puertos, settings: Settings) -> Non
         )
 
 
-@asynccontextmanager
-async def _en_fondo(
+@dataclass(frozen=True)
+class _Fondo:
+    """Una tarea en segundo plano, con su señal de parada y su límite para detenerse."""
+
+    tarea: "asyncio.Task[None]"
+    parada: asyncio.Event
+    limite_s: float
+    registro: logging.Logger
+    sin_parar: str
+
+
+def _lanzar(
     app: FastAPI,
     atributo: str,
     ejecutar: Ejecutar,
@@ -145,9 +171,8 @@ async def _en_fondo(
     registro: logging.Logger,
     detenido: str,
     sin_parar: str,
-) -> AsyncIterator[None]:
-    """Corre `ejecutar` como tarea (`app.state.<atributo>`) mientras dura el contexto. Al cerrar,
-    señaliza la parada y espera a la tarea hasta `limite_s`; si no termina, se cancela."""
+) -> _Fondo:
+    """Corre `ejecutar` como tarea (`app.state.<atributo>`) mientras la app vive."""
 
     async def correr(parada: asyncio.Event) -> None:
         # Las librerías ya absorben los ciclos fallidos; esto solo evita que un error inesperado
@@ -160,40 +185,45 @@ async def _en_fondo(
     parada = asyncio.Event()
     tarea = asyncio.create_task(correr(parada), name=atributo.replace("_", "-"))
     setattr(app.state, atributo, tarea)
-    try:
-        yield
-    finally:
-        parada.set()
+    return _Fondo(tarea, parada, limite_s, registro, sin_parar)
+
+
+async def _detener(*fondos: _Fondo | None) -> None:
+    """Señaliza la parada a todas a la vez y espera a todas en paralelo, cada una hasta su límite;
+    la que no termina a tiempo se cancela."""
+    activos = [fondo for fondo in fondos if fondo is not None]
+    for fondo in activos:
+        fondo.parada.set()
+
+    async def esperar(fondo: _Fondo) -> None:
         try:
-            await asyncio.wait_for(tarea, limite_s)
+            await asyncio.wait_for(fondo.tarea, fondo.limite_s)
         except TimeoutError:
-            registro.warning(sin_parar, extra={"limit_s": limite_s})
+            fondo.registro.warning(fondo.sin_parar, extra={"limit_s": fondo.limite_s})
+
+    await asyncio.gather(*(esperar(fondo) for fondo in activos))
 
 
-@asynccontextmanager
-async def _relay_outbox(app: FastAPI, settings: Settings, reloj: Reloj) -> AsyncIterator[None]:
+def _relay_outbox(app: FastAPI, settings: Settings, reloj: Reloj) -> _Fondo | None:
     """HU-W16 (16.6, P16-1): vacía el outbox hacia el tópico mientras la app vive, sobre su pool.
 
     Sin `OUTBOX_ENABLED` no hace nada. Habilitado sin tópico o sin base, o si no se puede crear el
-    cliente SNS, lo registra y la app arranca igual. Al cerrar, señaliza la parada y espera a la
-    tarea hasta `PARADA_RELAY_S`.
+    cliente SNS, lo registra y la app arranca igual. Se detiene en la fase 2, hasta
+    `PARADA_RELAY_S`.
     """
     if not settings.outbox_enabled:
-        yield
-        return
+        return None
     topico = settings.events_topic_arn
     pool = getattr(app.state, "pool", None)
     if not topico or pool is None:
         falta = "EVENTS_TOPIC_ARN" if not topico else "base"
         logger.error(MENSAJE_RELAY_SIN_CONFIGURACION, extra={"missing": falta})
-        yield
-        return
+        return None
     try:
         cliente = cliente_sns(settings.aws_region, endpoint_url=settings.aws_endpoint_url)
     except Exception as error:  # noqa: BLE001 - el mensaje puede traer la configuración
         logger.error(MENSAJE_RELAY_NO_ARRANCO, extra={"error_type": type(error).__name__})
-        yield
-        return
+        return None
     relay = RelayOutbox(
         OutboxPg(pool),
         PublicadorSns(cliente, topico),
@@ -202,7 +232,7 @@ async def _relay_outbox(app: FastAPI, settings: Settings, reloj: Reloj) -> Async
         intervalo_s=settings.outbox_intervalo_s,
         reloj=reloj.ahora,
     )
-    async with _en_fondo(
+    return _lanzar(
         app,
         "relay_outbox",
         relay.ejecutar,
@@ -210,8 +240,7 @@ async def _relay_outbox(app: FastAPI, settings: Settings, reloj: Reloj) -> Async
         registro=logger,
         detenido=MENSAJE_RELAY_DETENIDO,
         sin_parar=MENSAJE_RELAY_SIN_PARAR,
-    ):
-        yield
+    )
 
 
 def armar_consumidor(
@@ -223,28 +252,23 @@ def armar_consumidor(
     return ConsumidorInbox(receptor, InboxPg(pool), manejador_recaudos(caso), reloj=reloj.ahora)
 
 
-@asynccontextmanager
-async def _consumidor_recaudos(
-    app: FastAPI, settings: Settings, reloj: Reloj
-) -> AsyncIterator[None]:
+def _consumidor_recaudos(app: FastAPI, settings: Settings, reloj: Reloj) -> _Fondo | None:
     """HU-W16 (16.13): consume `polizas-recaudos` y proyecta el estado del recaudo, sobre el pool.
 
     Activo solo si llega la cola (en AWS siempre; en local y pruebas, no). Sin base, o si no se
-    puede crear el cliente SQS, lo registra y la app arranca igual. Al cerrar, señaliza la parada y
-    espera a la tarea hasta `PARADA_CONSUMIDOR_S`.
+    puede crear el cliente SQS, lo registra y la app arranca igual. Se detiene en la fase 1, hasta
+    `PARADA_CONSUMIDOR_S`.
     """
     cola = settings.sqs_polizas_recaudos_url
     if not cola:
         logger_inbox.info(
             MENSAJE_CONSUMIDOR_SIN_COLA, extra={"missing": "SQS_POLIZAS_RECAUDOS_URL"}
         )
-        yield
-        return
+        return None
     pool = getattr(app.state, "pool", None)
     if pool is None:
         logger_inbox.error(MENSAJE_CONSUMIDOR_SIN_CONFIGURACION, extra={"missing": "base"})
-        yield
-        return
+        return None
     espera = settings.consumidor_espera_larga_s
     try:
         receptor = ReceptorSqs(
@@ -259,10 +283,9 @@ async def _consumidor_recaudos(
         logger_inbox.error(
             MENSAJE_CONSUMIDOR_NO_ARRANCO, extra={"error_type": type(error).__name__}
         )
-        yield
-        return
+        return None
     consumidor = armar_consumidor(pool, receptor, reloj)
-    async with _en_fondo(
+    return _lanzar(
         app,
         "consumidor_recaudos",
         consumidor.ejecutar,
@@ -270,8 +293,83 @@ async def _consumidor_recaudos(
         registro=logger_inbox,
         detenido=MENSAJE_CONSUMIDOR_DETENIDO,
         sin_parar=MENSAJE_CONSUMIDOR_SIN_PARAR,
-    ):
-        yield
+    )
+
+
+def armar_emisora(
+    pool: "AsyncConnectionPool[Any]",
+    almacen: AlmacenDocumentos,
+    firma: AdaptadorFirmaHttp,
+    reloj: Reloj,
+    settings: Settings,
+) -> EmitirPolizas[Any]:
+    """HU-W17 (17.8): la tarea emisora. Póliza, datos del documento y outbox sobre el mismo pool,
+    en transacciones cortas; el PDF, el bucket y la firma, fuera de ellas."""
+    polizas = PolizasPg()
+    return EmitirPolizas(
+        polizas=polizas,
+        transacciones=TransaccionesPg(pool),
+        datos=ReunirDatosDocumento(polizas),
+        generador=GeneradorPdf(),
+        almacen=almacen,
+        firma=firma,
+        eventos=OutboxPolizasPg(),
+        reloj=reloj,
+        intervalo_s=settings.emision_intervalo_s,
+        reintento_s=settings.emision_reintento_s,
+        reserva_s=settings.emision_reserva_s,
+        lote=settings.emision_lote,
+        alerta_tras_s=settings.emision_alerta_tras_s,
+    )
+
+
+@asynccontextmanager
+async def _adaptador_firma(app: FastAPI, settings: Settings) -> AsyncIterator[AdaptadorFirmaHttp]:
+    """HU-W17 (17.8): el cliente de adaptador-firma de la tarea emisora. Propaga X-Correlation-Id
+    y traceparent; cada llamada fija su timeout. Se cierra después de detenerla."""
+    async with correlation.cliente_async(timeout=httpx.Timeout(1.0)) as cliente_firma:
+        firma = AdaptadorFirmaHttp(
+            cliente_firma, settings.adaptador_firma_url, settings.adaptador_firma_timeout_ms
+        )
+        app.state.cliente_firma = cliente_firma
+        app.state.firma = firma
+        yield firma
+
+
+def _emisora(
+    app: FastAPI, settings: Settings, reloj: Reloj, firma: AdaptadorFirmaHttp
+) -> _Fondo | None:
+    """HU-W17 (17.8): emite las pólizas EMITIENDO. Encendida por defecto; sin base, sin almacén o
+    sin la URL de adaptador-firma no arranca (WARNING) y la app arranca igual. No depende de la
+    cola: las EMITIENDO que quedaron se emiten igual. Se detiene en la fase 1, hasta
+    `PARADA_EMISION_S`."""
+    if not settings.emision_habilitada:
+        return None
+    pool = getattr(app.state, "pool", None)
+    if pool is None:
+        logger_emision.warning(MENSAJE_EMISION_SIN_CONFIGURACION, extra={"missing": "base"})
+        return None
+    if not settings.adaptador_firma_url.strip():
+        logger_emision.warning(
+            MENSAJE_EMISION_SIN_CONFIGURACION, extra={"missing": "ADAPTADOR_FIRMA_URL"}
+        )
+        return None
+    almacen = almacen_desde(settings)
+    if almacen is None:
+        logger_emision.warning(
+            MENSAJE_EMISION_SIN_CONFIGURACION, extra={"missing": "POLIZAS_BUCKET"}
+        )
+        return None
+    emisora = armar_emisora(pool, almacen, firma, reloj, settings)
+    return _lanzar(
+        app,
+        "emisora_polizas",
+        emisora.ejecutar,
+        limite_s=PARADA_EMISION_S,
+        registro=logger_emision,
+        detenido=MENSAJE_EMISION_DETENIDA,
+        sin_parar=MENSAJE_EMISION_SIN_PARAR,
+    )
 
 
 def crear_app(
@@ -340,11 +438,19 @@ def crear_app(
                     ),
                     settings,
                 )
-            # Lo último en entrar: al cerrar (en orden inverso), primero el consumidor, luego el
-            # relay y después el pool.
-            await pila.enter_async_context(_relay_outbox(app, settings, reloj))
-            await pila.enter_async_context(_consumidor_recaudos(app, settings, reloj))
-            yield
+            # HU-W17 (17.8): al cerrar, el consumidor y la tarea emisora a la vez, luego el relay;
+            # la pila cierra después el cliente de adaptador-firma, el pool y el cliente HTTP.
+            firma = await pila.enter_async_context(_adaptador_firma(app, settings))
+            relay: _Fondo | None = None
+            productores: list[_Fondo | None] = []
+            try:
+                relay = _relay_outbox(app, settings, reloj)
+                productores.append(_consumidor_recaudos(app, settings, reloj))
+                productores.append(_emisora(app, settings, reloj, firma))
+                yield
+            finally:
+                await _detener(*productores)
+                await _detener(relay)
 
     app = instrumentar(
         FastAPI(title=settings.service_name, lifespan=ciclo),
@@ -354,7 +460,7 @@ def crear_app(
     )
     registrar_manejadores(app)
     # HU-W13: suscripción automática; HU-W15: aceptación; HU-W16: estado del recaudo. HU-W17
-    # agregará la emisión.
+    # (17.9) agregará la lectura de la póliza.
     app.include_router(suscripciones.router)
     app.include_router(aceptaciones.router)
     app.include_router(recaudos.router)

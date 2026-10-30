@@ -139,7 +139,8 @@ def manejador_recaudos[T](
             sobre = modelo.model_validate_json(evento.cuerpo)
         except ValidationError as error:
             raise _invalido(evento, _campos(error)) from None
-        await caso.ejecutar(resultado_de(sobre), tx)
+        # HU-W17 (17.8): el correlationId validado por el inbox (None si no tenía la forma).
+        await caso.ejecutar(resultado_de(sobre), tx, evento.correlation_id)
         return None
 
     return manejar

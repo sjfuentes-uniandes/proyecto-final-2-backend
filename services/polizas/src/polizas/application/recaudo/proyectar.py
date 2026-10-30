@@ -10,6 +10,8 @@ Corre en la transacción del inbox (modo a): la fila del inbox y la proyección 
   misma transacción, con el número ya reservado. Un rechazo, un duplicado o una clave desconocida
   no crean nada. Un producto sin ramo tampoco: se registra un ERROR y el recaudo se proyecta igual
   (reintentar no lo arreglaría).
+- HU-W17 (17.8): la póliza guarda el `correlationId` del `RecaudoConfirmado` que la creó (el que el
+  inbox validó; nulo si no traía uno válido), para la emisión y `PolizaEmitida`.
 
 Los logs llevan la clave y los estados; nunca montos, transacciones ni motivos.
 """
@@ -38,7 +40,9 @@ class ProyectarRecaudo[T]:
         self._polizas = polizas
         self._reloj = reloj
 
-    async def ejecutar(self, resultado: ResultadoRecaudo, tx: T) -> None:
+    async def ejecutar(
+        self, resultado: ResultadoRecaudo, tx: T, correlation_id: str | None = None
+    ) -> None:
         clave = str(resultado.clave_recaudo)
         previo = await self._proyeccion.guardar(resultado, tx)
         if previo is None:
@@ -49,7 +53,7 @@ class ProyectarRecaudo[T]:
                     extra={"clave_recaudo": clave, "estado": resultado.estado.value},
                 )
             elif resultado.estado is SituacionRecaudo.CONFIRMADO:
-                await self._crear_poliza(origen, tx)
+                await self._crear_poliza(origen, tx, correlation_id)
             return
         if previo.estado is not resultado.estado:
             logger.error(
@@ -61,7 +65,7 @@ class ProyectarRecaudo[T]:
                 },
             )
 
-    async def _crear_poliza(self, origen: OrigenPoliza, tx: T) -> None:
+    async def _crear_poliza(self, origen: OrigenPoliza, tx: T, correlation_id: str | None) -> None:
         try:
             # Antes de reservar el número: un producto sin ramo no consume la secuencia.
             ramo_de(origen.producto.id)
@@ -76,6 +80,11 @@ class ProyectarRecaudo[T]:
             )
             return
         secuencia = await self._polizas.siguiente_secuencia(tx)
-        poliza = Poliza.emitiendo(origen, secuencia=secuencia, ahora=self._reloj.ahora())
+        poliza = Poliza.emitiendo(
+            origen,
+            secuencia=secuencia,
+            ahora=self._reloj.ahora(),
+            correlation_id=correlation_id,
+        )
         # False solo si la aceptación ya tenía póliza: se conserva esa.
         await self._polizas.crear(poliza, tx)

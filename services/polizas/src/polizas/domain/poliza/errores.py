@@ -61,3 +61,20 @@ class FalloAlmacenDocumentos(Exception):
         super().__init__(codigo)
         self.codigo = codigo
         self.error_s3 = error_s3
+
+
+class FalloFirma(Exception):
+    """HU-W17 (17.8): adaptador-firma no devolvió la firma de la huella. `codigo` es el que la
+    emisión registra como fallo: propio de la póliza, no el del catálogo del adaptador. La emisión
+    sigue EMITIENDO y la tarea emisora reintenta con la misma `Idempotency-Key` (el `polizaId`)."""
+
+    # Sin respuesta a tiempo (el corte de polizas) o el 504 del adaptador (el proveedor no respondió).
+    TIEMPO_AGOTADO = "FIRMA_TIEMPO_AGOTADO"
+    # Sin conexión, el 503 del adaptador u otro 5xx.
+    NO_DISPONIBLE = "FIRMA_NO_DISPONIBLE"
+    # El 502 del adaptador, otro estado o un 200 fuera de contrato (otro documento u otra huella).
+    RESPUESTA_INVALIDA = "FIRMA_RESPUESTA_INVALIDA"
+
+    def __init__(self, codigo: str) -> None:
+        super().__init__(codigo)
+        self.codigo = codigo

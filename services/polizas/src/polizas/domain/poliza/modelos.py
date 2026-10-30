@@ -10,6 +10,8 @@ E/S; el instante actual lo recibe cada operación.
 - `activar` exige los dos y pasa a `ACTIVA`, que es final. `emitida_en` es la fecha del documento:
   la que se imprime en el PDF (decisión 4), fijada antes de generarlo.
 - Un fallo deja `EMITIENDO` con su código (forma de código, como en dinero: sin texto libre ni PII).
+- HU-W17 (17.8): `correlation_id` es el del `RecaudoConfirmado` que la creó (nulo si llegó sin uno
+  válido). Lo propaga la emisión y lo lleva `PolizaEmitida`; no cambia.
 """
 
 import dataclasses
@@ -188,6 +190,7 @@ class Poliza:
     ultimo_fallo: str | None
     creada_en: datetime
     actualizada_en: datetime
+    correlation_id: str | None = None
 
     def __post_init__(self) -> None:
         for campo in ("poliza_id", "aceptacion_id", "cotizacion_id", "cliente_id"):
@@ -225,6 +228,7 @@ class Poliza:
         secuencia: int,
         ahora: datetime,
         poliza_id: UUID | None = None,
+        correlation_id: str | None = None,
     ) -> Self:
         """La emisión del primer `RecaudoConfirmado`, con su número ya reservado. Lanza
         `ProductoSinRamo` si el producto no está en la tabla de ramos."""
@@ -245,6 +249,7 @@ class Poliza:
             ultimo_fallo=None,
             creada_en=ahora,
             actualizada_en=ahora,
+            correlation_id=correlation_id,
         )
 
     def _emitiendo(self, hacia: str) -> None:
