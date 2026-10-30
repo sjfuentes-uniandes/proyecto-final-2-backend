@@ -633,9 +633,9 @@ source = { editable = "services/consulta" }
 dependencies = [
     { name = "alembic" },
     { name = "fastapi" },
-    { name = "psycopg", extra = ["binary"] },
+    { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pydantic-settings" },
-    { name = "solventa-common" },
+    { name = "solventa-common", extra = ["mensajeria"] },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -643,9 +643,9 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2" },
     { name = "pydantic-settings", specifier = ">=2.6" },
-    { name = "solventa-common", editable = "libs/solventa-common" },
+    { name = "solventa-common", extras = ["mensajeria"], editable = "libs/solventa-common" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
 ]
 

@@ -33,6 +33,8 @@ UMBRALES: dict[str, Umbral] = {
     "adaptador-pagos": Umbral(90, 0),
     # HU-W17: adaptador-firma conecta con un aliado, como adaptador-pagos.
     "adaptador-firma": Umbral(90, 0),
+    # HU-M10: la proyección de pólizas es negocio asegurador, como polizas.
+    "consulta": Umbral(90, 85),
 }
 SIN_UMBRAL = Umbral(0, 0)
 
