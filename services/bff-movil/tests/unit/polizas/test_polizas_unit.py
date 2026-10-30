@@ -153,9 +153,12 @@ def test_dto_de_detalle_incluye_credencial() -> None:
         "vigencia": {"desde": "2026-01-01", "hasta": "2026-12-31"},
     }
     assert cuerpo["coberturas"][0] == {"codigo": "MUERTE", "nombre": "Muerte", "obligatoria": True}
+    assert (cuerpo["producto"], cuerpo["ramo"]) == ("Vida Protegida", "VIDA")
     assert set(cuerpo) == {
         "numero",
         "estado",
+        "producto",
+        "ramo",
         "vigencia",
         "vigente",
         "prima",

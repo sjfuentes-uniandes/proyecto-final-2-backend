@@ -79,6 +79,8 @@ def test_detalle_incluye_credencial(crear_entorno: Callable[..., Entorno]) -> No
 
     assert respuesta.status_code == 200
     assert respuesta.json()["credencial"]["huella"] == "sha256:huella-completa-sintetica"
+    assert respuesta.json()["producto"] == "Vida Protegida"
+    assert respuesta.json()["ramo"] == "VIDA"
 
 
 @pytest.mark.parametrize(

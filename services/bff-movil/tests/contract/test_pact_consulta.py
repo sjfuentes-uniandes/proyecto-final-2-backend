@@ -138,6 +138,7 @@ async def test_detalle(pacto: Pact) -> None:
             UUID(CLIENTE_ID), UUID(POLIZA_ID), SUB
         )
     assert str(detalle.poliza_id) == POLIZA_ID
+    assert (detalle.producto_nombre, detalle.ramo) == ("Vida deudor", "VIDA")
 
 
 async def test_detalle_de_otro_cliente(pacto: Pact) -> None:

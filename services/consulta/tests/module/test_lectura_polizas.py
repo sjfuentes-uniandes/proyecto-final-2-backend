@@ -98,6 +98,8 @@ async def test_el_detalle_de_la_propia_devuelve_vigencia_coberturas_y_credencial
     cuerpo = r.json()
     assert cuerpo["polizaId"] == str(p.poliza_id)
     assert cuerpo["numero"] == "100-2026-000001"
+    assert cuerpo["productoNombre"] == p.producto_nombre
+    assert cuerpo["ramo"] == p.ramo
     assert cuerpo["vigencia"] == {"desde": "2026-10-25", "hasta": "2027-10-24"}
     assert cuerpo["vigente"] is True
     assert cuerpo["coberturas"] == [{"codigo": "MUERTE", "nombre": "Muerte", "obligatoria": True}]

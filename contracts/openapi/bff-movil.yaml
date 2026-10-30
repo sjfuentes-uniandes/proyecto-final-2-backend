@@ -1460,6 +1460,12 @@ components:
         estado:
           type: string
           title: Estado
+        producto:
+          type: string
+          title: Producto
+        ramo:
+          type: string
+          title: Ramo
         vigencia:
           $ref: '#/components/schemas/VigenciaDto'
         vigente:
@@ -1494,6 +1500,8 @@ components:
       required:
       - numero
       - estado
+      - producto
+      - ramo
       - vigencia
       - vigente
       - prima

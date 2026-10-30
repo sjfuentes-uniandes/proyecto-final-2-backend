@@ -81,6 +81,8 @@ class CredencialDto(Dto):
 class PolizaDetalleDto(Dto):
     numero: str
     estado: str
+    producto: str
+    ramo: str
     vigencia: VigenciaDto
     vigente: bool
     prima: Decimal
@@ -97,6 +99,8 @@ class PolizaDetalleDto(Dto):
         return cls(
             numero=p.numero,
             estado=p.estado,
+            producto=p.producto_nombre,
+            ramo=p.ramo,
             vigencia=vigencia,
             vigente=p.vigente,
             prima=p.prima,
