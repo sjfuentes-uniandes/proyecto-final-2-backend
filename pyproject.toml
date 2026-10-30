@@ -60,6 +60,11 @@ module = ["boto3", "boto3.*", "botocore", "botocore.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# reportlab no publica tipos (polizas lo usa para el PDF de la póliza, HU-W17).
+module = ["reportlab", "reportlab.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # Código nuevo de HU-M08: toda función con anotaciones completas.
 module = [
     "clientes.domain.consentimientos.*",
