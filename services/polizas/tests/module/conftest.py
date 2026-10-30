@@ -12,6 +12,8 @@ otra sin filtro, como `auditoria`; `abrir_api_con_relay` abre la app con el rela
 HU-W16 (16.13): `cola_recaudos` crea otro tópico con `polizas-recaudos` (filtro por el prefijo
 `Recaudo`) y su DLQ; `abrir_api_con_consumidor` abre la app con el consumidor sobre esa cola.
 
+HU-W17 (17.7): `localstack_s3` es otro LocalStack, con S3 y KMS y `S3_SKIP_SIGNATURE_VALIDATION=0`.
+
 psycopg asíncrono no corre sobre el ProactorEventLoop de Windows: las pruebas corren en un
 SelectorEventLoop (en Linux es el bucle por defecto), como `cotizacion`, `bff-movil` y `clientes`.
 """
@@ -172,6 +174,22 @@ def localstack() -> Iterator[str]:
     with LocalStackContainer(image=IMAGEN_LOCALSTACK, region_name=REGION).with_services(
         "sns", "sqs"
     ) as contenedor:
+        yield contenedor.get_url()
+
+
+@pytest.fixture(scope="module")
+def localstack_s3() -> Iterator[str]:
+    """HU-W17 (17.7): S3 (y KMS, para `aws:kms`) con la validación de firmas encendida, para que
+    una URL prefirmada vencida o alterada responda 403 (exploración §E)."""
+    _docker_disponible()
+    from testcontainers.community.localstack import LocalStackContainer
+
+    contenedor = (
+        LocalStackContainer(image=IMAGEN_LOCALSTACK, region_name=REGION)
+        .with_services("s3", "kms")
+        .with_env("S3_SKIP_SIGNATURE_VALIDATION", "0")
+    )
+    with contenedor:
         yield contenedor.get_url()
 
 

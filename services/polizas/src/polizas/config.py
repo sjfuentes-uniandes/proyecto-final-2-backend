@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import AliasChoices, Field
 from solventa_common import inbox, outbox
 from solventa_common.settings import ServiceSettings
@@ -50,6 +52,23 @@ class Settings(ServiceSettings):
     )
     consumidor_max_mensajes: int = Field(inbox.MAX_MENSAJES, ge=1, le=10)
     consumidor_espera_larga_s: int = Field(10, ge=1, le=10)
+    # HU-W17 (17.7): documentos de póliza. polizas está en document_writers: la infraestructura le
+    # entrega el bucket versionado y su cifrado (infra/apps/ecs.tf:88-91). La política del bucket
+    # niega todo PutObject sin este cifrado o con otro (infra/platform/storage.tf). Sin bucket
+    # (local y pruebas) no se emiten pólizas, y la app arranca igual.
+    polizas_bucket: str | None = Field(None, validation_alias=_env("POLIZAS_BUCKET"))
+    polizas_bucket_sse: Literal["AES256", "aws:kms"] = Field(
+        "AES256", validation_alias=_env("POLIZAS_BUCKET_SSE")
+    )
+    # Vencimiento de la URL prefirmada del documento. Se pide al hacer clic (17.9) y el navegador
+    # la abre en seguida: 5 minutos cubren la espera, y una URL filtrada (historial, logs) deja de
+    # servir pronto. Hasta 1 h, para que siga siendo corta.
+    documento_url_vence_s: int = Field(300, ge=60, le=3600)
+    # HU-W17: firma de la huella del documento (17.8). adaptador-firma está en polizas.calls
+    # (infra/platform/catalog.tf:56; ecs.tf:73).
+    adaptador_firma_url: str = Field(
+        "http://localhost:8092", validation_alias=_env("ADAPTADOR_FIRMA_URL")
+    )
 
 
 settings = Settings()

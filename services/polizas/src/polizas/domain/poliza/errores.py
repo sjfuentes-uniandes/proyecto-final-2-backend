@@ -33,3 +33,31 @@ class HuellaNoCoincide(Exception):
 
     def __init__(self) -> None:
         super().__init__(self.codigo)
+
+
+class DatosDocumentoNoDisponibles(Exception):
+    """HU-W17 (17.7): no están la aceptación de la póliza, su decisión o su recaudo confirmado. Sin
+    ellos no hay PDF; la emisión sigue EMITIENDO con este código."""
+
+    codigo = "DATOS_DOCUMENTO_NO_DISPONIBLES"
+
+    def __init__(self) -> None:
+        super().__init__(self.codigo)
+
+
+class FalloAlmacenDocumentos(Exception):
+    """HU-W17 (17.7): el bucket no guardó el documento o no se pudo firmar su URL. `codigo` es el
+    que la emisión registra como fallo (17.8); `error_s3`, el código de error de S3 si lo hubo. El
+    mensaje de S3 no se conserva: puede traer el bucket y la clave."""
+
+    # 4xx de S3: permisos, política del bucket (cifrado) o bucket inexistente. No se arregla solo.
+    RECHAZADO = "ALMACEN_RECHAZADO"
+    # 5xx, timeout o sin conexión: el próximo ciclo reintenta.
+    NO_DISPONIBLE = "ALMACEN_NO_DISPONIBLE"
+    # PutObject sin VersionId: el bucket no está versionado y no habría referencia estable.
+    SIN_VERSION = "ALMACEN_SIN_VERSION"
+
+    def __init__(self, codigo: str, error_s3: str | None = None) -> None:
+        super().__init__(codigo)
+        self.codigo = codigo
+        self.error_s3 = error_s3

@@ -6,6 +6,9 @@ CONFLICT (aceptacion_id) DO NOTHING`: con dos entregas concurrentes, la segunda 
 la primera y no inserta. `actualizar` lleva la guarda `estado = 'EMITIENDO'`: si otra tarea ya la
 activó, no cambia nada. El disparador de 004 protege la identidad y los puntos de control ya
 registrados. Las migraciones las aplica `decisiones_pg.migrar` (todos los .sql en orden).
+
+HU-W17 (17.7): `fuente_documento` lee, en la misma transacción, lo que el PDF toma de la aceptación,
+de la instantánea de su decisión y del recaudo confirmado.
 """
 
 from collections.abc import Mapping
@@ -15,6 +18,7 @@ from uuid import UUID
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
+from polizas.domain.poliza.documento import FuenteDocumento
 from polizas.domain.poliza.modelos import (
     Documento,
     EstadoPoliza,
@@ -25,6 +29,7 @@ from polizas.domain.poliza.modelos import (
     Ramo,
     Vigencia,
 )
+from polizas.domain.suscripcion.insumos import insumos_de
 
 # Lo que cambia una transición; la identidad (el resto) no cambia nunca.
 MUTABLES = (
@@ -81,6 +86,14 @@ _ORIGEN = (
     "SELECT a.id AS aceptacion_id, a.cotizacion_id, a.cliente_id, a.aceptada_en, "
     "d.producto_id, d.insumos ->> 'versionProducto' AS producto_version "
     "FROM aceptaciones a JOIN decisiones_suscripcion d ON d.id = a.decision_id WHERE a.id = %s"
+)
+# HU-W17 (17.7): lo que el PDF toma de la aceptación, de la instantánea y del recaudo confirmado.
+_FUENTE_DOCUMENTO = (
+    "SELECT a.aceptada_en, d.insumos, d.version_reglas, r.transaccion_id "
+    "FROM aceptaciones a "
+    "JOIN decisiones_suscripcion d ON d.id = a.decision_id "
+    "JOIN recaudos_aceptacion r ON r.clave_recaudo = a.id AND r.estado = 'CONFIRMADO' "
+    "WHERE a.id = %s"
 )
 
 
@@ -199,3 +212,27 @@ class PolizasPg:
             _ACTUALIZAR, [*(fila[c] for c in MUTABLES), poliza.poliza_id]
         )
         return await cursor.fetchone() is not None
+
+    async def fuente_documento(
+        self, aceptacion_id: UUID, tx: TransaccionPg
+    ) -> FuenteDocumento | None:
+        """Implementa FuentesDocumento[TransaccionPg] (HU-W17, 17.7)."""
+        cursor = tx.conexion.cursor(row_factory=dict_row)
+        await cursor.execute(_FUENTE_DOCUMENTO, (aceptacion_id,))
+        fila = await cursor.fetchone()
+        if fila is None:
+            return None
+        # Los insumos en su forma canónica; solo se toma lo que va en el PDF.
+        insumos = insumos_de(fila["insumos"])
+        return FuenteDocumento(
+            coberturas=insumos.coberturas,
+            suma_asegurada=insumos.suma_asegurada,
+            prima=insumos.prima_total,
+            periodicidad=insumos.periodicidad,
+            moneda=insumos.moneda,
+            socio_id=insumos.socio_id,
+            aceptada_en=fila["aceptada_en"],
+            transaccion_id=fila["transaccion_id"],
+            version_reglas_prima=insumos.version_reglas_prima,
+            version_reglas_suscripcion=fila["version_reglas"],
+        )
