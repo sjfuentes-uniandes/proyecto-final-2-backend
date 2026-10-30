@@ -1,6 +1,6 @@
 """Puertos de la póliza (HU-W17, 17.6; el documento, 17.7; la emisión, 17.8). Todo corre en una
 transacción `T` recibida: la del inbox para crearla junto con la proyección del recaudo; la de la
-tarea emisora (17.8) para el resto."""
+tarea emisora (17.8) para el resto. La lectura de las rutas (17.9) no recibe transacción."""
 
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
@@ -125,3 +125,14 @@ class EventosPoliza[T](Protocol):
     ) -> None:
         """Escribe `PolizaEmitida` v1 de la póliza ACTIVA en el outbox, dentro de `tx`."""
         ...
+
+
+# --- La lectura (HU-W17, 17.9) ----------------------------------------------------------------
+class LecturaPolizas(Protocol):
+    """Las rutas de la póliza leen con el pool, fuera de las transacciones de la tarea emisora."""
+
+    async def por_aceptacion(self, aceptacion_id: UUID) -> Poliza | None: ...
+
+    async def por_id(self, poliza_id: UUID) -> Poliza | None: ...
+
+    async def por_numero(self, numero: str) -> Poliza | None: ...

@@ -17,7 +17,7 @@ from solventa_common.inbox import ConsumidorInbox, InboxPg, Receptor, ReceptorSq
 from solventa_common.outbox import OutboxPg, PublicadorSns, RelayOutbox, cliente_sns
 from solventa_common.telemetry import instrumentar
 
-from polizas.adapters.inbound.http import aceptaciones, recaudos, suscripciones
+from polizas.adapters.inbound.http import aceptaciones, polizas, recaudos, suscripciones
 from polizas.adapters.inbound.sqs.recaudos import manejador_recaudos
 from polizas.adapters.outbound.catalogo_http import CatalogoHttp
 from polizas.adapters.outbound.cotizacion_http import CotizacionHttp
@@ -25,15 +25,20 @@ from polizas.adapters.outbound.documento_pdf import GeneradorPdf
 from polizas.adapters.outbound.documentos_s3 import almacen_desde
 from polizas.adapters.outbound.firma_http import AdaptadorFirmaHttp
 from polizas.adapters.outbound.outbox_pg import OutboxPolizasPg
-from polizas.adapters.outbound.polizas_pg import PolizasPg, TransaccionesPg
+from polizas.adapters.outbound.polizas_pg import PolizasLecturaPg, PolizasPg, TransaccionesPg
 from polizas.adapters.outbound.recaudos_pg import RecaudosPg
 from polizas.adapters.outbound.reloj import RelojSistema
 from polizas.application.aceptacion.consultar import ConsultarAceptacion
 from polizas.application.aceptacion.puertos import AceptacionesRepositorio
 from polizas.application.aceptacion.registrar import ConfigAceptacion, RegistrarAceptacion
+from polizas.application.poliza.consultar import (
+    ConsultarPoliza,
+    DescargarDocumento,
+    VerificarPoliza,
+)
 from polizas.application.poliza.documento import ReunirDatosDocumento
 from polizas.application.poliza.emitir import EmitirPolizas
-from polizas.application.poliza.puertos import AlmacenDocumentos
+from polizas.application.poliza.puertos import AlmacenDocumentos, LecturaPolizas
 from polizas.application.recaudo.consultar import ConsultarRecaudo
 from polizas.application.recaudo.proyectar import ProyectarRecaudo
 from polizas.application.recaudo.puertos import RecaudosRepositorio
@@ -109,9 +114,17 @@ class Puertos:
     # HU-W16 (16.13): la lectura del recaudo. Sin él (arneses anteriores, como la R3 de dinero),
     # GET …/recaudo responde 503 DEPENDENCIA_NO_DISPONIBLE.
     recaudos: RecaudosRepositorio | None = None
+    # HU-W17 (17.9): la lectura de la póliza. Sin ella, sus rutas responden 503
+    # DEPENDENCIA_NO_DISPONIBLE, como la del recaudo.
+    polizas: LecturaPolizas | None = None
 
 
-def _configurar_casos(app: FastAPI, puertos: Puertos, settings: Settings) -> None:
+def _configurar_casos(
+    app: FastAPI,
+    puertos: Puertos,
+    settings: Settings,
+    almacen: AlmacenDocumentos | None,
+) -> None:
     app.state.solicitar_suscripcion = SolicitarSuscripcion(
         insumos=puertos.insumos,
         reglas=puertos.reglas,
@@ -149,6 +162,16 @@ def _configurar_casos(app: FastAPI, puertos: Puertos, settings: Settings) -> Non
         app.state.consultar_recaudo = ConsultarRecaudo(
             puertos.aceptaciones, puertos.decisiones, puertos.recaudos
         )
+    # HU-W17 (17.9): la póliza, su documento (con el almacén de la tarea emisora; sin él, 503) y su
+    # verificación.
+    if puertos.polizas is not None and puertos.recaudos is not None:
+        app.state.consultar_poliza = ConsultarPoliza(
+            puertos.aceptaciones, puertos.decisiones, puertos.recaudos, puertos.polizas
+        )
+        app.state.descargar_documento = DescargarDocumento(
+            puertos.polizas, almacen, puertos.reloj, settings.documento_url_vence_s
+        )
+        app.state.verificar_poliza = VerificarPoliza(puertos.polizas)
 
 
 @dataclass(frozen=True)
@@ -337,7 +360,11 @@ async def _adaptador_firma(app: FastAPI, settings: Settings) -> AsyncIterator[Ad
 
 
 def _emisora(
-    app: FastAPI, settings: Settings, reloj: Reloj, firma: AdaptadorFirmaHttp
+    app: FastAPI,
+    settings: Settings,
+    reloj: Reloj,
+    firma: AdaptadorFirmaHttp,
+    almacen: AlmacenDocumentos | None,
 ) -> _Fondo | None:
     """HU-W17 (17.8): emite las pólizas EMITIENDO. Encendida por defecto; sin base, sin almacén o
     sin la URL de adaptador-firma no arranca (WARNING) y la app arranca igual. No depende de la
@@ -354,7 +381,6 @@ def _emisora(
             MENSAJE_EMISION_SIN_CONFIGURACION, extra={"missing": "ADAPTADOR_FIRMA_URL"}
         )
         return None
-    almacen = almacen_desde(settings)
     if almacen is None:
         logger_emision.warning(
             MENSAJE_EMISION_SIN_CONFIGURACION, extra={"missing": "POLIZAS_BUCKET"}
@@ -388,8 +414,11 @@ def crear_app(
     async def ciclo(app: FastAPI) -> AsyncIterator[None]:
         async with AsyncExitStack() as pila:
             reloj: Reloj = puertos.reloj if puertos is not None else RelojSistema()
+            # HU-W17 (17.9): un solo almacén (y un solo cliente de S3) para la tarea emisora y la
+            # URL del documento. Sin bucket es None: no se emite y la URL responde 503.
+            almacen = almacen_desde(settings)
             if puertos is not None:
-                _configurar_casos(app, puertos, settings)
+                _configurar_casos(app, puertos, settings, almacen)
                 if pool is not None:
                     app.state.pool = pool
             elif settings.db_host or settings.database_url_override:
@@ -435,8 +464,10 @@ def crear_app(
                         reloj=reloj,
                         aceptaciones=AceptacionesPg(pool_base),
                         recaudos=RecaudosPg(pool_base),
+                        polizas=PolizasLecturaPg(pool_base),
                     ),
                     settings,
+                    almacen,
                 )
             # HU-W17 (17.8): al cerrar, el consumidor y la tarea emisora a la vez, luego el relay;
             # la pila cierra después el cliente de adaptador-firma, el pool y el cliente HTTP.
@@ -446,7 +477,7 @@ def crear_app(
             try:
                 relay = _relay_outbox(app, settings, reloj)
                 productores.append(_consumidor_recaudos(app, settings, reloj))
-                productores.append(_emisora(app, settings, reloj, firma))
+                productores.append(_emisora(app, settings, reloj, firma, almacen))
                 yield
             finally:
                 await _detener(*productores)
@@ -459,11 +490,12 @@ def crear_app(
         metric_readers=metric_readers,
     )
     registrar_manejadores(app)
-    # HU-W13: suscripción automática; HU-W15: aceptación; HU-W16: estado del recaudo. HU-W17
-    # (17.9) agregará la lectura de la póliza.
+    # HU-W13: suscripción automática; HU-W15: aceptación; HU-W16: estado del recaudo; HU-W17
+    # (17.9): la póliza, su documento y su verificación.
     app.include_router(suscripciones.router)
     app.include_router(aceptaciones.router)
     app.include_router(recaudos.router)
+    app.include_router(polizas.router)
 
     @app.get("/health", response_model=None)
     async def health(request: Request) -> dict[str, str] | JSONResponse:

@@ -23,6 +23,9 @@ HU-W17 (17.8), la tarea emisora:
   disparador de 004 o de pisar lo registrado con un fallo.
 - `correlation_id` (005) es identidad: se escribe al crear y no está en `MUTABLES`.
 - `TransaccionesPg` abre las transacciones cortas de la tarea sobre el pool.
+
+HU-W17 (17.9): `PolizasLecturaPg` lee para las rutas con el pool, una conexión por consulta y sin
+transacción de la tarea: por aceptación, por id y por número (índice único de 004).
 """
 
 from collections.abc import AsyncIterator, Mapping
@@ -98,6 +101,7 @@ _INSERTAR = (
 )
 _POR_ACEPTACION = f"SELECT {', '.join(COLUMNAS)} FROM polizas WHERE aceptacion_id = %s"
 _POR_ID = f"SELECT {', '.join(COLUMNAS)} FROM polizas WHERE poliza_id = %s"
+_POR_NUMERO = f"SELECT {', '.join(COLUMNAS)} FROM polizas WHERE numero = %s"
 # Un `= NULL` no es verdadero: una copia sin el punto de control solo pasa si sigue vacío. Al
 # quedar ACTIVA se libera la reserva (después, el disparador de 004 no deja cambiar nada).
 _ACTUALIZAR = (
@@ -335,3 +339,26 @@ class PolizasPg:
             version_reglas_prima=insumos.version_reglas_prima,
             version_reglas_suscripcion=fila["version_reglas"],
         )
+
+
+class PolizasLecturaPg:
+    """Implementa LecturaPolizas (HU-W17, 17.9)."""
+
+    def __init__(self, pool: "AsyncConnectionPool[Any]") -> None:
+        self._pool = pool
+
+    async def _una(self, consulta: str, valor: object) -> Poliza | None:
+        async with self._pool.connection() as conexion:
+            cursor = conexion.cursor(row_factory=dict_row)
+            await cursor.execute(consulta, (valor,))
+            fila = await cursor.fetchone()
+        return None if fila is None else poliza_de(fila)
+
+    async def por_aceptacion(self, aceptacion_id: UUID) -> Poliza | None:
+        return await self._una(_POR_ACEPTACION, aceptacion_id)
+
+    async def por_id(self, poliza_id: UUID) -> Poliza | None:
+        return await self._una(_POR_ID, poliza_id)
+
+    async def por_numero(self, numero: str) -> Poliza | None:
+        return await self._una(_POR_NUMERO, numero)

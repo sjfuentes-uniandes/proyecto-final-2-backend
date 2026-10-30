@@ -343,6 +343,28 @@ def test_sin_configuracion_no_arranca_y_avisa(
     assert _mensajes(salida, "ERROR") == []
 
 
+def test_la_emisora_y_la_url_del_documento_comparten_un_almacen(
+    crear: Callable[..., tuple[FastAPI, io.StringIO]],
+    emisora_falsa: type[EmisoraFalsa],
+    almacenes: list[Settings],
+) -> None:
+    """HU-W17 (17.9): un solo almacén (un cliente de S3); la lectura usa el pool de la app."""
+    from polizas.adapters.outbound.polizas_pg import PolizasLecturaPg
+
+    app, _ = crear(documento_url_vence_s=120)
+    with TestClient(app):
+        descargar = app.state.descargar_documento
+        consultar = app.state.consultar_poliza
+        verificar = app.state.verificar_poliza
+        pool = app.state.pool
+    [emisora] = emisora_falsa.creadas
+    assert len(almacenes) == 1
+    assert emisora.opciones["almacen"] is descargar._almacen is ALMACEN
+    assert descargar._vence_s == 120
+    for lectura in (descargar._polizas, consultar._polizas, verificar._polizas):
+        assert isinstance(lectura, PolizasLecturaPg) and lectura._pool is pool
+
+
 def test_apagada_no_arranca_ni_avisa(
     crear: Callable[..., tuple[FastAPI, io.StringIO]],
     emisora_falsa: type[EmisoraFalsa],
@@ -351,7 +373,8 @@ def test_apagada_no_arranca_ni_avisa(
     app, salida = crear(emision_habilitada=False)
     with TestClient(app):
         assert getattr(app.state, "emisora_polizas", None) is None
-    assert emisora_falsa.creadas == [] and almacenes == []
+    # HU-W17 (17.9): el almacén se arma una vez para la URL del documento, aunque no se emita.
+    assert emisora_falsa.creadas == [] and len(almacenes) == 1
     assert _mensajes(salida, "WARNING") == []
 
 

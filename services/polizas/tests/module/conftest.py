@@ -44,6 +44,7 @@ from polizas.adapters.outbound.catalogo_http import CatalogoHttp
 from polizas.adapters.outbound.codigos import CodigosPg
 from polizas.adapters.outbound.cotizacion_http import CotizacionHttp
 from polizas.adapters.outbound.decisiones_pg import DecisionesPg, migrar
+from polizas.adapters.outbound.polizas_pg import PolizasLecturaPg
 from polizas.adapters.outbound.recaudos_pg import RecaudosPg
 from polizas.config import Settings
 from polizas.main import Puertos, crear_app
@@ -148,6 +149,7 @@ async def _api(
             reloj=reloj,
             aceptaciones=AceptacionesPg(pool),
             recaudos=RecaudosPg(pool),
+            polizas=PolizasLecturaPg(pool),
         )
         app = crear_app(settings, puertos=puertos, pool=pool)
         async with (

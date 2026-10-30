@@ -78,3 +78,12 @@ class FalloFirma(Exception):
     def __init__(self, codigo: str) -> None:
         super().__init__(codigo)
         self.codigo = codigo
+
+
+class PolizaNoEncontrada(Exception):
+    """HU-W17 (17.9): la cotización tiene aceptación y no tiene póliza (recaudo pendiente o
+    rechazado, o producto sin ramo: AC2), o el `polizaId` no existe."""
+
+
+class PolizaNoActiva(Exception):
+    """HU-W17 (17.9): la póliza sigue EMITIENDO; su documento no se entrega hasta ACTIVA."""

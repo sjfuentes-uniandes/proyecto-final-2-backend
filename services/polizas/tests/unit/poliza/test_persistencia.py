@@ -321,3 +321,47 @@ async def test_las_transacciones_abren_una_conexion_del_pool_con_transaccion() -
         assert tx.conexion is conexion
         eventos.append("trabajo")
     assert eventos == ["conexion", "begin", "trabajo", "commit"]
+
+
+# --- La lectura (HU-W17, 17.9) ----------------------------------------------------------------
+class PoolLectura:
+    """Un pool que entrega siempre la misma conexión falsa y cuenta las que abre."""
+
+    def __init__(self, respuestas: list[Any]) -> None:
+        self.conexion = Conexion(respuestas)
+        self.abiertas = 0
+
+    def connection(self) -> Any:
+        from contextlib import asynccontextmanager
+
+        @asynccontextmanager
+        async def abrir() -> Any:
+            self.abiertas += 1
+            yield self.conexion
+
+        return abrir()
+
+
+@pytest.mark.parametrize(
+    ("metodo", "valor", "filtro"),
+    [
+        ("por_aceptacion", ACTIVA.aceptacion_id, "aceptacion_id"),
+        ("por_id", ACTIVA.poliza_id, "poliza_id"),
+        ("por_numero", ACTIVA.numero, "numero"),
+    ],
+)
+async def test_la_lectura_usa_el_pool_una_conexion_por_consulta(
+    metodo: str, valor: Any, filtro: str
+) -> None:
+    from polizas.adapters.outbound.polizas_pg import PolizasLecturaPg
+
+    pool = PoolLectura([fila_poliza(ACTIVA), None])
+    repo = PolizasLecturaPg(pool)  # type: ignore[arg-type]
+    assert await getattr(repo, metodo)(valor) == ACTIVA
+    assert await getattr(repo, metodo)(valor) is None
+    assert pool.abiertas == 2
+    (consulta, parametros), _ = pool.conexion.cursor_.sentencias
+    assert consulta.endswith(f"FROM polizas WHERE {filtro} = %s")
+    assert parametros == (valor,)
+    # Todas las columnas de la póliza, sin la reserva.
+    assert consulta.startswith(f"SELECT {', '.join(COLUMNAS)} FROM")
