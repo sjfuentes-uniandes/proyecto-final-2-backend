@@ -21,6 +21,7 @@ from polizas.adapters.inbound.http import aceptaciones, recaudos, suscripciones
 from polizas.adapters.inbound.sqs.recaudos import manejador_recaudos
 from polizas.adapters.outbound.catalogo_http import CatalogoHttp
 from polizas.adapters.outbound.cotizacion_http import CotizacionHttp
+from polizas.adapters.outbound.polizas_pg import PolizasPg
 from polizas.adapters.outbound.recaudos_pg import RecaudosPg
 from polizas.adapters.outbound.reloj import RelojSistema
 from polizas.application.aceptacion.consultar import ConsultarAceptacion
@@ -217,8 +218,8 @@ def armar_consumidor(
     pool: "AsyncConnectionPool[Any]", receptor: Receptor, reloj: Reloj
 ) -> ConsumidorInbox[Any]:
     """El consumidor de `polizas-recaudos` (modo a): inbox y proyección sobre el mismo pool, en
-    una transacción por mensaje."""
-    caso = ProyectarRecaudo(RecaudosPg(pool))
+    una transacción por mensaje. HU-W17 (17.6): en esa transacción se crea la póliza."""
+    caso = ProyectarRecaudo(RecaudosPg(pool), PolizasPg(), reloj)
     return ConsumidorInbox(receptor, InboxPg(pool), manejador_recaudos(caso), reloj=reloj.ahora)
 
 

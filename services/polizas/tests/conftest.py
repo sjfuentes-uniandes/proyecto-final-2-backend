@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from polizas.domain.aceptacion.modelos import Aceptacion
+from polizas.domain.poliza.modelos import EstadoPoliza, OrigenPoliza, Poliza
 from polizas.domain.recaudo.modelos import ResultadoRecaudo
 from polizas.domain.suscripcion.errores import (
     CotizacionNoEncontrada,
@@ -292,12 +293,11 @@ class AceptacionesMemoria:
 class RecaudosMemoria:
     """RecaudosRepositorio y ProyeccionRecaudos en memoria (HU-W16, 16.13), con la clave primaria
     de la tabla: se queda el primer estado final. `transacciones` registra con qué `tx` se
-    escribió; `aceptaciones` son las claves conocidas."""
+    escribió."""
 
-    def __init__(self, aceptaciones: AceptacionesMemoria | None = None) -> None:
+    def __init__(self) -> None:
         self.resultados: dict[UUID, ResultadoRecaudo] = {}
         self.transacciones: list[Any] = []
-        self._aceptaciones = aceptaciones or AceptacionesMemoria()
 
     async def por_clave(self, clave_recaudo: UUID) -> ResultadoRecaudo | None:
         return self.resultados.get(clave_recaudo)
@@ -309,8 +309,42 @@ class RecaudosMemoria:
             self.resultados[resultado.clave_recaudo] = resultado
         return previo
 
-    async def aceptacion_conocida(self, clave_recaudo: UUID, tx: Any) -> bool:
-        return any(a.id == clave_recaudo for a in self._aceptaciones.aceptaciones)
+
+class PolizasMemoria:
+    """PolizasRepositorio en memoria (HU-W17, 17.6), con los índices únicos de la tabla: una póliza
+    por aceptación y por número. `origenes` son las aceptaciones conocidas, con lo que la póliza
+    toma de ellas; `transacciones` registra con qué `tx` se creó cada una."""
+
+    def __init__(self) -> None:
+        self.origenes: dict[UUID, OrigenPoliza] = {}
+        self.polizas: dict[UUID, Poliza] = {}
+        self.transacciones: list[Any] = []
+        self.secuencia = 0
+
+    async def origen(self, aceptacion_id: UUID, tx: Any) -> OrigenPoliza | None:
+        return self.origenes.get(aceptacion_id)
+
+    async def siguiente_secuencia(self, tx: Any) -> int:
+        self.secuencia += 1
+        return self.secuencia
+
+    async def crear(self, poliza: Poliza, tx: Any) -> bool:
+        self.transacciones.append(tx)
+        numeros = {p.numero for p in self.polizas.values()}
+        if poliza.aceptacion_id in self.polizas or poliza.numero in numeros:
+            return False
+        self.polizas[poliza.aceptacion_id] = poliza
+        return True
+
+    async def por_aceptacion(self, aceptacion_id: UUID, tx: Any) -> Poliza | None:
+        return self.polizas.get(aceptacion_id)
+
+    async def actualizar(self, poliza: Poliza, tx: Any) -> bool:
+        actual = self.polizas.get(poliza.aceptacion_id)
+        if actual is None or actual.estado is not EstadoPoliza.EMITIENDO:
+            return False
+        self.polizas[poliza.aceptacion_id] = poliza
+        return True
 
 
 @dataclass
@@ -321,11 +355,8 @@ class Dobles:
     codigos: CodigosMemoria
     reloj: RelojFijo
     aceptaciones: AceptacionesMemoria = field(default_factory=AceptacionesMemoria)
-    recaudos: RecaudosMemoria | None = None
-
-    def __post_init__(self) -> None:
-        if self.recaudos is None:
-            self.recaudos = RecaudosMemoria(self.aceptaciones)
+    recaudos: RecaudosMemoria = field(default_factory=RecaudosMemoria)
+    polizas: PolizasMemoria = field(default_factory=PolizasMemoria)
 
     def puertos(self) -> "Puertos":
         # Importación diferida: las pruebas del dominio no necesitan la app.

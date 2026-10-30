@@ -255,11 +255,16 @@ async def test_los_logs_y_el_evento_no_tienen_pii(
 
 
 async def test_migracion_adelante_y_atras(base: str) -> None:
-    """MT-W15-01: revertir 002 (dos veces) deja las decisiones; volver a aplicar la recrea."""
-    reversa = MIGRACIONES.joinpath("down", "002_aceptaciones.sql").read_text(encoding="utf-8")
+    """MT-W15-01: revertir 002 (dos veces) deja las decisiones; volver a aplicar la recrea. HU-W17:
+    antes, la reversa de 004 (las pólizas referencian a las aceptaciones)."""
+    reversas = [
+        MIGRACIONES.joinpath("down", nombre).read_text(encoding="utf-8")
+        for nombre in ("004_polizas.sql", "002_aceptaciones.sql")
+    ]
     with psycopg.connect(base, autocommit=True) as conexion:
-        conexion.execute(reversa)
-        conexion.execute(reversa)
+        for _ in range(2):
+            for reversa in reversas:
+                conexion.execute(reversa)
     existe = "SELECT to_regclass('{}') IS NOT NULL"
     assert _filas(base, existe.format("aceptaciones")) == [(False,)]
     assert _filas(base, existe.format("decisiones_suscripcion")) == [(True,)]

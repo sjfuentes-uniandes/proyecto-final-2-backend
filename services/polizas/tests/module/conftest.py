@@ -85,7 +85,8 @@ def limpia(base: str) -> str:
     # TRUNCATE no dispara el disparador de inmutabilidad (es por fila): solo para las pruebas.
     _ejecutar(
         base,
-        "TRUNCATE aceptaciones, decisiones_suscripcion, outbox, inbox, recaudos_aceptacion",
+        "TRUNCATE polizas, aceptaciones, decisiones_suscripcion, outbox, inbox, "
+        "recaudos_aceptacion",
     )
     return base
 

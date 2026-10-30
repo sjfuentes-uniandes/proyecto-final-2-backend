@@ -9,7 +9,7 @@ import io
 import json
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
@@ -19,7 +19,15 @@ from polizas.adapters.inbound.sqs.recaudos import MENSAJE_INVALIDO, manejador_re
 from polizas.application.recaudo.proyectar import (
     MENSAJE_CLAVE_DESCONOCIDA,
     MENSAJE_CONFLICTO,
+    MENSAJE_PRODUCTO_SIN_RAMO,
     ProyectarRecaudo,
+)
+from polizas.domain.poliza.modelos import (
+    EstadoPoliza,
+    OrigenPoliza,
+    Producto,
+    Ramo,
+    Vigencia,
 )
 from polizas.domain.recaudo.modelos import ResultadoRecaudo, SituacionRecaudo
 from solventa_common.inbox import (
@@ -36,6 +44,8 @@ TX = object()
 # Valores que nunca deben aparecer en un log.
 TRANSACCION = "TX-SINTETICA-7731"
 MONTO = "64638.10"
+# HU-W17: 23:30 del 21/10/2026 en Bogotá (ya el 22 en UTC); el reloj de los dobles es el 22/10.
+ACEPTADA_EN = datetime(2026, 10, 22, 4, 30, tzinfo=UTC)
 
 
 def _sobre(tipo: str, clave: UUID, **payload: Any) -> dict[str, Any]:
@@ -73,17 +83,20 @@ def _evento(sobre: dict[str, Any]) -> EventoRecibido:
 
 
 def _manejar(dobles: Any) -> Any:
-    return manejador_recaudos(ProyectarRecaudo(dobles.recaudos))
+    return manejador_recaudos(ProyectarRecaudo(dobles.recaudos, dobles.polizas, dobles.reloj))
 
 
-async def _aceptar(dobles: Any) -> UUID:
-    """Una aceptación conocida por polizas (solo importa su id, que es la clave)."""
-
-    class _Aceptacion:
-        id = uuid4()
-
-    dobles.aceptaciones.aceptaciones.append(_Aceptacion())
-    return _Aceptacion.id
+async def _aceptar(dobles: Any, producto: str = "vida-hipotecario") -> UUID:
+    """Una aceptación conocida por polizas: su id es la clave (HU-W17: con lo que toma la póliza)."""
+    clave = uuid4()
+    dobles.polizas.origenes[clave] = OrigenPoliza(
+        aceptacion_id=clave,
+        cotizacion_id=uuid4(),
+        cliente_id=uuid4(),
+        producto=Producto(producto, "2026.09.1"),
+        aceptada_en=ACEPTADA_EN,
+    )
+    return clave
 
 
 def _logs(salida: io.StringIO) -> list[dict[str, Any]]:
@@ -179,6 +192,9 @@ async def test_el_mismo_evento_dos_veces_tiene_un_solo_efecto(dobles: Any) -> No
     assert len(dobles.recaudos.transacciones) == 1
     assert list(dobles.recaudos.resultados) == [clave]
     assert receptor.borrados == ["m-1", "m-2"]
+    # HU-W17: una sola póliza.
+    assert list(dobles.polizas.polizas) == [clave]
+    assert dobles.polizas.secuencia == 1
 
 
 async def test_el_mismo_estado_con_otro_event_id_no_cambia_nada(
@@ -217,6 +233,10 @@ async def test_un_estado_final_distinto_no_cambia_el_primero_y_se_registra(
     )
     assert error["logger"] == "polizas.recaudo"
     _sin_datos_del_cobro(salida)
+    # HU-W17: la póliza solo existe si el primero fue CONFIRMADO, y una sola.
+    esperadas = [clave] if primero == "RecaudoConfirmado" else []
+    assert list(dobles.polizas.polizas) == esperadas
+    assert dobles.polizas.secuencia == len(esperadas)
 
 
 async def test_una_clave_sin_aceptacion_se_guarda_y_se_avisa(
@@ -230,6 +250,8 @@ async def test_una_clave_sin_aceptacion_se_guarda_y_se_avisa(
     assert aviso["message"] == MENSAJE_CLAVE_DESCONOCIDA
     assert (aviso["clave_recaudo"], aviso["estado"]) == (str(clave), "CONFIRMADO")
     _sin_datos_del_cobro(salida)
+    # HU-W17: sin aceptación no hay póliza ni se reserva número.
+    assert (dobles.polizas.polizas, dobles.polizas.secuencia) == ({}, 0)
 
 
 async def test_una_clave_conocida_no_avisa(
@@ -239,6 +261,82 @@ async def test_una_clave_conocida_no_avisa(
     clave = await _aceptar(dobles)
     await _manejar(dobles)(_evento(_sobre("RecaudoRechazado", clave)), TX)
     assert [log for log in _logs(salida) if log["level"] == "WARNING"] == []
+
+
+# --- La póliza (HU-W17, 17.6) ----------------------------------------------------------------
+async def test_el_primer_confirmado_crea_la_poliza_emitiendo_en_la_misma_transaccion(
+    dobles: Any, capturar_logs: Callable[..., io.StringIO]
+) -> None:
+    salida = capturar_logs()
+    clave = await _aceptar(dobles)
+    origen = dobles.polizas.origenes[clave]
+    await _manejar(dobles)(_evento(_sobre("RecaudoConfirmado", clave)), TX)
+    poliza = dobles.polizas.polizas[clave]
+    assert poliza.estado is EstadoPoliza.EMITIENDO
+    assert (poliza.aceptacion_id, poliza.cotizacion_id, poliza.cliente_id, poliza.producto) == (
+        clave,
+        origen.cotizacion_id,
+        origen.cliente_id,
+        origen.producto,
+    )
+    assert poliza.ramo == Ramo("100", "Vida hipotecario")
+    # Número reservado al crear, con el año del reloj en Bogotá.
+    assert poliza.numero == "100-2026-000001"
+    # Aceptada a las 23:30 del 21/10 en Bogotá: la vigencia empieza el 22/10.
+    assert poliza.vigencia == Vigencia(date(2026, 10, 22), date(2027, 10, 21))
+    assert poliza.creada_en == dobles.reloj.ahora()
+    assert (poliza.documento, poliza.firma, poliza.emitida_en) == (None, None, None)
+    # En la transacción del inbox, la misma que la proyección.
+    assert dobles.polizas.transacciones == dobles.recaudos.transacciones == [TX]
+    assert [log for log in _logs(salida) if log["level"] in ("WARNING", "ERROR")] == []
+
+
+async def test_un_rechazado_no_crea_poliza(dobles: Any) -> None:
+    clave = await _aceptar(dobles)
+    await _manejar(dobles)(_evento(_sobre("RecaudoRechazado", clave)), TX)
+    assert dobles.recaudos.resultados[clave].estado is SituacionRecaudo.RECHAZADO
+    assert (dobles.polizas.polizas, dobles.polizas.secuencia) == ({}, 0)
+
+
+async def test_un_confirmado_con_otro_event_id_no_crea_otra_poliza(dobles: Any) -> None:
+    clave = await _aceptar(dobles)
+    await _manejar(dobles)(_evento(_sobre("RecaudoConfirmado", clave)), TX)
+    primera = dobles.polizas.polizas[clave]
+    await _manejar(dobles)(_evento(_sobre("RecaudoConfirmado", clave)), TX)
+    assert dobles.polizas.polizas == {clave: primera}
+    # La proyección ya existía: ni se intenta crear ni se reserva otro número.
+    assert (dobles.polizas.secuencia, dobles.polizas.transacciones) == (1, [TX])
+
+
+async def test_un_producto_sin_ramo_proyecta_el_recaudo_sin_poliza_y_se_registra(
+    dobles: Any, capturar_logs: Callable[..., io.StringIO]
+) -> None:
+    salida = capturar_logs()
+    clave = await _aceptar(dobles, producto="vida-deudores")
+    # No lanza: el recaudo se proyecta y el mensaje se borra (reintentar no lo arreglaría).
+    assert await _manejar(dobles)(_evento(_sobre("RecaudoConfirmado", clave)), TX) is None
+    assert dobles.recaudos.resultados[clave].estado is SituacionRecaudo.CONFIRMADO
+    # Sin póliza y sin consumir un número.
+    assert (dobles.polizas.polizas, dobles.polizas.secuencia) == ({}, 0)
+    [error] = [log for log in _logs(salida) if log["level"] == "ERROR"]
+    assert error["message"] == MENSAJE_PRODUCTO_SIN_RAMO
+    assert (error["clave_recaudo"], error["producto_id"], error["codigo"]) == (
+        str(clave),
+        "vida-deudores",
+        "PRODUCTO_SIN_RAMO",
+    )
+    assert error["logger"] == "polizas.recaudo"
+    _sin_datos_del_cobro(salida)
+
+
+async def test_una_poliza_ya_existente_se_conserva(dobles: Any) -> None:
+    # No pasa (la proyección se crea con la póliza); si pasara, se conserva la que había.
+    clave = await _aceptar(dobles)
+    await _manejar(dobles)(_evento(_sobre("RecaudoConfirmado", clave)), TX)
+    existente = dobles.polizas.polizas[clave]
+    dobles.recaudos.resultados.clear()
+    assert await _manejar(dobles)(_evento(_sobre("RecaudoConfirmado", clave)), TX) is None
+    assert dobles.polizas.polizas == {clave: existente}
 
 
 # --- Inválidos -------------------------------------------------------------------------------

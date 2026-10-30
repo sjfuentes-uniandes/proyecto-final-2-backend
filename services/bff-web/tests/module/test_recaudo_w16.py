@@ -204,7 +204,7 @@ def _portal(monkeypatch: pytest.MonkeyPatch, polizas_url: str) -> TestClient:
 def portal(polizas: Servidor, base: str, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     with psycopg.connect(base, autocommit=True) as conexion:
         conexion.execute(
-            "TRUNCATE aceptaciones, decisiones_suscripcion, outbox, inbox, recaudos_aceptacion"
+            "TRUNCATE polizas, aceptaciones, decisiones_suscripcion, outbox, inbox, recaudos_aceptacion"
         )
     with _portal(monkeypatch, polizas.url) as cliente:
         yield cliente

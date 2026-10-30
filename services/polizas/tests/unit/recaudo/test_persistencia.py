@@ -129,16 +129,6 @@ async def test_guardar_sin_fila_tras_el_conflicto_falla() -> None:
     assert len(conexion.cursor_.sentencias) == 2
 
 
-@pytest.mark.parametrize(("fila", "esperado"), [((1,), True), (None, False)])
-async def test_aceptacion_conocida(fila: Any, esperado: bool) -> None:
-    repo, tx, conexion = _tx([fila])
-    clave = uuid4()
-    assert await repo.aceptacion_conocida(clave, tx) is esperado
-    [(consulta, parametros)] = conexion.cursor_.sentencias
-    assert "FROM aceptaciones WHERE id = %s" in consulta
-    assert parametros == (clave,)
-
-
 async def test_por_clave_lee_con_el_pool() -> None:
     conexion = Conexion([fila_recaudo(RECHAZADO)])
     repo = RecaudosPg(Pool(conexion))  # type: ignore[arg-type]

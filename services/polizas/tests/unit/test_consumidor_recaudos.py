@@ -20,6 +20,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from polizas import main
 from polizas.adapters.outbound import decisiones_pg
+from polizas.adapters.outbound.polizas_pg import PolizasPg
+from polizas.adapters.outbound.reloj import RelojSistema
 from polizas.config import Settings
 from solventa_common import inbox
 
@@ -382,6 +384,9 @@ def test_un_consumidor_real_procesa_la_cola_con_el_manejador_de_recaudos(
     assert tarea.done() and not tarea.cancelled()
     [caso] = construidos
     assert caso._proyeccion._pool is app.state.pool
+    # HU-W17 (17.6): la póliza se crea en la misma transacción, con el reloj del sistema.
+    assert isinstance(caso._polizas, PolizasPg)
+    assert isinstance(caso._reloj, RelojSistema)
     assert recaudos.manejador_recaudos is original
     assert _mensajes(salida, "ERROR") == []
 
