@@ -390,7 +390,13 @@ def crear_entorno(
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
     pila = ExitStack()
 
-    def crear(*, environment: str = "pruebas", con_cliente: bool = True, **ajustes: Any) -> Entorno:
+    def crear(
+        *,
+        environment: str = "pruebas",
+        con_cliente: bool = True,
+        consulta_polizas: Any = None,
+        **ajustes: Any,
+    ) -> Entorno:
         router = pila.enter_context(respx.mock(assert_all_called=False))
         jwks = router.get(f"{EMISOR_CLIENTES}/.well-known/jwks.json").respond(
             200, json={"keys": [_jwk(llave_privada, KID)]}
@@ -430,6 +436,7 @@ def crear_entorno(
         app = crear_app(
             settings,
             resolutor=ResolutorFalso({SUB: CLIENTE_ID} if con_cliente else {}),
+            consulta_polizas=consulta_polizas,
             span_exporter=spans,
             metric_readers=[lector],
         )

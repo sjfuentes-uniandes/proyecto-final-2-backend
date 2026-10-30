@@ -9,11 +9,18 @@ from solventa_common import correlation
 from solventa_common.errors import registrar_manejadores
 from solventa_common.telemetry import instrumentar
 
-from bff_movil.adapters.inbound.http import consentimientos, registro, sesion, verificacion
+from bff_movil.adapters.inbound.http import (
+    consentimientos,
+    polizas,
+    registro,
+    sesion,
+    verificacion,
+)
 from bff_movil.adapters.inbound.http.auth import Autenticador
 from bff_movil.adapters.inbound.http.jwks import ProveedorJwks
 from bff_movil.adapters.outbound.clientes_http import ClientesHttp
 from bff_movil.adapters.outbound.consentimientos_http import ConsentimientosHttp
+from bff_movil.adapters.outbound.polizas_http import PolizasHttp
 from bff_movil.adapters.outbound.registro_http import RegistroHttp
 from bff_movil.adapters.outbound.resolutor_cliente_http import ResolutorClienteHttp
 from bff_movil.adapters.outbound.verificacion_http import VerificacionHttp
@@ -23,6 +30,8 @@ from bff_movil.application.consentimientos.casos import (
     OtorgarConsentimiento,
     RevocarConsentimiento,
 )
+from bff_movil.application.polizas.casos import ConsultarPoliza, ListarPolizas
+from bff_movil.application.polizas.puertos import ConsultaPolizas
 from bff_movil.application.registro.casos import VerificarRegistro, VincularRegistro
 from bff_movil.application.sesion.consultar_sesion import ConsultarSesion
 from bff_movil.application.sesion.puertos import ResolutorCliente
@@ -35,6 +44,7 @@ def crear_app(
     *,
     transport: httpx.AsyncBaseTransport | None = None,
     resolutor: ResolutorCliente | None = None,
+    consulta_polizas: ConsultaPolizas | None = None,
     span_exporter: SpanExporter | None = None,
     metric_readers: Sequence[MetricReader] = (),
 ) -> FastAPI:
@@ -91,6 +101,14 @@ def crear_app(
             app.state.consultar_consentimientos = ConsultarConsentimientos(servicio_consentimientos)
             app.state.revocar_consentimiento = RevocarConsentimiento(servicio_consentimientos)
             app.state.consultar_texto_vigente = ConsultarTextoVigente(servicio_consentimientos)
+            resolutor_cliente = resolutor or ResolutorClienteHttp(
+                cliente_clientes, settings.clientes_url, settings.clientes_timeout_ms
+            )
+            servicio_polizas = consulta_polizas or PolizasHttp(
+                cliente_clientes, settings.consulta_url, settings.consulta_timeout_ms
+            )
+            app.state.listar_polizas = ListarPolizas(resolutor_cliente, servicio_polizas)
+            app.state.consultar_poliza = ConsultarPoliza(resolutor_cliente, servicio_polizas)
             yield
 
     app = instrumentar(
@@ -104,6 +122,7 @@ def crear_app(
     app.include_router(verificacion.router)
     app.include_router(registro.router)
     app.include_router(consentimientos.router)
+    app.include_router(polizas.router)
     if settings.environment == "local":
         # Simula el Lambda pre sign-up donde no hay Cognito; nunca existe fuera de local.
         app.include_router(registro.router_local)
