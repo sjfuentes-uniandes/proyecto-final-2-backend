@@ -29,7 +29,7 @@ def _catalogo(respuesta: Any) -> tuple[CatalogoHttp, list[httpx.Request]]:
         vistas.append(request)
         if isinstance(respuesta, Exception):
             raise respuesta
-        return respuesta  # type: ignore[no-any-return]
+        return respuesta
 
     cliente = httpx.AsyncClient(transport=httpx.MockTransport(manejar))
     return CatalogoHttp(cliente, "http://catalogo/", 300), vistas

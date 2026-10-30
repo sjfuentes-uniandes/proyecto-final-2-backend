@@ -53,7 +53,7 @@ def test_la_cola_como_la_pone_ecs_y_su_variante_solventa(monkeypatch: pytest.Mon
         {"catalogo_timeout_ms": 701},
     ],
 )
-def test_lote_espera_y_timeout_acotados(campo: dict[str, int]) -> None:
+def test_lote_espera_y_timeout_acotados(campo: dict[str, Any]) -> None:
     with pytest.raises(ValueError):
         Settings(**campo)
 

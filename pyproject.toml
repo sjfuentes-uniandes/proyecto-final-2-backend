@@ -66,6 +66,11 @@ module = ["reportlab", "reportlab.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# jsonschema no publica tipos (las pruebas de módulo validan eventos contra los esquemas).
+module = ["jsonschema", "jsonschema.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # Código nuevo de HU-M08: toda función con anotaciones completas.
 module = [
     "clientes.domain.consentimientos.*",
