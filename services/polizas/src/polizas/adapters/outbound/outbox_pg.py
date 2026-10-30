@@ -16,6 +16,7 @@ from polizas.adapters.outbound.eventos import (
     DECISION_SUSCRIPCION_REGISTRADA,
     OFERTA_ACEPTADA,
     POLIZA_EMITIDA,
+    CoberturaV1,
     DecisionSuscripcionRegistradaV1,
     DocumentoV1,
     FirmaV1,
@@ -23,6 +24,7 @@ from polizas.adapters.outbound.eventos import (
     PolizaEmitidaV1,
     PrimaAceptadaV1,
     ProductoV1,
+    RamoV1,
     SobreEvento,
     SobrePolizaEmitidaV1,
     VigenciaV1,
@@ -108,7 +110,8 @@ def evento_de_emision(
     poliza: Poliza, datos: DatosDocumento, correlation_id: str
 ) -> SobrePolizaEmitidaV1:
     """PolizaEmitida.v1 de una póliza ACTIVA: `occurredAt` = `emitidaEn`; la prima, la suma, la
-    moneda y la periodicidad, de los datos de su documento (la instantánea de la decisión)."""
+    moneda, la periodicidad y las coberturas, de los datos de su documento (la instantánea de la
+    decisión, nunca el catálogo); el ramo, de la póliza."""
     documento, firma, emitida_en = poliza.documento, poliza.firma, poliza.emitida_en
     # Una póliza ACTIVA siempre tiene documento, firma y emitida_en (Poliza y el CHECK de 004).
     activa = poliza.estado is EstadoPoliza.ACTIVA
@@ -128,6 +131,11 @@ def evento_de_emision(
             clave_recaudo=poliza.aceptacion_id,
             cliente_id=poliza.cliente_id,
             producto=ProductoV1(id=poliza.producto.id, version=poliza.producto.version),
+            ramo=RamoV1(codigo=poliza.ramo.codigo, nombre=poliza.ramo.nombre),
+            coberturas=[
+                CoberturaV1(codigo=c.codigo, nombre=c.nombre, obligatoria=c.obligatoria)
+                for c in datos.coberturas
+            ],
             vigencia=VigenciaV1(desde=poliza.vigencia.desde, hasta=poliza.vigencia.hasta),
             prima=texto(datos.prima),
             suma_asegurada=texto(datos.suma_asegurada),

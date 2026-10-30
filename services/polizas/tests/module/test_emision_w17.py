@@ -295,6 +295,15 @@ async def test_de_un_recaudo_confirmado_en_la_cola_a_poliza_activa_y_su_evento_e
         "tamanoBytes": poliza["documento_tamano_bytes"],
     }
     assert payload["firma"]["firmaId"] == poliza["firma_id"] == "FIR-SINT-C01"
+    # HU-W17 (17.8b): las coberturas de la instantánea de la decisión aceptada (S01), nunca del
+    # catálogo, y el ramo de la póliza.
+    assert payload["coberturas"] == [
+        {"codigo": c.codigo, "nombre": c.nombre, "obligatoria": c.obligatoria}
+        for c in sinteticos.insumos("S01").coberturas
+    ]
+    assert len(payload["coberturas"]) == 2
+    assert payload["ramo"] == {"codigo": "100", "nombre": "Vida hipotecario"}
+    assert (poliza["ramo_codigo"], poliza["ramo_nombre"]) == ("100", "Vida hipotecario")
     # Una sola versión del documento en el bucket, la referenciada.
     assert _versiones(localstack, bucket, documento["clave"]) == [documento["versionId"]]
 

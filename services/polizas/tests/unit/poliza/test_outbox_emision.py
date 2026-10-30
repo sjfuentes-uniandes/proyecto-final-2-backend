@@ -51,7 +51,10 @@ def _activa() -> Poliza:
 async def test_escribe_poliza_emitida_en_la_transaccion_recibida() -> None:
     activa = _activa()
     fuente = FuenteDocumento(
-        coberturas=(Cobertura("MUERTE", "Muerte", True),),
+        coberturas=(
+            Cobertura("MUERTE", "Muerte", True),
+            Cobertura("ITP", "Incapacidad total y permanente", False),
+        ),
         suma_asegurada=Decimal(180000000),
         prima=Decimal("64638.10"),
         periodicidad="MENSUAL",
@@ -74,3 +77,9 @@ async def test_escribe_poliza_emitida_en_la_transaccion_recibida() -> None:
     assert (occurred_at, correlacion) == (activa.emitida_en, "corr-x")
     assert payload.obj["documento"]["versionId"] == "v-1"
     assert payload.obj["prima"] == "64638.10"
+    # HU-W17 (17.8b): las coberturas de los datos del documento (la instantánea) y el ramo.
+    assert payload.obj["coberturas"] == [
+        {"codigo": "MUERTE", "nombre": "Muerte", "obligatoria": True},
+        {"codigo": "ITP", "nombre": "Incapacidad total y permanente", "obligatoria": False},
+    ]
+    assert payload.obj["ramo"] == {"codigo": "100", "nombre": "Vida hipotecario"}

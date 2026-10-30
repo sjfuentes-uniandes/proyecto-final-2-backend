@@ -11,6 +11,9 @@
   `versionId` y huella) y a la firma; solo ids, montos como texto decimal y fechas: ningún nombre,
   documento de identidad ni dato de contacto. `type` es el atributo `eventType` que filtran
   `avisos` (exacto) y `consulta-proyeccion` (prefijo `Poliza`). Sin productor hasta la 17.8.
+  HU-W17 (17.8b), aditivo y obligatorio: `ramo` y `coberturas`, las de la oferta aceptada
+  (instantánea de la decisión, DS2-10), no las del catálogo vigente: `consulta` no llama a
+  `catalogo`.
 
 Los esquemas publicados se regeneran con:
     uv run python -m polizas.adapters.outbound.eventos
@@ -96,6 +99,21 @@ class ProductoV1(_Evento):
     version: str
 
 
+class RamoV1(_Evento):
+    """El ramo de la póliza (ADR 0014, decisión 2): el mismo código que inicia el número."""
+
+    codigo: Annotated[str, Field(pattern=r"^[0-9]{3}$")]
+    nombre: str
+
+
+class CoberturaV1(_Evento):
+    """Una cobertura de la oferta aceptada, con los tipos de la instantánea de la decisión."""
+
+    codigo: str
+    nombre: str
+    obligatoria: bool
+
+
 class VigenciaV1(_Evento):
     """Fechas inclusivas en America/Bogota: del día siguiente a la aceptación al anterior a su
     aniversario (ADR 0014, decisión 3)."""
@@ -131,6 +149,9 @@ class PolizaEmitidaV1(_Evento):
     clave_recaudo: UUID
     cliente_id: UUID
     producto: ProductoV1
+    # HU-W17 (17.8b): de la póliza y de la instantánea de la decisión, nunca del catálogo.
+    ramo: RamoV1
+    coberturas: Annotated[list[CoberturaV1], Field(min_length=1)]
     vigencia: VigenciaV1
     prima: Annotated[str, Field(pattern=_TEXTO_DECIMAL)]
     suma_asegurada: Annotated[str, Field(pattern=_TEXTO_DECIMAL)]

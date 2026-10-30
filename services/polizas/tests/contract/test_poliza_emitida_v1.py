@@ -56,6 +56,16 @@ def _ejemplo() -> dict[str, Any]:
             "claveRecaudo": "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
             "clienteId": "3c4d5e6f-7a8b-4c9d-8e1f-2a3b4c5d6e7f",
             "producto": {"id": "vida-hipotecario", "version": "2026.1"},
+            # HU-W17 (17.8b): las de la oferta aceptada (instantánea), no las del catálogo vigente.
+            "ramo": {"codigo": "100", "nombre": "Vida hipotecario"},
+            "coberturas": [
+                {"codigo": "MUERTE", "nombre": "Muerte por cualquier causa", "obligatoria": True},
+                {
+                    "codigo": "INCAPACIDAD_TOTAL_PERMANENTE",
+                    "nombre": "Incapacidad total y permanente",
+                    "obligatoria": False,
+                },
+            ],
             "vigencia": {"desde": "2026-09-13", "hasta": "2027-09-12"},
             "prima": "247380",
             "sumaAsegurada": "180000000.00",
@@ -104,11 +114,15 @@ def test_el_payload_exige_todos_sus_campos() -> None:
         sobre = copy.deepcopy(ejemplo)
         del sobre["payload"][campo]
         assert _errores(sobre), f"aceptó el payload sin {campo}"
-    for grupo in ("producto", "vigencia", "documento", "firma"):
+    for grupo in ("producto", "ramo", "vigencia", "documento", "firma"):
         for campo in ejemplo["payload"][grupo]:
             sobre = copy.deepcopy(ejemplo)
             del sobre["payload"][grupo][campo]
             assert _errores(sobre), f"aceptó {grupo} sin {campo}"
+    for campo in ejemplo["payload"]["coberturas"][0]:
+        sobre = copy.deepcopy(ejemplo)
+        del sobre["payload"]["coberturas"][1][campo]
+        assert _errores(sobre), f"aceptó una cobertura sin {campo}"
 
 
 def _sin_version_del_documento(p: dict[str, Any]) -> None:
@@ -151,6 +165,26 @@ def _cliente_no_uuid(p: dict[str, Any]) -> None:
     p["clienteId"] = "C01"
 
 
+def _sin_coberturas(p: dict[str, Any]) -> None:
+    p["coberturas"] = []
+
+
+def _coberturas_como_objeto(p: dict[str, Any]) -> None:
+    p["coberturas"] = p["coberturas"][0]
+
+
+def _obligatoria_como_texto(p: dict[str, Any]) -> None:
+    p["coberturas"][0]["obligatoria"] = "true"
+
+
+def _ramo_de_dos_digitos(p: dict[str, Any]) -> None:
+    p["ramo"]["codigo"] = "10"
+
+
+def _ramo_con_letras(p: dict[str, Any]) -> None:
+    p["ramo"]["codigo"] = "VH1"
+
+
 @pytest.mark.parametrize(
     "desvio",
     [
@@ -164,6 +198,11 @@ def _cliente_no_uuid(p: dict[str, Any]) -> None:
         _emitida_sin_zona,
         _sello_sin_zona,
         _cliente_no_uuid,
+        _sin_coberturas,
+        _coberturas_como_objeto,
+        _obligatoria_como_texto,
+        _ramo_de_dos_digitos,
+        _ramo_con_letras,
     ],
     ids=lambda desvio: desvio.__name__.lstrip("_"),
 )
@@ -211,6 +250,19 @@ def test_el_payload_no_lleva_nombres_ni_documentos_de_identidad_ni_contacto() ->
 
 
 # --- El productor (HU-W17, 17.8) --------------------------------------------------------------
+def _coberturas_instantanea() -> Any:
+    from polizas.domain.suscripcion.modelos import Cobertura
+
+    # En otro orden que el alfabético y una no obligatoria: el evento las copia tal cual.
+    return (
+        Cobertura("MUERTE", "Muerte por cualquier causa", True),
+        Cobertura("INCAPACIDAD_TOTAL_PERMANENTE", "Incapacidad total y permanente", False),
+    )
+
+
+COBERTURAS_INSTANTANEA = _coberturas_instantanea()
+
+
 def _activa_y_datos() -> tuple[Any, Any]:
     from datetime import UTC, datetime
     from decimal import Decimal
@@ -218,7 +270,6 @@ def _activa_y_datos() -> tuple[Any, Any]:
 
     from polizas.domain.poliza.documento import FuenteDocumento, datos_documento
     from polizas.domain.poliza.modelos import Documento, Firma, OrigenPoliza, Poliza, Producto
-    from polizas.domain.suscripcion.modelos import Cobertura
 
     creada = datetime(2026, 9, 12, 20, 4, 5, 123000, tzinfo=UTC)
     origen = OrigenPoliza(
@@ -242,7 +293,7 @@ def _activa_y_datos() -> tuple[Any, Any]:
         .activar(creada)
     )
     fuente = FuenteDocumento(
-        coberturas=(Cobertura("MUERTE", "Muerte por cualquier causa", True),),
+        coberturas=COBERTURAS_INSTANTANEA,
         suma_asegurada=Decimal("180000000.00"),
         prima=Decimal(247380),
         periodicidad="MENSUAL",
@@ -289,6 +340,17 @@ def test_el_evento_que_produce_polizas_cumple_el_esquema_publicado() -> None:
     assert (payload["prima"], payload["sumaAsegurada"]) == ("247380", "180000000.00")
     assert (payload["moneda"], payload["periodicidad"]) == ("COP", "MENSUAL")
     assert payload["vigencia"] == {"desde": "2026-09-13", "hasta": "2027-09-12"}
+    # HU-W17 (17.8b): exactamente las coberturas de la instantánea, en su orden, y el ramo de la
+    # póliza.
+    assert payload["coberturas"] == [
+        {"codigo": "MUERTE", "nombre": "Muerte por cualquier causa", "obligatoria": True},
+        {
+            "codigo": "INCAPACIDAD_TOTAL_PERMANENTE",
+            "nombre": "Incapacidad total y permanente",
+            "obligatoria": False,
+        },
+    ]
+    assert payload["ramo"] == {"codigo": "100", "nombre": "Vida hipotecario"}
     # El cuerpo que publica el relay es el que sale del payload guardado (la columna jsonb).
     assert json.loads(json.dumps(cuerpo)) == cuerpo
 
