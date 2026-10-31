@@ -16,10 +16,13 @@ from solventa_common.inbox import ConsumidorInbox, InboxPg, Receptor, ReceptorSq
 from solventa_common.resiliencia import SinProteccion
 from solventa_common.telemetry import instrumentar
 
+from avisos.adapters.inbound.http import dispositivos
 from avisos.adapters.inbound.sqs.polizas import manejador_polizas
+from avisos.adapters.outbound.dispositivos_pg import DispositivosPg
 from avisos.adapters.outbound.entregas_pg import EntregasPg, migrar
 from avisos.adapters.outbound.push_http import EnviadorPushHttp
 from avisos.adapters.outbound.reloj import RelojSistema
+from avisos.application.dispositivos.casos import DarDeBajaDispositivo, RegistrarDispositivo
 from avisos.application.entregas.barrido import Barrido
 from avisos.application.entregas.enviar import EnviarEntregas
 from avisos.application.entregas.puertos import EnviadorPush, Reloj
@@ -197,6 +200,14 @@ def crear_app(
                 await pool_base.open()
                 pila.push_async_callback(pool_base.close)
                 app.state.pool = pool_base
+            pool_app = getattr(app.state, "pool", None)
+            if pool_app is not None:
+                # API de dispositivos (HU-M11): registro y baja, sobre la misma base del barrido.
+                dispositivos_repo = DispositivosPg(pool_app)
+                app.state.registrar_dispositivo = RegistrarDispositivo(dispositivos_repo, reloj_app)
+                app.state.dar_de_baja_dispositivo = DarDeBajaDispositivo(
+                    dispositivos_repo, reloj_app
+                )
             # Lo último en entrar: al cerrar (en orden inverso), primero las tareas y luego el pool.
             await pila.enter_async_context(_tareas_de_fondo(app, settings, enviador_app, reloj_app))
             yield
@@ -208,6 +219,7 @@ def crear_app(
         metric_readers=metric_readers,
     )
     registrar_manejadores(app)
+    app.include_router(dispositivos.router)
 
     @app.get("/health", response_model=None)
     async def health(request: Request) -> dict[str, str] | JSONResponse:

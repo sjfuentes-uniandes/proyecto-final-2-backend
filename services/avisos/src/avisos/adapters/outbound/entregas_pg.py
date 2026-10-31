@@ -31,9 +31,10 @@ _LOCK = "SELECT pg_advisory_lock(hashtext('avisos.migraciones'))"
 _UNLOCK = "SELECT pg_advisory_unlock(hashtext('avisos.migraciones'))"
 
 _CREAR = (
-    "INSERT INTO entrega (event_id, dispositivo_id, tipo, poliza_id, estado, proximo_intento,"
-    " creada_en, actualizada_en) "
-    "SELECT %(event_id)s, d.id, %(tipo)s, %(poliza_id)s, 'PENDIENTE', %(ahora)s, %(ahora)s, %(ahora)s "
+    "INSERT INTO entrega (event_id, dispositivo_id, cliente_id, tipo, poliza_id, estado,"
+    " proximo_intento, creada_en, actualizada_en) "
+    "SELECT %(event_id)s, d.id, d.cliente_id, %(tipo)s, %(poliza_id)s, 'PENDIENTE', %(ahora)s,"
+    " %(ahora)s, %(ahora)s "
     "FROM dispositivo d WHERE d.cliente_id = %(cliente_id)s AND d.estado = 'ACTIVO' "
     "ON CONFLICT (event_id, dispositivo_id) DO NOTHING RETURNING id"
 )
@@ -41,12 +42,16 @@ _RECLAMAR = (
     "WITH tomada AS ("
     " UPDATE entrega SET estado = 'EN_ENVIO', reclamada_hasta = %(hasta)s,"
     " intentos = intentos + 1, actualizada_en = %(ahora)s"
-    " WHERE id = (SELECT id FROM entrega"
-    "  WHERE intentos < %(max_intentos)s"
-    "   AND (%(event_id)s::uuid IS NULL OR event_id = %(event_id)s::uuid)"
-    "   AND ((estado = 'PENDIENTE' AND proximo_intento <= %(ahora)s)"
-    "     OR (estado = 'EN_ENVIO' AND reclamada_hasta < %(ahora)s))"
-    "  ORDER BY proximo_intento LIMIT 1 FOR UPDATE SKIP LOCKED)"
+    " WHERE id = (SELECT e.id FROM entrega e JOIN dispositivo d ON d.id = e.dispositivo_id"
+    "  WHERE e.intentos < %(max_intentos)s"
+    "   AND (%(event_id)s::uuid IS NULL OR e.event_id = %(event_id)s::uuid)"
+    "   AND ((e.estado = 'PENDIENTE' AND e.proximo_intento <= %(ahora)s)"
+    "     OR (e.estado = 'EN_ENVIO' AND e.reclamada_hasta < %(ahora)s))"
+    # Mientras el dispositivo esté ACTIVO, su dueño actual debe ser el mismo que creó la entrega
+    # (si cambió, la baja o la reasignación ya la pasaron a FALLIDO). Un dispositivo INVALIDO sigue
+    # siendo reclamable, sin importar el cliente, para cerrarlo a TOKEN_INVALIDO (HU-M11, Fase 1).
+    "   AND (d.estado != 'ACTIVO' OR d.cliente_id = e.cliente_id)"
+    "  ORDER BY e.proximo_intento LIMIT 1 FOR UPDATE SKIP LOCKED)"
     " RETURNING id, dispositivo_id, event_id, tipo, poliza_id, intentos) "
     "SELECT t.id, t.dispositivo_id, t.event_id, t.tipo, t.poliza_id, t.intentos,"
     " d.token, (d.estado = 'ACTIVO') AS activo "
