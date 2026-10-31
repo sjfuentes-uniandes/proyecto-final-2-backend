@@ -22,7 +22,17 @@ def _firmado(request: httpx.Request) -> httpx.Response:
     return httpx.Response(200, json=cuerpo)
 
 
-app = crear_app(Settings(), transport=httpx.MockTransport(_firmado))
+def _push_enviado(_: httpx.Request) -> httpx.Response:
+    return httpx.Response(200, json={"estado": "ENVIADO", "envioId": "PUSH-SINT-0001"})
+
+
+def _proveedor(request: httpx.Request) -> httpx.Response:
+    if request.url.path == "/firma/v1/firmas":
+        return _firmado(request)
+    return _push_enviado(request)
+
+
+app = crear_app(Settings(), transport=httpx.MockTransport(_proveedor))
 # Arranca el lifespan una vez: crea el cliente y el caso de uso en app.state.
 _ciclo = TestClient(app)
 _ciclo.__enter__()

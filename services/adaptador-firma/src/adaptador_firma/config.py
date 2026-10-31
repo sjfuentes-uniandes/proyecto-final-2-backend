@@ -40,5 +40,13 @@ class Settings(ServiceSettings):
         _LOCAL, validation_alias=_env("ALLY_FIRMA_CREDENTIALS"), repr=False
     )
 
+    # HU-M11: notificaciones push (aliado `push`). 2000 ms en infra (apps/variables.tf,
+    # ally_timeouts_ms); menor que el timeout de avisos hacia este adaptador (decisión HU-M11).
+    ally_push_url: str = Field("http://localhost:8089/push", validation_alias=_env("ALLY_PUSH_URL"))
+    ally_push_timeout_ms: int = Field(2000, validation_alias=_env("ALLY_PUSH_TIMEOUT_MS"))
+    ally_push_credentials: CredencialesAliado = Field(
+        _LOCAL, validation_alias=_env("ALLY_PUSH_CREDENTIALS"), repr=False
+    )
+
 
 settings = Settings()

@@ -40,3 +40,24 @@ def test_la_respuesta_de_la_firma() -> None:
     assert firma["properties"]["documentoId"]["format"] == "uuid"
     assert firma["properties"]["selloTiempo"]["format"] == "date-time"
     assert esquemas["EstadoFirma"]["enum"] == ["FIRMADO"]
+
+
+def test_contrato_de_la_notificacion() -> None:
+    operacion = app.openapi()["paths"]["/v1/notificaciones"]["post"]
+    assert set(operacion["responses"]) == {"200", "400", "422", "502", "503", "504"}
+    assert "parameters" not in operacion
+    esquemas = app.openapi()["components"]["schemas"]
+    solicitud = esquemas["SolicitudPush"]
+    assert set(solicitud["required"]) == {"tokenDispositivo", "tipo", "polizaId", "eventId"}
+    assert solicitud["properties"]["polizaId"]["format"] == "uuid"
+    assert solicitud["properties"]["eventId"]["format"] == "uuid"
+
+
+def test_la_respuesta_de_la_notificacion() -> None:
+    operacion = app.openapi()["paths"]["/v1/notificaciones"]["post"]
+    esquema = operacion["responses"]["200"]["content"]["application/json"]["schema"]
+    assert esquema == {"$ref": "#/components/schemas/PushDto"}
+    esquemas = app.openapi()["components"]["schemas"]
+    push = esquemas["PushDto"]
+    assert set(push["required"]) == {"resultado"}
+    assert esquemas["ResultadoPush"]["enum"] == ["OK", "RECHAZADO"]

@@ -55,6 +55,57 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/notificaciones:
+    post:
+      tags:
+      - notificaciones
+      summary: Notificar
+      description: Envía el aviso; `resultado = RECHAZADO` cuando el token del dispositivo
+        no es válido.
+      operationId: notificar_v1_notificaciones_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudPush'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushDto'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '502':
+          description: RESPUESTA_INVALIDA (también un 404 que no es token_no_reconocido)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: FUENTE_NO_DISPONIBLE (detalles.motivo y detalles.circuito)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '504':
+          description: TIEMPO_AGOTADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -128,6 +179,27 @@ components:
       - selloTiempo
       - huella
       title: FirmaDto
+    PushDto:
+      properties:
+        resultado:
+          $ref: '#/components/schemas/ResultadoPush'
+        envioId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Envioid
+      type: object
+      required:
+      - resultado
+      title: PushDto
+    ResultadoPush:
+      type: string
+      enum:
+      - OK
+      - RECHAZADO
+      title: ResultadoPush
+      description: 'La única negativa definitiva del proveedor: un token de dispositivo
+        no reconocido.'
     SolicitudFirma:
       properties:
         documentoId:
@@ -150,3 +222,27 @@ components:
       - huella
       - firmanteRef
       title: SolicitudFirma
+    SolicitudPush:
+      properties:
+        tokenDispositivo:
+          type: string
+          minLength: 1
+          title: Tokendispositivo
+        tipo:
+          type: string
+          title: Tipo
+        polizaId:
+          type: string
+          format: uuid
+          title: Polizaid
+        eventId:
+          type: string
+          format: uuid
+          title: Eventid
+      type: object
+      required:
+      - tokenDispositivo
+      - tipo
+      - polizaId
+      - eventId
+      title: SolicitudPush
