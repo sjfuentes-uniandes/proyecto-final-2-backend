@@ -70,3 +70,12 @@ def test_el_repr_de_la_entrega_no_muestra_el_token() -> None:
 
     assert "token-secreto" not in repr(entrega)
     assert "token-secreto" not in str(entrega)
+
+
+def test_el_repr_del_dispositivo_no_muestra_el_hash_del_token() -> None:
+    huella = hash_token("token-secreto")
+    dispositivo = Dispositivo(uuid4(), uuid4(), huella)
+
+    assert huella not in repr(dispositivo)
+    assert huella not in str(dispositivo)
+    assert "token_hash" not in repr(dispositivo)
