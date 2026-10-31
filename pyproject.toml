@@ -52,6 +52,7 @@ mypy_path = [
   "services/adaptador-pagos/src",
   "services/adaptador-firma/src",
   "services/consulta/src",
+  "services/avisos/src",
 ]
 explicit_package_bases = true
 
