@@ -10,9 +10,11 @@ from solventa_common.errors import registrar_manejadores
 from solventa_common.resiliencia import SinProteccion
 from solventa_common.telemetry import instrumentar
 
-from adaptador_firma.adapters.inbound.http import firmas
+from adaptador_firma.adapters.inbound.http import firmas, notificaciones
 from adaptador_firma.adapters.outbound.firma_http import FirmaHttp
+from adaptador_firma.adapters.outbound.push_http import PushHttp
 from adaptador_firma.application.firmas.firmar import Firmar
+from adaptador_firma.application.notificaciones.enviar import EnviarPush
 from adaptador_firma.config import Settings
 
 
@@ -45,6 +47,16 @@ def crear_app(
                 proteccion=SinProteccion(corte_duro_ms=settings.ally_firma_timeout_ms),
                 timeout_ms=settings.ally_firma_timeout_ms,
             )
+            # El mismo cliente sirve a los dos aliados: ambos propagan la correlación igual.
+            app.state.enviar_push = EnviarPush(
+                proveedor=PushHttp(
+                    cliente_firma,
+                    settings.ally_push_url,
+                    settings.ally_push_credentials.client_secret,
+                ),
+                proteccion=SinProteccion(corte_duro_ms=settings.ally_push_timeout_ms),
+                timeout_ms=settings.ally_push_timeout_ms,
+            )
             yield
 
     app = instrumentar(
@@ -55,6 +67,7 @@ def crear_app(
     )
     registrar_manejadores(app)
     app.include_router(firmas.router)
+    app.include_router(notificaciones.router)
 
     @app.get("/health")
     async def health() -> dict[str, str]:

@@ -84,6 +84,7 @@ def app_adaptador(
     def crear(**env: str) -> Adaptador:
         variables = {
             "ALLY_FIRMA_URL": f"{wiremock.url}/firma",
+            "ALLY_PUSH_URL": f"{wiremock.url}/push",
             "OTEL_SDK_DISABLED": "false",
             **env,
         }
