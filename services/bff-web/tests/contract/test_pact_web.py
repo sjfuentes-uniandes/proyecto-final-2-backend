@@ -483,6 +483,12 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
             (RECAUDO_CONFIRMADO, None),
             (RECAUDO_RECHAZADO, None),
             (SIN_ACEPTACION, None),
+            # HU-W17: la póliza EMITIENDO, ACTIVA y el 404; su documento, 200 y 409 mientras se emite.
+            (POLIZA_EMITIENDO, None),
+            (POLIZA_ACTIVA, None),
+            (SIN_POLIZA, None),
+            (DOCUMENTO_ACTIVA, None),
+            (DOCUMENTO_EMITIENDO, None),
         ],
         key=str,
     )
