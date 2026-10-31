@@ -38,6 +38,7 @@ MENSAJE_SIN_BASE = "avisos: sin base; no se consume ni se barre"
 MENSAJE_CONSUMIDOR_NO_ARRANCO = "inbox: el consumidor no arrancó"
 MENSAJE_TAREA_DETENIDA = "avisos: una tarea de fondo se detuvo"
 MENSAJE_TAREA_SIN_PARAR = "avisos: una tarea de fondo no se detuvo a tiempo; se cancela"
+MENSAJE_SIN_ADAPTADOR_FIRMA = "avisos: sin ADAPTADOR_FIRMA_URL; el envío push fallará cerrado"
 
 logger = logging.getLogger("avisos.main")
 
@@ -169,7 +170,12 @@ def crear_app(
                     correlation.cliente_async(transport=transport)
                 )
                 # Sin ADAPTADOR_FIRMA_URL (local y pruebas sin inyectar), falla cerrado: el envío
-                # nunca marca ENVIADO sin haber llamado de verdad al proveedor.
+                # nunca marca ENVIADO sin haber llamado de verdad al proveedor. Se avisa como un
+                # error explícito (no un silencio) para que no pase por una configuración normal.
+                if not settings.adaptador_firma_url:
+                    logger.error(
+                        MENSAJE_SIN_ADAPTADOR_FIRMA, extra={"missing": "ADAPTADOR_FIRMA_URL"}
+                    )
                 enviador_app = EnviadorPushHttp(
                     cliente_firma,
                     settings.adaptador_firma_url,

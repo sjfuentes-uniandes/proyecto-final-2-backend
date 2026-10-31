@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 from solventa_common import inbox
 
 COLA = "https://sqs.us-east-1.amazonaws.com/000000000000/solventa-int-avisos"
-_NOMBRES = ("SQS_AVISOS_URL", "AWS_REGION", "AWS_ENDPOINT_URL")
+_NOMBRES = ("SQS_AVISOS_URL", "AWS_REGION", "AWS_ENDPOINT_URL", "ADAPTADOR_FIRMA_URL")
 
 
 @pytest.fixture(autouse=True)
@@ -169,7 +169,8 @@ def test_sin_cola_se_registra_un_error_explicito_y_la_app_sigue(
         assert cliente.get("/health").status_code == 200
     errores = _errores(capsys.readouterr().out)
     assert [(r["message"], r["missing"]) for r in errores] == [
-        (main.MENSAJE_SIN_COLA, "SQS_AVISOS_URL")
+        (main.MENSAJE_SIN_ADAPTADOR_FIRMA, "ADAPTADOR_FIRMA_URL"),
+        (main.MENSAJE_SIN_COLA, "SQS_AVISOS_URL"),
     ]
 
 
@@ -183,7 +184,8 @@ def test_si_el_cliente_sqs_no_se_crea_se_registra_un_error_sin_la_configuracion(
     with TestClient(crear_app(Settings(sqs_avisos_url=COLA), pool=PoolFalso())):  # type: ignore[arg-type]
         pass
     salida = capsys.readouterr().out
-    assert [(r["message"], r["error_type"]) for r in _errores(salida)] == [
+    con_tipo = [r for r in _errores(salida) if "error_type" in r]
+    assert [(r["message"], r["error_type"]) for r in con_tipo] == [
         (main.MENSAJE_CONSUMIDOR_NO_ARRANCO, "ValueError")
     ]
     assert COLA not in salida
@@ -257,6 +259,56 @@ def test_sin_enviador_inyectado_la_app_arranca_igual_con_el_http_wireado(
     falla cerrado al enviar (`test_push_http.py`), sin impedir que el servicio arranque."""
     with TestClient(crear_app(Settings(), pool=PoolFalso())) as cliente:  # type: ignore[arg-type]
         assert cliente.get("/health").status_code == 200
+
+
+def test_el_timeout_hacia_adaptador_firma_supera_el_del_aliado_push() -> None:
+    # El aliado push de adaptador-firma usa 2000 ms (infra/apps/variables.tf, ally_timeouts_ms):
+    # avisos debe esperar más, para que adaptador-firma siempre alcance a responder antes.
+    assert Settings().adaptador_firma_timeout_ms > 2000
+
+
+def test_adaptador_firma_url_es_la_variable_que_inyecta_ecs_tf_por_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # infra/apps/ecs.tf:73 arma "${env_name[callee]}_URL" = "http://<callee>:8080" para cada
+    # servicio en `calls` (avisos.calls incluye adaptador-firma en infra/platform/catalog.tf).
+    monkeypatch.setenv("ADAPTADOR_FIRMA_URL", "http://adaptador-firma:8080")
+    assert Settings().adaptador_firma_url == "http://adaptador-firma:8080"
+
+
+def test_sin_url_se_registra_un_error_explicito_al_arrancar(
+    tareas_falsas: type[Tarea], capsys: pytest.CaptureFixture[str]
+) -> None:
+    with TestClient(crear_app(Settings(), pool=PoolFalso())) as cliente:  # type: ignore[arg-type]
+        assert cliente.get("/health").status_code == 200
+    errores = _errores(capsys.readouterr().out)
+    assert (main.MENSAJE_SIN_ADAPTADOR_FIRMA, "ADAPTADOR_FIRMA_URL") in [
+        (r["message"], r["missing"]) for r in errores
+    ]
+
+
+def test_con_url_no_se_registra_el_error(
+    tareas_falsas: type[Tarea], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("ADAPTADOR_FIRMA_URL", "http://adaptador-firma:8080")
+    with TestClient(crear_app(Settings(), pool=PoolFalso())):  # type: ignore[arg-type]
+        pass
+    salida = capsys.readouterr().out
+    assert main.MENSAJE_SIN_ADAPTADOR_FIRMA not in salida
+
+
+def test_un_enviador_inyectado_no_evalua_la_url_ni_avisa(
+    tareas_falsas: type[Tarea], capsys: pytest.CaptureFixture[str]
+) -> None:
+    class EnviadorFalso:
+        async def enviar(self, token: str, aviso: Any) -> bool:
+            return True
+
+    with TestClient(
+        crear_app(Settings(), pool=PoolFalso(), enviador=EnviadorFalso())  # type: ignore[arg-type]
+    ):
+        pass
+    assert main.MENSAJE_SIN_ADAPTADOR_FIRMA not in capsys.readouterr().out
 
 
 def test_una_tarea_que_no_se_detiene_a_tiempo_se_cancela_y_la_app_cierra(
