@@ -21,23 +21,31 @@
 1. **Disparo.**
    - El primer `RecaudoConfirmado` de una aceptación conocida crea, en la misma transacción que la proyección del recaudo, **una emisión `EMITIENDO`** (una por aceptación).
    - Una **tarea emisora** de `polizas`, encendida por defecto, la procesa: PDF → subida al bucket → firma de la huella por `adaptador-firma` → `ACTIVA` con su número y `PolizaEmitida` v1 en el outbox, en una sola transacción.
+   - Antes de procesar una póliza, la tarea la **reserva** (60 s), para que nunca haya dos subidas a la vez de la misma clave.
    - Un fallo deja la emisión `EMITIENDO`; la misma tarea la reintenta, con puntos de control persistidos para no repetir la subida ni la firma.
    - Pasada una hora, se mide como error. **Sin compensación.**
-2. **Número:** `100-<año de emisión>-<6 dígitos>`, con una secuencia global. **`100` es una convención de Solventa para el producto `vida-hipotecario`**, junto con su nombre de ramo, «Vida hipotecario», en una tabla de constantes de `polizas`. No es un dato del catálogo.
+2. **Número:** `100-<año>-<6 dígitos>`, con una secuencia global, donde el año es el año en que se registra la emisión (America/Bogota). **`100` es una convención de Solventa para el producto `vida-hipotecario`**, junto con su nombre de ramo, «Vida hipotecario», en una tabla de constantes de `polizas`. No es un dato del catálogo.
+   - El número **se reserva al crear la emisión**, porque el PDF lo necesita antes de `ACTIVA`.
+   - Se acepta un hueco en la secuencia.
 3. **Vigencia:** desde las 00:00 (America/Bogota) del día siguiente a la aceptación y hasta el día anterior a su aniversario. Un año, sin depender del plazo del crédito.
 4. **Documento:**
-   - un PDF determinista (`reportlab`, `invariant=1`, con la fecha tomada de `emitidaEn`), con los datos de la decisión, la aceptación y el recaudo;
+   - un PDF determinista (`reportlab`, `invariant=1`), con los datos de la decisión, la aceptación y el recaudo;
+   - la fecha del documento, y con ella `emitidaEn`, es la de **registro de la emisión** (`creada_en`). Así el PDF es idéntico entre reintentos;
+   - no se define `SOURCE_DATE_EPOCH` en el entorno: `reportlab` la usa y cambiaría el `/ID` del archivo;
    - el titular y el canal van solo como identificadores: el PDF no incluye nombres;
    - se guarda en el bucket versionado, con el cifrado exigido, y se entrega con una URL prefirmada por `versionId`, con vencimiento corto, que genera `polizas`.
 5. **Firma y verificación:**
    - se firma la huella sha256 del PDF, no el PDF;
    - `firmaId` y `selloTiempo` se guardan en la base y viajan en `PolizaEmitida`;
    - «verificable» significa que `polizas` confirma que un número y una huella coinciden con lo firmado. Basta con el versionado; sin Object Lock.
-6. **`PolizaEmitida` v1:** referencia estable al documento (clave, `versionId` y huella) y a la firma, más los identificadores (póliza, número, cotización, `claveRecaudo` y cliente), el producto, la vigencia, la prima, la suma y la moneda. Sin nombres ni datos de contacto. **Su esquema lo revisa el dueño de `avisos` y `consulta` antes de construir el productor.**
+6. **`PolizaEmitida` v1:** referencia estable al documento (clave, `versionId` y huella) y a la firma, más los identificadores (póliza, número, cotización, `claveRecaudo` y cliente), el producto, el ramo, las coberturas, la vigencia, la prima, su periodicidad, la suma y la moneda. Sin nombres ni datos de contacto.
+   - Las coberturas salen de **la instantánea de la oferta aceptada, no del catálogo vigente**: lo pidió el dueño de `consulta`, que no puede llamar a `catalogo`.
+   - `occurredAt` = `emitidaEn`.
+   - **Su esquema lo revisa el dueño de `avisos` y `consulta` antes de construir el productor.**
 7. **AC3 de HU-W17:** W17 garantiza que reintentar nunca emite otra póliza y que el evento apunta siempre al mismo documento. Reintentar el aviso, deduplicarlo por dispositivo y manejar los tokens es de HU-M11.
 8. **Pantallas** (portal, grupo `asesores`):
    - solo pasos reales, con su hora: aceptada → recaudada → documento firmado por Solventa → emitida;
-   - el nombre del titular y el del canal los compone `bff-web` con las llamadas que ya tiene, cuando existan.
+   - el nombre del titular y el del canal **no se muestran**: `clientes` no expone el nombre del cliente en ninguna ruta, y no hay una ruta de socios para `asesores`.
 
 ## Diferencias con los mockups
 
@@ -50,7 +58,7 @@
 | W17-2 y W17-4 | Nota de compensación, «Ver un caso compensado» | No se muestra (W17-3, diferido) |
 | W17-2 y W17-4 | «Presupuesto del recorrido 1,50 s», «Total de la emisión» | No se muestra: ningún tramo medible corresponde a esas cifras. La meta se vigila con la alarma `emision` |
 | W17-3 | Emisión fallida y compensada, con devolución automática | Diferido. Un fallo deja la emisión `EMITIENDO` y se reintenta |
-| W17-4 | Nombre del titular y del canal | En pantalla, si `bff-web` puede componerlos. **No en el PDF** |
+| W17-4 | Nombre del titular y del canal | No se muestran, ni en pantalla ni en el PDF: `clientes` no expone el nombre del cliente en ninguna ruta, y no hay una ruta de socios para `asesores` |
 | W17-4 | Número `100-2026-004817` y «Ramo: Vida hipotecario» | Sí, con `100` como convención (decisión 2) |
 
 ## Alternativas descartadas
@@ -65,12 +73,14 @@
 
 - **Se gana:**
   - una emisión reintentable sin duplicados y fuera del camino del consumidor;
+  - con la reserva, nunca hay dos subidas a la vez de la misma clave. Sin ella, quedaría referenciada una versión no actual del objeto, que el bucket borra a los 90 días (`infra/platform/storage.tf:132-133`);
   - un documento reproducible y verificable;
   - un contrato de evento estable para M11 y W18;
   - todo con la infraestructura existente.
 - **Se sacrifica:**
-  - el PDF no lleva nombres;
+  - ni el PDF ni la pantalla llevan nombres;
   - la pantalla no confirma el aviso;
   - no hay compensación: una emisión imposible queda `EMITIENDO`, medida como error;
   - el número usa un código de ramo propio.
+- **Hay que cambiar:** con una clave KMS propia (`use_customer_managed_key = true`), `polizas` debería enviar `SSEKMSKeyId`, y `infra/apps/ecs.tf` debería entregarle la clave. En `int` se usa `AES256` y no aplica.
 - **Si más adelante se quiere el PDF con nombres o la compensación:** habrá que cambiar `infra/` (`polizas.calls`, y un evento con su cola `polizas → dinero`).
