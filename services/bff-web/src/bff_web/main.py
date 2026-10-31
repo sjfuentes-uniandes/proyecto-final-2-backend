@@ -1,3 +1,6 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from solventa_common.telemetry import instrumentar
@@ -15,9 +18,17 @@ from bff_web.adapters.inbound import (
     suscripciones,
     usuarios,
 )
+from bff_web.adapters.outbound.clientes import cerrar_compartidos
 from bff_web.config import settings
 
-app = instrumentar(FastAPI(title=settings.service_name), settings)
+
+@asynccontextmanager
+async def ciclo(_: FastAPI) -> AsyncIterator[None]:
+    yield
+    await cerrar_compartidos()
+
+
+app = instrumentar(FastAPI(title=settings.service_name, lifespan=ciclo), settings)
 # El portal (CloudFront) y la API de canales tienen orígenes distintos; API Gateway
 # reenvía el preflight al BFF (infra/platform/edge.tf).
 app.add_middleware(

@@ -10,7 +10,7 @@ from uuid import uuid4
 import httpx
 import psycopg
 import pytest
-from clientes.adapters.outbound.postgres import RepositorioPostgres, migrar
+from clientes.adapters.outbound.postgres import RepositorioPostgres, crear_pool, migrar
 from clientes.config import Settings
 from clientes.domain.identidad.modelos import (
     DatosCliente,
@@ -45,11 +45,52 @@ def base() -> Iterator[str]:
         yield url
 
 
-@pytest.fixture
-def repo(base: str) -> RepositorioPostgres:
+@pytest.fixture(params=["sin_pool", "con_pool"])
+def repo(base: str, request: pytest.FixtureRequest) -> Iterator[RepositorioPostgres]:
+    """Cada prueba del repositorio corre sin pool (una conexión por operación) y con el pool que
+    usa la app: la semántica (transacción, idempotencia, concurrencia) debe ser la misma."""
     with psycopg.connect(base, autocommit=True) as conexion:
         conexion.execute("TRUNCATE cliente CASCADE")
-    return RepositorioPostgres(base)
+    if request.param == "sin_pool":
+        yield RepositorioPostgres(base)
+        return
+    pool = crear_pool(base, 1, 4)
+    pool.open(wait=True)
+    try:
+        yield RepositorioPostgres(base, pool)
+    finally:
+        pool.close()
+
+
+def test_el_pool_reutiliza_las_conexiones_en_lecturas_paralelas(base: str) -> None:
+    """Muchas lecturas en paralelo (el nombre de cada cliente de una vista) no abren una conexión
+    por lectura: el pool no pasa de su máximo."""
+    pool = crear_pool(base, 1, 3)
+    pool.open(wait=True)
+    try:
+        repo = RepositorioPostgres(base, pool)
+        cliente = repo.asegurar("sub-pool")
+        with ThreadPoolExecutor(max_workers=8) as hilos:
+            leidos = list(hilos.map(lambda _: repo.obtener(cliente.id), range(40)))
+        assert all(c is not None and c.id == cliente.id for c in leidos)
+        estadisticas = pool.get_stats()
+        assert estadisticas["pool_max"] == 3
+        assert estadisticas.get("connections_num", 0) <= 3
+    finally:
+        pool.close()
+
+
+def test_con_pool_un_error_deshace_la_transaccion(base: str) -> None:
+    """La conexión vuelve al pool sin la transacción a medias: la siguiente operación funciona."""
+    pool = crear_pool(base, 1, 1)
+    pool.open(wait=True)
+    try:
+        repo = RepositorioPostgres(base, pool)
+        with pytest.raises(psycopg.errors.UndefinedTable), repo._conectar() as conexion:
+            conexion.execute("SELECT * FROM tabla_que_no_existe")
+        assert repo.asegurar("sub-tras-error").sub == "sub-tras-error"
+    finally:
+        pool.close()
 
 
 def test_la_tabla_no_guarda_biometria(base: str) -> None:

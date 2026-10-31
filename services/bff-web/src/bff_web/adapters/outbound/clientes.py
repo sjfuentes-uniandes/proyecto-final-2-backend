@@ -1,5 +1,12 @@
-"""Cliente HTTP de la API interna de clientes (/v1/clientes, HU-W30 y lectura de HU-W31)."""
+"""Cliente HTTP de la API interna de clientes (/v1/clientes, HU-W30 y lectura de HU-W31).
 
+Las llamadas reutilizan un `httpx.AsyncClient` por event loop y URL (conexiones persistentes): las
+vistas que componen el nombre del cliente hacen varias lecturas en paralelo y abrir una conexión
+por llamada las hacía llegar tarde a clientes. Con `transporte` (pruebas) se crea uno por llamada.
+"""
+
+import asyncio
+import weakref
 from typing import Any
 from uuid import UUID
 
@@ -7,6 +14,23 @@ import httpx
 from solventa_common.correlation import cliente_async
 
 ROL_ASESOR = "ASESOR"
+
+# event loop → URL base → cliente compartido. Un AsyncClient queda atado al loop donde se usa.
+_compartidos: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, httpx.AsyncClient]]" = weakref.WeakKeyDictionary()
+
+
+def _compartido(url: str) -> httpx.AsyncClient:
+    por_url = _compartidos.setdefault(asyncio.get_running_loop(), {})
+    cliente = por_url.get(url)
+    if cliente is None or cliente.is_closed:
+        cliente = por_url[url] = cliente_async(base_url=url)
+    return cliente
+
+
+async def cerrar_compartidos() -> None:
+    """Cierra los clientes del loop actual (al apagar la app)."""
+    for cliente in _compartidos.pop(asyncio.get_running_loop(), {}).values():
+        await cliente.aclose()
 
 
 class ErrorClientes(Exception):
@@ -28,12 +52,21 @@ class ClientesCliente:
 
     async def _llamar(self, metodo: str, ruta: str, actor: str, **opciones: Any) -> tuple[int, Any]:
         encabezados = {"X-Actor-Id": actor, "X-Actor-Rol": ROL_ASESOR}
-        async with cliente_async(
-            base_url=self.url, timeout=self.timeout, transport=self.transporte
-        ) as cliente:
-            respuesta = await cliente.request(
-                metodo, f"/v1/clientes{ruta}", headers=encabezados, **opciones
+        if self.transporte is None:
+            respuesta = await _compartido(self.url).request(
+                metodo,
+                f"/v1/clientes{ruta}",
+                headers=encabezados,
+                timeout=self.timeout,
+                **opciones,
             )
+        else:
+            async with cliente_async(
+                base_url=self.url, timeout=self.timeout, transport=self.transporte
+            ) as cliente:
+                respuesta = await cliente.request(
+                    metodo, f"/v1/clientes{ruta}", headers=encabezados, **opciones
+                )
         if respuesta.status_code >= 400:
             try:
                 cuerpo = respuesta.json()

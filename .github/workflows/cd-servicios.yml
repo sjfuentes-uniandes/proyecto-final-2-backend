@@ -1,13 +1,171 @@
 name: CD servicios
+
 on:
   push:
     branches: [main]
-    paths: ["services/**", "libs/**"]
+    paths:
+      - "services/**"
+      - "libs/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/cd-servicios.yml"
+  workflow_dispatch:
+    inputs:
+      ambiente:
+        description: Ambiente (carpeta infra/envs/<ambiente>)
+        type: string
+        default: int
+        required: true
+      servicios:
+        description: Servicios separados por coma (vacío = los que cambiaron en el último commit)
+        type: string
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: infra-${{ inputs.ambiente || 'int' }}
+  cancel-in-progress: false
+
+env:
+  ENV: ${{ inputs.ambiente || 'int' }}
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  AUTO_APPROVE: "1"
 
 jobs:
-  desplegar:
+  cambios:
     runs-on: ubuntu-latest
+    outputs:
+      servicios: ${{ steps.detectar.outputs.servicios }}
+      lista: ${{ steps.detectar.outputs.lista }}
     steps:
       - uses: actions/checkout@v4
-      # TODO: detectar servicios cambiados, construir imagen, publicar en ECR y desplegar a int.
-      - run: echo "Pendiente"
+        with: { fetch-depth: 0 }
+      - id: detectar
+        name: Detectar servicios a desplegar
+        env:
+          PEDIDOS: ${{ inputs.servicios }}
+          ANTES: ${{ github.event.before }}
+        run: |
+          if [ -n "$PEDIDOS" ]; then
+            candidatos=$(tr ', ' '\n\n' <<<"$PEDIDOS")
+          else
+            # Primer push de la rama (before = 0…0) o ejecución manual sin lista: el último commit.
+            if [ -z "$ANTES" ] || [ "$ANTES" = "0000000000000000000000000000000000000000" ] \
+              || ! git cat-file -e "$ANTES^{commit}" 2>/dev/null; then
+              ANTES="HEAD~1"
+            fi
+            cambios=$(git diff --name-only "$ANTES" HEAD)
+            if grep -qE '^(libs/|pyproject.toml|uv.lock)' <<<"$cambios"; then
+              candidatos=$(ls services)
+            else
+              # Un cambio solo en services/<servicio>/tests/ no cambia la imagen.
+              candidatos=$(awk -F/ '$1=="services" && $3!="tests"{print $2}' <<<"$cambios")
+            fi
+          fi
+          # Solo los servicios con imagen (los que tienen Dockerfile).
+          for s in $(sort -u <<<"$candidatos" | sed '/^$/d'); do
+            [ -f "services/$s/Dockerfile" ] && echo "$s"
+          done > "$RUNNER_TEMP/servicios.txt" || true
+          servicios=$(jq -R . "$RUNNER_TEMP/servicios.txt" | jq -sc .)
+          lista=$(paste -sd, "$RUNNER_TEMP/servicios.txt")
+          echo "servicios=$servicios" >> "$GITHUB_OUTPUT"
+          echo "lista=$lista" >> "$GITHUB_OUTPUT"
+          echo "### Servicios a desplegar en \`${ENV}\`: ${lista:-ninguno}" >> "$GITHUB_STEP_SUMMARY"
+
+  pruebas:
+    needs: cambios
+    if: needs.cambios.outputs.servicios != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: true
+      matrix:
+        servicio: ${{ fromJson(needs.cambios.outputs.servicios) }}
+    steps:
+      - uses: actions/checkout@v4
+      - if: matrix.servicio != 'simulador-aliados'
+        uses: ./.github/actions/preparar-python
+      # Mismo criterio que la CI: lint solo en los servicios que ya cumplen ruff.
+      - if: contains(fromJson('["catalogo","cotizacion","adaptador-datos","api-socios","clientes","adaptador-identidad","bff-movil"]'), matrix.servicio)
+        run: make lint SERVICE=${{ matrix.servicio }}
+      - if: matrix.servicio != 'simulador-aliados'
+        run: make test-unit SERVICE=${{ matrix.servicio }}
+      - if: matrix.servicio == 'simulador-aliados'
+        name: Validar los JSON de los mapeos
+        run: |
+          shopt -s globstar
+          for f in services/simulador-aliados/mappings/**/*.json; do jq empty "$f"; done
+
+  imagenes:
+    needs: [cambios, pruebas]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SERVICES: ${{ needs.cambios.outputs.lista }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/preparar-infra
+        with:
+          aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Construir y publicar en ECR
+        run: make infra-imagenes
+
+  plan-aplicaciones:
+    needs: imagenes
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      cambios: ${{ steps.plan.outputs.cambios }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/preparar-infra
+        with:
+          aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Plan
+        id: plan
+        uses: ./.github/actions/plan-terraform
+        with:
+          raiz: apps
+          titulo: Aplicaciones
+
+  aplicaciones:
+    needs: [cambios, plan-aplicaciones]
+    if: needs.plan-aplicaciones.outputs.cambios == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.ambiente || 'int' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/preparar-infra
+        with:
+          aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: plan-apps
+          path: ${{ runner.temp }}
+
+      - name: Aplicar plan aprobado
+        env:
+          PLAN_FILE: ${{ runner.temp }}/apps.tfplan
+        run: make infra-aplicaciones
+
+      - name: Resumen
+        if: success()
+        env:
+          LISTA: ${{ needs.cambios.outputs.lista }}
+        run: |
+          echo "### Desplegado en \`${ENV}\`: ${LISTA} (commit \`${GITHUB_SHA::12}\`)" >> "$GITHUB_STEP_SUMMARY"

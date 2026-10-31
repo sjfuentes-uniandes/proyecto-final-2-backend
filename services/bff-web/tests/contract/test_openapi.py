@@ -172,6 +172,17 @@ def test_contrato_de_clientes() -> None:
     }
 
 
+def test_el_nombre_que_compone_el_bff_existe_en_la_lectura_de_clientes() -> None:
+    """Cotizaciones abiertas y la suscripción leen `nombreCompleto` de GET /v1/clientes/{id}
+    (`application/nombres.py`). Las pruebas unitarias simulan a clientes: esta verifica que el campo
+    exista en su contrato publicado."""
+    contrato = yaml.safe_load(CLIENTES.read_text(encoding="utf-8"))
+    respuesta = contrato["paths"]["/v1/clientes/{cliente_id}"]["get"]["responses"]["200"]
+    ref = respuesta["content"]["application/json"]["schema"]["$ref"]
+    esquema = contrato["components"]["schemas"][ref.rsplit("/", 1)[-1]]
+    assert "nombreCompleto" in esquema["properties"]
+
+
 # HU-W31 (PR 3.5): lectura de consentimientos para el asesor, con los esquemas de clientes.
 # `ConsentimientoDto` ya es el de cotizacion (dentro del perfil): el de clientes se publica como
 # `ConsentimientoClienteDto`, igual salvo el título.
