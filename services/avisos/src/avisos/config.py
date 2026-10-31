@@ -29,5 +29,12 @@ class Settings(ServiceSettings):
     # Cuánto reserva una tarea una entrega mientras envía; debe superar el timeout del envío.
     entregas_lease_s: float = Field(60.0, gt=0)
 
+    # HU-M11: envío del push a través de adaptador-firma (infra/platform/catalog.tf: avisos.calls).
+    # Sin URL (local y pruebas), el servicio falla cerrado (avisos.adapters.outbound.push_http).
+    adaptador_firma_url: str | None = Field(None, validation_alias=_env("ADAPTADOR_FIRMA_URL"))
+    # Mayor que el timeout del aliado push en adaptador-firma (2000 ms, ally_timeouts_ms), para que
+    # el adaptador siempre pueda responder antes de que avisos agote su propio timeout.
+    adaptador_firma_timeout_ms: int = Field(3000, ge=1)
+
 
 settings = Settings()
