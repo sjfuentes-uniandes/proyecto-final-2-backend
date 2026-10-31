@@ -899,6 +899,7 @@ async def test_c01_de_la_aceptacion_a_la_poliza_activa_verificable_y_su_evento_e
         payload["polizaId"],
         payload["numero"],
     )
+    assert poliza["clienteId"] == C01  # 17.11c: el titular, el de la aceptación
     assert poliza["documento"] == {
         "huella": documento["huella"],
         "versionId": documento["versionId"],

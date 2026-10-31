@@ -1537,6 +1537,11 @@ components:
           type: string
           format: uuid
           title: Polizaid
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+          description: 'El titular: el cliente de la aceptación'
         estado:
           $ref: '#/components/schemas/EstadoPoliza'
         numero:
@@ -1599,6 +1604,7 @@ components:
       type: object
       required:
       - polizaId
+      - clienteId
       - estado
       - numero
       - producto

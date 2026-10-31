@@ -89,6 +89,18 @@ ESTADOS_POLIZA = {
 POLIZA_ID = "00000000-0000-4000-9000-000000000001"
 RUTA_POLIZA = f"/v1/cotizaciones/{COTIZACION_RECAUDO}/poliza"
 RUTA_DOCUMENTO = f"/v1/polizas/{POLIZA_ID}/documento"
+# 17.11c: el titular de la póliza y lo que clientes responde para él (`ClienteLecturaDto`,
+# clientes.yaml) en el estado de la póliza activa; de ahí sale `titularNombre`.
+TITULAR_ID = "00000000-0000-4000-8000-000000000001"
+TITULAR_NOMBRE = "Natalia González Ruiz"
+TITULAR = {
+    "clienteId": TITULAR_ID,
+    "estado": "VERIFICADO",
+    "verificadoEn": "2026-10-20T14:00:00Z",
+    "proveedor": "KYC",
+    "referencia": "kyc-ref-001",
+    "nombreCompleto": TITULAR_NOMBRE,
+}
 SIN_DATOS: dict[str, Any] = {
     "vigenteHasta": None,
     "motivoCliente": None,
@@ -278,6 +290,7 @@ def _poliza(estado: str) -> httpx.Response:
     recaudo confirmado de `_recaudo`), su EnlaceDocumento, el 409 mientras se emite o el 404."""
     emitiendo = {
         "polizaId": POLIZA_ID,
+        "clienteId": TITULAR_ID,
         "estado": "EMITIENDO",
         "numero": "100-2026-000001",
         "producto": {"id": "vida-hipotecario", "version": "2026.09.1"},
@@ -380,6 +393,22 @@ class PolizasSimulado:
         )
 
 
+class ClientesSimulado:
+    """GET /v1/clientes/{id}: el titular sembrado (17.11c) o, para cualquier otro cliente, una
+    lectura sin nombre (el `clienteNombre` de la suscripción sale null, como antes)."""
+
+    def __init__(self) -> None:
+        self.titular: dict[str, Any] | None = None
+        self.pedidos: list[str] = []
+
+    def responder(self, pedido: httpx.Request) -> httpx.Response:
+        cliente_id = pedido.url.path.rsplit("/", 1)[-1]
+        self.pedidos.append(cliente_id)
+        if self.titular is not None and self.titular["clienteId"] == cliente_id:
+            return httpx.Response(200, json=self.titular)
+        return httpx.Response(200, json={"id": cliente_id})
+
+
 @contextmanager
 def _servir(aplicacion: FastAPI) -> Iterator[str]:
     zocalo = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -404,12 +433,16 @@ def _servir(aplicacion: FastAPI) -> Iterator[str]:
         hilo.join(timeout=15)
 
 
-def _sembrar(polizas: PolizasSimulado, state: str, parametros: dict[str, Any]) -> None:
-    """Siembra en polizas lo que el estado del proveedor describe; uno desconocido falla."""
+def _sembrar(
+    polizas: PolizasSimulado, clientes: ClientesSimulado, state: str, parametros: dict[str, Any]
+) -> None:
+    """Siembra en polizas (y en clientes, el titular de la póliza activa) lo que el estado del
+    proveedor describe; uno desconocido falla."""
     polizas.decision = None
     polizas.aceptacion = None
     polizas.recaudo = None
     polizas.poliza = None
+    clientes.titular = None
     if state in ESTADOS_ACEPTACION:
         polizas.aceptacion = state
         return
@@ -418,6 +451,8 @@ def _sembrar(polizas: PolizasSimulado, state: str, parametros: dict[str, Any]) -
         return
     if state in ESTADOS_POLIZA:
         polizas.poliza = state
+        if state == POLIZA_ACTIVA:
+            clientes.titular = TITULAR
         return
     if state == NO_EXISTE:
         return
@@ -430,18 +465,21 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
     assert PACTO.exists(), "Copiar el pacto del portal (web/pacts/portal-web-bff-web.json)"
     monkeypatch.setattr(settings, "jwt_issuers", {"backoffice": EMISOR})
     polizas = PolizasSimulado()
-    clientes = httpx.MockTransport(
-        lambda pedido: httpx.Response(200, json={"id": pedido.url.path.rsplit("/", 1)[-1]})
-    )
+    clientes = ClientesSimulado()
     cliente_polizas = PolizasCliente(
         "http://polizas:8080", 1500, httpx.MockTransport(polizas.responder)
     )
+    cliente_clientes = ClientesCliente(
+        "http://clientes:8080", 1500, httpx.MockTransport(clientes.responder)
+    )
     app.dependency_overrides[ruta.suscripciones] = lambda: Suscripciones(
-        cliente_polizas, ClientesCliente("http://clientes:8080", 1500, clientes), 200
+        cliente_polizas, cliente_clientes, 200
     )
     app.dependency_overrides[ruta_aceptacion.aceptaciones] = lambda: Aceptaciones(cliente_polizas)
     app.dependency_overrides[ruta_recaudo.recaudos] = lambda: Recaudos(cliente_polizas)
-    app.dependency_overrides[ruta_poliza.polizas] = lambda: Polizas(cliente_polizas)
+    app.dependency_overrides[ruta_poliza.polizas] = lambda: Polizas(
+        cliente_polizas, cliente_clientes, 200
+    )
     vistos: list[tuple[str, str | None]] = []
 
     def estado(state: str, action: str, parameters: dict[str, Any] | None) -> None:
@@ -450,7 +488,7 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
             return
         parametros = parameters or {}
         vistos.append((state, parametros.get("caso")))
-        _sembrar(polizas, state, parametros)
+        _sembrar(polizas, clientes, state, parametros)
 
     try:
         with _servir(app) as url:
@@ -525,7 +563,7 @@ def test_los_estados_del_recaudo_responden_lo_que_promete_bff_web(
         "http://polizas:8080", 1500, httpx.MockTransport(polizas.responder)
     )
     app.dependency_overrides[ruta_recaudo.recaudos] = lambda: Recaudos(cliente_polizas)
-    _sembrar(polizas, state, {"cotizacionId": COTIZACION_RECAUDO})
+    _sembrar(polizas, ClientesSimulado(), state, {"cotizacionId": COTIZACION_RECAUDO})
     try:
         respuesta = TestClient(app).get(
             f"/v1/cotizaciones/{COTIZACION_RECAUDO}/recaudo",
@@ -562,14 +600,21 @@ def test_los_estados_de_la_poliza_responden_lo_que_promete_bff_web(
     monkeypatch: pytest.MonkeyPatch, state: str, ruta_: str, status: int, esperado: str | None
 ) -> None:
     """HU-W17 (17.11): los estados que usará la 17.12 ya existen y pasan por la app real (DTO,
-    lista blanca y rol) antes de que el pacto los traiga."""
+    lista blanca y rol) antes de que el pacto los traiga. 17.11c: la póliza activa, con el nombre
+    del titular sembrado en clientes, para que la 17.12b pueda pactar `titularNombre`."""
     monkeypatch.setattr(settings, "jwt_issuers", {"backoffice": EMISOR})
     polizas = PolizasSimulado()
+    clientes = ClientesSimulado()
     cliente_polizas = PolizasCliente(
         "http://polizas:8080", 1500, httpx.MockTransport(polizas.responder)
     )
-    app.dependency_overrides[ruta_poliza.polizas] = lambda: Polizas(cliente_polizas)
-    _sembrar(polizas, state, {"cotizacionId": COTIZACION_RECAUDO, "polizaId": POLIZA_ID})
+    cliente_clientes = ClientesCliente(
+        "http://clientes:8080", 1500, httpx.MockTransport(clientes.responder)
+    )
+    app.dependency_overrides[ruta_poliza.polizas] = lambda: Polizas(
+        cliente_polizas, cliente_clientes, 200
+    )
+    _sembrar(polizas, clientes, state, {"cotizacionId": COTIZACION_RECAUDO, "polizaId": POLIZA_ID})
     try:
         respuesta = TestClient(app).get(
             ruta_,
@@ -596,4 +641,8 @@ def test_los_estados_de_la_poliza_responden_lo_que_promete_bff_web(
             activa,
         )
         assert (cuerpo["firma"] is not None) == activa
+        # El nombre del titular solo con la póliza activa; el `clienteId` no llega al portal.
+        assert cuerpo["titularNombre"] == (TITULAR_NOMBRE if activa else None)
+        assert "clienteId" not in cuerpo
+        assert clientes.pedidos == ([TITULAR_ID] if activa else [])
     assert polizas.roles == ["ASESOR"]

@@ -4673,6 +4673,13 @@ components:
           - $ref: '#/components/schemas/FirmaPolizaDto'
           - type: 'null'
           description: Nula hasta que se firma su huella
+        titularNombre:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Titularnombre
+          description: Nombre del titular según clientes, solo con la póliza ACTIVA;
+            nulo mientras se emite o si clientes no lo da a tiempo
       type: object
       required:
       - polizaId
@@ -4691,6 +4698,7 @@ components:
       - emitidaEn
       - documento
       - firma
+      - titularNombre
       title: Poliza
       description: 'La póliza de la oferta aceptada (ADR 0014). `emitidaEn`, `documento`
         y `firma` son nulos

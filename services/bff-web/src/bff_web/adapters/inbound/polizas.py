@@ -8,8 +8,9 @@ Los DTO son copia de los de polizas (contracts/openapi/polizas.yaml) con los mis
 tests/contract/test_openapi.py verifica que sus esquemas sean iguales. El cuerpo de polizas se
 valida contra el DTO antes de devolverlo: si no lo cumple, 503 (falla cerrada).
 
-Sin el nombre del titular ni el del canal (ADR 0014, decisión 8): la póliza de polizas no trae el
-`clienteId` ni el `socioId` con que componerlos.
+`Poliza` es la excepción (17.11c): sin el `clienteId` de polizas y con `titularNombre`, compuesto
+desde clientes solo con la póliza ACTIVA (null si no se obtiene). Sin el nombre del canal: no hay
+ruta de socios para asesores (ADR 0014, decisión 8).
 """
 
 from datetime import date, datetime
@@ -27,6 +28,7 @@ from bff_web.adapters.inbound.autorizacion import requerir_grupo
 from bff_web.adapters.inbound.cotizaciones import CoberturaProductoDto, TextoDecimal
 from bff_web.adapters.inbound.perfilamiento import actor
 from bff_web.adapters.inbound.socios import ErrorDto
+from bff_web.adapters.outbound.clientes import ClientesCliente
 from bff_web.adapters.outbound.polizas import PolizasCliente
 from bff_web.application.poliza import Polizas
 from bff_web.application.suscripcion import servicio_no_disponible
@@ -74,6 +76,7 @@ class FirmaPolizaDto(_Dto):
     sello_tiempo: datetime
 
 
+# La de polizas sin `clienteId` y con `titularNombre` (17.11c).
 class Poliza(_Dto):
     """La póliza de la oferta aceptada (ADR 0014). `emitidaEn`, `documento` y `firma` son nulos
     mientras no estén registrados."""
@@ -94,6 +97,10 @@ class Poliza(_Dto):
     emitida_en: datetime | None = Field(description="Nulo mientras se emite")
     documento: DocumentoPolizaDto | None = Field(description="Nulo hasta que se sube el PDF")
     firma: FirmaPolizaDto | None = Field(description="Nula hasta que se firma su huella")
+    titular_nombre: str | None = Field(
+        description="Nombre del titular según clientes, solo con la póliza ACTIVA; nulo mientras "
+        "se emite o si clientes no lo da a tiempo"
+    )
 
 
 class EnlaceDocumento(_Dto):
@@ -122,7 +129,11 @@ router = APIRouter(
 
 @lru_cache
 def polizas() -> Polizas:
-    return Polizas(PolizasCliente(settings.polizas_url, settings.polizas_timeout_ms))
+    return Polizas(
+        PolizasCliente(settings.polizas_url, settings.polizas_timeout_ms),
+        ClientesCliente(settings.clientes_url, settings.clientes_timeout_ms),
+        settings.nombre_cliente_timeout_ms,
+    )
 
 
 Servicio = Annotated[Polizas, Depends(polizas)]

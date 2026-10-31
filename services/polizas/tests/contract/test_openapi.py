@@ -186,6 +186,7 @@ def test_contrato_de_la_poliza() -> None:
         == set(poliza["properties"])
         == {
             "polizaId",
+            "clienteId",
             "estado",
             "numero",
             "producto",
@@ -204,6 +205,8 @@ def test_contrato_de_la_poliza() -> None:
         }
     )
     assert esquemas["EstadoPoliza"]["enum"] == ["EMITIENDO", "ACTIVA"]
+    # 17.11c: el titular, para que bff-web componga su nombre.
+    assert poliza["properties"]["clienteId"]["format"] == "uuid"
     for monto in ("sumaAsegurada", "prima"):
         assert poliza["properties"][monto]["type"] == "string"
         assert poliza["properties"][monto]["pattern"] == r"^-?\d+(\.\d+)?$"

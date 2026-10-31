@@ -113,6 +113,8 @@ def _cuerpo_base(poliza: Poliza, aceptacion: Any, sinteticos: Any) -> dict[str, 
     insumos = sinteticos.insumos("S01")
     return {
         "polizaId": str(poliza.poliza_id),
+        # 17.11c: el titular, el de la aceptación; bff-web compone su nombre.
+        "clienteId": str(aceptacion.cliente_id),
         "estado": poliza.estado.value,
         "numero": poliza.numero,
         "producto": {"id": "vida-hipotecario", "version": insumos.version_producto},
@@ -208,7 +210,7 @@ def test_activa_con_su_documento_y_su_firma(
     # Lo interno no sale: ni la clave del objeto, ni el fallo, ni la reserva, ni pasos.
     texto_cuerpo = json.dumps(cuerpo)
     assert "polizas/" not in texto_cuerpo
-    assert not {"clave", "ultimoFallo", "reservadaHasta", "pasos", "clienteId"} & set(cuerpo)
+    assert not {"clave", "ultimoFallo", "reservadaHasta", "pasos"} & set(cuerpo)
 
 
 # --- GET /v1/polizas/{polizaId}/documento -----------------------------------------------------

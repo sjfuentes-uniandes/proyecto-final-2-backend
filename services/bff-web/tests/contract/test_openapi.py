@@ -390,11 +390,10 @@ def test_contrato_de_recaudo() -> None:
     assert {p["name"] for p in consultar["parameters"] if p["required"]} == {"cotizacionId"}
 
 
-# HU-W17 (17.11): la póliza y la URL de su documento; DTO copiados de polizas. Sin
-# `titularNombre` ni `canalNombre`: la póliza de polizas no trae el `clienteId` ni el `socioId`
-# con que componerlos (ADR 0014, decisión 8).
+# HU-W17 (17.11): la póliza y la URL de su documento; DTO copiados de polizas. 17.11c: `Poliza`
+# deja fuera el `clienteId` de polizas y agrega `titularNombre`, compuesto desde clientes. Sin
+# `canalNombre`: no hay ruta de socios para asesores (ADR 0014, decisión 8).
 ESQUEMAS_POLIZA = (
-    "Poliza",
     "EstadoPoliza",
     "ProductoPolizaDto",
     "RamoPolizaDto",
@@ -413,6 +412,17 @@ def test_dto_de_poliza_iguales_a_polizas() -> None:
     de_polizas = yaml.safe_load(POLIZAS.read_text(encoding="utf-8"))
     for nombre in ESQUEMAS_POLIZA:
         assert propios[nombre] == de_polizas["components"]["schemas"][nombre], nombre
+    # `Poliza`: los mismos campos que la de polizas salvo el `clienteId`, que no llega al portal, y
+    # `titularNombre` como adicional (texto o null, siempre presente).
+    propia, base = propios["Poliza"], de_polizas["components"]["schemas"]["Poliza"]
+    assert "clienteId" in base["properties"]
+    assert set(propia["properties"]) == set(base["properties"]) - {"clienteId"} | {"titularNombre"}
+    for campo in set(base["properties"]) - {"clienteId"}:
+        assert propia["properties"][campo] == base["properties"][campo], campo
+    assert set(propia["required"]) == set(base["required"]) - {"clienteId"} | {"titularNombre"}
+    assert (propia["type"], propia["title"]) == (base["type"], base["title"])
+    titular = propia["properties"]["titularNombre"]
+    assert {t["type"] for t in titular["anyOf"]} == {"string", "null"}
     # La respuesta 200 de cada ruta es la de polizas.
     rutas = app.openapi()["paths"]
     for ruta in (POLIZA, DOCUMENTO):

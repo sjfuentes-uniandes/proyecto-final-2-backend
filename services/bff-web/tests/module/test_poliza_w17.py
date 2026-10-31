@@ -1,4 +1,5 @@
-"""MT-W17-11 (17.11): del portal a la póliza y la URL de su documento, con `polizas` real.
+"""MT-W17-11 (17.11 y 17.11c): del portal a la póliza y la URL de su documento, con `polizas`
+real.
 
 Cadena: `bff-web` -> `polizas` (uvicorn + PostgreSQL de Testcontainers, con sus migraciones), con su
 consumidor de `polizas-recaudos` y su tarea emisora reales, contra un LocalStack 4.14.0 con SQS y S3
@@ -11,6 +12,10 @@ La suscripción y la aceptación se registran por la API de polizas; el `Recaudo
 la cola. Con la firma caída, la póliza queda EMITIENDO con su documento subido: 200 y el documento
 409. Con la firma, ACTIVA: 200 y la URL del portal descarga el PDF, cuyo sha256 es la huella. Sin
 recaudo confirmado, 404; con polizas caído, 503. Solo datos sintéticos.
+
+17.11c: clientes se simula con su contrato (`ClienteLecturaDto` de GET /v1/clientes/{cliente_id}),
+servido por HTTP. ACTIVA sale con el nombre del titular de S01; con clientes caído, sin nombre y 200.
+EMITIENDO no llama a clientes.
 """
 
 import asyncio
@@ -81,6 +86,7 @@ TODAS = {
     "avisosElectronicos": True,
 }
 RESUELTO_EN = "2026-10-22T15:00:01.250000Z"
+TITULAR_NOMBRE = "Natalia González Ruiz"
 TABLAS = "polizas, aceptaciones, decisiones_suscripcion, outbox, inbox, recaudos_aceptacion"
 
 
@@ -145,6 +151,35 @@ class Firma:
                 "firmaId": "FIR-SINT-C01",
                 "selloTiempo": "2026-01-01T00:00:00Z",
                 "huella": cuerpo["huella"],
+            }
+        )
+
+
+class Clientes:
+    """clientes con su contrato (17.11c): el `ClienteLecturaDto` del titular de S01, con el nombre
+    con que se dio de alta; cualquier otro cliente, 404 CLIENTE_NO_ENCONTRADO."""
+
+    def __init__(self) -> None:
+        self.pedidos: list[tuple[str, str | None, str | None]] = []
+        self.url = ""
+
+    async def leer(self, pedido: Request) -> JSONResponse:
+        cliente_id = pedido.path_params["cliente_id"]
+        self.pedidos.append(
+            (cliente_id, pedido.headers.get("X-Actor-Id"), pedido.headers.get("X-Actor-Rol"))
+        )
+        if cliente_id != S01["clienteId"]:
+            return JSONResponse(
+                {"codigo": "CLIENTE_NO_ENCONTRADO", "mensaje": "m", "detalles": {}}, 404
+            )
+        return JSONResponse(
+            {
+                "clienteId": cliente_id,
+                "estado": "VERIFICADO",
+                "verificadoEn": "2026-10-20T14:00:00Z",
+                "proveedor": "KYC",
+                "referencia": "kyc-ref-001",
+                "nombreCompleto": TITULAR_NOMBRE,
             }
         )
 
@@ -279,6 +314,16 @@ def firma() -> Iterator[Firma]:
 
 
 @pytest.fixture(scope="module")
+def clientes() -> Iterator[Clientes]:
+    clientes = Clientes()
+    servidor = Servidor(Starlette(routes=[Route("/v1/clientes/{cliente_id}", clientes.leer)]))
+    servidor.arrancar()
+    clientes.url = servidor.url
+    yield clientes
+    servidor.apagar()
+
+
+@pytest.fixture(scope="module")
 def polizas(base: str, localstack: str, aws: dict[str, Any], firma: Firma) -> Iterator[Servidor]:
     ajustes = AjustesPolizas(
         SOLVENTA_DATABASE_URL=base,
@@ -295,21 +340,33 @@ def polizas(base: str, localstack: str, aws: dict[str, Any], firma: Firma) -> It
     servidor.apagar()
 
 
-def _portal(monkeypatch: pytest.MonkeyPatch, polizas_url: str) -> TestClient:
+def _portal(monkeypatch: pytest.MonkeyPatch, polizas_url: str, clientes_url: str) -> TestClient:
     monkeypatch.setattr(settings, "jwt_issuers", {"backoffice": BACKOFFICE})
     monkeypatch.setattr(settings, "polizas_url", polizas_url)
+    monkeypatch.setattr(settings, "clientes_url", clientes_url)
     ruta.polizas.cache_clear()
     return TestClient(portal_app, headers=ASESOR)
 
 
+def _puerto_cerrado() -> str:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as zocalo:
+        zocalo.bind(("127.0.0.1", 0))
+        return f"http://127.0.0.1:{zocalo.getsockname()[1]}"
+
+
 @pytest.fixture
 def portal(
-    polizas: Servidor, base: str, firma: Firma, monkeypatch: pytest.MonkeyPatch
+    polizas: Servidor,
+    base: str,
+    firma: Firma,
+    clientes: Clientes,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[TestClient]:
     with psycopg.connect(base, autocommit=True) as conexion:
         conexion.execute(f"TRUNCATE {TABLAS}")
     firma.caida = False
-    with _portal(monkeypatch, polizas.url) as cliente:
+    clientes.pedidos.clear()
+    with _portal(monkeypatch, polizas.url, clientes.url) as cliente:
         yield cliente
     ruta.polizas.cache_clear()
 
@@ -389,7 +446,12 @@ def _documento(portal: TestClient, poliza_id: str) -> httpx.Response:
 
 
 def test_emitiendo_200_y_su_documento_409(
-    portal: TestClient, polizas: Servidor, aws: dict[str, Any], firma: Firma, base: str
+    portal: TestClient,
+    polizas: Servidor,
+    aws: dict[str, Any],
+    firma: Firma,
+    base: str,
+    clientes: Clientes,
 ) -> None:
     # La firma caída deja la póliza EMITIENDO con el documento ya subido.
     firma.caida = True
@@ -414,6 +476,9 @@ def test_emitiendo_200_y_su_documento_409(
     assert datetime.fromisoformat(poliza["aceptadaEn"]) == datetime.fromisoformat(
         aceptacion["aceptadaEn"]
     )
+    # 17.11c: mientras se emite, sin nombre y sin llamar a clientes (el portal consulta en bucle).
+    assert (poliza["titularNombre"], clientes.pedidos) == (None, [])
+    assert "clienteId" not in poliza
 
     documento = _documento(portal, poliza["polizaId"])
     assert (documento.status_code, documento.json()["codigo"]) == (409, "POLIZA_NO_ACTIVA")
@@ -459,6 +524,45 @@ def test_activa_200_y_la_url_descarga_el_pdf(
     assert len(descarga.content) == fila["documento_tamano_bytes"]
 
 
+def _activa(polizas: Servidor, aws: dict[str, Any], base: str) -> dict[str, Any]:
+    """S01 aceptada, con el recaudo confirmado y la póliza ya ACTIVA."""
+    aceptacion = _aceptar(polizas)
+    _confirmar(aws, aceptacion["id"])
+    _esperar(base, "SELECT poliza_id FROM polizas WHERE estado = 'ACTIVA'")
+    return aceptacion
+
+
+def test_activa_con_el_nombre_del_titular(
+    portal: TestClient, polizas: Servidor, aws: dict[str, Any], base: str, clientes: Clientes
+) -> None:
+    aceptacion = _activa(polizas, aws, base)
+    respuesta = _poliza(portal, aceptacion["cotizacionId"])
+    assert respuesta.status_code == 200, respuesta.json()
+    poliza = respuesta.json()
+    assert (poliza["estado"], poliza["titularNombre"]) == ("ACTIVA", TITULAR_NOMBRE)
+    # El titular que registró polizas (el de la aceptación), pedido como el asesor; sin el
+    # `clienteId` en la respuesta.
+    assert clientes.pedidos == [(S01["clienteId"], "sub-asesora", "ASESOR")]
+    assert "clienteId" not in poliza and S01["clienteId"] not in respuesta.text
+
+
+def test_activa_con_clientes_caido_200_sin_nombre(
+    portal: TestClient,
+    polizas: Servidor,
+    aws: dict[str, Any],
+    base: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    aceptacion = _activa(polizas, aws, base)
+    monkeypatch.setattr(settings, "clientes_url", _puerto_cerrado())
+    ruta.polizas.cache_clear()
+    respuesta = _poliza(portal, aceptacion["cotizacionId"])
+    assert respuesta.status_code == 200, respuesta.json()
+    poliza = respuesta.json()
+    assert (poliza["estado"], poliza["titularNombre"]) == ("ACTIVA", None)
+    assert poliza["firma"]["firmaId"] == "FIR-SINT-C01"
+
+
 def test_sin_poliza_404(portal: TestClient, polizas: Servidor) -> None:
     # Aceptada y con el recaudo pendiente: no hay póliza (AC2).
     aceptacion = _aceptar(polizas)
@@ -473,14 +577,12 @@ def test_sin_poliza_404(portal: TestClient, polizas: Servidor) -> None:
 
 
 def test_polizas_caido_503(monkeypatch: pytest.MonkeyPatch) -> None:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as zocalo:
-        zocalo.bind(("127.0.0.1", 0))
-        cerrado = f"http://127.0.0.1:{zocalo.getsockname()[1]}"
+    cerrado = _puerto_cerrado()
     pedidos: list[Callable[[TestClient], httpx.Response]] = [
         lambda portal: _poliza(portal, S01["cotizacionId"]),
         lambda portal: _documento(portal, str(uuid4())),
     ]
-    with _portal(monkeypatch, cerrado) as portal:
+    with _portal(monkeypatch, cerrado, cerrado) as portal:
         respuestas = [pedir(portal) for pedir in pedidos]
     ruta.polizas.cache_clear()
     for respuesta in respuestas:

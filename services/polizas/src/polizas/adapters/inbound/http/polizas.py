@@ -85,6 +85,7 @@ class Poliza(_Dto):
     mientras no estén registrados."""
 
     poliza_id: UUID
+    cliente_id: UUID = Field(description="El titular: el cliente de la aceptación")
     estado: EstadoPoliza
     numero: PatronNumero = Field(description="Reservado al crear la póliza: no cambia")
     producto: ProductoPolizaDto
@@ -125,6 +126,7 @@ def poliza_dto(vista: VistaPoliza) -> Poliza:
     poliza, documento, firma = vista.poliza, vista.poliza.documento, vista.poliza.firma
     return Poliza(
         poliza_id=poliza.poliza_id,
+        cliente_id=poliza.cliente_id,
         estado=poliza.estado,
         numero=poliza.numero,
         producto=ProductoPolizaDto(id=poliza.producto.id, version=poliza.producto.version),
