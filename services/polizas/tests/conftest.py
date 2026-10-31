@@ -12,17 +12,25 @@ import json
 import logging
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from polizas.domain.aceptacion.modelos import Aceptacion
-from polizas.domain.recaudo.modelos import ResultadoRecaudo
+from polizas.domain.poliza.modelos import (
+    Documento,
+    EstadoPoliza,
+    Firma,
+    OrigenPoliza,
+    Poliza,
+    Producto,
+)
+from polizas.domain.recaudo.modelos import ResultadoRecaudo, SituacionRecaudo
 from polizas.domain.suscripcion.errores import (
     CotizacionNoEncontrada,
     ReglasNoVigentes,
@@ -292,12 +300,11 @@ class AceptacionesMemoria:
 class RecaudosMemoria:
     """RecaudosRepositorio y ProyeccionRecaudos en memoria (HU-W16, 16.13), con la clave primaria
     de la tabla: se queda el primer estado final. `transacciones` registra con qué `tx` se
-    escribió; `aceptaciones` son las claves conocidas."""
+    escribió."""
 
-    def __init__(self, aceptaciones: AceptacionesMemoria | None = None) -> None:
+    def __init__(self) -> None:
         self.resultados: dict[UUID, ResultadoRecaudo] = {}
         self.transacciones: list[Any] = []
-        self._aceptaciones = aceptaciones or AceptacionesMemoria()
 
     async def por_clave(self, clave_recaudo: UUID) -> ResultadoRecaudo | None:
         return self.resultados.get(clave_recaudo)
@@ -309,8 +316,58 @@ class RecaudosMemoria:
             self.resultados[resultado.clave_recaudo] = resultado
         return previo
 
-    async def aceptacion_conocida(self, clave_recaudo: UUID, tx: Any) -> bool:
-        return any(a.id == clave_recaudo for a in self._aceptaciones.aceptaciones)
+
+class PolizasMemoria:
+    """PolizasRepositorio en memoria (HU-W17, 17.6), con los índices únicos de la tabla: una póliza
+    por aceptación y por número. `origenes` son las aceptaciones conocidas, con lo que la póliza
+    toma de ellas; `transacciones` registra con qué `tx` se creó cada una."""
+
+    def __init__(self) -> None:
+        self.origenes: dict[UUID, OrigenPoliza] = {}
+        self.polizas: dict[UUID, Poliza] = {}
+        self.transacciones: list[Any] = []
+        self.secuencia = 0
+
+    async def origen(self, aceptacion_id: UUID, tx: Any) -> OrigenPoliza | None:
+        return self.origenes.get(aceptacion_id)
+
+    async def siguiente_secuencia(self, tx: Any) -> int:
+        self.secuencia += 1
+        return self.secuencia
+
+    async def crear(self, poliza: Poliza, tx: Any) -> bool:
+        self.transacciones.append(tx)
+        numeros = {p.numero for p in self.polizas.values()}
+        if poliza.aceptacion_id in self.polizas or poliza.numero in numeros:
+            return False
+        self.polizas[poliza.aceptacion_id] = poliza
+        return True
+
+    async def por_aceptacion(self, aceptacion_id: UUID, tx: Any) -> Poliza | None:
+        return self.polizas.get(aceptacion_id)
+
+    async def actualizar(self, poliza: Poliza, tx: Any) -> bool:
+        actual = self.polizas.get(poliza.aceptacion_id)
+        if actual is None or actual.estado is not EstadoPoliza.EMITIENDO:
+            return False
+        self.polizas[poliza.aceptacion_id] = poliza
+        return True
+
+
+class LecturaPolizasMemoria:
+    """LecturaPolizas (HU-W17, 17.9) sobre las pólizas de `PolizasMemoria`, sin transacción."""
+
+    def __init__(self, polizas: PolizasMemoria) -> None:
+        self._polizas = polizas
+
+    async def por_aceptacion(self, aceptacion_id: UUID) -> Poliza | None:
+        return self._polizas.polizas.get(aceptacion_id)
+
+    async def por_id(self, poliza_id: UUID) -> Poliza | None:
+        return next((p for p in self._polizas.polizas.values() if p.poliza_id == poliza_id), None)
+
+    async def por_numero(self, numero: str) -> Poliza | None:
+        return next((p for p in self._polizas.polizas.values() if p.numero == numero), None)
 
 
 @dataclass
@@ -321,11 +378,8 @@ class Dobles:
     codigos: CodigosMemoria
     reloj: RelojFijo
     aceptaciones: AceptacionesMemoria = field(default_factory=AceptacionesMemoria)
-    recaudos: RecaudosMemoria | None = None
-
-    def __post_init__(self) -> None:
-        if self.recaudos is None:
-            self.recaudos = RecaudosMemoria(self.aceptaciones)
+    recaudos: RecaudosMemoria = field(default_factory=RecaudosMemoria)
+    polizas: PolizasMemoria = field(default_factory=PolizasMemoria)
 
     def puertos(self) -> "Puertos":
         # Importación diferida: las pruebas del dominio no necesitan la app.
@@ -339,6 +393,7 @@ class Dobles:
             self.reloj,
             self.aceptaciones,
             self.recaudos,
+            polizas=LecturaPolizasMemoria(self.polizas),
         )
 
 
@@ -412,6 +467,55 @@ def api(dobles: Dobles) -> Iterator[TestClient]:
 
     with TestClient(crear_app(Settings(), puertos=dobles.puertos())) as cliente:
         yield cliente
+
+
+HUELLA_DOCUMENTO = "sha256:" + "ab" * 32
+RECAUDADA_EN = datetime(2026, 10, 22, 15, 0, 1, 250000, tzinfo=UTC)
+
+
+@pytest.fixture
+def registrar_poliza(dobles: Dobles) -> Callable[..., Poliza]:
+    """HU-W17 (17.9): la póliza de una aceptación en los dobles, en la etapa pedida (`EMITIENDO`,
+    `DOCUMENTO`, `FIRMADA` o `ACTIVA`), con su recaudo confirmado (como la crea la 17.6)."""
+
+    def registrar(aceptacion: Aceptacion, etapa: str = "ACTIVA", secuencia: int = 7) -> Poliza:
+        insumos_s01 = insumos("S01")
+        origen = OrigenPoliza(
+            aceptacion_id=aceptacion.id,
+            cotizacion_id=aceptacion.cotizacion_id,
+            cliente_id=aceptacion.cliente_id,
+            producto=Producto(insumos_s01.producto_id, insumos_s01.version_producto),
+            aceptada_en=aceptacion.aceptada_en,
+        )
+        poliza = Poliza.emitiendo(origen, secuencia=secuencia, ahora=AHORA)
+        if etapa != "EMITIENDO":
+            documento = Documento(
+                clave=f"polizas/{poliza.poliza_id}/{poliza.numero}.pdf",
+                version_id="v-registrada",
+                huella=HUELLA_DOCUMENTO,
+                tamano_bytes=4096,
+                fecha_documento=AHORA,
+            )
+            poliza = poliza.registrar_documento(documento, AHORA)
+        if etapa in ("FIRMADA", "ACTIVA"):
+            firma = Firma("FIR-SINT-C01", datetime(2026, 1, 1, tzinfo=UTC))
+            poliza = poliza.registrar_firma(firma, HUELLA_DOCUMENTO, AHORA)
+        if etapa == "ACTIVA":
+            poliza = poliza.activar(AHORA)
+        dobles.polizas.polizas[aceptacion.id] = poliza
+        dobles.recaudos.resultados[aceptacion.id] = ResultadoRecaudo(
+            clave_recaudo=aceptacion.id,
+            recaudo_id=uuid4(),
+            estado=SituacionRecaudo.CONFIRMADO,
+            monto=insumos_s01.prima_total,
+            moneda=insumos_s01.moneda,
+            transaccion_id="TX-SINTETICA-0001",
+            motivo=None,
+            ocurrido_en=RECAUDADA_EN,
+        )
+        return poliza
+
+    return registrar
 
 
 def cabeceras(rol: str = "ASESOR", actor: str = "sub-asesor-1", **otras: str) -> dict[str, str]:

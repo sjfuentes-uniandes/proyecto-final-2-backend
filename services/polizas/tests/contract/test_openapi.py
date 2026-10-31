@@ -35,6 +35,9 @@ def test_contrato_de_suscripciones() -> None:
         "/v1/suscripciones/{decisionId}/reconstruccion",
         "/v1/cotizaciones/{cotizacionId}/aceptacion",
         "/v1/cotizaciones/{cotizacionId}/recaudo",
+        "/v1/cotizaciones/{cotizacionId}/poliza",
+        "/v1/polizas/{polizaId}/documento",
+        "/v1/polizas/verificaciones",
         "/health",
     }
     esquemas = app.openapi()["components"]["schemas"]
@@ -158,6 +161,102 @@ def test_contrato_del_recaudo() -> None:
         tipos = {t.get("type") for t in estado["properties"][nullable]["anyOf"]}
         assert tipos == {"string", "null"}, nullable
     assert esquemas["SituacionRecaudo"]["enum"] == ["PENDIENTE", "CONFIRMADO", "RECHAZADO"]
+
+
+def _nullable(propiedad: dict[str, Any]) -> set[Any]:
+    return {t.get("type", t.get("$ref")) for t in propiedad["anyOf"]}
+
+
+def test_contrato_de_la_poliza() -> None:
+    """HU-W17 (17.9): la póliza por cotización, con los encabezados y errores de GET …/aceptacion;
+    respuesta cerrada, con los puntos de control como nulos mientras se emite y sin lo interno."""
+    rutas = app.openapi()["paths"]
+    ruta = rutas["/v1/cotizaciones/{cotizacionId}/poliza"]
+    assert set(ruta) == {"get"}
+    aceptacion = rutas["/v1/cotizaciones/{cotizacionId}/aceptacion"]["get"]
+    assert set(ruta["get"]["responses"]) == set(aceptacion["responses"])
+    assert ruta["get"]["parameters"] == aceptacion["parameters"]
+    assert ruta["get"]["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/Poliza"
+    }
+    esquemas = app.openapi()["components"]["schemas"]
+    poliza = esquemas["Poliza"]
+    assert (
+        set(poliza["required"])
+        == set(poliza["properties"])
+        == {
+            "polizaId",
+            "clienteId",
+            "estado",
+            "numero",
+            "producto",
+            "ramo",
+            "coberturas",
+            "vigencia",
+            "sumaAsegurada",
+            "prima",
+            "moneda",
+            "periodicidad",
+            "aceptadaEn",
+            "recaudadaEn",
+            "emitidaEn",
+            "documento",
+            "firma",
+        }
+    )
+    assert esquemas["EstadoPoliza"]["enum"] == ["EMITIENDO", "ACTIVA"]
+    # 17.11c: el titular, para que bff-web componga su nombre.
+    assert poliza["properties"]["clienteId"]["format"] == "uuid"
+    for monto in ("sumaAsegurada", "prima"):
+        assert poliza["properties"][monto]["type"] == "string"
+        assert poliza["properties"][monto]["pattern"] == r"^-?\d+(\.\d+)?$"
+    assert poliza["properties"]["numero"]["pattern"] == r"^[0-9]{3}-[0-9]{4}-[0-9]{6}$"
+    assert _nullable(poliza["properties"]["emitidaEn"]) == {"string", "null"}
+    assert _nullable(poliza["properties"]["documento"]) == {
+        "#/components/schemas/DocumentoPolizaDto",
+        "null",
+    }
+    assert _nullable(poliza["properties"]["firma"]) == {
+        "#/components/schemas/FirmaPolizaDto",
+        "null",
+    }
+    assert set(esquemas["DocumentoPolizaDto"]["properties"]) == {"huella", "versionId"}
+    assert set(esquemas["FirmaPolizaDto"]["properties"]) == {"firmaId", "selloTiempo"}
+    vigencia = esquemas["VigenciaPolizaDto"]["properties"]
+    assert vigencia["desde"]["format"] == vigencia["hasta"]["format"] == "date"
+
+
+def test_contrato_del_documento_y_la_verificacion() -> None:
+    """HU-W17 (17.9): la URL del documento y la verificación, con los encabezados del actor."""
+    rutas = app.openapi()["paths"]
+    documento = rutas["/v1/polizas/{polizaId}/documento"]
+    assert set(documento) == {"get"}
+    assert set(documento["get"]["responses"]) == {"200", "401", "403", "404", "409", "422", "503"}
+    cabeceras = {
+        p["name"]: p["required"] for p in documento["get"]["parameters"] if p["in"] == "header"
+    }
+    assert cabeceras == {"X-Actor-Id": False, "X-Actor-Rol": False}
+    verificaciones = rutas["/v1/polizas/verificaciones"]
+    assert set(verificaciones) == {"post"}
+    verificar = verificaciones["post"]
+    assert set(verificar["responses"]) == {"200", "401", "403", "422"}
+    cabeceras = {p["name"]: p["required"] for p in verificar["parameters"] if p["in"] == "header"}
+    assert cabeceras == {"X-Actor-Id": False, "X-Actor-Rol": False}
+    esquemas = app.openapi()["components"]["schemas"]
+    enlace = esquemas["EnlaceDocumento"]
+    assert set(enlace["required"]) == set(enlace["properties"]) == {"url", "venceEn"}
+    solicitud = esquemas["SolicitudVerificacion"]
+    assert set(solicitud["required"]) == set(solicitud["properties"]) == {"numero", "huella"}
+    assert solicitud["properties"]["huella"]["pattern"] == r"^sha256:[0-9a-f]{64}$"
+    assert solicitud["properties"]["numero"]["pattern"] == r"^[0-9]{3}-[0-9]{4}-[0-9]{6}$"
+    resultado = esquemas["VerificacionPoliza"]
+    assert (
+        set(resultado["required"])
+        == set(resultado["properties"])
+        == {"valido", "numero", "firmaId", "selloTiempo"}
+    )
+    for nullable in ("firmaId", "selloTiempo"):
+        assert _nullable(resultado["properties"][nullable]) == {"string", "null"}, nullable
 
 
 def test_una_decision_de_w13_sin_comunicacion_sigue_siendo_valida(

@@ -72,5 +72,10 @@ def test_umbral_de_adaptador_pagos_solo_lineas() -> None:
     assert cobertura.evaluar("adaptador-pagos", _reporte(89.9, 10, 10)) != []
 
 
+def test_umbral_de_adaptador_firma_solo_lineas() -> None:
+    assert cobertura.evaluar("adaptador-firma", _reporte(90, 0, 10)) == []
+    assert cobertura.evaluar("adaptador-firma", _reporte(89.9, 10, 10)) != []
+
+
 def test_argumentos_incorrectos() -> None:
     assert cobertura.main([]) == 2

@@ -31,6 +31,8 @@ UMBRALES: dict[str, Umbral] = {
     # aliado, como adaptador-datos y adaptador-identidad.
     "dinero": Umbral(90, 85),
     "adaptador-pagos": Umbral(90, 0),
+    # HU-W17: adaptador-firma conecta con un aliado, como adaptador-pagos.
+    "adaptador-firma": Umbral(90, 0),
 }
 SIN_UMBRAL = Umbral(0, 0)
 

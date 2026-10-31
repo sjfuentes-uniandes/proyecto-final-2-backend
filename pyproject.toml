@@ -39,7 +39,7 @@ warn_redundant_casts = true
 show_error_codes = true
 # Layout src/ del workspace: los módulos se nombran desde estas raíces.
 # HU-W13: catalogo, polizas, cotizacion y bff-web también, para `make typecheck SERVICE=<servicio>` (fuera de la CI,
-# ADR 0008). HU-W16: dinero y adaptador-pagos.
+# ADR 0008). HU-W16: dinero y adaptador-pagos. HU-W17: adaptador-firma.
 mypy_path = [
   "libs/solventa-common/src",
   "services/clientes/src",
@@ -50,12 +50,18 @@ mypy_path = [
   "services/bff-web/src",
   "services/dinero/src",
   "services/adaptador-pagos/src",
+  "services/adaptador-firma/src",
 ]
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
 # boto3 no publica tipos (bff-web lo usa para Cognito, CloudWatch y X-Ray).
 module = ["boto3", "boto3.*", "botocore", "botocore.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# reportlab no publica tipos (polizas lo usa para el PDF de la póliza, HU-W17).
+module = ["reportlab", "reportlab.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

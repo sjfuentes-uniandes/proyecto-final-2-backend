@@ -1,0 +1,285 @@
+{
+  "$defs": {
+    "CoberturaV1": {
+      "description": "Una cobertura de la oferta aceptada, con los tipos de la instant\u00e1nea de la decisi\u00f3n.",
+      "properties": {
+        "codigo": {
+          "title": "Codigo",
+          "type": "string"
+        },
+        "nombre": {
+          "title": "Nombre",
+          "type": "string"
+        },
+        "obligatoria": {
+          "title": "Obligatoria",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "codigo",
+        "nombre",
+        "obligatoria"
+      ],
+      "title": "CoberturaV1",
+      "type": "object"
+    },
+    "DocumentoV1": {
+      "description": "La versi\u00f3n emitida del PDF en el bucket de p\u00f3lizas: se lee por `clave` y `versionId`.",
+      "properties": {
+        "clave": {
+          "minLength": 1,
+          "title": "Clave",
+          "type": "string"
+        },
+        "huella": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Huella",
+          "type": "string"
+        },
+        "tamanoBytes": {
+          "exclusiveMinimum": 0,
+          "title": "Tamanobytes",
+          "type": "integer"
+        },
+        "versionId": {
+          "minLength": 1,
+          "title": "Versionid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "clave",
+        "versionId",
+        "huella",
+        "tamanoBytes"
+      ],
+      "title": "DocumentoV1",
+      "type": "object"
+    },
+    "FirmaV1": {
+      "description": "La firma de Solventa sobre la huella del documento, no sobre el PDF.",
+      "properties": {
+        "firmaId": {
+          "minLength": 1,
+          "title": "Firmaid",
+          "type": "string"
+        },
+        "selloTiempo": {
+          "format": "date-time",
+          "title": "Sellotiempo",
+          "type": "string"
+        }
+      },
+      "required": [
+        "firmaId",
+        "selloTiempo"
+      ],
+      "title": "FirmaV1",
+      "type": "object"
+    },
+    "PolizaEmitidaV1": {
+      "description": "P\u00f3liza ACTIVA, una por aceptaci\u00f3n; si se reentrega, apunta al mismo documento. Sin nombres,\ndocumentos de identidad ni datos de contacto.",
+      "properties": {
+        "claveRecaudo": {
+          "format": "uuid",
+          "title": "Claverecaudo",
+          "type": "string"
+        },
+        "clienteId": {
+          "format": "uuid",
+          "title": "Clienteid",
+          "type": "string"
+        },
+        "coberturas": {
+          "items": {
+            "$ref": "#/$defs/CoberturaV1"
+          },
+          "minItems": 1,
+          "title": "Coberturas",
+          "type": "array"
+        },
+        "cotizacionId": {
+          "format": "uuid",
+          "title": "Cotizacionid",
+          "type": "string"
+        },
+        "documento": {
+          "$ref": "#/$defs/DocumentoV1"
+        },
+        "emitidaEn": {
+          "format": "date-time",
+          "title": "Emitidaen",
+          "type": "string"
+        },
+        "firma": {
+          "$ref": "#/$defs/FirmaV1"
+        },
+        "moneda": {
+          "pattern": "^[A-Z]{3}$",
+          "title": "Moneda",
+          "type": "string"
+        },
+        "numero": {
+          "pattern": "^[0-9]{3}-[0-9]{4}-[0-9]{6}$",
+          "title": "Numero",
+          "type": "string"
+        },
+        "periodicidad": {
+          "title": "Periodicidad",
+          "type": "string"
+        },
+        "polizaId": {
+          "format": "uuid",
+          "title": "Polizaid",
+          "type": "string"
+        },
+        "prima": {
+          "pattern": "^[0-9]+(\\.[0-9]{1,2})?$",
+          "title": "Prima",
+          "type": "string"
+        },
+        "producto": {
+          "$ref": "#/$defs/ProductoV1"
+        },
+        "ramo": {
+          "$ref": "#/$defs/RamoV1"
+        },
+        "sumaAsegurada": {
+          "pattern": "^[0-9]+(\\.[0-9]{1,2})?$",
+          "title": "Sumaasegurada",
+          "type": "string"
+        },
+        "vigencia": {
+          "$ref": "#/$defs/VigenciaV1"
+        }
+      },
+      "required": [
+        "polizaId",
+        "numero",
+        "cotizacionId",
+        "claveRecaudo",
+        "clienteId",
+        "producto",
+        "ramo",
+        "coberturas",
+        "vigencia",
+        "prima",
+        "sumaAsegurada",
+        "moneda",
+        "periodicidad",
+        "documento",
+        "firma",
+        "emitidaEn"
+      ],
+      "title": "PolizaEmitidaV1",
+      "type": "object"
+    },
+    "ProductoV1": {
+      "description": "El producto y la versi\u00f3n de la oferta aceptada.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "ProductoV1",
+      "type": "object"
+    },
+    "RamoV1": {
+      "description": "El ramo de la p\u00f3liza (ADR 0014, decisi\u00f3n 2): el mismo c\u00f3digo que inicia el n\u00famero.",
+      "properties": {
+        "codigo": {
+          "pattern": "^[0-9]{3}$",
+          "title": "Codigo",
+          "type": "string"
+        },
+        "nombre": {
+          "title": "Nombre",
+          "type": "string"
+        }
+      },
+      "required": [
+        "codigo",
+        "nombre"
+      ],
+      "title": "RamoV1",
+      "type": "object"
+    },
+    "VigenciaV1": {
+      "description": "Fechas inclusivas en America/Bogota: del d\u00eda siguiente a la aceptaci\u00f3n al anterior a su\naniversario (ADR 0014, decisi\u00f3n 3).",
+      "properties": {
+        "desde": {
+          "format": "date",
+          "title": "Desde",
+          "type": "string"
+        },
+        "hasta": {
+          "format": "date",
+          "title": "Hasta",
+          "type": "string"
+        }
+      },
+      "required": [
+        "desde",
+        "hasta"
+      ],
+      "title": "VigenciaV1",
+      "type": "object"
+    }
+  },
+  "description": "El sobre de siempre, con `type` fijo: los filtros de las colas dependen del nombre exacto.",
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/PolizaEmitidaV1"
+    },
+    "type": {
+      "const": "PolizaEmitida",
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobrePolizaEmitidaV1",
+  "type": "object"
+}

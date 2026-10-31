@@ -8,6 +8,7 @@ dependencies = [
     "pydantic-settings>=2.6",
     "psycopg[binary,pool]>=3.2",
     "alembic>=1.14",
+    "reportlab>=5.1,<6",
     "solventa-common[mensajeria]",
 ]
 

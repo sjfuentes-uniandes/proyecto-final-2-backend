@@ -17,7 +17,3 @@ class ProyeccionRecaudos[T](Protocol):
         """Guarda el resultado si la clave aún no tiene estado final y devuelve None. Si ya tiene
         uno, no cambia nada y devuelve el que estaba."""
         ...
-
-    async def aceptacion_conocida(self, clave_recaudo: UUID, tx: T) -> bool:
-        """True si existe la aceptación cuyo id es la clave."""
-        ...

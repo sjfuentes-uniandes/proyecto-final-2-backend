@@ -258,10 +258,16 @@ async def test_una_duracion_fuera_de_la_telemetria_es_fuga(telemetria: Any) -> N
 
 async def test_migracion_adelante_y_atras(base: str) -> None:
     """MT-W13-02: aplicar, revertir (dos veces, idempotente) y volver a aplicar. Las reversas van
-    de la más nueva a la más antigua (HU-W15: aceptaciones referencia a las decisiones)."""
+    de la más nueva a la más antigua (HU-W15: aceptaciones referencia a las decisiones; HU-W17:
+    las pólizas, a las aceptaciones)."""
     reversas = [
         MIGRACIONES.joinpath("down", nombre).read_text(encoding="utf-8")
-        for nombre in ("003_recaudos.sql", "002_aceptaciones.sql", "001_suscripcion.sql")
+        for nombre in (
+            "004_polizas.sql",
+            "003_recaudos.sql",
+            "002_aceptaciones.sql",
+            "001_suscripcion.sql",
+        )
     ]
     with psycopg.connect(base, autocommit=True) as conexion:
         for _ in range(2):
