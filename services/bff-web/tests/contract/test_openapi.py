@@ -377,3 +377,49 @@ def test_contrato_de_recaudo() -> None:
         "$ref": "#/components/schemas/EstadoRecaudo"
     }
     assert {p["name"] for p in consultar["parameters"] if p["required"]} == {"cotizacionId"}
+
+
+# HU-W17 (17.11): la póliza y la URL de su documento; DTO copiados de polizas. Sin
+# `titularNombre` ni `canalNombre`: la póliza de polizas no trae el `clienteId` ni el `socioId`
+# con que componerlos (ADR 0014, decisión 8).
+ESQUEMAS_POLIZA = (
+    "Poliza",
+    "EstadoPoliza",
+    "ProductoPolizaDto",
+    "RamoPolizaDto",
+    "CoberturaProductoDto",
+    "VigenciaPolizaDto",
+    "DocumentoPolizaDto",
+    "FirmaPolizaDto",
+    "EnlaceDocumento",
+)
+POLIZA = "/v1/cotizaciones/{cotizacionId}/poliza"
+DOCUMENTO = "/v1/polizas/{polizaId}/documento"
+
+
+def test_dto_de_poliza_iguales_a_polizas() -> None:
+    propios = app.openapi()["components"]["schemas"]
+    de_polizas = yaml.safe_load(POLIZAS.read_text(encoding="utf-8"))
+    for nombre in ESQUEMAS_POLIZA:
+        assert propios[nombre] == de_polizas["components"]["schemas"][nombre], nombre
+    # La respuesta 200 de cada ruta es la de polizas.
+    rutas = app.openapi()["paths"]
+    for ruta in (POLIZA, DOCUMENTO):
+        assert (
+            rutas[ruta]["get"]["responses"]["200"]
+            == de_polizas["paths"][ruta]["get"]["responses"]["200"]
+        ), ruta
+
+
+def test_contrato_de_poliza() -> None:
+    rutas = app.openapi()["paths"]
+    assert set(rutas[POLIZA]) == {"get"}
+    consultar = rutas[POLIZA]["get"]
+    assert set(consultar["responses"]) == {"200", "401", "403", "404", "422", "503"}
+    assert {p["name"] for p in consultar["parameters"] if p["required"]} == {"cotizacionId"}
+    assert set(rutas[DOCUMENTO]) == {"get"}
+    documento = rutas[DOCUMENTO]["get"]
+    assert set(documento["responses"]) == {"200", "401", "403", "404", "409", "422", "503"}
+    assert {p["name"] for p in documento["parameters"] if p["required"]} == {"polizaId"}
+    # Solo las dos lecturas: la verificación de polizas no se expone en el portal.
+    assert not any(r.startswith("/v1/polizas/") and r != DOCUMENTO for r in rutas)

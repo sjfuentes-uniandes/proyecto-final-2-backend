@@ -1,22 +1,22 @@
 """N3 R3 (HU-W17) contra un ambiente desplegado: de la aceptación a la póliza emitida y su documento.
 
 Recorre el caso nominal de la versión de módulo (`services/polizas/tests/module/
-test_r3_emision_w17.py`) con lo que se ve desde fuera: el portal para aceptar, los logs de
-CloudWatch (`/ecs/<prefijo>/<servicio>`) de `dinero`, `polizas` y `adaptador-firma`, por
-`clave_recaudo` y `correlation_id`, y el bucket de documentos de póliza (solo lectura). Sin acceso a
-las bases ni a las colas: leer `avisos` o `consulta-proyeccion` le quitaría los mensajes a su
-consumidor.
+test_r3_emision_w17.py`) con lo que se ve desde fuera: el portal (`/web`, usuario E2E del
+back-office en `asesores`) para aceptar y para leer el recaudo, la póliza y la URL de su documento
+(17.11); y, solo para lo que el portal no muestra, los logs de CloudWatch
+(`/ecs/<prefijo>/<servicio>`) de `polizas` y `adaptador-firma`, por `clave_recaudo` y
+`correlation_id`, y el bucket de documentos de póliza (solo lectura). Sin acceso a las bases ni a
+las colas: leer `avisos` o `consulta-proyeccion` le quitaría los mensajes a su consumidor.
 
-- C01: portal (`/web`, usuario E2E del back-office en `asesores`) → aceptación de S01 → dinero
-  confirma el cobro → polizas emite la póliza una sola vez (`emision: póliza procesada`, `ok`, con
-  la correlación de la aceptación) y adaptador-firma midió un solo `firma.documento` `ok` → en el
-  bucket, una sola versión de `polizas/<polizaId>/<numero>.pdf`, cifrada con el SSE del bucket; su
-  URL prefirmada por `VersionId` (como la arma polizas) descarga un PDF de ese tamaño.
+- C01: por el portal, aceptación de S01 → recaudo `CONFIRMADO` → póliza `ACTIVA`, con su documento
+  y su firma → la URL del documento descarga el PDF, cuyo sha256 es la huella de la póliza y cuyo
+  `versionId` es el registrado. En CloudWatch, polizas la emitió una sola vez (`emision: póliza
+  procesada`, `ok`, con la correlación de la aceptación) y adaptador-firma midió un solo
+  `firma.documento` `ok`. En el bucket, una sola versión de `polizas/<polizaId>/<numero>.pdf`: la
+  de la póliza, cifrada con el SSE del bucket.
 
-La póliza todavía no se ve por bff-web: sus rutas llegan en la 17.11. Hasta entonces, el estado
-por la API, la verificación por la huella (`POST /v1/polizas/verificaciones`) y la huella de
-`PolizaEmitida` frente al sha256 del PDF se comprueban solo en la versión de módulo. Con la 17.11,
-esta prueba debe observar la póliza y su URL por el portal en lugar de los logs y el bucket.
+La verificación por la huella (`POST /v1/polizas/verificaciones`) no la expone el portal y la huella
+de `PolizaEmitida` no se ve desde fuera: se comprueban solo en la versión de módulo.
 
 C06 (firma lenta) y C07 (firma caída) solo se verifican a nivel de módulo: dejarían pólizas
 EMITIENDO en un ambiente compartido y C07 quedaría así para siempre (la tarea emisora la reintenta
@@ -24,8 +24,9 @@ y, pasada una hora, la mide como `error`, lo que hace sonar la alarma de `emisio
 fallido (AC3) también: requiere un consumidor de prueba en `avisos`, que es de HU-M11.
 
 Requiere lo mismo que la R3 de HU-W16 (EXT-01 y EXT-02 en `int`, el usuario E2E en `asesores` y
-credenciales que lean los logs) más lectura del bucket de documentos (`s3:ListBucketVersions`,
-`s3:GetObjectVersion`; con `aws:kms`, también `kms:Decrypt`). El bucket y su SSE salen de
+credenciales que lean los logs) más lectura del bucket de documentos (`s3:ListBucketVersions` y
+`s3:GetObjectVersion`, para listar las versiones y leer su cabecera; el PDF se descarga por la URL
+que entrega el portal). El bucket y su SSE salen de
 `platform.policy_documents_bucket` o de `E2E_POLIZAS_BUCKET` y `E2E_POLIZAS_BUCKET_SSE`. Espera al
 recaudo y a la emisión `E2E_EMISION_ESPERA_S` (por defecto, 180). Sin configuración se omite como
 las demás N3.
@@ -33,6 +34,7 @@ las demás N3.
 Configuración y precondiciones en infra/DESPLIEGUE.md (sección 7, "Pruebas E2E (N3)").
 """
 
+import hashlib
 import json
 import os
 import time
@@ -40,6 +42,7 @@ import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 import pytest
@@ -49,8 +52,6 @@ TIMEOUT_S = 30
 ESPERA_EMISION_S = int(os.getenv("E2E_EMISION_ESPERA_S", "180"))
 # Tras la emisión, cuánto se espera a que aparezca una segunda (no debe).
 ESPERA_DUPLICADO_S = 60
-# La vida de la URL prefirmada de la prueba (polizas usa SOLVENTA_DOCUMENTO_URL_VENCE_S, 300 s).
-URL_VENCE_S = 300
 VERSION_DECLARACIONES = "2026.10.1"
 DECLARACIONES = {
     "leidoCondiciones": True,
@@ -60,9 +61,7 @@ DECLARACIONES = {
 }
 # Cliente sintético de S01: pagador y firmante de los simuladores de pagos y de firma.
 C01 = "00000000-0000-4000-8000-000000000001"
-# Los mensajes de dinero (application/recaudo/recaudar.py) y de polizas (application/poliza/
-# emitir.py).
-RESUELTO = "recaudo: cobro resuelto"
+# El mensaje de polizas (application/poliza/emitir.py).
 EMITIDA = "emision: póliza procesada"
 
 
@@ -84,6 +83,24 @@ class Portal:
             "el usuario E2E del back-office debe estar en el grupo asesores (infra/DESPLIEGUE.md)"
         )
         return respuesta
+
+    def get(self, ruta: str) -> httpx.Response:
+        respuesta = httpx.get(f"{self._base}{ruta}", headers=self._cabeceras, timeout=TIMEOUT_S)
+        assert respuesta.status_code != 403, (
+            "el usuario E2E del back-office debe estar en el grupo asesores (infra/DESPLIEGUE.md)"
+        )
+        return respuesta
+
+    def esperar(
+        self, ruta: str, condicion: Callable[[httpx.Response], bool], espera_s: int
+    ) -> httpx.Response:
+        """La primera respuesta de `ruta` que cumple `condicion` (o la última al vencer)."""
+        limite = time.monotonic() + espera_s
+        while True:
+            respuesta = self.get(ruta)
+            if condicion(respuesta) or time.monotonic() > limite:
+                return respuesta
+            time.sleep(5)
 
     def aceptar_s01(self) -> httpx.Response:
         """Perfil, cotización, decisión APROBADA y aceptación de S01 (C01, 36 años)."""
@@ -235,18 +252,44 @@ def test_hu_w17_r3_c01_la_aceptacion_pagada_se_emite_una_vez_con_su_documento(
     desde = _hace_un_minuto()
     aceptacion = portal.aceptar_s01()
     clave = aceptacion.json()["id"]
+    cotizacion_id = aceptacion.json()["cotizacionId"]
     correlacion = aceptacion.headers["X-Correlation-Id"]
 
-    # El recaudo, como la R3 de W16.
-    resueltos = aws.esperar("dinero", "clave_recaudo", clave, desde, es(RESUELTO), ESPERA_EMISION_S)
-    assert [(r["estado"], r["correlation_id"]) for r in resueltos] == [("CONFIRMADO", correlacion)]
+    # Por el portal: el recaudo confirmado y la póliza ACTIVA, con su documento y su firma.
+    recaudo = portal.esperar(
+        f"/cotizaciones/{cotizacion_id}/recaudo",
+        lambda r: r.status_code == 200 and r.json()["estado"] != "PENDIENTE",
+        ESPERA_EMISION_S,
+    )
+    assert recaudo.status_code == 200, recaudo.text
+    assert (recaudo.json()["estado"], recaudo.json()["claveRecaudo"]) == ("CONFIRMADO", clave)
+    respuesta = portal.esperar(
+        f"/cotizaciones/{cotizacion_id}/poliza",
+        lambda r: r.status_code == 200 and r.json()["estado"] == "ACTIVA",
+        ESPERA_EMISION_S,
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    poliza = respuesta.json()
+    assert poliza["estado"] == "ACTIVA", poliza["estado"]
+    assert poliza["documento"] is not None and poliza["firma"] is not None
+    assert poliza["emitidaEn"] is not None
+    poliza_id = poliza["polizaId"]
 
-    # La emisión: una, ok, con la correlación de la aceptación.
+    # La URL del documento, por el portal: descarga la versión registrada, cuyo sha256 es la huella.
+    enlace = portal.get(f"/polizas/{poliza_id}/documento")
+    assert enlace.status_code == 200, enlace.text
+    url = enlace.json()["url"]
+    assert parse_qs(urlsplit(url).query)["versionId"] == [poliza["documento"]["versionId"]]
+    descarga = httpx.get(url, timeout=TIMEOUT_S)
+    assert descarga.status_code == 200
+    assert descarga.content.startswith(b"%PDF-")
+    assert "sha256:" + hashlib.sha256(descarga.content).hexdigest() == poliza["documento"]["huella"]
+
+    # Lo que el portal no muestra. La emisión: una, ok, con la correlación de la aceptación.
     emitidas = aws.esperar(
         "polizas", "clave_recaudo", clave, desde, es(EMITIDA, resultado="ok"), ESPERA_EMISION_S
     )
-    assert [r["correlation_id"] for r in emitidas] == [correlacion]
-    poliza_id = emitidas[0]["poliza_id"]
+    assert [(r["correlation_id"], r["poliza_id"]) for r in emitidas] == [(correlacion, poliza_id)]
     time.sleep(ESPERA_DUPLICADO_S)
     procesadas = [
         r
@@ -257,24 +300,16 @@ def test_hu_w17_r3_c01_la_aceptacion_pagada_se_emite_una_vez_con_su_documento(
     assert aws.medidos("polizas", "emision", correlacion, desde) == ["ok"]
     assert aws.medidos("adaptador-firma", "firma.documento", correlacion, desde) == ["ok"]
 
-    # El documento: una sola versión en el bucket, cifrada con el SSE del bucket.
+    # El documento: una sola versión en el bucket, la de la póliza, cifrada con el SSE del bucket.
     [version] = aws.versiones(f"polizas/{poliza_id}/")
-    assert version["Key"].endswith(".pdf") and version["IsLatest"]
+    assert version["Key"] == f"polizas/{poliza_id}/{poliza['numero']}.pdf" and version["IsLatest"]
+    assert version["VersionId"] == poliza["documento"]["versionId"]
+    assert version["Size"] == len(descarga.content)
     cabecera = aws.s3.head_object(
         Bucket=aws.bucket, Key=version["Key"], VersionId=version["VersionId"]
     )
     assert cabecera["ServerSideEncryption"] == documentos["sse"]
     assert cabecera["ContentType"] == "application/pdf"
-    # Su URL prefirmada por versión, como la arma polizas, descarga el PDF.
-    url = aws.s3.generate_presigned_url(
-        "get_object",
-        Params={"Bucket": aws.bucket, "Key": version["Key"], "VersionId": version["VersionId"]},
-        ExpiresIn=URL_VENCE_S,
-    )
-    descarga = httpx.get(url, timeout=TIMEOUT_S)
-    assert descarga.status_code == 200
-    assert descarga.content.startswith(b"%PDF-")
-    assert len(descarga.content) == version["Size"]
     print(
         f"\nHU-W17 R3: póliza {poliza_id} emitida (aceptación {clave}, correlación {correlacion})"
     )
