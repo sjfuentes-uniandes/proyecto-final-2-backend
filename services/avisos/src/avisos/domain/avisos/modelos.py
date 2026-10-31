@@ -12,7 +12,7 @@ notificación) y el segundo reemplaza al primero en lugar de mostrarse aparte.
 
 import hashlib
 import re
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from enum import StrEnum
 from uuid import UUID
@@ -72,7 +72,7 @@ def aviso_de_poliza_emitida(event_id: UUID, poliza_id: UUID) -> Aviso:
 class Dispositivo:
     id: UUID
     cliente_id: UUID
-    token_hash: str
+    token_hash: str = field(repr=False)
     estado: EstadoDispositivo = EstadoDispositivo.ACTIVO
     invalidado_en: datetime | None = None
     motivo_invalidez: str | None = None
