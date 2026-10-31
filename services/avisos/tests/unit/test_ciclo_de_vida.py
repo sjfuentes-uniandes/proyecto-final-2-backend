@@ -11,7 +11,6 @@ from typing import Any, ClassVar, Self
 
 import pytest
 from avisos import main
-from avisos.adapters.outbound.push_memoria import PushEnMemoria
 from avisos.adapters.outbound.reloj import RelojSistema
 from avisos.application.entregas.barrido import Barrido
 from avisos.config import Settings
@@ -237,14 +236,27 @@ async def test_el_barrido_repite_ciclos_sobrevive_a_un_fallo_y_se_detiene() -> N
     assert caso.ciclos >= 3
 
 
-def test_con_un_enviador_inyectado_no_se_avisa_del_envio_simulado(
-    tareas_falsas: type[Tarea], capsys: pytest.CaptureFixture[str]
+def test_un_enviador_inyectado_reemplaza_al_http_wireado_por_defecto(
+    tareas_falsas: type[Tarea],
 ) -> None:
+    class EnviadorFalso:
+        async def enviar(self, token: str, aviso: Any) -> bool:
+            return True
+
+    enviador = EnviadorFalso()
     with TestClient(
-        crear_app(Settings(), pool=PoolFalso(), enviador=PushEnMemoria())  # type: ignore[arg-type]
-    ):
-        pass
-    assert main.MENSAJE_PUSH_SIMULADO not in capsys.readouterr().out
+        crear_app(Settings(), pool=PoolFalso(), enviador=enviador)  # type: ignore[arg-type]
+    ) as cliente:
+        assert cliente.get("/health").status_code == 200
+
+
+def test_sin_enviador_inyectado_la_app_arranca_igual_con_el_http_wireado(
+    tareas_falsas: type[Tarea],
+) -> None:
+    """Sin ADAPTADOR_FIRMA_URL (local y pruebas), `crear_app` arma su propio EnviadorPushHttp, que
+    falla cerrado al enviar (`test_push_http.py`), sin impedir que el servicio arranque."""
+    with TestClient(crear_app(Settings(), pool=PoolFalso())) as cliente:  # type: ignore[arg-type]
+        assert cliente.get("/health").status_code == 200
 
 
 def test_una_tarea_que_no_se_detiene_a_tiempo_se_cancela_y_la_app_cierra(

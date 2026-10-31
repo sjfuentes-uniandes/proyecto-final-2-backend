@@ -19,15 +19,36 @@ from uuid import UUID, uuid4
 import psycopg
 import pytest
 from avisos.adapters.outbound.entregas_pg import EntregasPg, migrar
-from avisos.adapters.outbound.push_memoria import PushEnMemoria
 from avisos.application.entregas.barrido import Barrido
+from avisos.application.entregas.puertos import FalloTransitorio
 from avisos.config import Settings
-from avisos.domain.avisos.modelos import hash_token
+from avisos.domain.avisos.modelos import Aviso, hash_token
 from avisos.main import armar_consumidor, armar_envio
 from psycopg_pool import AsyncConnectionPool
 from solventa_common.inbox import MensajeSqs
 
 pytestmark = pytest.mark.anyio
+
+
+class PushEnMemoria:
+    """EnviadorPush en memoria (HU-M11): doble de prueba, igual al de `tests/unit/test_enviar_entregas.py`."""
+
+    def __init__(self) -> None:
+        self.enviados: list[tuple[str, Aviso]] = []
+        self.intentos: list[str] = []
+        self.rechazados: set[str] = set()
+        self.fallos: dict[str, list[str]] = {}
+
+    async def enviar(self, token: str, aviso: Aviso) -> bool:
+        self.intentos.append(token)
+        if self.fallos.get(token):
+            raise FalloTransitorio(self.fallos[token].pop(0))
+        if token in self.rechazados:
+            return False
+        self.enviados.append((token, aviso))
+        return True
+
+
 MIGRACIONES = resources.files("avisos.adapters.outbound").joinpath("migraciones")
 AHORA = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 SETTINGS = Settings(entregas_max_intentos=3, entregas_espera_inicial_s=5, entregas_lease_s=60)

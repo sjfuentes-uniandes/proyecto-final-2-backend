@@ -6,7 +6,6 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from avisos.adapters.outbound.push_memoria import PushEnMemoria
 from avisos.application.entregas.barrido import Barrido
 from avisos.application.entregas.enviar import LOTE_MAXIMO, EnviarEntregas
 from avisos.application.entregas.puertos import FalloTransitorio
@@ -20,6 +19,28 @@ from avisos.domain.avisos.modelos import (
 
 pytestmark = pytest.mark.anyio
 AHORA = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
+
+
+class PushEnMemoria:
+    """EnviadorPush en memoria (HU-M11): doble de prueba de los casos de uso de envío.
+
+    Registra lo enviado y permite simular el rechazo y los fallos transitorios por token."""
+
+    def __init__(self) -> None:
+        self.enviados: list[tuple[str, Aviso]] = []
+        self.intentos: list[str] = []
+        self.rechazados: set[str] = set()
+        # Fallos transitorios pendientes por token: cada intento consume uno.
+        self.fallos: dict[str, list[str]] = {}
+
+    async def enviar(self, token: str, aviso: Aviso) -> bool:
+        self.intentos.append(token)
+        if self.fallos.get(token):
+            raise FalloTransitorio(self.fallos[token].pop(0))
+        if token in self.rechazados:
+            return False
+        self.enviados.append((token, aviso))
+        return True
 
 
 class Reloj:

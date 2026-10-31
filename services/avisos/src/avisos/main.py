@@ -4,18 +4,21 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
+import httpx
 import psycopg
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from opentelemetry.sdk.metrics.export import MetricReader
 from opentelemetry.sdk.trace.export import SpanExporter
+from solventa_common import correlation
 from solventa_common.errors import registrar_manejadores
 from solventa_common.inbox import ConsumidorInbox, InboxPg, Receptor, ReceptorSqs, cliente_sqs
+from solventa_common.resiliencia import SinProteccion
 from solventa_common.telemetry import instrumentar
 
 from avisos.adapters.inbound.sqs.polizas import manejador_polizas
 from avisos.adapters.outbound.entregas_pg import EntregasPg, migrar
-from avisos.adapters.outbound.push_memoria import PushEnMemoria
+from avisos.adapters.outbound.push_http import EnviadorPushHttp
 from avisos.adapters.outbound.reloj import RelojSistema
 from avisos.application.entregas.barrido import Barrido
 from avisos.application.entregas.enviar import EnviarEntregas
@@ -35,7 +38,6 @@ MENSAJE_SIN_BASE = "avisos: sin base; no se consume ni se barre"
 MENSAJE_CONSUMIDOR_NO_ARRANCO = "inbox: el consumidor no arrancó"
 MENSAJE_TAREA_DETENIDA = "avisos: una tarea de fondo se detuvo"
 MENSAJE_TAREA_SIN_PARAR = "avisos: una tarea de fondo no se detuvo a tiempo; se cancela"
-MENSAJE_PUSH_SIMULADO = "avisos: sin proveedor push; se usa el envío simulado en memoria"
 
 logger = logging.getLogger("avisos.main")
 
@@ -147,19 +149,33 @@ def crear_app(
     enviador: EnviadorPush | None = None,
     reloj: Reloj | None = None,
     pool: "AsyncConnectionPool[Any] | None" = None,
+    transport: httpx.AsyncBaseTransport | None = None,
     span_exporter: SpanExporter | None = None,
     metric_readers: Sequence[MetricReader] = (),
 ) -> FastAPI:
-    """App de avisos. Las pruebas inyectan el enviador, el reloj, el pool y los exportadores."""
+    """App de avisos. Las pruebas inyectan el enviador, el reloj, el pool, el transporte HTTP del
+    envío push y los exportadores."""
     settings = settings or Settings()
 
     @asynccontextmanager
     async def ciclo(app: FastAPI) -> AsyncIterator[None]:
         async with AsyncExitStack() as pila:
             reloj_app: Reloj = reloj or RelojSistema()
-            if enviador is None:
-                logger.warning(MENSAJE_PUSH_SIMULADO)
-            enviador_app: EnviadorPush = enviador or PushEnMemoria()
+            if enviador is not None:
+                enviador_app: EnviadorPush = enviador
+            else:
+                # Propaga X-Correlation-Id y traceparent hacia adaptador-firma.
+                cliente_firma = await pila.enter_async_context(
+                    correlation.cliente_async(transport=transport)
+                )
+                # Sin ADAPTADOR_FIRMA_URL (local y pruebas sin inyectar), falla cerrado: el envío
+                # nunca marca ENVIADO sin haber llamado de verdad al proveedor.
+                enviador_app = EnviadorPushHttp(
+                    cliente_firma,
+                    settings.adaptador_firma_url,
+                    settings.adaptador_firma_timeout_ms,
+                    proteccion=SinProteccion(corte_duro_ms=settings.adaptador_firma_timeout_ms),
+                )
             if pool is not None:
                 app.state.pool = pool
             elif settings.db_host or settings.database_url_override:
