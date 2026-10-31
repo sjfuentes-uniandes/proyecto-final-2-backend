@@ -249,7 +249,7 @@ paths:
     get:
       tags:
       - alta-de-clientes
-      summary: Estado de la identidad y traza de la verificación del cliente
+      summary: Estado de la identidad, traza de la verificación y nombre del cliente
       operationId: obtener_v1_clientes__cliente_id__get
       parameters:
       - name: cliente_id
@@ -281,7 +281,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ClienteDto'
+                $ref: '#/components/schemas/ClienteLecturaDto'
         '401':
           description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
           content:
@@ -1179,6 +1179,52 @@ components:
       title: ClienteDto
       description: Estado del cliente y traza de la verificación. No incluye PII ni
         el motivo del proveedor.
+    ClienteLecturaDto:
+      properties:
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        estado:
+          $ref: '#/components/schemas/EstadoIdentidad'
+        verificadoEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Verificadoen
+        proveedor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Proveedor
+        referencia:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Referencia
+        nombreCompleto:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Nombrecompleto
+      type: object
+      required:
+      - clienteId
+      - estado
+      - verificadoEn
+      - proveedor
+      - referencia
+      - nombreCompleto
+      title: ClienteLecturaDto
+      description: 'La lectura del asesor: el estado y la traza más el nombre con
+        que se dio de alta.
+
+
+        Solo el nombre: ni el documento ni la fecha de nacimiento. `null` si el cliente
+        nació por su
+
+        ingreso o su registro (sin alta por documento).'
     ConsentimientoDto:
       properties:
         consentimientoId:
