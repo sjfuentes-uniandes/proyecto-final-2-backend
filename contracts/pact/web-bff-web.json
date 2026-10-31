@@ -1088,6 +1088,7 @@
             },
             "recaudadaEn": "2026-10-24T15:00:01Z",
             "sumaAsegurada": "180000000",
+            "titularNombre": "Natalia González Ruiz",
             "vigencia": {
               "desde": "2026-10-25",
               "hasta": "2027-10-24"
@@ -1291,6 +1292,14 @@
                 }
               ]
             },
+            "$.titularNombre": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
             "$.vigencia.desde": {
               "combine": "AND",
               "matchers": [
@@ -1365,6 +1374,7 @@
             },
             "recaudadaEn": "2026-10-24T15:00:01Z",
             "sumaAsegurada": "180000000",
+            "titularNombre": null,
             "vigencia": {
               "desde": "2026-10-25",
               "hasta": "2027-10-24"
