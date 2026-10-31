@@ -45,7 +45,10 @@
 7. **AC3 de HU-W17:** W17 garantiza que reintentar nunca emite otra póliza y que el evento apunta siempre al mismo documento. Reintentar el aviso, deduplicarlo por dispositivo y manejar los tokens es de HU-M11.
 8. **Pantallas** (portal, grupo `asesores`):
    - solo pasos reales, con su hora: aceptada → recaudada → documento firmado por Solventa → emitida;
-   - el nombre del titular y el del canal **no se muestran**: `clientes` no expone el nombre del cliente en ninguna ruta, y no hay una ruta de socios para `asesores`.
+   - el nombre del **titular** se muestra cuando la póliza está `ACTIVA`:
+     - lo compone `bff-web` con `nombres_de_clientes`, sobre la lectura de `clientes` para `ASESOR`, que expone `nombreCompleto` desde `75e8e05`. `polizas` entrega `clienteId` en `GET …/poliza`;
+     - si `clientes` falla, el nombre se omite, sin un 503;
+   - **el nombre del canal no se muestra:** no hay una ruta de socios para `asesores`.
 
 ## Diferencias con los mockups
 
@@ -58,7 +61,7 @@
 | W17-2 y W17-4 | Nota de compensación, «Ver un caso compensado» | No se muestra (W17-3, diferido) |
 | W17-2 y W17-4 | «Presupuesto del recorrido 1,50 s», «Total de la emisión» | No se muestra: ningún tramo medible corresponde a esas cifras. La meta se vigila con la alarma `emision` |
 | W17-3 | Emisión fallida y compensada, con devolución automática | Diferido. Un fallo deja la emisión `EMITIENDO` y se reintenta |
-| W17-4 | Nombre del titular y del canal | No se muestran, ni en pantalla ni en el PDF: `clientes` no expone el nombre del cliente en ninguna ruta, y no hay una ruta de socios para `asesores` |
+| W17-4 | Nombre del titular y del canal | Titular: sí, en pantalla con la póliza activa (no en el PDF). Canal: no se muestra, por falta de una ruta de socios para `asesores` |
 | W17-4 | Número `100-2026-004817` y «Ramo: Vida hipotecario» | Sí, con `100` como convención (decisión 2) |
 
 ## Alternativas descartadas
@@ -78,7 +81,7 @@
   - un contrato de evento estable para M11 y W18;
   - todo con la infraestructura existente.
 - **Se sacrifica:**
-  - ni el PDF ni la pantalla llevan nombres;
+  - el PDF no lleva nombres; la pantalla muestra el titular, pero no el canal;
   - la pantalla no confirma el aviso;
   - no hay compensación: una emisión imposible queda `EMITIENDO`, medida como error;
   - el número usa un código de ramo propio.
