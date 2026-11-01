@@ -17,6 +17,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 import uvicorn
 from bff_web.adapters.inbound import estado_polizas as ruta
@@ -156,6 +157,15 @@ def _portal(url: str, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
 @pytest.fixture(scope="module")
 def url_consulta() -> Iterator[str]:
     with _servir(_consulta_real()) as url:
+        # Precalentamiento: el primer request paga las importaciones diferidas y no debe caer
+        # dentro del corte de 700 ms de las pruebas.
+        for destino in ("/v1/polizas", f"/v1/polizas/{uuid4()}/estado"):
+            for _ in range(3):
+                httpx.get(
+                    f"{url}{destino}",
+                    headers={"X-Actor-Id": "calentamiento", "X-Actor-Rol": "ASESOR"},
+                    timeout=10,
+                )
         yield url
 
 
