@@ -288,7 +288,7 @@ run "sprint2" {
   assert {
     condition = (
       local.catalog["bff-web"].calls == ["clientes", "cotizacion", "api-socios", "polizas", "consulta"] &&
-      local.catalog["bff-movil"].calls == ["clientes", "consulta", "avisos"] &&
+      local.catalog["bff-movil"].calls == ["clientes", "consulta", "avisos"] && local.catalog["consulta"].calls == ["catalogo"] &&
       local.catalog["dinero"].calls == ["adaptador-pagos"] && local.catalog["polizas"].calls == ["adaptador-firma", "cotizacion", "catalogo"] &&
       alltrue([for name in ["polizas", "consulta", "avisos", "adaptador-pagos", "adaptador-firma"] : contains(local.discoverable, name)]) &&
       !contains(local.discoverable, "dinero")

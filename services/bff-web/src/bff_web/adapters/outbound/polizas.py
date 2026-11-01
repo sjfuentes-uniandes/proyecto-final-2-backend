@@ -1,4 +1,5 @@
 """Cliente HTTP de la API interna de polizas: /v1/suscripciones (HU-W13),
+/v1/cotizaciones/{cotizacionId}/aceptacion (HU-W15) y …/recaudo (HU-W16).
 /v1/cotizaciones/{cotizacionId}/aceptacion (HU-W15), …/recaudo (HU-W16), …/poliza y
 /v1/polizas/{polizaId}/documento (HU-W17).
 

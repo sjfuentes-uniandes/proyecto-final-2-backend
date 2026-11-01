@@ -21,12 +21,10 @@
 1. **Disparo.**
    - El primer `RecaudoConfirmado` de una aceptación conocida crea, en la misma transacción que la proyección del recaudo, **una emisión `EMITIENDO`** (una por aceptación).
    - Una **tarea emisora** de `polizas`, encendida por defecto, la procesa: PDF → subida al bucket → firma de la huella por `adaptador-firma` → `ACTIVA` con su número y `PolizaEmitida` v1 en el outbox, en una sola transacción.
-   - Antes de procesar una póliza, la tarea la **reserva** (60 s), para que nunca haya dos subidas a la vez de la misma clave.
-   - Un fallo deja la emisión `EMITIENDO`; la misma tarea la reintenta, con puntos de control persistidos para no repetir la subida ni la firma.
-   - Pasada una hora, se mide como error. **Sin compensación.**
-2. **Número:** `100-<año>-<6 dígitos>`, con una secuencia global, donde el año es el año en que se registra la emisión (America/Bogota). **`100` es una convención de Solventa para el producto `vida-hipotecario`**, junto con su nombre de ramo, «Vida hipotecario», en una tabla de constantes de `polizas`. No es un dato del catálogo.
-   - El número **se reserva al crear la emisión**, porque el PDF lo necesita antes de `ACTIVA`.
-   - Se acepta un hueco en la secuencia.
+  - Antes de procesar una póliza, la tarea la **reserva** (60 s), para que nunca haya dos subidas a la vez de la misma clave.
+  - Un fallo deja la emisión `EMITIENDO`; la misma tarea la reintenta, con puntos de control persistidos para no repetir la subida ni la firma.
+  - Pasada una hora, se mide como error. **Sin compensación.**
+2. **Número:** `100-<año>-<6 dígitos>`, con una secuencia global, donde el año es el año en que se registra la emisión (America/Bogota). El número se reserva al crear la emisión porque el PDF lo necesita antes de `ACTIVA`; se acepta un hueco en la secuencia. **`100` es una convención de Solventa para el producto `vida-hipotecario`**, junto con su nombre de ramo, «Vida hipotecario», en una tabla de constantes de `polizas`. No es un dato del catálogo.
 3. **Vigencia:** desde las 00:00 (America/Bogota) del día siguiente a la aceptación y hasta el día anterior a su aniversario. Un año, sin depender del plazo del crédito.
 4. **Documento:**
    - un PDF determinista (`reportlab`, `invariant=1`), con los datos de la decisión, la aceptación y el recaudo;

@@ -1059,6 +1059,206 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/polizas:
+    get:
+      tags:
+      - polizas
+      summary: Pólizas del cliente autenticado, incluidas las vencidas
+      operationId: listar_v1_polizas_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PolizaResumenDto'
+                title: Response Listar V1 Polizas Get
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '401':
+          description: 'NO_AUTENTICADO: falta el token, venció, tiene una firma inválida
+            o no corresponde al titular autenticado. La app debe pedir autenticación
+            completa'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: el token no es del pool de clientes'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: CLIENTE_NO_ENCONTRADO
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: 'SOLICITUD_INVALIDA: un encabezado no cumple su formato'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: no se pudo consultar las pólizas'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/polizas/{poliza_id}:
+    get:
+      tags:
+      - polizas
+      summary: Detalle de una póliza del cliente autenticado con su credencial
+      operationId: detalle_v1_polizas__poliza_id__get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: poliza_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Poliza Id
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolizaDetalleDto'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '401':
+          description: 'NO_AUTENTICADO: falta el token, venció, tiene una firma inválida
+            o no corresponde al titular autenticado. La app debe pedir autenticación
+            completa'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: el token no es del pool de clientes, o
+            POLIZA_NO_AUTORIZADA: la póliza es de otro cliente'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: CLIENTE_NO_ENCONTRADO o POLIZA_NO_ENCONTRADA
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: 'SOLICITUD_INVALIDA: el identificador o un encabezado no cumplen
+            su formato'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: no se pudo consultar las pólizas'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -1095,6 +1295,23 @@ components:
       - estado
       - verificadoEn
       title: ClienteVinculadoDto
+    CoberturaDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        nombre:
+          type: string
+          title: Nombre
+        obligatoria:
+          type: boolean
+          title: Obligatoria
+      type: object
+      required:
+      - codigo
+      - nombre
+      - obligatoria
+      title: CoberturaDto
     ConsentimientoDto:
       properties:
         consentimientoId:
@@ -1143,6 +1360,26 @@ components:
       - vigenteHasta
       - revocadoEn
       title: ConsentimientoDto
+    CredencialDto:
+      properties:
+        numero:
+          type: string
+          title: Numero
+        huella:
+          type: string
+          title: Huella
+        firmaId:
+          type: string
+          title: Firmaid
+        vigencia:
+          $ref: '#/components/schemas/VigenciaDto'
+      type: object
+      required:
+      - numero
+      - huella
+      - firmaId
+      - vigencia
+      title: CredencialDto
     ErrorDto:
       properties:
         codigo:
@@ -1215,6 +1452,102 @@ components:
       - tipo
       - ocurridoEn
       title: HitoDto
+    PolizaDetalleDto:
+      properties:
+        numero:
+          type: string
+          title: Numero
+        estado:
+          type: string
+          title: Estado
+        producto:
+          type: string
+          title: Producto
+        ramo:
+          type: string
+          title: Ramo
+        vigencia:
+          $ref: '#/components/schemas/VigenciaDto'
+        vigente:
+          type: boolean
+          title: Vigente
+        prima:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Prima
+        sumaAsegurada:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Sumaasegurada
+        moneda:
+          type: string
+          title: Moneda
+        periodicidad:
+          type: string
+          title: Periodicidad
+        emitidaEn:
+          type: string
+          format: date-time
+          title: Emitidaen
+        coberturas:
+          items:
+            $ref: '#/components/schemas/CoberturaDto'
+          type: array
+          title: Coberturas
+        credencial:
+          $ref: '#/components/schemas/CredencialDto'
+      type: object
+      required:
+      - numero
+      - estado
+      - producto
+      - ramo
+      - vigencia
+      - vigente
+      - prima
+      - sumaAsegurada
+      - moneda
+      - periodicidad
+      - emitidaEn
+      - coberturas
+      - credencial
+      title: PolizaDetalleDto
+    PolizaResumenDto:
+      properties:
+        polizaId:
+          type: string
+          format: uuid
+          title: Polizaid
+        numero:
+          type: string
+          title: Numero
+        estado:
+          type: string
+          title: Estado
+        producto:
+          type: string
+          title: Producto
+        ramo:
+          type: string
+          title: Ramo
+        vigencia:
+          $ref: '#/components/schemas/VigenciaDto'
+        vigente:
+          type: boolean
+          title: Vigente
+        resumenCobertura:
+          $ref: '#/components/schemas/ResumenCoberturaDto'
+      type: object
+      required:
+      - polizaId
+      - numero
+      - estado
+      - producto
+      - ramo
+      - vigencia
+      - vigente
+      - resumenCobertura
+      title: PolizaResumenDto
     RegistroVerificadoDto:
       properties:
         clienteId:
@@ -1266,6 +1599,24 @@ components:
       - CAPTURA_INVALIDA
       - RECHAZADO
       title: ResultadoKyc
+    ResumenCoberturaDto:
+      properties:
+        sumaAsegurada:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Sumaasegurada
+        moneda:
+          type: string
+          title: Moneda
+        totalCoberturas:
+          type: integer
+          title: Totalcoberturas
+      type: object
+      required:
+      - sumaAsegurada
+      - moneda
+      - totalCoberturas
+      title: ResumenCoberturaDto
     ServicioAutorizado:
       type: string
       enum:
@@ -1472,6 +1823,21 @@ components:
       - motivo
       - verificadoEn
       title: VerificacionDto
+    VigenciaDto:
+      properties:
+        desde:
+          type: string
+          format: date
+          title: Desde
+        hasta:
+          type: string
+          format: date
+          title: Hasta
+      type: object
+      required:
+      - desde
+      - hasta
+      title: VigenciaDto
   securitySchemes:
     bearerAuth:
       type: http

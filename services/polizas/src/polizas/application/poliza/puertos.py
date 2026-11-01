@@ -1,6 +1,5 @@
-"""Puertos de la póliza (HU-W17, 17.6; el documento, 17.7; la emisión, 17.8). Todo corre en una
-transacción `T` recibida: la del inbox para crearla junto con la proyección del recaudo; la de la
-tarea emisora (17.8) para el resto. La lectura de las rutas (17.9) no recibe transacción."""
+"""Puertos de la póliza (HU-W17, 17.6; el documento, 17.7). Todo corre en una transacción `T` recibida: la del inbox
+para crearla junto con la proyección del recaudo; la de la tarea emisora (17.8) para el resto."""
 
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass

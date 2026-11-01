@@ -1,0 +1,314 @@
+components:
+  schemas:
+    CoberturaDto:
+      properties:
+        codigo:
+          title: Codigo
+          type: string
+        nombre:
+          title: Nombre
+          type: string
+        obligatoria:
+          title: Obligatoria
+          type: boolean
+      required:
+      - codigo
+      - nombre
+      - obligatoria
+      title: CoberturaDto
+      type: object
+    ErrorDto:
+      properties:
+        codigo:
+          title: Codigo
+          type: string
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          title: Detalles
+          type: object
+        mensaje:
+          title: Mensaje
+          type: string
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
+      type: object
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          title: Detail
+          type: array
+      title: HTTPValidationError
+      type: object
+    PolizaDto:
+      properties:
+        coberturas:
+          items:
+            $ref: '#/components/schemas/CoberturaDto'
+          title: Coberturas
+          type: array
+        documentoHuella:
+          title: Documentohuella
+          type: string
+        emitidaEn:
+          format: date-time
+          title: Emitidaen
+          type: string
+        estado:
+          title: Estado
+          type: string
+        firmaId:
+          title: Firmaid
+          type: string
+        moneda:
+          title: Moneda
+          type: string
+        numero:
+          title: Numero
+          type: string
+        periodicidad:
+          title: Periodicidad
+          type: string
+        polizaId:
+          format: uuid
+          title: Polizaid
+          type: string
+        prima:
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Prima
+          type: string
+        productoId:
+          title: Productoid
+          type: string
+        productoNombre:
+          title: Productonombre
+          type: string
+        productoVersion:
+          title: Productoversion
+          type: string
+        ramo:
+          title: Ramo
+          type: string
+        sumaAsegurada:
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Sumaasegurada
+          type: string
+        vigencia:
+          $ref: '#/components/schemas/VigenciaDto'
+        vigente:
+          title: Vigente
+          type: boolean
+      required:
+      - polizaId
+      - numero
+      - estado
+      - productoId
+      - productoVersion
+      - productoNombre
+      - ramo
+      - vigencia
+      - vigente
+      - prima
+      - sumaAsegurada
+      - moneda
+      - periodicidad
+      - coberturas
+      - documentoHuella
+      - firmaId
+      - emitidaEn
+      title: PolizaDto
+      type: object
+    ValidationError:
+      properties:
+        ctx:
+          title: Context
+          type: object
+        input:
+          title: Input
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          title: Location
+          type: array
+        msg:
+          title: Message
+          type: string
+        type:
+          title: Error Type
+          type: string
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+      type: object
+    VigenciaDto:
+      properties:
+        desde:
+          format: date
+          title: Desde
+          type: string
+        hasta:
+          format: date
+          title: Hasta
+          type: string
+      required:
+      - desde
+      - hasta
+      title: VigenciaDto
+      type: object
+info:
+  title: consulta
+  version: 0.1.0
+openapi: 3.1.0
+paths:
+  /health:
+    get:
+      operationId: health_health_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      summary: Health
+  /v1/clientes/{cliente_id}/polizas:
+    get:
+      operationId: listar_v1_clientes__cliente_id__polizas_get
+      parameters:
+      - in: path
+        name: cliente_id
+        required: true
+        schema:
+          format: uuid
+          title: Cliente Id
+          type: string
+      - in: header
+        name: X-Actor-Id
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - in: header
+        name: X-Actor-Rol
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/PolizaDto'
+                title: Response Listar V1 Clientes  Cliente Id  Polizas Get
+                type: array
+          description: Successful Response
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de CLIENTE'
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: "P\xF3lizas del cliente, incluidas las vencidas, por vigencia_hasta\
+        \ descendente"
+      tags:
+      - polizas
+  /v1/clientes/{cliente_id}/polizas/{poliza_id}:
+    get:
+      operationId: detalle_v1_clientes__cliente_id__polizas__poliza_id__get
+      parameters:
+      - in: path
+        name: cliente_id
+        required: true
+        schema:
+          format: uuid
+          title: Cliente Id
+          type: string
+      - in: path
+        name: poliza_id
+        required: true
+        schema:
+          format: uuid
+          title: Poliza Id
+          type: string
+      - in: header
+        name: X-Actor-Id
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - in: header
+        name: X-Actor-Rol
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolizaDto'
+          description: Successful Response
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+          description: "POLIZA_NO_AUTORIZADA: la p\xF3liza es de otro cliente (sin\
+            \ datos de la p\xF3liza)"
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+          description: POLIZA_NO_ENCONTRADA
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: "Detalle de una p\xF3liza del cliente"
+      tags:
+      - polizas

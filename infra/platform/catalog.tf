@@ -93,7 +93,7 @@ locals {
     # síncronas con meta de latencia, por eso escala por CPU y no por su cola.
     "consulta" = {
       tier     = "proyeccion", listener_port = null, database = true, publishes = false, cache = true
-      calls    = []
+      calls    = ["catalogo"]
       consumes = ["consulta-proyeccion"], allies = []
       stories  = ["HU-W18", "HU-M10"]
     }

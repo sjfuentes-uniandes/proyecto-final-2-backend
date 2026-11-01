@@ -17,6 +17,7 @@ class Settings(ServiceSettings):
     service_name: str = "bff-movil"
 
     clientes_url: str = Field("http://localhost:8083", validation_alias=_env("CLIENTES_URL"))
+    consulta_url: str = Field("http://localhost:8090", validation_alias=_env("CONSULTA_URL"))
     # Emisor de cada pool de Cognito: customers, backoffice y partners (infra/apps/ecs.tf).
     jwt_issuers: dict[str, str] = Field(default_factory=dict, validation_alias=_env("JWT_ISSUERS"))
     # Solo la usa POST /v1/registro/validaciones, que existe únicamente con ENVIRONMENT=local
@@ -28,6 +29,7 @@ class Settings(ServiceSettings):
     # Variables propias (SOLVENTA_<NOMBRE>), con valores seguros por defecto.
     # SinProteccion limita el timeout a 700 ms (regla 7).
     clientes_timeout_ms: int = Field(500, ge=1)
+    consulta_timeout_ms: int = Field(500, ge=1)
     # Debe superar el timeout de `clientes` hacia adaptador-identidad (4 s), que a su vez supera
     # el del proveedor KYC (3 s): cada nivel espera más que el que está debajo.
     verificacion_timeout_ms: int = Field(5000, ge=1)
