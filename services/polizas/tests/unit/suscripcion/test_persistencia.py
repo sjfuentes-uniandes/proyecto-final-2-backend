@@ -280,9 +280,13 @@ def test_migrar_bloquea_aplica_y_libera(monkeypatch: pytest.MonkeyPatch) -> None
     # HU-W16 (16.13): 003, el inbox y la proyección del recaudo.
     assert "CREATE TABLE IF NOT EXISTS inbox" in conexion.sentencias[3]
     assert "CREATE TABLE IF NOT EXISTS recaudos_aceptacion" in conexion.sentencias[3]
+    # HU-W17 (17.6): 004 después de 002 (las pólizas referencian a las aceptaciones).
+    assert "CREATE TABLE IF NOT EXISTS polizas" in conexion.sentencias[4]
+    # HU-W17 (17.8): 005 después de 004 (la correlación y el índice de las pendientes).
+    assert "CREATE INDEX IF NOT EXISTS polizas_emitiendo" in conexion.sentencias[5]
     assert "pg_advisory_unlock" in conexion.sentencias[-1]
     # Solo los .sql de la raíz: las reversas (down/) no se aplican al arrancar.
-    assert len(conexion.sentencias) == 5
+    assert len(conexion.sentencias) == 7
 
 
 def test_migrar_libera_el_candado_si_falla(monkeypatch: pytest.MonkeyPatch) -> None:

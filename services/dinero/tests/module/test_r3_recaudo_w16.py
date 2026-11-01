@@ -711,7 +711,7 @@ def cadena(
     simulador: Simulador,
     adaptador: Servidor,
 ) -> Iterator[Cadena]:
-    _ejecutar(base_polizas, "TRUNCATE aceptaciones, decisiones_suscripcion, outbox")
+    _ejecutar(base_polizas, "TRUNCATE polizas, aceptaciones, decisiones_suscripcion, outbox")
     simulador.limpiar_journal()
     raiz = logging.getLogger()
     anteriores, nivel = list(raiz.handlers), raiz.level

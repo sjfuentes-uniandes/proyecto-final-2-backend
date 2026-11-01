@@ -1,7 +1,7 @@
 """Proyección del recaudo en PostgreSQL (HU-W16, 16.13): tabla `recaudos_aceptacion` de 003.
 
-`guardar` y `aceptacion_conocida` escriben y leen en la transacción del inbox
-(`TransaccionInboxPg.conexion`); `por_clave` lee con el pool. `ON CONFLICT (clave_recaudo) DO
+`guardar` escribe y lee en la transacción del inbox (`TransaccionInboxPg.conexion`); `por_clave`
+lee con el pool. Si la aceptación es conocida lo dice `PolizasPg.origen` (HU-W17, 17.6). `ON CONFLICT (clave_recaudo) DO
 NOTHING` deja el primer estado final: con dos entregas concurrentes de la misma clave, el segundo
 `INSERT` espera al commit del primero y luego lee su fila. Las migraciones las aplica
 `decisiones_pg.migrar` (todos los .sql en orden).
@@ -33,7 +33,6 @@ _INSERTAR = (
     "ON CONFLICT (clave_recaudo) DO NOTHING RETURNING clave_recaudo"
 )
 _POR_CLAVE = f"SELECT {', '.join(COLUMNAS)} FROM recaudos_aceptacion WHERE clave_recaudo = %s"
-_ACEPTACION = "SELECT 1 FROM aceptaciones WHERE id = %s"
 
 
 def fila_recaudo(resultado: ResultadoRecaudo) -> dict[str, Any]:
@@ -90,7 +89,3 @@ class RecaudosPg:
             # No pasa: el conflicto implica una fila confirmada. Si pasara, rollback y reentrega.
             raise RuntimeError("recaudo: conflicto sin fila")
         return recaudo_de(previa)
-
-    async def aceptacion_conocida(self, clave_recaudo: UUID, tx: TransaccionInboxPg) -> bool:
-        cursor = await tx.conexion.execute(_ACEPTACION, (clave_recaudo,))
-        return await cursor.fetchone() is not None

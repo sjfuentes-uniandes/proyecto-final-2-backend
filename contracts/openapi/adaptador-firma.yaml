@@ -1,0 +1,152 @@
+openapi: 3.1.0
+info:
+  title: adaptador-firma
+  version: 0.1.0
+paths:
+  /v1/firmas:
+    post:
+      tags:
+      - firmas
+      summary: Firmar
+      description: Firma la huella con `documentoId` como clave idempotente hacia
+        el proveedor.
+      operationId: firmar_v1_firmas_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudFirma'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FirmaDto'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '502':
+          description: RESPUESTA_INVALIDA (también un 404, un estado no previsto o
+            la firma de otro documento u otra huella)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: FUENTE_NO_DISPONIBLE (detalles.motivo y detalles.circuito)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '504':
+          description: TIEMPO_AGOTADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Health Get
+components:
+  schemas:
+    ErrorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        mensaje:
+          type: string
+          title: Mensaje
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          type: object
+          title: Detalles
+      type: object
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
+    EstadoFirma:
+      type: string
+      enum:
+      - FIRMADO
+      title: EstadoFirma
+      description: 'La única respuesta definitiva del proveedor: no hay rechazo (plan
+        W17, §b, decisión 9).'
+    FirmaDto:
+      properties:
+        documentoId:
+          type: string
+          format: uuid
+          title: Documentoid
+        estado:
+          $ref: '#/components/schemas/EstadoFirma'
+        firmaId:
+          type: string
+          title: Firmaid
+        selloTiempo:
+          type: string
+          format: date-time
+          title: Sellotiempo
+        huella:
+          type: string
+          title: Huella
+      type: object
+      required:
+      - documentoId
+      - estado
+      - firmaId
+      - selloTiempo
+      - huella
+      title: FirmaDto
+    SolicitudFirma:
+      properties:
+        documentoId:
+          type: string
+          format: uuid
+          title: Documentoid
+        huella:
+          type: string
+          pattern: ^sha256:[0-9a-f]{64}$
+          title: Huella
+          examples:
+          - sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+        firmanteRef:
+          type: string
+          format: uuid
+          title: Firmanteref
+      type: object
+      required:
+      - documentoId
+      - huella
+      - firmanteRef
+      title: SolicitudFirma

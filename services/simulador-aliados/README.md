@@ -92,6 +92,27 @@ omiten (también las incluye `pytest services/simulador-aliados/tests`):
 uv run pytest services/simulador-aliados/tests/module
 ```
 
+## Firma por cliente sintético (`/firma`), HU-W17
+
+`adaptador-firma` firma la huella sha256 del PDF de la póliza (ADR 0014, decisión 3: se firma la huella, no el PDF).
+El caso lo elige el `firmante` (el `clienteId` sintético), con los mismos clientes que pagos. Los mapeos por
+`documentoId` fijo (`doc-sintetico-*`) de la tabla de HU-S02 siguen igual y no se solapan: estos exigen un
+`documentoId` uuid y una huella bien formada.
+
+**Firma:** `POST /firma/v1/firmas` con `X-Api-Key` e `Idempotency-Key` (cualquier valor) y el cuerpo
+`{"documentoId": "<uuid>", "huella": "sha256:<64 hex en minúsculas>", "firmante": "<clienteId>"}`. La respuesta
+devuelve el `documentoId` y la `huella` recibidos (plantilla de respuestas). `firmaId` y `selloTiempo` son fijos y
+sintéticos: `FIR-SINT-C01` o `FIR-SINT-C06`, y `2026-01-01T00:00:00Z`. Sin rechazo, porque C02 nunca llega a
+emitirse, y sin consulta de estado, porque reintentar con la misma `Idempotency-Key` es idempotente (ADR 0014).
+
+| Caso | Cliente (`firmante`) | Respuesta |
+| --- | --- | --- |
+| Firmado | C01 `00000000-0000-4000-8000-000000000001` | 200 `{"documentoId", "estado": "FIRMADO", "firmaId": "FIR-SINT-C01", "selloTiempo": "2026-01-01T00:00:00Z", "huella"}`, 50 ms |
+| Malformado | C05 `00000000-0000-4000-8000-000000000005` | 200 con el cuerpo `{"estado": ` (JSON inválido) |
+| Lento (incierto) | C06 `00000000-0000-4000-8000-000000000006` | 200 `FIRMADO` (`FIR-SINT-C06`) en 8000 ms, por encima del timeout de 5 s: la firma sí ocurre |
+| Caído | C07 `00000000-0000-4000-8000-000000000007` | 503 `{"error": "unavailable"}` |
+| Otro firmante, sin encabezados, `documentoId` que no es uuid o huella mal formada | — | 404 `documento_no_reconocido` (respaldo) |
+
 ## Aliados (`/open-finance` y `/datos-abiertos`)
 
 Cada mapeo exige `X-Api-Key` (cualquier valor) y el parámetro de campos **exacto** de la fuente. Una solicitud que no coincide (otro cliente, otros campos o sin `X-Api-Key`) cae en el respaldo de prioridad 10: 404 `{"error":"customer_not_found"}`.
