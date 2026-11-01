@@ -220,6 +220,24 @@ async def test_registrar_mismo_cliente_reactiva_un_dispositivo_invalido(base: st
     ) == [("ACTIVO", None, None)]
 
 
+async def test_registrar_token_invalido_con_otro_cliente_lo_reasigna_y_lo_deja_activo(
+    base: str,
+) -> None:
+    cliente_anterior = uuid4()
+    cliente_nuevo = uuid4()
+    dispositivo_id = await _registrar(base, cliente_anterior, "t-invalido-ajeno", AHORA)
+    await _dar_de_baja(base, dispositivo_id, cliente_anterior, AHORA)
+
+    reasignado_id = await _registrar(base, cliente_nuevo, "t-invalido-ajeno", AHORA)
+
+    assert reasignado_id == dispositivo_id
+    assert _filas(
+        base,
+        "SELECT cliente_id, estado, invalidado_en, motivo_invalidez FROM dispositivo WHERE id = %s",
+        (dispositivo_id,),
+    ) == [(cliente_nuevo, "ACTIVO", None, None)]
+
+
 # --- Dos clientes con eventos distintos: cada uno recibe solo lo suyo ---------------------------
 async def test_cliente_a_y_b_con_eventos_distintos_reciben_solo_lo_suyo(
     base: str, sobre_poliza: Any, push: PushEnMemoria, reloj: Reloj

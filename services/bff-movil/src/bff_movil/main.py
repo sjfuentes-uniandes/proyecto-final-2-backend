@@ -11,6 +11,7 @@ from solventa_common.telemetry import instrumentar
 
 from bff_movil.adapters.inbound.http import (
     consentimientos,
+    dispositivos,
     polizas,
     registro,
     sesion,
@@ -20,6 +21,7 @@ from bff_movil.adapters.inbound.http.auth import Autenticador
 from bff_movil.adapters.inbound.http.jwks import ProveedorJwks
 from bff_movil.adapters.outbound.clientes_http import ClientesHttp
 from bff_movil.adapters.outbound.consentimientos_http import ConsentimientosHttp
+from bff_movil.adapters.outbound.dispositivos_http import DispositivosHttp
 from bff_movil.adapters.outbound.polizas_http import PolizasHttp
 from bff_movil.adapters.outbound.registro_http import RegistroHttp
 from bff_movil.adapters.outbound.resolutor_cliente_http import ResolutorClienteHttp
@@ -30,6 +32,8 @@ from bff_movil.application.consentimientos.casos import (
     OtorgarConsentimiento,
     RevocarConsentimiento,
 )
+from bff_movil.application.dispositivos.casos import DarDeBajaDispositivo, RegistrarDispositivo
+from bff_movil.application.dispositivos.puertos import GestionDispositivos
 from bff_movil.application.polizas.casos import ConsultarPoliza, ListarPolizas
 from bff_movil.application.polizas.puertos import ConsultaPolizas
 from bff_movil.application.registro.casos import VerificarRegistro, VincularRegistro
@@ -45,6 +49,7 @@ def crear_app(
     transport: httpx.AsyncBaseTransport | None = None,
     resolutor: ResolutorCliente | None = None,
     consulta_polizas: ConsultaPolizas | None = None,
+    gestion_dispositivos: GestionDispositivos | None = None,
     span_exporter: SpanExporter | None = None,
     metric_readers: Sequence[MetricReader] = (),
 ) -> FastAPI:
@@ -109,6 +114,15 @@ def crear_app(
             )
             app.state.listar_polizas = ListarPolizas(resolutor_cliente, servicio_polizas)
             app.state.consultar_poliza = ConsultarPoliza(resolutor_cliente, servicio_polizas)
+            servicio_dispositivos = gestion_dispositivos or DispositivosHttp(
+                cliente_clientes, settings.avisos_url, settings.avisos_timeout_ms
+            )
+            app.state.registrar_dispositivo = RegistrarDispositivo(
+                resolutor_cliente, servicio_dispositivos
+            )
+            app.state.dar_de_baja_dispositivo = DarDeBajaDispositivo(
+                resolutor_cliente, servicio_dispositivos
+            )
             yield
 
     app = instrumentar(
@@ -123,6 +137,7 @@ def crear_app(
     app.include_router(registro.router)
     app.include_router(consentimientos.router)
     app.include_router(polizas.router)
+    app.include_router(dispositivos.router)
     if settings.environment == "local":
         # Simula el Lambda pre sign-up donde no hay Cognito; nunca existe fuera de local.
         app.include_router(registro.router_local)

@@ -1271,6 +1271,218 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/dispositivos:
+    post:
+      tags:
+      - dispositivos
+      summary: Registra el dispositivo del cliente autenticado; idempotente por el
+        token
+      operationId: registrar_v1_dispositivos_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudRegistroDispositivo'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DispositivoDto'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '401':
+          description: 'NO_AUTENTICADO: falta el token, venció, tiene una firma inválida
+            o no corresponde al titular autenticado. La app debe pedir autenticación
+            completa'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: el token no es del pool de clientes'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: CLIENTE_NO_ENCONTRADO
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: 'SOLICITUD_INVALIDA: el cuerpo o un encabezado no cumplen su
+            formato'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: no se pudo atender la solicitud'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/dispositivos/{dispositivo_id}:
+    delete:
+      tags:
+      - dispositivos
+      summary: Da de baja un dispositivo del cliente autenticado
+      operationId: dar_de_baja_v1_dispositivos__dispositivo_id__delete
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: dispositivo_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Dispositivo Id
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '204':
+          description: Successful Response
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '401':
+          description: 'NO_AUTENTICADO: falta el token, venció, tiene una firma inválida
+            o no corresponde al titular autenticado. La app debe pedir autenticación
+            completa'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: el token no es del pool de clientes, o
+            DISPOSITIVO_NO_AUTORIZADO: el dispositivo es de otro cliente'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: CLIENTE_NO_ENCONTRADO o DISPOSITIVO_NO_ENCONTRADO
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: 'SOLICITUD_INVALIDA: el identificador o un encabezado no cumplen
+            su formato'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: no se pudo atender la solicitud'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -1392,6 +1604,16 @@ components:
       - firmaId
       - vigencia
       title: CredencialDto
+    DispositivoDto:
+      properties:
+        dispositivoId:
+          type: string
+          format: uuid
+          title: Dispositivoid
+      type: object
+      required:
+      - dispositivoId
+      title: DispositivoDto
     ErrorDto:
       properties:
         codigo:
@@ -1699,6 +1921,16 @@ components:
 
         `detalles.campos` todos los que faltan o son inválidos, no solo el primero
         (AC3).'
+    SolicitudRegistroDispositivo:
+      properties:
+        token:
+          type: string
+          minLength: 1
+          title: Token
+      type: object
+      required:
+      - token
+      title: SolicitudRegistroDispositivo
     SolicitudVerificacion:
       properties:
         selfie:

@@ -34,6 +34,22 @@ def test_contrato_de_sesion() -> None:
     ]
 
 
+def test_contrato_de_dispositivos() -> None:
+    """HU-M11: rutas sin `clienteId` ni token en la URL; el token va solo en el cuerpo."""
+    rutas = app.openapi()["paths"]
+    registro = rutas["/v1/dispositivos"]["post"]
+    baja = rutas["/v1/dispositivos/{dispositivo_id}"]["delete"]
+    assert set(registro["responses"]) == {"201", "400", "401", "403", "404", "422", "503"}
+    assert set(baja["responses"]) == {"204", "401", "403", "404", "422", "503"}
+    for operacion in (registro, baja):
+        assert operacion["security"] == [{"bearerAuth": []}]
+        assert all("cliente" not in p["name"].lower() for p in operacion["parameters"])
+        assert all("token" not in p["name"].lower() for p in operacion["parameters"])
+    esquemas = app.openapi()["components"]["schemas"]
+    assert set(esquemas["SolicitudRegistroDispositivo"]["required"]) == {"token"}
+    assert set(esquemas["DispositivoDto"]["properties"]) == {"dispositivoId"}
+
+
 def test_contrato_de_consentimientos() -> None:
     """HU-M08: rutas sin `clienteId` (el titular sale del token) y lista como arreglo simple."""
     rutas = app.openapi()["paths"]

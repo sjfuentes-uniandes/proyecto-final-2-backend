@@ -401,6 +401,7 @@ def crear_entorno(
         environment: str = "pruebas",
         con_cliente: bool = True,
         consulta_polizas: Any = None,
+        gestion_dispositivos: Any = None,
         **ajustes: Any,
     ) -> Entorno:
         router = pila.enter_context(respx.mock(assert_all_called=False))
@@ -443,6 +444,7 @@ def crear_entorno(
             settings,
             resolutor=ResolutorFalso({SUB: CLIENTE_ID} if con_cliente else {}),
             consulta_polizas=consulta_polizas,
+            gestion_dispositivos=gestion_dispositivos,
             span_exporter=spans,
             metric_readers=[lector],
         )

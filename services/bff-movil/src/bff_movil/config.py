@@ -18,6 +18,7 @@ class Settings(ServiceSettings):
 
     clientes_url: str = Field("http://localhost:8083", validation_alias=_env("CLIENTES_URL"))
     consulta_url: str = Field("http://localhost:8090", validation_alias=_env("CONSULTA_URL"))
+    avisos_url: str = Field("http://localhost:8080", validation_alias=_env("AVISOS_URL"))
     # Emisor de cada pool de Cognito: customers, backoffice y partners (infra/apps/ecs.tf).
     jwt_issuers: dict[str, str] = Field(default_factory=dict, validation_alias=_env("JWT_ISSUERS"))
     # Solo la usa POST /v1/registro/validaciones, que existe únicamente con ENVIRONMENT=local
@@ -30,6 +31,8 @@ class Settings(ServiceSettings):
     # SinProteccion limita el timeout a 700 ms (regla 7).
     clientes_timeout_ms: int = Field(500, ge=1)
     consulta_timeout_ms: int = Field(500, ge=1)
+    # Registrar y dar de baja son una escritura breve en la base de `avisos`.
+    avisos_timeout_ms: int = Field(500, ge=1)
     # Debe superar el timeout de `clientes` hacia adaptador-identidad (4 s), que a su vez supera
     # el del proveedor KYC (3 s): cada nivel espera más que el que está debajo.
     verificacion_timeout_ms: int = Field(5000, ge=1)
