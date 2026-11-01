@@ -89,6 +89,42 @@ services:
       OTEL_PROPAGATORS: tracecontext,baggage,xray
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
       CLIENTES_URL: http://clientes:8080
+      # HU-M11: dispositivos push. Dentro de compose avisos escucha en 8080 (como Service Connect).
+      AVISOS_URL: http://avisos:8080
+
+  # HU-M11: inbox de avisos y registro de dispositivos. Host: 8091 (8080 es de bff-web); el puerto por
+  # defecto de bff-movil (AVISOS_URL=http://localhost:8080) solo aplica a un avisos suelto sin bff-web.
+  # Sin SQS_AVISOS_URL no consume la cola (solo registra dispositivos y barre entregas).
+  avisos:
+    <<: *servicio
+    build: { context: ., dockerfile: services/avisos/Dockerfile }
+    ports: ["8091:8080"]
+    depends_on:
+      postgres: { condition: service_started }
+      localstack: { condition: service_started }
+      otel-collector: { condition: service_started }
+      adaptador-firma: { condition: service_started }
+    # El ancla define environment: se repiten sus variables junto con las propias.
+    environment:
+      SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_PROPAGATORS: tracecontext,baggage,xray
+      OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
+      DB_HOST: postgres
+      ADAPTADOR_FIRMA_URL: http://adaptador-firma:8080
+
+  adaptador-firma:
+    <<: *servicio
+    build: { context: ., dockerfile: services/adaptador-firma/Dockerfile }
+    ports: ["8092:8080"]
+    # El ancla define environment: se repiten sus variables junto con las propias.
+    environment:
+      SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_PROPAGATORS: tracecontext,baggage,xray
+      OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
+      ALLY_FIRMA_URL: http://simulador-aliados:8080/firma
+      ALLY_PUSH_URL: http://simulador-aliados:8080/push
 
   clientes:
     <<: *servicio

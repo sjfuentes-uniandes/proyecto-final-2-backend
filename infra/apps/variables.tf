@@ -307,6 +307,7 @@ variable "provider_operations" {
     pagos          = { service = "adaptador-pagos", operations = ["cobro.pagos"] }
     firma          = { service = "adaptador-firma", operations = ["firma.documento"] }
     push           = { service = "adaptador-firma", operations = ["notificacion.push"] }
+    push-avisos    = { service = "avisos", operations = ["aviso.push"] }
   }
   validation {
     condition     = alltrue([for provider in values(var.provider_operations) : length(provider.operations) >= 1 && length(provider.operations) <= 5])

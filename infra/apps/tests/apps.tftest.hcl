@@ -463,11 +463,12 @@ run "sprint2" {
   }
   assert {
     condition = (
-      toset(keys(aws_cloudwatch_metric_alarm.provider_degradation)) == toset([for p in ["open-finance", "datos-abiertos", "kyc", "pagos", "firma", "push"] : "proveedor-${p}-degradado"]) &&
+      toset(keys(aws_cloudwatch_metric_alarm.provider_degradation)) == toset([for p in ["open-finance", "datos-abiertos", "kyc", "pagos", "firma", "push", "push-avisos"] : "proveedor-${p}-degradado"]) &&
       one([for q in aws_cloudwatch_metric_alarm.provider_degradation["proveedor-open-finance-degradado"].metric_query : q.expression if q.id == "errores"]) == "FILL(e0, 0) + FILL(e1, 0) + FILL(e2, 0)" &&
       one([for q in aws_cloudwatch_metric_alarm.provider_degradation["proveedor-open-finance-degradado"].metric_query : q.expression if q.return_data == true]) == "IF(total > 0, 100 * errores / total, 0)" &&
       toset([for q in aws_cloudwatch_metric_alarm.provider_degradation["proveedor-open-finance-degradado"].metric_query : q.metric[0].dimensions.Operation if length(q.metric) > 0]) == toset(["consulta.FA_PRODUCTOS_VIGENTES", "consulta.FA_HISTORIAL_PAGOS_12M", "consulta.FA_INGRESOS_AGREGADOS"]) &&
       toset([for q in aws_cloudwatch_metric_alarm.provider_degradation["proveedor-pagos-degradado"].metric_query : "${q.metric[0].metric_name}/${q.metric[0].stat}/${q.metric[0].dimensions.Service}/${q.metric[0].dimensions.Operation}" if length(q.metric) > 0]) == toset(["OperationErrors/Sum/adaptador-pagos/cobro.pagos", "OperationDuration/SampleCount/adaptador-pagos/cobro.pagos"]) &&
+      toset([for q in aws_cloudwatch_metric_alarm.provider_degradation["proveedor-push-avisos-degradado"].metric_query : "${q.metric[0].dimensions.Service}/${q.metric[0].dimensions.Operation}" if length(q.metric) > 0]) == toset(["avisos/aviso.push"]) &&
       aws_cloudwatch_metric_alarm.provider_degradation["proveedor-push-degradado"].threshold == 20 &&
       aws_cloudwatch_metric_alarm.provider_degradation["proveedor-firma-degradado"].treat_missing_data == "notBreaching"
     )
