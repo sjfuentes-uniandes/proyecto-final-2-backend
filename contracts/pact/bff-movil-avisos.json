@@ -1,0 +1,224 @@
+{
+  "consumer": {
+    "name": "bff-movil"
+  },
+  "interactions": [
+    {
+      "description": "el registro de un dispositivo del cliente",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el cliente puede registrar dispositivos"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "token": "token-sintetico-entregado"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/clientes/00000000-0000-4000-8000-000000000001/dispositivos"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "dispositivoId": "00000000-0000-4000-8000-0000000000d1"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.dispositivoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la baja de un dispositivo de otro cliente",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el dispositivo pertenece a otro cliente"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "method": "DELETE",
+        "path": "/v1/clientes/00000000-0000-4000-8000-000000000001/dispositivos/00000000-0000-4000-8000-0000000000d2"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "DISPOSITIVO_NO_AUTORIZADO",
+            "correlationId": "c0rr3l4c10n",
+            "detalles": {},
+            "mensaje": "Mensaje genérico"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 403
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la baja de un dispositivo del cliente",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el dispositivo es del cliente"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "method": "DELETE",
+        "path": "/v1/clientes/00000000-0000-4000-8000-000000000001/dispositivos/00000000-0000-4000-8000-0000000000d1"
+      },
+      "response": {
+        "status": 204
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la baja de un dispositivo inexistente",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el dispositivo no existe"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "X-Actor-Rol": [
+            "CLIENTE"
+          ]
+        },
+        "method": "DELETE",
+        "path": "/v1/clientes/00000000-0000-4000-8000-000000000001/dispositivos/00000000-0000-4000-8000-0000000000d3"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "DISPOSITIVO_NO_ENCONTRADO",
+            "correlationId": "c0rr3l4c10n",
+            "detalles": {},
+            "mensaje": "Mensaje genérico"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactRust": {
+      "ffi": "0.5.8",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    }
+  },
+  "provider": {
+    "name": "avisos"
+  }
+}

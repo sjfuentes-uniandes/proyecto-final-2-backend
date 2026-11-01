@@ -1,0 +1,234 @@
+openapi: 3.1.0
+info:
+  title: avisos
+  version: 0.1.0
+paths:
+  /v1/clientes/{cliente_id}/dispositivos:
+    post:
+      tags:
+      - dispositivos
+      summary: Registra (o reasigna) el dispositivo del cliente; idempotente por el
+        token
+      operationId: registrar_v1_clientes__cliente_id__dispositivos_post
+      parameters:
+      - name: cliente_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cliente Id
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudRegistro'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DispositivoDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de CLIENTE'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/clientes/{cliente_id}/dispositivos/{dispositivo_id}:
+    delete:
+      tags:
+      - dispositivos
+      summary: Da de baja el dispositivo (queda INVALIDO; no se borra)
+      operationId: dar_de_baja_v1_clientes__cliente_id__dispositivos__dispositivo_id__delete
+      parameters:
+      - name: cliente_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cliente Id
+      - name: dispositivo_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Dispositivo Id
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '204':
+          description: Successful Response
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: El dispositivo es de otro cliente (sin datos del dispositivo)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: El dispositivo no existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+components:
+  schemas:
+    DispositivoDto:
+      properties:
+        dispositivoId:
+          type: string
+          format: uuid
+          title: Dispositivoid
+      type: object
+      required:
+      - dispositivoId
+      title: DispositivoDto
+    ErrorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        mensaje:
+          type: string
+          title: Mensaje
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          type: object
+          title: Detalles
+      type: object
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    SolicitudRegistro:
+      properties:
+        token:
+          type: string
+          minLength: 1
+          title: Token
+      type: object
+      required:
+      - token
+      title: SolicitudRegistro
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
