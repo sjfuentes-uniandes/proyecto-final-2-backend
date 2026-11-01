@@ -39,7 +39,7 @@ async def test_poliza_emitida_v1_se_mapea_y_se_proyecta(sobre_poliza: Any) -> No
     payload = sobre["payload"]
     assert str(evento.poliza_id) == payload["polizaId"]
     assert str(evento.cliente_id) == payload["clienteId"]
-    assert (evento.producto_id, evento.producto_version) == ("vida-deudor", "1.0.0")
+    assert (evento.producto_id, evento.producto_version) == ("vida-hipotecario", "1.0.0")
     assert (evento.prima, evento.suma_asegurada) == ("64638.10", "50000000")
     assert evento.documento_huella == payload["documento"]["huella"]
     assert evento.firma_id == "FIRMA-0001"
