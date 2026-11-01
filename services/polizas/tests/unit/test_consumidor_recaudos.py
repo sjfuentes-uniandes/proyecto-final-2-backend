@@ -172,6 +172,8 @@ def crear(
 
     def _crear(con_base: bool = True, **cambios: Any) -> tuple[FastAPI, io.StringIO]:
         global _app_actual
+        # HU-W17 (17.8): la tarea emisora se prueba en test_emisora.py.
+        cambios = {"emision_habilitada": False} | cambios
         settings = Settings(DB_HOST="rds.interno" if con_base else None, **cambios)
         app = main.crear_app(settings)
         _app_actual = app.state

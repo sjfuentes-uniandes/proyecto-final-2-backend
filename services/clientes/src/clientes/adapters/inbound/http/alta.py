@@ -2,6 +2,10 @@
 
 El cliente nace PENDIENTE; solo el veredicto del proveedor lo pasa a VERIFICADO o RECHAZADO.
 Solo `bff-web` invoca estas rutas, con el rol ASESOR.
+
+La lectura (`GET /v1/clientes/{clienteId}`) agrega `nombreCompleto`: `clientes` es el dueño de los
+datos personales y el BFF compone con él las vistas del asesor (cotizaciones abiertas, bandeja y
+decisión de suscripción), sin copiarlo en otros servicios (modelo de información, VA-005).
 """
 
 from datetime import UTC, date, datetime
@@ -72,6 +76,23 @@ class ClienteDto(Dto):
         )
 
 
+class ClienteLecturaDto(ClienteDto):
+    """La lectura del asesor: el estado y la traza más el nombre con que se dio de alta.
+
+    Solo el nombre: ni el documento ni la fecha de nacimiento. `null` si el cliente nació por su
+    ingreso o su registro (sin alta por documento).
+    """
+
+    nombre_completo: str | None
+
+    @classmethod
+    def desde(cls, cliente: Cliente) -> "ClienteLecturaDto":
+        return cls(
+            **ClienteDto.desde(cliente).model_dump(),
+            nombre_completo=cliente.nombre_completo,
+        )
+
+
 def _no_encontrado() -> ErrorNegocio:
     return ErrorNegocio("CLIENTE_NO_ENCONTRADO", "El cliente no existe", 404)
 
@@ -109,15 +130,15 @@ async def crear(
 
 @router.get(
     "/{cliente_id}",
-    response_model=ClienteDto,
+    response_model=ClienteLecturaDto,
     response_model_by_alias=True,
-    summary="Estado de la identidad y traza de la verificación del cliente",
+    summary="Estado de la identidad, traza de la verificación y nombre del cliente",
     responses={**ERRORES_ASESOR, 404: error("CLIENTE_NO_ENCONTRADO")},
 )
-async def obtener(cliente_id: UUID, request: Request, _asesor: Asesor) -> ClienteDto:
+async def obtener(cliente_id: UUID, request: Request, _asesor: Asesor) -> ClienteLecturaDto:
     consultas: ConsultarCliente = request.app.state.consultar_cliente
     try:
-        return ClienteDto.desde(await consultas.identidad(cliente_id))
+        return ClienteLecturaDto.desde(await consultas.identidad(cliente_id))
     except ClienteNoEncontrado as error_:
         raise _no_encontrado() from error_
 

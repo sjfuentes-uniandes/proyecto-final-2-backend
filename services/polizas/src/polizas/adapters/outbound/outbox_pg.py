@@ -1,5 +1,8 @@
 """Transactional Outbox de polizas (regla 3): el evento se escribe en la misma transacción que la
 decisión o la aceptación. La publicación a SNS la hace el relay (EXT-04); aquí solo se insertan filas.
+
+HU-W17 (17.8): `PolizaEmitida` v1, en la transacción que deja la póliza ACTIVA (la de la tarea
+emisora), con la referencia registrada del documento y de la firma.
 """
 
 from collections.abc import Sequence
@@ -12,12 +15,24 @@ from psycopg.types.json import Jsonb
 from polizas.adapters.outbound.eventos import (
     DECISION_SUSCRIPCION_REGISTRADA,
     OFERTA_ACEPTADA,
+    POLIZA_EMITIDA,
+    CoberturaV1,
     DecisionSuscripcionRegistradaV1,
+    DocumentoV1,
+    FirmaV1,
     OfertaAceptadaV1,
+    PolizaEmitidaV1,
     PrimaAceptadaV1,
+    ProductoV1,
+    RamoV1,
     SobreEvento,
+    SobrePolizaEmitidaV1,
+    VigenciaV1,
 )
+from polizas.adapters.outbound.polizas_pg import TransaccionPg
 from polizas.domain.aceptacion.modelos import Aceptacion
+from polizas.domain.poliza.documento import DatosDocumento
+from polizas.domain.poliza.modelos import EstadoPoliza, Poliza
 from polizas.domain.suscripcion.insumos import texto
 from polizas.domain.suscripcion.modelos import Decision
 
@@ -89,6 +104,62 @@ def evento_de_aceptacion(
             canal=aceptacion.canal,
         ),
     )
+
+
+def evento_de_emision(
+    poliza: Poliza, datos: DatosDocumento, correlation_id: str
+) -> SobrePolizaEmitidaV1:
+    """PolizaEmitida.v1 de una póliza ACTIVA: `occurredAt` = `emitidaEn`; la prima, la suma, la
+    moneda, la periodicidad y las coberturas, de los datos de su documento (la instantánea de la
+    decisión, nunca el catálogo); el ramo, de la póliza."""
+    documento, firma, emitida_en = poliza.documento, poliza.firma, poliza.emitida_en
+    # Una póliza ACTIVA siempre tiene documento, firma y emitida_en (Poliza y el CHECK de 004).
+    activa = poliza.estado is EstadoPoliza.ACTIVA
+    if not activa or documento is None or firma is None or emitida_en is None:
+        raise ValueError("PolizaEmitida: solo de una póliza ACTIVA")
+    return SobrePolizaEmitidaV1(
+        event_id=uuid4(),
+        aggregate_id=poliza.poliza_id,
+        type=POLIZA_EMITIDA,
+        version=1,
+        occurred_at=emitida_en,
+        correlation_id=correlation_id,
+        payload=PolizaEmitidaV1(
+            poliza_id=poliza.poliza_id,
+            numero=poliza.numero,
+            cotizacion_id=poliza.cotizacion_id,
+            clave_recaudo=poliza.aceptacion_id,
+            cliente_id=poliza.cliente_id,
+            producto=ProductoV1(id=poliza.producto.id, version=poliza.producto.version),
+            ramo=RamoV1(codigo=poliza.ramo.codigo, nombre=poliza.ramo.nombre),
+            coberturas=[
+                CoberturaV1(codigo=c.codigo, nombre=c.nombre, obligatoria=c.obligatoria)
+                for c in datos.coberturas
+            ],
+            vigencia=VigenciaV1(desde=poliza.vigencia.desde, hasta=poliza.vigencia.hasta),
+            prima=texto(datos.prima),
+            suma_asegurada=texto(datos.suma_asegurada),
+            moneda=datos.moneda,
+            periodicidad=datos.periodicidad,
+            documento=DocumentoV1(
+                clave=documento.clave,
+                version_id=documento.version_id,
+                huella=documento.huella,
+                tamano_bytes=documento.tamano_bytes,
+            ),
+            firma=FirmaV1(firma_id=firma.firma_id, sello_tiempo=firma.sello_tiempo),
+            emitida_en=emitida_en,
+        ),
+    )
+
+
+class OutboxPolizasPg:
+    """Implementa EventosPoliza[TransaccionPg] (HU-W17, 17.8)."""
+
+    async def emitida(
+        self, poliza: Poliza, datos: DatosDocumento, correlation_id: str, tx: TransaccionPg
+    ) -> None:
+        await insertar(tx.conexion, [evento_de_emision(poliza, datos, correlation_id)])
 
 
 async def insertar(conexion: AsyncConnection[Any], sobres: Sequence[SobreEvento[Any]]) -> None:

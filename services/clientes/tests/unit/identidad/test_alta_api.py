@@ -161,8 +161,23 @@ def test_aprobado_pasa_a_verificado_con_fecha_y_referencia(api: Any) -> None:
     (request,) = recibidas
     assert request.url.path == "/v1/verificaciones/documento"
     assert request.headers["X-Correlation-Id"] == CORRELACION
-    # El estado leído después coincide.
-    assert cliente.get(f"/v1/clientes/{cliente_id}", headers=ASESOR).json() == cuerpo
+    # El estado leído después coincide; la lectura agrega el nombre del alta.
+    leido = cliente.get(f"/v1/clientes/{cliente_id}", headers=ASESOR).json()
+    assert leido == {**cuerpo, "nombreCompleto": ALTA["nombreCompleto"]}
+
+
+def test_la_lectura_del_asesor_trae_solo_el_nombre_de_los_datos_personales(api: Any) -> None:
+    """Las vistas del portal (cotizaciones abiertas, bandeja de suscripción) componen el nombre
+    desde esta lectura; el alta y la verificación no lo repiten."""
+    cliente, _ = api(_veredicto("APROBADO"))
+    alta = _alta(cliente).json()
+    assert "nombreCompleto" not in alta
+    leido = cliente.get(f"/v1/clientes/{alta['clienteId']}", headers=ASESOR).json()
+    assert set(leido) == {
+        "clienteId", "estado", "verificadoEn", "proveedor", "referencia", "nombreCompleto",
+    }  # fmt: skip
+    assert leido["nombreCompleto"] == ALTA["nombreCompleto"]
+    assert "nombreCompleto" not in _verificar(cliente, alta["clienteId"]).json()
 
 
 def test_rechazado_no_revela_el_motivo_del_proveedor(api: Any) -> None:
@@ -245,3 +260,10 @@ def test_la_ruta_actual_sigue_siendo_del_titular(api: Any) -> None:
     cliente, _ = api(_veredicto())
     titular = {"X-Actor-Id": "sub-sin-cliente", "X-Actor-Rol": "CLIENTE"}
     _error(cliente.get("/v1/clientes/actual", headers=titular), 404, "CLIENTE_NO_ENCONTRADO")
+
+
+def test_un_cliente_sin_alta_por_documento_se_lee_sin_nombre(api: Any, repositorio: Any) -> None:
+    cliente, _ = api(_veredicto("APROBADO"))
+    sin_documento = repositorio.asegurar("sub-sin-alta")
+    leido = cliente.get(f"/v1/clientes/{sin_documento.id}", headers=ASESOR).json()
+    assert leido["nombreCompleto"] is None

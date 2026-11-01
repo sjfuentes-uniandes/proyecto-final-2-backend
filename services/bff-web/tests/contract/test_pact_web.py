@@ -10,7 +10,10 @@ docs/hu-w14-comunicacion.md §1.1. HU-W15: los estados de la aceptación hacen q
 lo que responde en ese caso (201, 200 con la misma clave, 409 OFERTA_VENCIDA o DECISION_NO_APROBADA y
 422 DECLARACIONES_INCOMPLETAS si faltan las declaraciones obligatorias). HU-W16 (16.14): los estados
 del recaudo hacen que polizas responda el EstadoRecaudo de ese estado o el 404
-ACEPTACION_NO_ENCONTRADA; las interacciones las agrega el portal en la 16.15. El verificador envía
+ACEPTACION_NO_ENCONTRADA; las interacciones las agrega el portal en la 16.15. HU-W17 (17.11): los
+estados de la póliza hacen que polizas responda la Poliza EMITIENDO o ACTIVA, el 404
+POLIZA_NO_ENCONTRADA, el EnlaceDocumento o el 409 POLIZA_NO_ACTIVA; las interacciones las agrega el
+portal en la 17.12. El verificador envía
 los encabezados que pone API Gateway para un usuario del grupo `asesores`.
 """
 
@@ -29,11 +32,13 @@ import httpx
 import pytest
 import uvicorn
 from bff_web.adapters.inbound import aceptaciones as ruta_aceptacion
+from bff_web.adapters.inbound import polizas as ruta_poliza
 from bff_web.adapters.inbound import recaudos as ruta_recaudo
 from bff_web.adapters.inbound import suscripciones as ruta
 from bff_web.adapters.outbound.clientes import ClientesCliente
 from bff_web.adapters.outbound.polizas import PolizasCliente
 from bff_web.application.aceptacion import Aceptaciones
+from bff_web.application.poliza import Polizas
 from bff_web.application.recaudo import Recaudos
 from bff_web.application.suscripcion import Suscripciones
 from bff_web.config import settings
@@ -67,6 +72,35 @@ RECAUDO_RECHAZADO = "la aceptación tiene el recaudo rechazado"
 SIN_ACEPTACION = "la cotización no tiene aceptación"
 ESTADOS_RECAUDO = {RECAUDO_PENDIENTE, RECAUDO_CONFIRMADO, RECAUDO_RECHAZADO, SIN_ACEPTACION}
 COTIZACION_RECAUDO = "00000000-0000-4000-a000-000000000001"
+# HU-W17 (17.11): estados de la póliza, para las interacciones que agrega la 17.12
+# (GET …/poliza, parámetro `cotizacionId`, y GET /v1/polizas/{polizaId}/documento, `polizaId`).
+POLIZA_EMITIENDO = "la cotización tiene la póliza emitiéndose"
+POLIZA_ACTIVA = "la cotización tiene la póliza activa"
+SIN_POLIZA = "la cotización no tiene póliza"
+DOCUMENTO_ACTIVA = "la póliza está activa con su documento"
+DOCUMENTO_EMITIENDO = "la póliza todavía se está emitiendo"
+ESTADOS_POLIZA = {
+    POLIZA_EMITIENDO,
+    POLIZA_ACTIVA,
+    SIN_POLIZA,
+    DOCUMENTO_ACTIVA,
+    DOCUMENTO_EMITIENDO,
+}
+POLIZA_ID = "00000000-0000-4000-9000-000000000001"
+RUTA_POLIZA = f"/v1/cotizaciones/{COTIZACION_RECAUDO}/poliza"
+RUTA_DOCUMENTO = f"/v1/polizas/{POLIZA_ID}/documento"
+# 17.11c: el titular de la póliza y lo que clientes responde para él (`ClienteLecturaDto`,
+# clientes.yaml) en el estado de la póliza activa; de ahí sale `titularNombre`.
+TITULAR_ID = "00000000-0000-4000-8000-000000000001"
+TITULAR_NOMBRE = "Natalia González Ruiz"
+TITULAR = {
+    "clienteId": TITULAR_ID,
+    "estado": "VERIFICADO",
+    "verificadoEn": "2026-10-20T14:00:00Z",
+    "proveedor": "KYC",
+    "referencia": "kyc-ref-001",
+    "nombreCompleto": TITULAR_NOMBRE,
+}
 SIN_DATOS: dict[str, Any] = {
     "vigenteHasta": None,
     "motivoCliente": None,
@@ -251,15 +285,71 @@ def _recaudo(estado: str) -> httpx.Response:
     return _error("ACEPTACION_NO_ENCONTRADA", 404)
 
 
+def _poliza(estado: str) -> httpx.Response:
+    """Lo que polizas devuelve en el estado: la Poliza de S01 (la aceptación de `_aceptacion` y el
+    recaudo confirmado de `_recaudo`), su EnlaceDocumento, el 409 mientras se emite o el 404."""
+    emitiendo = {
+        "polizaId": POLIZA_ID,
+        "clienteId": TITULAR_ID,
+        "estado": "EMITIENDO",
+        "numero": "100-2026-000001",
+        "producto": {"id": "vida-hipotecario", "version": "2026.09.1"},
+        "ramo": {"codigo": "100", "nombre": "Vida hipotecario"},
+        "coberturas": [
+            {"codigo": "MUERTE", "nombre": "Muerte por cualquier causa", "obligatoria": True},
+            {
+                "codigo": "INCAPACIDAD_TOTAL_PERMANENTE",
+                "nombre": "Incapacidad total y permanente",
+                "obligatoria": True,
+            },
+        ],
+        "vigencia": {"desde": "2026-10-25", "hasta": "2027-10-24"},
+        "sumaAsegurada": "180000000",
+        "prima": "64638",
+        "moneda": "COP",
+        "periodicidad": "MENSUAL",
+        "aceptadaEn": "2026-10-24T15:00:00.123456Z",
+        "recaudadaEn": "2026-10-24T15:00:01.250000Z",
+        "emitidaEn": None,
+        "documento": None,
+        "firma": None,
+    }
+    match estado:
+        case "la cotización tiene la póliza emitiéndose":
+            return httpx.Response(200, json=emitiendo)
+        case "la cotización tiene la póliza activa":
+            activa = {
+                **emitiendo,
+                "estado": "ACTIVA",
+                "emitidaEn": "2026-10-24T15:00:03.500000Z",
+                "documento": {"huella": "sha256:" + "b" * 64, "versionId": "v-sintetica-0001"},
+                "firma": {"firmaId": "FIR-SINT-C01", "selloTiempo": "2026-01-01T00:00:00Z"},
+            }
+            return httpx.Response(200, json=activa)
+        case "la póliza está activa con su documento":
+            url = (
+                "https://polizas-documentos.s3.amazonaws.com/polizas/"
+                f"{POLIZA_ID}/100-2026-000001.pdf?versionId=v-sintetica-0001"
+                "&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=300&X-Amz-Signature=sintetica"
+            )
+            return httpx.Response(200, json={"url": url, "venceEn": "2026-10-24T15:05:03.500000Z"})
+        case "la póliza todavía se está emitiendo":
+            return _error("POLIZA_NO_ACTIVA", 409)
+    return _error("POLIZA_NO_ENCONTRADA", 404)
+
+
 class PolizasSimulado:
     """GET /v1/suscripciones/{id}: la decisión sembrada por el estado, o 404 en formato B2.
     POST /v1/cotizaciones/{id}/aceptacion (HU-W15): lo que polizas responde en el estado sembrado.
-    GET /v1/cotizaciones/{id}/recaudo (HU-W16): el estado del recaudo sembrado, o 404."""
+    GET /v1/cotizaciones/{id}/recaudo (HU-W16): el estado del recaudo sembrado, o 404.
+    GET /v1/cotizaciones/{id}/poliza y /v1/polizas/{id}/documento (HU-W17): la póliza o el enlace
+    sembrados, o el error del estado."""
 
     def __init__(self) -> None:
         self.decision: dict[str, Any] | None = None
         self.aceptacion: str | None = None
         self.recaudo: str | None = None
+        self.poliza: str | None = None
         self.roles: list[str] = []
 
     def aceptar(self, pedido: httpx.Request) -> httpx.Response:
@@ -284,6 +374,8 @@ class PolizasSimulado:
 
     def responder(self, pedido: httpx.Request) -> httpx.Response:
         self.roles.append(pedido.headers.get("X-Actor-Rol", ""))
+        if pedido.url.path.endswith(("/poliza", "/documento")):
+            return _poliza(self.poliza or SIN_POLIZA)
         if pedido.url.path.endswith("/recaudo"):
             return _recaudo(self.recaudo or SIN_ACEPTACION)
         if pedido.url.path.endswith("/aceptacion"):
@@ -299,6 +391,22 @@ class PolizasSimulado:
                 "detalles": {},
             },
         )
+
+
+class ClientesSimulado:
+    """GET /v1/clientes/{id}: el titular sembrado (17.11c) o, para cualquier otro cliente, una
+    lectura sin nombre (el `clienteNombre` de la suscripción sale null, como antes)."""
+
+    def __init__(self) -> None:
+        self.titular: dict[str, Any] | None = None
+        self.pedidos: list[str] = []
+
+    def responder(self, pedido: httpx.Request) -> httpx.Response:
+        cliente_id = pedido.url.path.rsplit("/", 1)[-1]
+        self.pedidos.append(cliente_id)
+        if self.titular is not None and self.titular["clienteId"] == cliente_id:
+            return httpx.Response(200, json=self.titular)
+        return httpx.Response(200, json={"id": cliente_id})
 
 
 @contextmanager
@@ -325,16 +433,26 @@ def _servir(aplicacion: FastAPI) -> Iterator[str]:
         hilo.join(timeout=15)
 
 
-def _sembrar(polizas: PolizasSimulado, state: str, parametros: dict[str, Any]) -> None:
-    """Siembra en polizas lo que el estado del proveedor describe; uno desconocido falla."""
+def _sembrar(
+    polizas: PolizasSimulado, clientes: ClientesSimulado, state: str, parametros: dict[str, Any]
+) -> None:
+    """Siembra en polizas (y en clientes, el titular de la póliza activa) lo que el estado del
+    proveedor describe; uno desconocido falla."""
     polizas.decision = None
     polizas.aceptacion = None
     polizas.recaudo = None
+    polizas.poliza = None
+    clientes.titular = None
     if state in ESTADOS_ACEPTACION:
         polizas.aceptacion = state
         return
     if state in ESTADOS_RECAUDO:
         polizas.recaudo = state
+        return
+    if state in ESTADOS_POLIZA:
+        polizas.poliza = state
+        if state == POLIZA_ACTIVA:
+            clientes.titular = TITULAR
         return
     if state == NO_EXISTE:
         return
@@ -347,17 +465,21 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
     assert PACTO.exists(), "Copiar el pacto del portal (web/pacts/portal-web-bff-web.json)"
     monkeypatch.setattr(settings, "jwt_issuers", {"backoffice": EMISOR})
     polizas = PolizasSimulado()
-    clientes = httpx.MockTransport(
-        lambda pedido: httpx.Response(200, json={"id": pedido.url.path.rsplit("/", 1)[-1]})
-    )
+    clientes = ClientesSimulado()
     cliente_polizas = PolizasCliente(
         "http://polizas:8080", 1500, httpx.MockTransport(polizas.responder)
     )
+    cliente_clientes = ClientesCliente(
+        "http://clientes:8080", 1500, httpx.MockTransport(clientes.responder)
+    )
     app.dependency_overrides[ruta.suscripciones] = lambda: Suscripciones(
-        cliente_polizas, ClientesCliente("http://clientes:8080", 1500, clientes), 200
+        cliente_polizas, cliente_clientes, 200
     )
     app.dependency_overrides[ruta_aceptacion.aceptaciones] = lambda: Aceptaciones(cliente_polizas)
     app.dependency_overrides[ruta_recaudo.recaudos] = lambda: Recaudos(cliente_polizas)
+    app.dependency_overrides[ruta_poliza.polizas] = lambda: Polizas(
+        cliente_polizas, cliente_clientes, 200
+    )
     vistos: list[tuple[str, str | None]] = []
 
     def estado(state: str, action: str, parameters: dict[str, Any] | None) -> None:
@@ -366,7 +488,7 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
             return
         parametros = parameters or {}
         vistos.append((state, parametros.get("caso")))
-        _sembrar(polizas, state, parametros)
+        _sembrar(polizas, clientes, state, parametros)
 
     try:
         with _servir(app) as url:
@@ -399,6 +521,12 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
             (RECAUDO_CONFIRMADO, None),
             (RECAUDO_RECHAZADO, None),
             (SIN_ACEPTACION, None),
+            # HU-W17: la póliza EMITIENDO, ACTIVA y el 404; su documento, 200 y 409 mientras se emite.
+            (POLIZA_EMITIENDO, None),
+            (POLIZA_ACTIVA, None),
+            (SIN_POLIZA, None),
+            (DOCUMENTO_ACTIVA, None),
+            (DOCUMENTO_EMITIENDO, None),
         ],
         key=str,
     )
@@ -435,7 +563,7 @@ def test_los_estados_del_recaudo_responden_lo_que_promete_bff_web(
         "http://polizas:8080", 1500, httpx.MockTransport(polizas.responder)
     )
     app.dependency_overrides[ruta_recaudo.recaudos] = lambda: Recaudos(cliente_polizas)
-    _sembrar(polizas, state, {"cotizacionId": COTIZACION_RECAUDO})
+    _sembrar(polizas, ClientesSimulado(), state, {"cotizacionId": COTIZACION_RECAUDO})
     try:
         respuesta = TestClient(app).get(
             f"/v1/cotizaciones/{COTIZACION_RECAUDO}/recaudo",
@@ -455,4 +583,66 @@ def test_los_estados_del_recaudo_responden_lo_que_promete_bff_web(
         assert cuerpo["estado"] == estado
         assert (cuerpo["transaccionId"] is not None) == (estado == "CONFIRMADO")
         assert (cuerpo["motivo"] is not None) == (estado == "RECHAZADO")
+    assert polizas.roles == ["ASESOR"]
+
+
+@pytest.mark.parametrize(
+    ("state", "ruta_", "status", "esperado"),
+    [
+        (POLIZA_EMITIENDO, RUTA_POLIZA, 200, "EMITIENDO"),
+        (POLIZA_ACTIVA, RUTA_POLIZA, 200, "ACTIVA"),
+        (SIN_POLIZA, RUTA_POLIZA, 404, "POLIZA_NO_ENCONTRADA"),
+        (DOCUMENTO_ACTIVA, RUTA_DOCUMENTO, 200, None),
+        (DOCUMENTO_EMITIENDO, RUTA_DOCUMENTO, 409, "POLIZA_NO_ACTIVA"),
+    ],
+)
+def test_los_estados_de_la_poliza_responden_lo_que_promete_bff_web(
+    monkeypatch: pytest.MonkeyPatch, state: str, ruta_: str, status: int, esperado: str | None
+) -> None:
+    """HU-W17 (17.11): los estados que usará la 17.12 ya existen y pasan por la app real (DTO,
+    lista blanca y rol) antes de que el pacto los traiga. 17.11c: la póliza activa, con el nombre
+    del titular sembrado en clientes, para que la 17.12b pueda pactar `titularNombre`."""
+    monkeypatch.setattr(settings, "jwt_issuers", {"backoffice": EMISOR})
+    polizas = PolizasSimulado()
+    clientes = ClientesSimulado()
+    cliente_polizas = PolizasCliente(
+        "http://polizas:8080", 1500, httpx.MockTransport(polizas.responder)
+    )
+    cliente_clientes = ClientesCliente(
+        "http://clientes:8080", 1500, httpx.MockTransport(clientes.responder)
+    )
+    app.dependency_overrides[ruta_poliza.polizas] = lambda: Polizas(
+        cliente_polizas, cliente_clientes, 200
+    )
+    _sembrar(polizas, clientes, state, {"cotizacionId": COTIZACION_RECAUDO, "polizaId": POLIZA_ID})
+    try:
+        respuesta = TestClient(app).get(
+            ruta_,
+            headers={
+                "X-Authenticated-Sub": "sub-asesor-pact",
+                "X-Authenticated-Groups": "[asesores]",
+                "X-Authenticated-Issuer": EMISOR,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert respuesta.status_code == status
+    cuerpo = respuesta.json()
+    if status != 200:
+        assert cuerpo["codigo"] == esperado
+    elif ruta_ == RUTA_DOCUMENTO:
+        assert set(cuerpo) == {"url", "venceEn"}
+        assert "versionId=" in cuerpo["url"]
+    else:
+        assert (cuerpo["estado"], cuerpo["polizaId"]) == (esperado, POLIZA_ID)
+        activa = esperado == "ACTIVA"
+        assert (cuerpo["emitidaEn"] is not None, cuerpo["documento"] is not None) == (
+            activa,
+            activa,
+        )
+        assert (cuerpo["firma"] is not None) == activa
+        # El nombre del titular solo con la póliza activa; el `clienteId` no llega al portal.
+        assert cuerpo["titularNombre"] == (TITULAR_NOMBRE if activa else None)
+        assert "clienteId" not in cuerpo
+        assert clientes.pedidos == ([TITULAR_ID] if activa else [])
     assert polizas.roles == ["ASESOR"]

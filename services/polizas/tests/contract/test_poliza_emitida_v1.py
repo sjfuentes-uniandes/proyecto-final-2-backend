@@ -56,6 +56,16 @@ def _ejemplo() -> dict[str, Any]:
             "claveRecaudo": "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
             "clienteId": "3c4d5e6f-7a8b-4c9d-8e1f-2a3b4c5d6e7f",
             "producto": {"id": "vida-hipotecario", "version": "2026.1"},
+            # HU-W17 (17.8b): las de la oferta aceptada (instantánea), no las del catálogo vigente.
+            "ramo": {"codigo": "100", "nombre": "Vida hipotecario"},
+            "coberturas": [
+                {"codigo": "MUERTE", "nombre": "Muerte por cualquier causa", "obligatoria": True},
+                {
+                    "codigo": "INCAPACIDAD_TOTAL_PERMANENTE",
+                    "nombre": "Incapacidad total y permanente",
+                    "obligatoria": False,
+                },
+            ],
             "vigencia": {"desde": "2026-09-13", "hasta": "2027-09-12"},
             "prima": "247380",
             "sumaAsegurada": "180000000.00",
@@ -104,11 +114,15 @@ def test_el_payload_exige_todos_sus_campos() -> None:
         sobre = copy.deepcopy(ejemplo)
         del sobre["payload"][campo]
         assert _errores(sobre), f"aceptó el payload sin {campo}"
-    for grupo in ("producto", "vigencia", "documento", "firma"):
+    for grupo in ("producto", "ramo", "vigencia", "documento", "firma"):
         for campo in ejemplo["payload"][grupo]:
             sobre = copy.deepcopy(ejemplo)
             del sobre["payload"][grupo][campo]
             assert _errores(sobre), f"aceptó {grupo} sin {campo}"
+    for campo in ejemplo["payload"]["coberturas"][0]:
+        sobre = copy.deepcopy(ejemplo)
+        del sobre["payload"]["coberturas"][1][campo]
+        assert _errores(sobre), f"aceptó una cobertura sin {campo}"
 
 
 def _sin_version_del_documento(p: dict[str, Any]) -> None:
@@ -151,6 +165,26 @@ def _cliente_no_uuid(p: dict[str, Any]) -> None:
     p["clienteId"] = "C01"
 
 
+def _sin_coberturas(p: dict[str, Any]) -> None:
+    p["coberturas"] = []
+
+
+def _coberturas_como_objeto(p: dict[str, Any]) -> None:
+    p["coberturas"] = p["coberturas"][0]
+
+
+def _obligatoria_como_texto(p: dict[str, Any]) -> None:
+    p["coberturas"][0]["obligatoria"] = "true"
+
+
+def _ramo_de_dos_digitos(p: dict[str, Any]) -> None:
+    p["ramo"]["codigo"] = "10"
+
+
+def _ramo_con_letras(p: dict[str, Any]) -> None:
+    p["ramo"]["codigo"] = "VH1"
+
+
 @pytest.mark.parametrize(
     "desvio",
     [
@@ -164,6 +198,11 @@ def _cliente_no_uuid(p: dict[str, Any]) -> None:
         _emitida_sin_zona,
         _sello_sin_zona,
         _cliente_no_uuid,
+        _sin_coberturas,
+        _coberturas_como_objeto,
+        _obligatoria_como_texto,
+        _ramo_de_dos_digitos,
+        _ramo_con_letras,
     ],
     ids=lambda desvio: desvio.__name__.lstrip("_"),
 )
@@ -208,3 +247,136 @@ def test_el_payload_no_lleva_nombres_ni_documentos_de_identidad_ni_contacto() ->
         "tarjeta",
     }
     assert not prohibidos & set(payload)
+
+
+# --- El productor (HU-W17, 17.8) --------------------------------------------------------------
+def _coberturas_instantanea() -> Any:
+    from polizas.domain.suscripcion.modelos import Cobertura
+
+    # En otro orden que el alfabético y una no obligatoria: el evento las copia tal cual.
+    return (
+        Cobertura("MUERTE", "Muerte por cualquier causa", True),
+        Cobertura("INCAPACIDAD_TOTAL_PERMANENTE", "Incapacidad total y permanente", False),
+    )
+
+
+COBERTURAS_INSTANTANEA = _coberturas_instantanea()
+
+
+def _activa_y_datos() -> tuple[Any, Any]:
+    from datetime import UTC, datetime
+    from decimal import Decimal
+    from uuid import UUID
+
+    from polizas.domain.poliza.documento import FuenteDocumento, datos_documento
+    from polizas.domain.poliza.modelos import Documento, Firma, OrigenPoliza, Poliza, Producto
+
+    creada = datetime(2026, 9, 12, 20, 4, 5, 123000, tzinfo=UTC)
+    origen = OrigenPoliza(
+        aceptacion_id=UUID("2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e"),
+        cotizacion_id=UUID("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"),
+        cliente_id=UUID("3c4d5e6f-7a8b-4c9d-8e1f-2a3b4c5d6e7f"),
+        producto=Producto("vida-hipotecario", "2026.1"),
+        aceptada_en=datetime(2026, 9, 12, 20, 0, tzinfo=UTC),
+    )
+    poliza = Poliza.emitiendo(origen, secuencia=4817, ahora=creada, correlation_id="corr-emision")
+    documento = Documento(
+        clave=f"polizas/{poliza.poliza_id}/{poliza.numero}.pdf",
+        version_id="3HL4kqtJlcpXroDTDmJ+rmSpXd3dIbrHY+MTRCxf3vjVBH40Nr8X8gdRQBpUMLUo",
+        huella="sha256:" + "a1" * 32,
+        tamano_bytes=48213,
+        fecha_documento=creada,
+    )
+    activa = (
+        poliza.registrar_documento(documento, creada)
+        .registrar_firma(Firma("FIR-SINT-0001", creada), documento.huella, creada)
+        .activar(creada)
+    )
+    fuente = FuenteDocumento(
+        coberturas=COBERTURAS_INSTANTANEA,
+        suma_asegurada=Decimal("180000000.00"),
+        prima=Decimal(247380),
+        periodicidad="MENSUAL",
+        moneda="COP",
+        socio_id=None,
+        aceptada_en=origen.aceptada_en,
+        transaccion_id="TX-SINTETICA-0001",
+        version_reglas_prima="2026.09.1",
+        version_reglas_suscripcion="2026.10.1",
+    )
+    return activa, datos_documento(activa, fuente, creada)
+
+
+def test_el_evento_que_produce_polizas_cumple_el_esquema_publicado() -> None:
+    from polizas.adapters.outbound.outbox_pg import evento_de_emision
+
+    activa, datos = _activa_y_datos()
+    sobre = evento_de_emision(activa, datos, "corr-emision")
+    cuerpo = sobre.model_dump(mode="json", by_alias=True)
+    assert _errores(cuerpo) == []
+    payload = cuerpo["payload"]
+    assert (cuerpo["type"], cuerpo["version"], cuerpo["correlationId"]) == (
+        "PolizaEmitida",
+        1,
+        "corr-emision",
+    )
+    assert cuerpo["aggregateId"] == payload["polizaId"] == str(activa.poliza_id)
+    # occurredAt = emitidaEn = la fecha del documento.
+    assert cuerpo["occurredAt"] == payload["emitidaEn"] == "2026-09-12T20:04:05.123000Z"
+    assert payload["claveRecaudo"] == str(activa.aceptacion_id)
+    assert payload["numero"] == activa.numero == "100-2026-004817"
+    # La referencia registrada del documento, sin la fecha (que es emitidaEn).
+    assert payload["documento"] == {
+        "clave": activa.documento.clave,
+        "versionId": activa.documento.version_id,
+        "huella": activa.documento.huella,
+        "tamanoBytes": 48213,
+    }
+    assert payload["firma"] == {
+        "firmaId": "FIR-SINT-0001",
+        "selloTiempo": "2026-09-12T20:04:05.123000Z",
+    }
+    # Montos como texto decimal, sin float ni exponente.
+    assert (payload["prima"], payload["sumaAsegurada"]) == ("247380", "180000000.00")
+    assert (payload["moneda"], payload["periodicidad"]) == ("COP", "MENSUAL")
+    assert payload["vigencia"] == {"desde": "2026-09-13", "hasta": "2027-09-12"}
+    # HU-W17 (17.8b): exactamente las coberturas de la instantánea, en su orden, y el ramo de la
+    # póliza.
+    assert payload["coberturas"] == [
+        {"codigo": "MUERTE", "nombre": "Muerte por cualquier causa", "obligatoria": True},
+        {
+            "codigo": "INCAPACIDAD_TOTAL_PERMANENTE",
+            "nombre": "Incapacidad total y permanente",
+            "obligatoria": False,
+        },
+    ]
+    assert payload["ramo"] == {"codigo": "100", "nombre": "Vida hipotecario"}
+    # El cuerpo que publica el relay es el que sale del payload guardado (la columna jsonb).
+    assert json.loads(json.dumps(cuerpo)) == cuerpo
+
+
+def test_el_evento_producido_no_lleva_campos_fuera_del_esquema() -> None:
+    from polizas.adapters.outbound.outbox_pg import evento_de_emision
+
+    activa, datos = _activa_y_datos()
+    cuerpo = evento_de_emision(activa, datos, "corr-emision").model_dump(mode="json", by_alias=True)
+    esquema = _publicado()
+    payload = esquema["$defs"]["PolizaEmitidaV1"]["properties"]
+    assert set(cuerpo["payload"]) == set(payload)
+    assert set(cuerpo) == set(esquema["properties"])
+
+
+def test_un_evento_de_una_poliza_no_activa_no_se_produce() -> None:
+    from polizas.adapters.outbound.outbox_pg import evento_de_emision
+
+    activa, datos = _activa_y_datos()
+    import dataclasses
+
+    from polizas.domain.poliza.modelos import EstadoPoliza
+
+    with pytest.raises(ValueError, match="ACTIVA"):
+        evento_de_emision(
+            dataclasses.replace(activa, estado=EstadoPoliza.EMITIENDO, emitida_en=None),
+            datos,
+            "corr-emision",
+        )

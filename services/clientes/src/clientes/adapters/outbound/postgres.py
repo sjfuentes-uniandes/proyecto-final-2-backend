@@ -1,9 +1,12 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
 from importlib import resources
 from typing import Any
 from uuid import UUID, uuid4
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 from clientes.domain.identidad.modelos import (
     Cliente,
@@ -79,12 +82,42 @@ def _cliente(fila: dict[str, Any]) -> Cliente:
     )
 
 
-class RepositorioPostgres:
-    def __init__(self, url: str) -> None:
-        self.url = url
+def crear_pool(
+    url: str, minimo: int, maximo: int
+) -> ConnectionPool[psycopg.Connection[dict[str, Any]]]:
+    """Pool síncrono para las lecturas y escrituras de identidad (corren en asyncio.to_thread).
 
-    def _conectar(self) -> psycopg.Connection[dict[str, Any]]:
-        return psycopg.connect(self.url, row_factory=dict_row)
+    Abrir una conexión TLS con RDS cuesta ~90 ms: sin pool, varias lecturas en paralelo (el nombre
+    de cada cliente de una vista del portal) se encolaban y superaban el timeout de quien llama.
+    """
+    return ConnectionPool(
+        url,
+        min_size=minimo,
+        max_size=maximo,
+        kwargs={"row_factory": dict_row},
+        check=ConnectionPool.check_connection,
+        open=False,
+    )
+
+
+class RepositorioPostgres:
+    """Sin `pool` abre una conexión por operación (migraciones, semilla y pruebas)."""
+
+    def __init__(
+        self, url: str, pool: ConnectionPool[psycopg.Connection[dict[str, Any]]] | None = None
+    ) -> None:
+        self.url = url
+        self._pool = pool
+
+    @contextmanager
+    def _conectar(self) -> Iterator[psycopg.Connection[dict[str, Any]]]:
+        # Las dos formas confirman al salir sin error y deshacen ante una excepción.
+        if self._pool is not None:
+            with self._pool.connection() as conexion:
+                yield conexion
+            return
+        with psycopg.connect(self.url, row_factory=dict_row) as conexion:
+            yield conexion
 
     def obtener(self, cliente_id: UUID) -> Cliente | None:
         with self._conectar() as conexion:

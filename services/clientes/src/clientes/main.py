@@ -70,14 +70,24 @@ def crear_app(
                 from psycopg_pool import AsyncConnectionPool
 
                 from clientes.adapters.outbound.consentimientos_pg import ConsentimientosPg
-                from clientes.adapters.outbound.postgres import RepositorioPostgres, migrar
+                from clientes.adapters.outbound.postgres import (
+                    RepositorioPostgres,
+                    crear_pool,
+                    migrar,
+                )
 
                 migrar(settings.database_url)
                 if settings.semilla_sintetica:
                     from clientes.adapters.outbound.semilla_sintetica import sembrar
 
                     sembrar(settings.database_url)
-                repo = RepositorioPostgres(settings.database_url)
+                # Identidad: conexiones reutilizadas (antes, una conexión TLS nueva por lectura).
+                pool_identidad = crear_pool(
+                    settings.database_url, settings.db_pool_min_size, settings.db_pool_size
+                )
+                pool_identidad.open()
+                pila.callback(pool_identidad.close)
+                repo = RepositorioPostgres(settings.database_url, pool_identidad)
                 if repo_consentimientos is None:
                     pool = AsyncConnectionPool(
                         settings.database_url,

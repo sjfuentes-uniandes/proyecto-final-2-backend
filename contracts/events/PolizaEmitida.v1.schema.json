@@ -1,5 +1,29 @@
 {
   "$defs": {
+    "CoberturaV1": {
+      "description": "Una cobertura de la oferta aceptada, con los tipos de la instant\u00e1nea de la decisi\u00f3n.",
+      "properties": {
+        "codigo": {
+          "title": "Codigo",
+          "type": "string"
+        },
+        "nombre": {
+          "title": "Nombre",
+          "type": "string"
+        },
+        "obligatoria": {
+          "title": "Obligatoria",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "codigo",
+        "nombre",
+        "obligatoria"
+      ],
+      "title": "CoberturaV1",
+      "type": "object"
+    },
     "DocumentoV1": {
       "description": "La versi\u00f3n emitida del PDF en el bucket de p\u00f3lizas: se lee por `clave` y `versionId`.",
       "properties": {
@@ -67,6 +91,14 @@
           "title": "Clienteid",
           "type": "string"
         },
+        "coberturas": {
+          "items": {
+            "$ref": "#/$defs/CoberturaV1"
+          },
+          "minItems": 1,
+          "title": "Coberturas",
+          "type": "array"
+        },
         "cotizacionId": {
           "format": "uuid",
           "title": "Cotizacionid",
@@ -110,6 +142,9 @@
         "producto": {
           "$ref": "#/$defs/ProductoV1"
         },
+        "ramo": {
+          "$ref": "#/$defs/RamoV1"
+        },
         "sumaAsegurada": {
           "pattern": "^[0-9]+(\\.[0-9]{1,2})?$",
           "title": "Sumaasegurada",
@@ -126,6 +161,8 @@
         "claveRecaudo",
         "clienteId",
         "producto",
+        "ramo",
+        "coberturas",
         "vigencia",
         "prima",
         "sumaAsegurada",
@@ -155,6 +192,26 @@
         "version"
       ],
       "title": "ProductoV1",
+      "type": "object"
+    },
+    "RamoV1": {
+      "description": "El ramo de la p\u00f3liza (ADR 0014, decisi\u00f3n 2): el mismo c\u00f3digo que inicia el n\u00famero.",
+      "properties": {
+        "codigo": {
+          "pattern": "^[0-9]{3}$",
+          "title": "Codigo",
+          "type": "string"
+        },
+        "nombre": {
+          "title": "Nombre",
+          "type": "string"
+        }
+      },
+      "required": [
+        "codigo",
+        "nombre"
+      ],
+      "title": "RamoV1",
       "type": "object"
     },
     "VigenciaV1": {

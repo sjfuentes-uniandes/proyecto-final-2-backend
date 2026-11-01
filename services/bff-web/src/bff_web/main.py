@@ -1,3 +1,6 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from solventa_common.telemetry import instrumentar
@@ -9,14 +12,23 @@ from bff_web.adapters.inbound import (
     cotizaciones,
     operacion,
     perfilamiento,
+    polizas,
     recaudos,
     socios,
     suscripciones,
     usuarios,
 )
+from bff_web.adapters.outbound.clientes import cerrar_compartidos
 from bff_web.config import settings
 
-app = instrumentar(FastAPI(title=settings.service_name), settings)
+
+@asynccontextmanager
+async def ciclo(_: FastAPI) -> AsyncIterator[None]:
+    yield
+    await cerrar_compartidos()
+
+
+app = instrumentar(FastAPI(title=settings.service_name, lifespan=ciclo), settings)
 # El portal (CloudFront) y la API de canales tienen orígenes distintos; API Gateway
 # reenvía el preflight al BFF (infra/platform/edge.tf).
 app.add_middleware(
@@ -44,6 +56,8 @@ app.include_router(suscripciones.router_bandeja)
 app.include_router(aceptaciones.router)
 # HU-W16: estado del recaudo de la prima aceptada (polizas).
 app.include_router(recaudos.router)
+# HU-W17: la póliza y la URL de su documento (polizas).
+app.include_router(polizas.router)
 
 
 @app.get("/health")

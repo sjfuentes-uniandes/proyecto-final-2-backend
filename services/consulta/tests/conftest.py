@@ -30,7 +30,11 @@ def sobre_poliza() -> FabricaSobre:
             "cotizacionId": str(uuid4()),
             "claveRecaudo": str(uuid4()),
             "clienteId": str(uuid4()),
-            "producto": {"id": "vida-deudor", "version": "1.0.0"},
+            "producto": {"id": "vida-hipotecario", "version": "1.0.0"},
+            "ramo": {"codigo": "100", "nombre": "Vida hipotecario"},
+            "coberturas": [
+                {"codigo": "MUERTE", "nombre": "Muerte por cualquier causa", "obligatoria": True}
+            ],
             "vigencia": {"desde": "2026-10-25", "hasta": "2027-10-24"},
             "prima": "64638.10",
             "sumaAsegurada": "50000000",
