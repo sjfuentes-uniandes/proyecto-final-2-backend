@@ -63,6 +63,12 @@ class Settings(ServiceSettings):
     )
     polizas_timeout_ms: int = 1500
     nombre_cliente_timeout_ms: int = 500
+    # HU-W18: estado y listado de pólizas en consulta; corte duro de 700 ms (mockup).
+    consulta_url: str = Field(
+        "http://localhost:8090",
+        validation_alias=AliasChoices("CONSULTA_URL", "SOLVENTA_CONSULTA_URL"),
+    )
+    consulta_timeout_ms: int = 700
     # Pool de Cognito del back-office (infra/apps/ecs.tf): Administración › Usuarios.
     backoffice_user_pool_id: str | None = Field(
         None,

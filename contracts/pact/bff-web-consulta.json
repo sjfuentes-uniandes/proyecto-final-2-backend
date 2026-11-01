@@ -1,0 +1,544 @@
+{
+  "consumer": {
+    "name": "bff-web"
+  },
+  "interactions": [
+    {
+      "description": "el estado de una póliza inexistente",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "la póliza no existe"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "sub-asesora"
+          ],
+          "X-Actor-Rol": [
+            "ASESOR"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/polizas/00000000-0000-4000-8000-0000000000b3/estado"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "POLIZA_NO_ENCONTRADA",
+            "correlationId": "c0rr3l4c10n",
+            "detalles": {},
+            "mensaje": "Mensaje genérico"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "el estado de una póliza proyectada",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "existe una póliza proyectada"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "sub-asesora"
+          ],
+          "X-Actor-Rol": [
+            "ASESOR"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/polizas/00000000-0000-4000-8000-0000000000b1/estado"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "coberturas": [
+              {
+                "codigo": "MUERTE",
+                "nombre": "Muerte",
+                "obligatoria": true
+              }
+            ],
+            "emitidaEn": "2026-10-24T15:00:03.500000Z",
+            "estado": "VIGENTE",
+            "fechaActualizacion": "2026-10-24T15:00:05.250000Z",
+            "moneda": "COP",
+            "numero": "100-2026-000001",
+            "periodicidad": "MENSUAL",
+            "polizaId": "00000000-0000-4000-8000-0000000000b1",
+            "prima": "64638.10",
+            "producto": "Vida deudor",
+            "ramo": "Vida",
+            "sumaAsegurada": "50000000",
+            "vigencia": {
+              "desde": "2026-10-25",
+              "hasta": "2027-10-24"
+            }
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.coberturas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.coberturas[*].codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.coberturas[*].nombre": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.coberturas[*].obligatoria": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.emitidaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(NO_INICIADA|VIGENTE|POR_VENCER|VENCIDA)$"
+                }
+              ]
+            },
+            "$.fechaActualizacion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.moneda": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.numero": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9]{3}-[0-9]{4}-[0-9]{6}$"
+                }
+              ]
+            },
+            "$.periodicidad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.polizaId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.prima": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.producto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.ramo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.sumaAsegurada": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.vigencia.desde": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}$"
+                }
+              ]
+            },
+            "$.vigencia.hasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "el listado de pólizas con filtros y paginación",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "hay pólizas proyectadas"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "sub-asesora"
+          ],
+          "X-Actor-Rol": [
+            "ASESOR"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/polizas",
+        "query": {
+          "estado": [
+            "VIGENTE"
+          ],
+          "pagina": [
+            "1"
+          ],
+          "ramo": [
+            "Vida"
+          ],
+          "tamano": [
+            "20"
+          ],
+          "vigenciaDesde": [
+            "2026-01-01"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "content": {
+            "actualizadoEn": "2026-10-24T15:00:05.250000Z",
+            "items": [
+              {
+                "estado": "VIGENTE",
+                "fechaActualizacion": "2026-10-24T15:00:05.250000Z",
+                "moneda": "COP",
+                "numero": "100-2026-000001",
+                "polizaId": "00000000-0000-4000-8000-0000000000b1",
+                "prima": "64638.10",
+                "producto": "Vida deudor",
+                "ramo": "Vida",
+                "vigenciaHasta": "2027-10-24"
+              }
+            ],
+            "pagina": 1,
+            "tamano": 20,
+            "total": 1
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.actualizadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.items": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.items[*].estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(NO_INICIADA|VIGENTE|POR_VENCER|VENCIDA)$"
+                }
+              ]
+            },
+            "$.items[*].fechaActualizacion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.items[*].moneda": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.items[*].numero": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.items[*].polizaId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "$.items[*].prima": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.items[*].producto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.items[*].ramo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.items[*].vigenciaHasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}$"
+                }
+              ]
+            },
+            "$.pagina": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.tamano": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.total": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "el listado de pólizas sin proyecciones",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "no hay pólizas proyectadas"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Actor-Id": [
+            "sub-asesora"
+          ],
+          "X-Actor-Rol": [
+            "ASESOR"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/polizas",
+        "query": {
+          "pagina": [
+            "1"
+          ],
+          "tamano": [
+            "20"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "content": {
+            "actualizadoEn": null,
+            "items": [],
+            "pagina": 1,
+            "tamano": 20,
+            "total": 0
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.pagina": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.tamano": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactRust": {
+      "ffi": "0.5.8",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    }
+  },
+  "provider": {
+    "name": "consulta"
+  }
+}

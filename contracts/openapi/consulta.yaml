@@ -41,6 +41,76 @@ components:
       - detalles
       title: ErrorDto
       type: object
+    EstadoPolizaDto:
+      properties:
+        coberturas:
+          items:
+            $ref: '#/components/schemas/CoberturaDto'
+          title: Coberturas
+          type: array
+        emitidaEn:
+          format: date-time
+          title: Emitidaen
+          type: string
+        estado:
+          $ref: '#/components/schemas/EstadoVigencia'
+        fechaActualizacion:
+          format: date-time
+          title: Fechaactualizacion
+          type: string
+        moneda:
+          title: Moneda
+          type: string
+        numero:
+          title: Numero
+          type: string
+        periodicidad:
+          title: Periodicidad
+          type: string
+        polizaId:
+          format: uuid
+          title: Polizaid
+          type: string
+        prima:
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Prima
+          type: string
+        producto:
+          title: Producto
+          type: string
+        ramo:
+          title: Ramo
+          type: string
+        sumaAsegurada:
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Sumaasegurada
+          type: string
+        vigencia:
+          $ref: '#/components/schemas/VigenciaDto'
+      required:
+      - polizaId
+      - numero
+      - estado
+      - fechaActualizacion
+      - producto
+      - ramo
+      - vigencia
+      - prima
+      - sumaAsegurada
+      - moneda
+      - periodicidad
+      - emitidaEn
+      - coberturas
+      title: EstadoPolizaDto
+      type: object
+    EstadoVigencia:
+      enum:
+      - NO_INICIADA
+      - VIGENTE
+      - POR_VENCER
+      - VENCIDA
+      title: EstadoVigencia
+      type: string
     HTTPValidationError:
       properties:
         detail:
@@ -49,6 +119,36 @@ components:
           title: Detail
           type: array
       title: HTTPValidationError
+      type: object
+    PaginaPolizasDto:
+      properties:
+        actualizadoEn:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Actualizadoen
+        items:
+          items:
+            $ref: '#/components/schemas/ResumenPolizaDto'
+          title: Items
+          type: array
+        pagina:
+          title: Pagina
+          type: integer
+        tamano:
+          title: Tamano
+          type: integer
+        total:
+          title: Total
+          type: integer
+      required:
+      - items
+      - total
+      - pagina
+      - tamano
+      - actualizadoEn
+      title: PaginaPolizasDto
       type: object
     PolizaDto:
       properties:
@@ -127,6 +227,50 @@ components:
       - firmaId
       - emitidaEn
       title: PolizaDto
+      type: object
+    ResumenPolizaDto:
+      properties:
+        estado:
+          $ref: '#/components/schemas/EstadoVigencia'
+        fechaActualizacion:
+          format: date-time
+          title: Fechaactualizacion
+          type: string
+        moneda:
+          title: Moneda
+          type: string
+        numero:
+          title: Numero
+          type: string
+        polizaId:
+          format: uuid
+          title: Polizaid
+          type: string
+        prima:
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Prima
+          type: string
+        producto:
+          title: Producto
+          type: string
+        ramo:
+          title: Ramo
+          type: string
+        vigenciaHasta:
+          format: date
+          title: Vigenciahasta
+          type: string
+      required:
+      - polizaId
+      - numero
+      - ramo
+      - producto
+      - prima
+      - moneda
+      - vigenciaHasta
+      - estado
+      - fechaActualizacion
+      title: ResumenPolizaDto
       type: object
     ValidationError:
       properties:
@@ -312,3 +456,168 @@ paths:
       summary: "Detalle de una p\xF3liza del cliente"
       tags:
       - polizas
+  /v1/polizas:
+    get:
+      operationId: listar_v1_polizas_get
+      parameters:
+      - in: query
+        name: numero
+        required: false
+        schema:
+          anyOf:
+          - pattern: ^[0-9]{3}-[0-9]{4}-[0-9]{6}$
+            type: string
+          - type: 'null'
+          title: Numero
+      - in: query
+        name: ramo
+        required: false
+        schema:
+          anyOf:
+          - maxLength: 80
+            minLength: 1
+            type: string
+          - type: 'null'
+          title: Ramo
+      - in: query
+        name: estado
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/EstadoVigencia'
+          - type: 'null'
+          title: Estado
+      - in: query
+        name: vigenciaDesde
+        required: false
+        schema:
+          anyOf:
+          - format: date
+            type: string
+          - type: 'null'
+          title: Vigenciadesde
+      - in: query
+        name: pagina
+        required: false
+        schema:
+          default: 1
+          maximum: 100000
+          minimum: 1
+          title: Pagina
+          type: integer
+      - in: query
+        name: tamano
+        required: false
+        schema:
+          default: 20
+          maximum: 50
+          minimum: 1
+          title: Tamano
+          type: integer
+      - in: header
+        name: X-Actor-Id
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - in: header
+        name: X-Actor-Rol
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaPolizasDto'
+          description: Successful Response
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de ASESOR'
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+          description: "SOLICITUD_INVALIDA: par\xE1metro inv\xE1lido (sin el valor\
+            \ recibido)"
+      summary: "Listado paginado de p\xF3lizas con su estado, por emitida_en descendente"
+      tags:
+      - estado-polizas
+  /v1/polizas/{poliza_id}/estado:
+    get:
+      operationId: estado_de_poliza_v1_polizas__poliza_id__estado_get
+      parameters:
+      - in: path
+        name: poliza_id
+        required: true
+        schema:
+          format: uuid
+          title: Poliza Id
+          type: string
+      - in: header
+        name: X-Actor-Id
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - in: header
+        name: X-Actor-Rol
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoPolizaDto'
+          description: Successful Response
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol distinto de ASESOR'
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+          description: "POLIZA_NO_ENCONTRADA: no existe o a\xFAn no se proyect\xF3"
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+          description: "SOLICITUD_INVALIDA: par\xE1metro inv\xE1lido (sin el valor\
+            \ recibido)"
+      summary: "Estado vigente de una p\xF3liza y su fecha de actualizaci\xF3n"
+      tags:
+      - estado-polizas

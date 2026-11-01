@@ -15,12 +15,15 @@ from solventa_common.errors import registrar_manejadores
 from solventa_common.inbox import ConsumidorInbox, InboxPg, Receptor, ReceptorSqs, cliente_sqs
 from solventa_common.telemetry import instrumentar
 
+from consulta.adapters.inbound.http.estado_polizas import router as estado_polizas_router
 from consulta.adapters.inbound.http.polizas import router as polizas_router
 from consulta.adapters.inbound.sqs.polizas import manejador_polizas
 from consulta.adapters.outbound.catalogo_http import CatalogoHttp
+from consulta.adapters.outbound.estado_pg import LecturaEstadoPolizasPg
 from consulta.adapters.outbound.lectura_pg import LecturaPolizasPg
 from consulta.adapters.outbound.polizas_pg import ProyeccionPolizasPg, migrar
 from consulta.adapters.outbound.reloj import RelojSistema
+from consulta.application.estado.casos import BuscarPolizas, ConsultarEstadoPoliza
 from consulta.application.lectura.casos import ConsultarPoliza, ListarPolizas
 from consulta.application.proyeccion.proyectar_poliza import ProyectarPoliza
 from consulta.application.proyeccion.puertos import ConsultaCatalogo, Reloj
@@ -178,6 +181,12 @@ def crear_app(
                 lectura = LecturaPolizasPg(lectura_pool)
                 app.state.listar_polizas = ListarPolizas(lectura, reloj_app)
                 app.state.consultar_poliza = ConsultarPoliza(lectura, reloj_app)
+                lectura_estado = LecturaEstadoPolizasPg(lectura_pool)
+                dias = settings.dias_por_vencer
+                app.state.consultar_estado_poliza = ConsultarEstadoPoliza(
+                    lectura_estado, reloj_app, dias
+                )
+                app.state.buscar_polizas = BuscarPolizas(lectura_estado, reloj_app, dias)
             if catalogo_app is None:
                 # Propaga X-Correlation-Id y traceparent; cada llamada fija su propio timeout.
                 cliente = await pila.enter_async_context(
@@ -201,6 +210,7 @@ def crear_app(
     )
     registrar_manejadores(app)
     app.include_router(polizas_router)
+    app.include_router(estado_polizas_router)
 
     @app.get("/health", response_model=None)
     async def health(request: Request) -> dict[str, str] | JSONResponse:

@@ -10,6 +10,7 @@ from bff_web.adapters.inbound import (
     clientes,
     consentimientos,
     cotizaciones,
+    estado_polizas,
     operacion,
     perfilamiento,
     polizas,
@@ -58,6 +59,8 @@ app.include_router(aceptaciones.router)
 app.include_router(recaudos.router)
 # HU-W17: la póliza y la URL de su documento (polizas).
 app.include_router(polizas.router)
+# HU-W18: estado y listado de pólizas (consulta).
+app.include_router(estado_polizas.router)
 
 
 @app.get("/health")

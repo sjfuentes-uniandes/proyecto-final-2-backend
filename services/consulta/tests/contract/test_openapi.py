@@ -21,3 +21,22 @@ def test_contrato_de_lectura_de_polizas() -> None:
     for operacion in (lista, detalle):
         nombres = {p["name"].lower() for p in operacion["parameters"]}
         assert {"x-actor-id", "x-actor-rol"} <= nombres
+
+
+def test_contrato_de_estado_y_listado_de_polizas() -> None:
+    rutas = app.openapi()["paths"]
+    listado = rutas["/v1/polizas"]["get"]
+    estado = rutas["/v1/polizas/{poliza_id}/estado"]["get"]
+    assert set(listado["responses"]) == {"200", "401", "403", "422"}
+    assert set(estado["responses"]) == {"200", "401", "403", "404", "422"}
+    for operacion in (listado, estado):
+        nombres = {p["name"].lower() for p in operacion["parameters"]}
+        assert {"x-actor-id", "x-actor-rol"} <= nombres
+    filtros = {p["name"] for p in listado["parameters"]}
+    assert {"numero", "ramo", "estado", "vigenciaDesde", "pagina", "tamano"} <= filtros
+    esquemas = app.openapi()["components"]["schemas"]
+    assert set(esquemas["EstadoVigencia"]["enum"]) == {
+        "NO_INICIADA", "VIGENTE", "POR_VENCER", "VENCIDA"
+    }  # fmt: skip
+    assert "clienteId" not in esquemas["EstadoPolizaDto"]["properties"]
+    assert "clienteId" not in esquemas["ResumenPolizaDto"]["properties"]

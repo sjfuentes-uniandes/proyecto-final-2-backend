@@ -442,5 +442,49 @@ def test_contrato_de_poliza() -> None:
     documento = rutas[DOCUMENTO]["get"]
     assert set(documento["responses"]) == {"200", "401", "403", "404", "409", "422", "503"}
     assert {p["name"] for p in documento["parameters"] if p["required"]} == {"polizaId"}
-    # Solo las dos lecturas: la verificación de polizas no se expone en el portal.
-    assert not any(r.startswith("/v1/polizas/") and r != DOCUMENTO for r in rutas)
+    # La verificación de polizas no se expone en el portal; HU-W18 solo agrega `/estado`.
+    assert not any(
+        r.startswith("/v1/polizas/") and r not in (DOCUMENTO, ESTADO_POLIZA) for r in rutas
+    )
+
+
+# HU-W18: estado y listado de pólizas; DTO copiados de consulta (consulta.yaml manda).
+CONSULTA = CONTRATO.parent / "consulta.yaml"
+ESTADO_POLIZA = "/v1/polizas/{polizaId}/estado"
+LISTADO_POLIZAS = "/v1/polizas"
+ESTADOS_VIGENCIA = ["NO_INICIADA", "VIGENTE", "POR_VENCER", "VENCIDA"]
+
+
+def test_dto_de_estado_de_poliza_iguales_a_consulta() -> None:
+    propios = app.openapi()["components"]["schemas"]
+    de_consulta = yaml.safe_load(CONSULTA.read_text(encoding="utf-8"))["components"]["schemas"]
+    assert propios["EstadoVigencia"]["enum"] == ESTADOS_VIGENCIA
+    assert de_consulta["EstadoVigencia"]["enum"] == ESTADOS_VIGENCIA
+    for propio, base in (
+        ("EstadoPolizaDto", "EstadoPolizaDto"),
+        ("ResumenPolizaDto", "ResumenPolizaDto"),
+        ("PaginaPolizasDto", "PaginaPolizasDto"),
+    ):
+        assert set(propios[propio]["properties"]) == set(de_consulta[base]["properties"]), propio
+        assert set(propios[propio]["required"]) == set(de_consulta[base]["required"]), propio
+    # Ningún dato del cliente en el portal.
+    for nombre in ("EstadoPolizaDto", "ResumenPolizaDto"):
+        assert not {"clienteId", "documentoHuella", "firmaId"} & set(propios[nombre]["properties"])
+
+
+def test_contrato_de_estado_y_listado_de_polizas() -> None:
+    rutas = app.openapi()["paths"]
+    assert set(rutas[ESTADO_POLIZA]) == {"get"}
+    estado = rutas[ESTADO_POLIZA]["get"]
+    assert set(estado["responses"]) == {"200", "401", "403", "404", "422", "503"}
+    assert {p["name"] for p in estado["parameters"] if p["required"]} == {"polizaId"}
+    assert set(rutas[LISTADO_POLIZAS]) == {"get"}
+    listado = rutas[LISTADO_POLIZAS]["get"]
+    assert set(listado["responses"]) == {"200", "401", "403", "422", "503"}
+    parametros = {p["name"]: p for p in listado["parameters"] if p["in"] == "query"}
+    assert set(parametros) == {"numero", "ramo", "estado", "vigenciaDesde", "pagina", "tamano"}
+    assert not any(p["required"] for p in parametros.values())
+    assert parametros["tamano"]["schema"]["maximum"] == 50
+    # Solo se agregan rutas: las de la HU-W17 siguen igual.
+    assert set(rutas[POLIZA]) == {"get"}
+    assert set(rutas[DOCUMENTO]) == {"get"}
