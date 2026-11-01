@@ -23,6 +23,8 @@ class Settings(ServiceSettings):
     sqs_consulta_proyeccion_url: str | None = Field(
         None, validation_alias=_env("SQS_CONSULTA_PROYECCION_URL")
     )
+    # HU-W18: una póliza vigente con este número de días o menos para terminar está POR_VENCER.
+    dias_por_vencer: int = Field(30, ge=1, le=365, validation_alias=_env("DIAS_POR_VENCER"))
     consumidor_max_mensajes: int = Field(inbox.MAX_MENSAJES, ge=1, le=10)
     consumidor_espera_larga_s: int = Field(10, ge=1, le=10)
 
