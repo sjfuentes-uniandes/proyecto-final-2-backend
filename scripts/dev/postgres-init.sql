@@ -6,3 +6,4 @@ CREATE DATABASE catalogo;
 CREATE DATABASE cotizacion;
 CREATE DATABASE polizas;
 CREATE DATABASE consulta;
+CREATE DATABASE avisos;
