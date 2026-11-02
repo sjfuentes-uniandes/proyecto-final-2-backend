@@ -1,5 +1,6 @@
 """PuertoProveedorKyc sobre HTTPX."""
 
+import logging
 from typing import Any
 from uuid import UUID
 
@@ -16,6 +17,17 @@ from adaptador_identidad.domain.verificaciones.modelos import (
 )
 
 PROVEEDOR = "KYC"
+
+logger = logging.getLogger(__name__)
+
+
+def _rechazar(operacion: str, motivo: str, estado: int) -> RespuestaInvalida:
+    # Deja el estado y el motivo del proveedor para poder diagnosticar el 502 sin exponer datos.
+    logger.warning(
+        "respuesta inválida del proveedor KYC",
+        extra={"kyc_operacion": operacion, "kyc_motivo": motivo, "kyc_estado": estado},
+    )
+    return RespuestaInvalida(motivo)
 
 
 class KycHttp:
@@ -40,7 +52,7 @@ class KycHttp:
             timeout=timeout_s,
         )
         if 400 <= respuesta.status_code < 500:
-            raise RespuestaInvalida("HTTP_4XX")
+            raise _rechazar("verificar", "HTTP_4XX", respuesta.status_code)
         respuesta.raise_for_status()
         try:
             cuerpo = respuesta.json()
@@ -48,7 +60,7 @@ class KycHttp:
                 resultado=ResultadoVerificacion(cuerpo["resultado"]), motivo=cuerpo.get("motivo")
             )
         except (ValueError, KeyError) as error:
-            raise RespuestaInvalida("JSON") from error
+            raise _rechazar("verificar", "JSON", respuesta.status_code) from error
 
     async def verificar_documento(
         self, cliente_id: UUID, datos: DatosDocumento, timeout_s: float
@@ -66,7 +78,7 @@ class KycHttp:
             timeout=timeout_s,
         )
         if 400 <= respuesta.status_code < 500:
-            raise RespuestaInvalida("HTTP_4XX")
+            raise _rechazar("verificar_documento", "HTTP_4XX", respuesta.status_code)
         respuesta.raise_for_status()
         try:
             cuerpo = respuesta.json()
@@ -80,4 +92,4 @@ class KycHttp:
                 proveedor=PROVEEDOR,
             )
         except (ValueError, KeyError, TypeError) as error:
-            raise RespuestaInvalida("JSON") from error
+            raise _rechazar("verificar_documento", "JSON", respuesta.status_code) from error

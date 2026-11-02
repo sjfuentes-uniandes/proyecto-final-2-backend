@@ -64,6 +64,20 @@ async def test_404_es_respuesta_invalida() -> None:
     assert error.value.motivo == "HTTP_4XX"
 
 
+async def test_respuesta_invalida_registra_estado_y_motivo(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level("WARNING"), pytest.raises(RespuestaInvalida):
+        await _proveedor(lambda _: httpx.Response(404)).verificar(
+            CLIENTE, "selfie-secreta", {}, 0.3
+        )
+    (registro,) = caplog.records
+    assert registro.__dict__["kyc_estado"] == 404
+    assert registro.__dict__["kyc_motivo"] == "HTTP_4XX"
+    assert "selfie-secreta" not in caplog.text
+    assert CLAVE not in caplog.text
+
+
 async def test_503_lanza_http_status_error() -> None:
     with pytest.raises(httpx.HTTPStatusError):
         await _proveedor(lambda _: httpx.Response(503)).verificar(CLIENTE, "selfie", {}, 0.3)
