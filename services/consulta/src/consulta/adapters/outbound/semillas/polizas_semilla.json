@@ -1,0 +1,24 @@
+[
+  {
+    "polizaId": "5eed0000-0000-4000-8000-000000000001",
+    "clienteId": "fde3e6dd-3426-467a-b3b2-69e7cebb6d05",
+    "numero": "900-2026-000001",
+    "productoId": "semilla-vida",
+    "productoVersion": "1",
+    "productoNombre": "Póliza de vida (prueba)",
+    "ramo": "VIDA",
+    "vigenciaDesde": "2026-10-01",
+    "vigenciaHasta": "2027-09-30",
+    "prima": 120000,
+    "sumaAsegurada": 50000000,
+    "moneda": "COP",
+    "periodicidad": "MENSUAL",
+    "coberturas": [
+      { "codigo": "MUERTE", "nombre": "Muerte por cualquier causa", "obligatoria": true },
+      { "codigo": "INCAPACIDAD", "nombre": "Incapacidad total y permanente", "obligatoria": false }
+    ],
+    "documentoHuella": "sha256:semilla-1",
+    "firmaId": "SEMILLA-FIRMA-1",
+    "emitidaEn": "2026-10-01T15:00:00Z"
+  }
+]
