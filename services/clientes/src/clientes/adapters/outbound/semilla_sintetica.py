@@ -124,6 +124,18 @@ _CONSENTIMIENTO = (
 )
 
 
+# El cliente que se registró desde la app móvil (HU-M10) nace sin documento ni nombre: se le da el
+# titular para ver el detalle de sus pólizas. Solo si aún no tiene documento ni lo tiene otro.
+CLIENTE_MOVIL_ID = UUID("fde3e6dd-3426-467a-b3b2-69e7cebb6d05")
+CLIENTE_MOVIL_DOCUMENTO = "1020456789"
+CLIENTE_MOVIL_NOMBRE = "Cliente Móvil Prueba"
+_TITULAR_MOVIL = (
+    "UPDATE cliente SET tipo_documento = %s, numero_documento = %s, nombre_completo = %s, "
+    "fecha_nacimiento = %s WHERE id = %s AND numero_documento IS NULL "
+    "AND NOT EXISTS (SELECT 1 FROM cliente WHERE tipo_documento = %s AND numero_documento = %s)"
+)
+
+
 def _identidad(cliente: ClienteSintetico) -> tuple[datetime | None, str | None, str | None]:
     """`verificado_en`, `proveedor` y `referencia`, como los deja `Cliente.con_resultado`."""
     if cliente.identidad is EstadoIdentidad.PENDIENTE:
@@ -181,6 +193,18 @@ def sembrar(url: str) -> int:
             parametros = _consentimiento(cliente)
             if parametros is not None:
                 conexion.execute(_CONSENTIMIENTO, parametros)
+        conexion.execute(
+            _TITULAR_MOVIL,
+            (
+                TIPO_DOCUMENTO,
+                CLIENTE_MOVIL_DOCUMENTO,
+                CLIENTE_MOVIL_NOMBRE,
+                FECHA_NACIMIENTO,
+                CLIENTE_MOVIL_ID,
+                TIPO_DOCUMENTO,
+                CLIENTE_MOVIL_DOCUMENTO,
+            ),
+        )
     # Solo el conteo: los documentos y nombres, aunque sintéticos, tienen forma de PII.
     logger.info("semilla sintética aplicada", extra={"clientes_creados": creados})
     return creados
