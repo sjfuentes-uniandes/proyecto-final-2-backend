@@ -163,20 +163,27 @@ def test_aprobado_pasa_a_verificado_con_fecha_y_referencia(api: Any) -> None:
     assert request.headers["X-Correlation-Id"] == CORRELACION
     # El estado leído después coincide; la lectura agrega el nombre del alta.
     leido = cliente.get(f"/v1/clientes/{cliente_id}", headers=ASESOR).json()
-    assert leido == {**cuerpo, "nombreCompleto": ALTA["nombreCompleto"]}
+    titular = {
+        "nombreCompleto": ALTA["nombreCompleto"],
+        "tipoDocumento": "CC",
+        "documentoEnmascarado": "1.020.***.789",
+    }
+    assert leido == {**cuerpo, **titular}
 
 
-def test_la_lectura_del_asesor_trae_solo_el_nombre_de_los_datos_personales(api: Any) -> None:
-    """Las vistas del portal (cotizaciones abiertas, bandeja de suscripción) componen el nombre
-    desde esta lectura; el alta y la verificación no lo repiten."""
+def test_la_lectura_del_asesor_trae_el_titular_sin_el_numero_completo(api: Any) -> None:
+    """Las vistas del portal (cotizaciones abiertas, bandeja de suscripción, detalle de póliza)
+    componen el titular desde esta lectura; el alta y la verificación no lo repiten."""
     cliente, _ = api(_veredicto("APROBADO"))
     alta = _alta(cliente).json()
     assert "nombreCompleto" not in alta
-    leido = cliente.get(f"/v1/clientes/{alta['clienteId']}", headers=ASESOR).json()
-    assert set(leido) == {
+    leido = cliente.get(f"/v1/clientes/{alta['clienteId']}", headers=ASESOR)
+    assert set(leido.json()) == {
         "clienteId", "estado", "verificadoEn", "proveedor", "referencia", "nombreCompleto",
+        "tipoDocumento", "documentoEnmascarado",
     }  # fmt: skip
-    assert leido["nombreCompleto"] == ALTA["nombreCompleto"]
+    assert leido.json()["nombreCompleto"] == ALTA["nombreCompleto"]
+    assert ALTA["numeroDocumento"] not in leido.text
     assert "nombreCompleto" not in _verificar(cliente, alta["clienteId"]).json()
 
 
@@ -267,3 +274,4 @@ def test_un_cliente_sin_alta_por_documento_se_lee_sin_nombre(api: Any, repositor
     sin_documento = repositorio.asegurar("sub-sin-alta")
     leido = cliente.get(f"/v1/clientes/{sin_documento.id}", headers=ASESOR).json()
     assert leido["nombreCompleto"] is None
+    assert (leido["tipoDocumento"], leido["documentoEnmascarado"]) == (None, None)

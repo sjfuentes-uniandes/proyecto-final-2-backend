@@ -2,7 +2,8 @@
 
 El actor viaja en `X-Actor-Id` y `X-Actor-Rol=ASESOR`; el rol se valida antes de tocar la base.
 Todo asesor ve todas las pólizas proyectadas (como `puede_leer` de `cotizacion`); lo que no existe
-o aún no se proyectó responde un único 404 uniforme. La proyección no tiene datos del cliente.
+o aún no se proyectó responde un único 404 uniforme. El detalle lleva el `clienteId` para que
+`bff-web` componga el titular (no llega al navegador); el listado no lleva datos del cliente.
 """
 
 from datetime import date, datetime
@@ -63,7 +64,10 @@ class CoberturaDto(Dto):
 
 
 class EstadoPolizaDto(Dto):
+    """`cliente_id` es para que `bff-web` componga el titular; no llega al navegador."""
+
     poliza_id: UUID
+    cliente_id: UUID
     numero: str
     estado: EstadoVigencia
     fecha_actualizacion: datetime
@@ -82,6 +86,7 @@ class EstadoPolizaDto(Dto):
         p = consultada.poliza
         return cls(
             poliza_id=p.poliza_id,
+            cliente_id=p.cliente_id,
             numero=p.numero,
             estado=consultada.estado,
             fecha_actualizacion=p.proyectada_en,

@@ -86,6 +86,7 @@
       "response": {
         "body": {
           "content": {
+            "clienteId": "00000000-0000-4000-8000-0000000000c1",
             "coberturas": [
               {
                 "codigo": "MUERTE",
@@ -119,6 +120,15 @@
         },
         "matchingRules": {
           "body": {
+            "$.clienteId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
             "$.coberturas": {
               "combine": "AND",
               "matchers": [

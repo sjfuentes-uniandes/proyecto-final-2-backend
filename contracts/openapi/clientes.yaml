@@ -1208,6 +1208,16 @@ components:
           - type: string
           - type: 'null'
           title: Nombrecompleto
+        tipoDocumento:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tipodocumento
+        documentoEnmascarado:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Documentoenmascarado
       type: object
       required:
       - clienteId
@@ -1216,15 +1226,20 @@ components:
       - proveedor
       - referencia
       - nombreCompleto
+      - tipoDocumento
+      - documentoEnmascarado
       title: ClienteLecturaDto
-      description: 'La lectura del asesor: el estado y la traza más el nombre con
-        que se dio de alta.
+      description: 'La lectura del asesor: el estado y la traza más el titular del
+        alta.
 
 
-        Solo el nombre: ni el documento ni la fecha de nacimiento. `null` si el cliente
-        nació por su
+        Del titular solo salen el nombre, el tipo de documento y el número enmascarado:
+        nunca el número
 
-        ingreso o su registro (sin alta por documento).'
+        completo ni la fecha de nacimiento. Los tres son `null` si el cliente nació
+        por su ingreso o su
+
+        registro (sin alta por documento).'
     ConsentimientoDto:
       properties:
         consentimientoId:
