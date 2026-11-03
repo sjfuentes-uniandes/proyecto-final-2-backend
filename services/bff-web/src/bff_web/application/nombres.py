@@ -22,6 +22,37 @@ async def nombres_de_clientes(
     return dict(zip(unicos, nombres, strict=True))
 
 
+async def titular_de_cliente(
+    clientes: ClientesCliente, cliente_id: Any, actor: str, timeout_s: float
+) -> dict[str, str | None]:
+    """Nombre, tipo de documento y número enmascarado del titular; todo None si clientes no
+    responde a tiempo. El número completo nunca llega aquí: clientes ya lo enmascara, y un valor
+    sin asteriscos se descarta."""
+    vacio: dict[str, str | None] = {
+        "titularNombre": None,
+        "tipoDocumento": None,
+        "documentoEnmascarado": None,
+    }
+    try:
+        cliente = await asyncio.wait_for(clientes.obtener(UUID(str(cliente_id)), actor), timeout_s)
+    except (TimeoutError, ErrorClientes, httpx.HTTPError, ValueError):
+        return vacio
+    if not isinstance(cliente, dict):
+        return vacio
+    nombre, tipo, enmascarado = (
+        cliente.get("nombreCompleto"),
+        cliente.get("tipoDocumento"),
+        cliente.get("documentoEnmascarado"),
+    )
+    return {
+        "titularNombre": nombre if isinstance(nombre, str) else None,
+        "tipoDocumento": tipo if isinstance(tipo, str) else None,
+        "documentoEnmascarado": (
+            enmascarado if isinstance(enmascarado, str) and "*" in enmascarado else None
+        ),
+    }
+
+
 async def _nombre(
     clientes: ClientesCliente, cliente_id: str, actor: str, timeout_s: float
 ) -> str | None:

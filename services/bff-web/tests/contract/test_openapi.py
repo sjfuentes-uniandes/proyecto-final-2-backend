@@ -455,6 +455,9 @@ LISTADO_POLIZAS = "/v1/polizas"
 ESTADOS_VIGENCIA = ["NO_INICIADA", "VIGENTE", "POR_VENCER", "VENCIDA"]
 
 
+TITULAR = ("titularNombre", "tipoDocumento", "documentoEnmascarado")
+
+
 def test_dto_de_estado_de_poliza_iguales_a_consulta() -> None:
     propios = app.openapi()["components"]["schemas"]
     de_consulta = yaml.safe_load(CONSULTA.read_text(encoding="utf-8"))["components"]["schemas"]
@@ -465,8 +468,13 @@ def test_dto_de_estado_de_poliza_iguales_a_consulta() -> None:
         ("ResumenPolizaDto", "ResumenPolizaDto"),
         ("PaginaPolizasDto", "PaginaPolizasDto"),
     ):
-        assert set(propios[propio]["properties"]) == set(de_consulta[base]["properties"]), propio
-        assert set(propios[propio]["required"]) == set(de_consulta[base]["required"]), propio
+        # El titular lo agrega el BFF desde clientes; clienteId es solo interno.
+        extra = set(TITULAR) if propio == "EstadoPolizaDto" else set()
+        interno = {"clienteId"} if propio == "EstadoPolizaDto" else set()
+        esperadas = set(de_consulta[base]["properties"]) - interno | extra
+        requeridas = set(de_consulta[base]["required"]) - interno | extra
+        assert set(propios[propio]["properties"]) == esperadas, propio
+        assert set(propios[propio]["required"]) == requeridas, propio
     # Ningún dato del cliente en el portal.
     for nombre in ("EstadoPolizaDto", "ResumenPolizaDto"):
         assert not {"clienteId", "documentoHuella", "firmaId"} & set(propios[nombre]["properties"])

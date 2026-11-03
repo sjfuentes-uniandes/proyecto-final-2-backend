@@ -7,8 +7,10 @@ El estado (NO_INICIADA, VIGENTE, POR_VENCER o VENCIDA) lo deriva consulta y se r
 asesor ve todas las pólizas proyectadas; la que no existe o aún no se proyectó es un único 404. Solo
 los parámetros de los contratos llegan a consulta: nada del navegador (cliente, socio, rol) altera
 el resultado. El cuerpo de consulta se valida contra el DTO antes de devolverlo: si no lo cumple,
-503 (falla cerrada). Los DTO son copia de los de consulta (contracts/openapi/consulta.yaml), sin
-datos del cliente.
+503 (falla cerrada). El detalle agrega el titular (nombre, tipo y número enmascarado) que pide a
+clientes con el `clienteId` de consulta, que no sale al navegador; si clientes falla o tarda, los
+tres campos van en null y el estado sale igual. Los DTO son copia de los de consulta
+(contracts/openapi/consulta.yaml), salvo el titular.
 """
 
 from datetime import date, datetime
@@ -30,6 +32,7 @@ from bff_web.adapters.inbound.polizas import (
     _Dto,
 )
 from bff_web.adapters.inbound.socios import ErrorDto
+from bff_web.adapters.outbound.clientes import ClientesCliente
 from bff_web.adapters.outbound.consulta import ConsultaCliente
 from bff_web.application.estado_poliza import EstadoPolizas, servicio_no_disponible
 from bff_web.config import settings
@@ -60,6 +63,16 @@ class EstadoPolizaDto(_Dto):
     periodicidad: str
     emitida_en: datetime
     coberturas: list[CoberturaProductoDto]
+    titular_nombre: str | None = Field(
+        description="Nombre del titular según clientes; nulo si clientes no lo da a tiempo"
+    )
+    tipo_documento: Annotated[str, Field(pattern=r"^[A-Z]{2,3}$")] | None = Field(
+        description="Tipo del documento del titular; nulo si clientes no lo da a tiempo"
+    )
+    documento_enmascarado: str | None = Field(
+        description="Número de documento enmascarado por clientes (p. ej. 1.020.***.456); "
+        "el número completo nunca llega al navegador. Nulo si clientes no lo da a tiempo"
+    )
 
 
 class ResumenPolizaDto(_Dto):
@@ -103,7 +116,11 @@ router = APIRouter(
 
 @lru_cache
 def estados() -> EstadoPolizas:
-    return EstadoPolizas(ConsultaCliente(settings.consulta_url, settings.consulta_timeout_ms))
+    return EstadoPolizas(
+        ConsultaCliente(settings.consulta_url, settings.consulta_timeout_ms),
+        ClientesCliente(settings.clientes_url, settings.clientes_timeout_ms),
+        settings.nombre_cliente_timeout_ms,
+    )
 
 
 Servicio = Annotated[EstadoPolizas, Depends(estados)]

@@ -19,6 +19,7 @@ from solventa_common.errors import ErrorNegocio
 from clientes.adapters.inbound.http.comun import ERRORES_ASESOR, Asesor, Dto, error
 from clientes.application.identidad.casos import ConsultarCliente
 from clientes.application.identidad.documental import CrearCliente, VerificarDocumento
+from clientes.domain.identidad.enmascarado import enmascarar_documento
 from clientes.domain.identidad.modelos import (
     Cliente,
     ClienteNoEncontrado,
@@ -77,19 +78,25 @@ class ClienteDto(Dto):
 
 
 class ClienteLecturaDto(ClienteDto):
-    """La lectura del asesor: el estado y la traza más el nombre con que se dio de alta.
+    """La lectura del asesor: el estado y la traza más el titular del alta.
 
-    Solo el nombre: ni el documento ni la fecha de nacimiento. `null` si el cliente nació por su
-    ingreso o su registro (sin alta por documento).
+    Del titular solo salen el nombre, el tipo de documento y el número enmascarado: nunca el número
+    completo ni la fecha de nacimiento. Los tres son `null` si el cliente nació por su ingreso o su
+    registro (sin alta por documento).
     """
 
     nombre_completo: str | None
+    tipo_documento: str | None
+    documento_enmascarado: str | None
 
     @classmethod
     def desde(cls, cliente: Cliente) -> "ClienteLecturaDto":
+        numero = cliente.numero_documento
         return cls(
             **ClienteDto.desde(cliente).model_dump(),
             nombre_completo=cliente.nombre_completo,
+            tipo_documento=cliente.tipo_documento,
+            documento_enmascarado=enmascarar_documento(numero) if numero else None,
         )
 
 

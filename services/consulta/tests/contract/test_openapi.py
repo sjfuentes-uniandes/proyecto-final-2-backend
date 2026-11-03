@@ -38,5 +38,6 @@ def test_contrato_de_estado_y_listado_de_polizas() -> None:
     assert set(esquemas["EstadoVigencia"]["enum"]) == {
         "NO_INICIADA", "VIGENTE", "POR_VENCER", "VENCIDA"
     }  # fmt: skip
-    assert "clienteId" not in esquemas["EstadoPolizaDto"]["properties"]
+    # El detalle lleva el clienteId solo para que bff-web componga el titular; el listado no.
+    assert "clienteId" in esquemas["EstadoPolizaDto"]["properties"]
     assert "clienteId" not in esquemas["ResumenPolizaDto"]["properties"]

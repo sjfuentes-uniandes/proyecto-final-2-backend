@@ -4165,6 +4165,29 @@ components:
             $ref: '#/components/schemas/CoberturaProductoDto'
           type: array
           title: Coberturas
+        titularNombre:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Titularnombre
+          description: Nombre del titular según clientes; nulo si clientes no lo da
+            a tiempo
+        tipoDocumento:
+          anyOf:
+          - type: string
+            pattern: ^[A-Z]{2,3}$
+          - type: 'null'
+          title: Tipodocumento
+          description: Tipo del documento del titular; nulo si clientes no lo da a
+            tiempo
+        documentoEnmascarado:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Documentoenmascarado
+          description: Número de documento enmascarado por clientes (p. ej. 1.020.***.456);
+            el número completo nunca llega al navegador. Nulo si clientes no lo da
+            a tiempo
       type: object
       required:
       - polizaId
@@ -4180,6 +4203,9 @@ components:
       - periodicidad
       - emitidaEn
       - coberturas
+      - titularNombre
+      - tipoDocumento
+      - documentoEnmascarado
       title: EstadoPolizaDto
       description: Estado vigente de una póliza; `fechaActualizacion` es cuando la
         proyección la registró.

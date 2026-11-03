@@ -121,9 +121,10 @@ def test_detalle_por_estado(poliza: PolizaProyectada, estado: str) -> None:
     }
     assert Decimal(cuerpo["prima"]) == Decimal("64638.10")
     assert cuerpo["coberturas"] == [{"codigo": "MUERTE", "nombre": "Muerte", "obligatoria": True}]
+    assert cuerpo["clienteId"] == str(poliza.cliente_id)
     assert set(cuerpo) == {
-        "polizaId", "numero", "estado", "fechaActualizacion", "producto", "ramo", "vigencia",
-        "prima", "sumaAsegurada", "moneda", "periodicidad", "emitidaEn", "coberturas",
+        "polizaId", "clienteId", "numero", "estado", "fechaActualizacion", "producto", "ramo",
+        "vigencia", "prima", "sumaAsegurada", "moneda", "periodicidad", "emitidaEn", "coberturas",
     }  # fmt: skip
 
 
