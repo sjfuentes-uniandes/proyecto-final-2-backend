@@ -122,6 +122,17 @@ def test_conflictos_del_registro(entorno: Entorno, codigo: str, esperado: str) -
     assert respuesta.json()["codigo"] == esperado
 
 
+def test_un_documento_sin_alta_responde_404(entorno: Entorno) -> None:
+    entorno.registro_verificacion.mock(
+        return_value=httpx.Response(404, json={"codigo": "CLIENTE_NO_REGISTRADO", "detalles": {}})
+    )
+
+    respuesta = entorno.registrar()
+
+    assert respuesta.status_code == 404
+    assert respuesta.json()["codigo"] == "CLIENTE_NO_REGISTRADO"
+
+
 def test_un_409_desconocido_es_servicio_no_disponible(entorno: Entorno) -> None:
     entorno.registro_verificacion.mock(return_value=httpx.Response(409, text="no-json"))
 
@@ -160,6 +171,8 @@ def test_clientes_que_excede_el_timeout_responde_503_sin_reintentar(
         {"registroId": "no-uuid"},
         {"correo": "no-es-correo"},
         {"correo": ""},
+        {"tipoDocumento": "cedula"},
+        {"numeroDocumento": "1"},
         {"selfie": ""},
         {"pruebaDeVida": "no-es-objeto"},
     ],

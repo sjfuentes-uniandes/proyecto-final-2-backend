@@ -12,10 +12,12 @@ from fastapi import APIRouter, Request
 from pydantic import Field
 from solventa_common.errors import ErrorNegocio
 
+from clientes.adapters.inbound.http.alta import NumeroDocumento, TipoDocumento
 from clientes.adapters.inbound.http.comun import ERRORES_ACTOR, MAX_SELFIE, Dto, Titular, error
 from clientes.adapters.inbound.http.identidad import IdentidadDto
 from clientes.application.identidad.casos import VerificarRegistro, VincularRegistro
 from clientes.domain.identidad.modelos import (
+    ClienteNoRegistrado,
     EstadoIdentidad,
     IdentidadNoDisponible,
     RegistroConCorreoDistinto,
@@ -32,6 +34,8 @@ Correo = Annotated[str, Field(min_length=3, max_length=254, pattern=r"^[^@ ]+@[^
 
 
 class SolicitudVerificacionRegistro(Dto):
+    tipo_documento: TipoDocumento
+    numero_documento: NumeroDocumento
     correo: Correo
     selfie: Annotated[str, Field(min_length=1, max_length=MAX_SELFIE)]
     prueba_de_vida: dict[str, Any]
@@ -60,8 +64,10 @@ class SolicitudVinculacion(Dto):
     summary="Verifica la identidad antes de crear la cuenta",
     responses={
         400: error("ERROR_HTTP: el cuerpo no se puede leer como JSON"),
+        404: error("CLIENTE_NO_REGISTRADO: ningún asesor dio de alta ese documento"),
         409: error(
-            "REGISTRO_CORREO_DISTINTO (la verificación va ligada a un correo) o "
+            "REGISTRO_CORREO_DISTINTO (el correo no es el que el asesor o el primer intento "
+            "ligaron) o "
             "REGISTRO_YA_VINCULADO (la cuenta de este registro ya existe)"
         ),
         422: error("SOLICITUD_INVALIDA"),
@@ -78,8 +84,17 @@ async def verificar(
     caso: VerificarRegistro = request.app.state.verificar_registro
     try:
         registro = await caso.ejecutar(
-            registro_id, solicitud.correo, solicitud.selfie, solicitud.prueba_de_vida
+            registro_id,
+            solicitud.tipo_documento,
+            solicitud.numero_documento,
+            solicitud.correo,
+            solicitud.selfie,
+            solicitud.prueba_de_vida,
         )
+    except ClienteNoRegistrado as exc:
+        raise ErrorNegocio(
+            "CLIENTE_NO_REGISTRADO", "No hay un cliente dado de alta con ese documento", 404
+        ) from exc
     except RegistroConCorreoDistinto as exc:
         raise ErrorNegocio(
             "REGISTRO_CORREO_DISTINTO", "El registro se verificó con otro correo", 409

@@ -26,6 +26,10 @@ class ClienteVinculado:
     verificado_en: datetime | None
 
 
+class ClienteNoRegistrado(Exception):
+    """Ningún asesor dio de alta un cliente con ese documento."""
+
+
 class RegistroConCorreoDistinto(Exception):
     """El registro ya se verificó con otro correo."""
 

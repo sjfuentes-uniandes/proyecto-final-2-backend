@@ -418,9 +418,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'CLIENTE_NO_REGISTRADO: ningún asesor dio de alta ese documento'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
         '409':
-          description: REGISTRO_CORREO_DISTINTO (la verificación va ligada a un correo)
-            o REGISTRO_YA_VINCULADO (la cuenta de este registro ya existe)
+          description: REGISTRO_CORREO_DISTINTO (el correo no es el que el asesor o
+            el primer intento ligaron) o REGISTRO_YA_VINCULADO (la cuenta de este registro
+            ya existe)
           content:
             application/json:
               schema:
@@ -1429,6 +1436,14 @@ components:
           type: string
           format: date
           title: Fechanacimiento
+        correo:
+          anyOf:
+          - type: string
+            maxLength: 254
+            minLength: 3
+            pattern: ^[^@ ]+@[^@ ]+\.[^@ ]+$
+          - type: 'null'
+          title: Correo
       type: object
       required:
       - tipoDocumento
@@ -1510,6 +1525,14 @@ components:
       title: SolicitudVerificacionConsentimiento
     SolicitudVerificacionRegistro:
       properties:
+        tipoDocumento:
+          type: string
+          pattern: ^[A-Z]{2,3}$
+          title: Tipodocumento
+        numeroDocumento:
+          type: string
+          pattern: ^[A-Za-z0-9]{3,20}$
+          title: Numerodocumento
         correo:
           type: string
           maxLength: 254
@@ -1527,6 +1550,8 @@ components:
           title: Pruebadevida
       type: object
       required:
+      - tipoDocumento
+      - numeroDocumento
       - correo
       - selfie
       - pruebaDeVida

@@ -6,7 +6,7 @@ import logging
 from calendar import monthrange
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -58,13 +58,31 @@ class RepositorioMemoria:
         self.clientes[nuevo.id] = nuevo
         return nuevo
 
-    def asegurar_registro(self, registro_id: UUID, correo: str) -> Cliente:
-        existente = self.por_registro(registro_id)
-        if existente is not None:
-            return existente
-        nuevo = Cliente(id=uuid4(), registro_id=registro_id, correo=correo)
-        self.clientes[nuevo.id] = nuevo
-        return nuevo
+    def por_documento(self, tipo_documento: str, numero_documento: str) -> Cliente | None:
+        return next(
+            (
+                c
+                for c in self.clientes.values()
+                if (c.tipo_documento, c.numero_documento) == (tipo_documento, numero_documento)
+            ),
+            None,
+        )
+
+    def asignar_registro(self, cliente_id: UUID, registro_id: UUID, correo: str) -> Cliente:
+        cliente = self.clientes[cliente_id]
+        dueno = self.por_registro(registro_id)
+        if cliente.sub is not None or (dueno is not None and dueno.id != cliente_id):
+            raise RegistroYaVinculado()
+        asignado = replace(cliente, registro_id=registro_id, correo=correo)
+        self.clientes[cliente_id] = asignado
+        return asignado
+
+    def dar_de_alta(self, correo: str | None = None) -> Cliente:
+        """Alta de un asesor con el documento de las pruebas de registro."""
+        cliente, _ = self.asegurar_por_documento(
+            DatosCliente("CC", "1234567890", "Persona Ejemplo", date(1990, 1, 1), correo)
+        )
+        return cliente
 
     def vincular(self, cliente_id: UUID, sub: str) -> Cliente:
         cliente = self.clientes[cliente_id]
@@ -96,6 +114,7 @@ class RepositorioMemoria:
             numero_documento=datos.numero_documento,
             nombre_completo=datos.nombre_completo,
             fecha_nacimiento=datos.fecha_nacimiento,
+            correo=datos.correo,
         )
         self.clientes[nuevo.id] = nuevo
         return nuevo, True

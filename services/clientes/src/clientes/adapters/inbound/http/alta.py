@@ -14,6 +14,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Request, Response
 from pydantic import Field, field_validator
+from solventa_common import token_registro
 from solventa_common.errors import ErrorNegocio
 
 from clientes.adapters.inbound.http.comun import ERRORES_ASESOR, Asesor, Dto, error
@@ -40,6 +41,10 @@ class SolicitudAltaCliente(Dto):
     numero_documento: NumeroDocumento
     nombre_completo: Annotated[str, Field(min_length=1, max_length=200)]
     fecha_nacimiento: date
+    correo: Annotated[
+        str | None,
+        Field(min_length=3, max_length=254, pattern=r"^[^@ ]+@[^@ ]+\.[^@ ]+$"),
+    ] = None
 
     @field_validator("fecha_nacimiento", mode="before")
     @classmethod
@@ -128,6 +133,7 @@ async def crear(
             solicitud.numero_documento,
             solicitud.nombre_completo,
             solicitud.fecha_nacimiento,
+            token_registro.normalizar_correo(solicitud.correo) if solicitud.correo else None,
         )
     )
     if not creado:

@@ -17,6 +17,7 @@ from solventa_common.errors import ErrorNegocio
 
 from bff_movil.adapters.inbound.http.auth import IdentidadAutenticada, autenticar
 from bff_movil.adapters.inbound.http.codigos import (
+    CLIENTE_NO_REGISTRADO,
     REGISTRO_CORREO_DISTINTO,
     REGISTRO_YA_VINCULADO,
     SERVICIO_NO_DISPONIBLE,
@@ -25,6 +26,7 @@ from bff_movil.adapters.inbound.http.codigos import (
 from bff_movil.adapters.inbound.http.comun import CABECERAS, Dto, error
 from bff_movil.application.registro.casos import VerificarRegistro, VincularRegistro
 from bff_movil.domain.registro.modelos import (
+    ClienteNoRegistrado,
     ClienteVinculado,
     RegistroConCorreoDistinto,
     RegistroVerificado,
@@ -48,6 +50,8 @@ SIN_CACHE = {"Cache-Control": "no-store"}
 
 class SolicitudVerificacionRegistro(Dto):
     registro_id: UUID = Field(description="UUID que genera la app y reutiliza en cada reintento")
+    tipo_documento: Annotated[str, Field(pattern=r"^[A-Z]{2,3}$")]
+    numero_documento: Annotated[str, Field(pattern=r"^[A-Za-z0-9]{3,20}$")]
     correo: Correo
     selfie: Annotated[str, Field(min_length=1, max_length=MAX_SELFIE)]
     prueba_de_vida: dict[str, Any]
@@ -104,8 +108,10 @@ class ClienteVinculadoDto(Dto):
     responses={
         200: {"headers": CABECERAS},
         400: error("ERROR_HTTP: el cuerpo no se puede leer como JSON"),
+        404: error("CLIENTE_NO_REGISTRADO: ningún asesor dio de alta ese documento"),
         409: error(
-            "REGISTRO_CORREO_DISTINTO (la verificación va ligada a un correo) o "
+            "REGISTRO_CORREO_DISTINTO (el correo no es el que el asesor o el primer intento "
+            "ligaron) o "
             "REGISTRO_YA_VINCULADO (la cuenta de este registro ya existe)"
         ),
         422: error("SOLICITUD_INVALIDA: el cuerpo no cumple su formato"),
@@ -123,8 +129,17 @@ async def verificar(
     caso: VerificarRegistro = request.app.state.verificar_registro
     try:
         registro = await caso.ejecutar(
-            solicitud.registro_id, solicitud.correo, solicitud.selfie, solicitud.prueba_de_vida
+            solicitud.registro_id,
+            solicitud.tipo_documento,
+            solicitud.numero_documento,
+            solicitud.correo,
+            solicitud.selfie,
+            solicitud.prueba_de_vida,
         )
+    except ClienteNoRegistrado as exc:
+        raise ErrorNegocio(
+            CLIENTE_NO_REGISTRADO, "No hay un cliente dado de alta con ese documento", 404
+        ) from exc
     except RegistroConCorreoDistinto as exc:
         raise ErrorNegocio(
             REGISTRO_CORREO_DISTINTO, "El registro se verificó con otro correo", 409

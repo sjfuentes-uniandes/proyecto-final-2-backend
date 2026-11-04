@@ -56,6 +56,10 @@ class SolicitudAltaCliente(_Dto):
     numero_documento: Annotated[str, Field(pattern=r"^[A-Za-z0-9]{3,20}$")]
     nombre_completo: Annotated[str, Field(min_length=1, max_length=200)]
     fecha_nacimiento: date
+    correo: Annotated[
+        str | None,
+        Field(min_length=3, max_length=254, pattern=r"^[^@ ]+@[^@ ]+\.[^@ ]+$"),
+    ] = None
 
 
 class ClienteDto(_Dto):
@@ -92,7 +96,9 @@ async def crear_cliente(
     solicitud: SolicitudAltaCliente, http: Response, servicio: Servicio, asesor: Actor
 ) -> dict[str, Any]:
     """El mismo documento devuelve el mismo cliente, sin duplicarlo (paso 1 de la cotización)."""
-    estado, cliente = await servicio.crear(solicitud.model_dump(mode="json", by_alias=True), asesor)
+    estado, cliente = await servicio.crear(
+        solicitud.model_dump(mode="json", by_alias=True, exclude_none=True), asesor
+    )
     http.status_code = estado
     return cliente
 

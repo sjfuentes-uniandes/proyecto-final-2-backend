@@ -28,6 +28,8 @@ class DatosCliente:
     numero_documento: str
     nombre_completo: str
     fecha_nacimiento: date
+    # Opcional: si el asesor lo informa, el cliente solo podrá registrarse con ese correo.
+    correo: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,6 +116,10 @@ class ResultadoVerificacion:
 
 class ClienteNoEncontrado(Exception):
     """El cliente no existe."""
+
+
+class ClienteNoRegistrado(Exception):
+    """Ningún asesor dio de alta un cliente con ese documento: no puede crear su cuenta."""
 
 
 class RegistroConCorreoDistinto(Exception):

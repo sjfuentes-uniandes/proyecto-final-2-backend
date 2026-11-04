@@ -5593,6 +5593,14 @@ components:
           type: string
           format: date
           title: Fechanacimiento
+        correo:
+          anyOf:
+          - type: string
+            maxLength: 254
+            minLength: 3
+            pattern: ^[^@ ]+@[^@ ]+\.[^@ ]+$
+          - type: 'null'
+          title: Correo
       type: object
       required:
       - tipoDocumento

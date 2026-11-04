@@ -16,6 +16,8 @@ REGISTRO = "00000000-0000-4000-8000-0000000000aa"
 CORRELACION = "corr-registro-m06"
 ACTOR = {"X-Actor-Id": "sub-nuevo-1", "X-Actor-Rol": "CLIENTE"}
 CUERPO = {
+    "tipoDocumento": "CC",
+    "numeroDocumento": "1234567890",
     "correo": "Persona@Ejemplo.co",
     "selfie": "selfie-sintetica-aprobada",
     "pruebaDeVida": {"completado": True},
@@ -34,7 +36,9 @@ def _veredicto(resultado: str, motivo: str | None = None) -> Manejador:
 def api(repositorio: Any) -> Iterator[Callable[[Manejador], TestClient]]:
     abiertos: list[TestClient] = []
 
-    def crear(manejador: Manejador) -> TestClient:
+    def crear(manejador: Manejador, dar_de_alta: bool = True) -> TestClient:
+        if dar_de_alta:
+            repositorio.dar_de_alta()
         app = crear_app(
             Settings(), transport=httpx.MockTransport(manejador), repositorio=repositorio
         )
@@ -111,6 +115,24 @@ def test_503_la_verificacion_no_termino(api: Any, respuesta: httpx.Response, mot
     assert cuerpo["detalles"] == {"motivo": motivo}
 
 
+def test_404_un_documento_sin_alta_no_puede_registrarse(api: Any, repositorio: Any) -> None:
+    cliente = api(_veredicto("APROBADO"), dar_de_alta=False)
+
+    _error(cliente.post(VERIFICAR, json=CUERPO), 404, "CLIENTE_NO_REGISTRADO")
+
+    assert not repositorio.clientes
+
+
+def test_409_el_correo_debe_ser_el_que_informo_el_asesor(api: Any, repositorio: Any) -> None:
+    cliente = api(_veredicto("APROBADO"), dar_de_alta=False)
+    repositorio.dar_de_alta("asesor@ejemplo.co")
+
+    _error(cliente.post(VERIFICAR, json=CUERPO), 409, "REGISTRO_CORREO_DISTINTO")
+    correcto = cliente.post(VERIFICAR, json={**CUERPO, "correo": "ASESOR@ejemplo.co"})
+
+    assert correcto.status_code == 200, correcto.text
+
+
 def test_reintento_tras_interrupcion_no_crea_otro_cliente(api: Any, repositorio: Any) -> None:
     respuestas = iter([httpx.Response(503), httpx.Response(200, json={"resultado": "APROBADO"})])
     cliente = api(lambda _: next(respuestas))
@@ -145,6 +167,8 @@ def test_409_un_registro_con_cuenta_no_se_vuelve_a_verificar(api: Any) -> None:
     [
         ({"correo": "no-es-correo"}, ["correo"]),
         ({"correo": ""}, ["correo"]),
+        ({"tipoDocumento": "cedula"}, ["tipoDocumento"]),
+        ({"numeroDocumento": "1"}, ["numeroDocumento"]),
         ({"selfie": ""}, ["selfie"]),
         ({"pruebaDeVida": "no-es-objeto"}, ["pruebaDeVida"]),
     ],
@@ -157,7 +181,7 @@ def test_422_solicitud_invalida(
     respuesta = cliente.post(VERIFICAR, json={**CUERPO, **cambios})
 
     assert _error(respuesta, 422, "SOLICITUD_INVALIDA")["detalles"] == {"campos": campos}
-    assert repositorio.clientes == {}
+    assert all(c.registro_id is None for c in repositorio.clientes.values())
 
 
 def test_422_registro_id_invalido(api: Any) -> None:

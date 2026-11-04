@@ -157,12 +157,13 @@ class _RepositorioMemoria:
             self.clientes[existente.id] = existente
         return existente
 
-    def asegurar_registro(self, registro_id: UUID, correo: str) -> Cliente:
-        existente = self.por_registro(registro_id)
-        if existente is None:
-            existente = Cliente(id=uuid4(), registro_id=registro_id, correo=correo)
-            self.clientes[existente.id] = existente
-        return existente
+    def por_documento(self, tipo_documento: str, numero_documento: str) -> Cliente | None:
+        return None
+
+    def asignar_registro(self, cliente_id: UUID, registro_id: UUID, correo: str) -> Cliente:
+        cliente = replace(self.clientes[cliente_id], registro_id=registro_id, correo=correo)
+        self.clientes[cliente_id] = cliente
+        return cliente
 
     def vincular(self, cliente_id: UUID, sub: str) -> Cliente:
         cliente = replace(self.clientes[cliente_id], sub=sub)

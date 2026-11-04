@@ -17,6 +17,7 @@ from solventa_common.resiliencia import (
 
 from bff_movil.adapters.outbound.clientes_http import ROL_CLIENTE
 from bff_movil.domain.registro.modelos import (
+    ClienteNoRegistrado,
     ClienteVinculado,
     RegistroConCorreoDistinto,
     RegistroVerificado,
@@ -83,12 +84,24 @@ class RegistroHttp:
         )
 
     async def verificar(
-        self, registro_id: UUID, correo: str, selfie: str, prueba_de_vida: dict[str, Any]
+        self,
+        registro_id: UUID,
+        tipo_documento: str,
+        numero_documento: str,
+        correo: str,
+        selfie: str,
+        prueba_de_vida: dict[str, Any],
     ) -> RegistroVerificado:
         async def llamada(timeout_s: float) -> RegistroVerificado:
             respuesta = await self._cliente.post(
                 f"{self._base_url}/v1/registros/{registro_id}/verificaciones",
-                json={"correo": correo, "selfie": selfie, "pruebaDeVida": prueba_de_vida},
+                json={
+                    "tipoDocumento": tipo_documento,
+                    "numeroDocumento": numero_documento,
+                    "correo": correo,
+                    "selfie": selfie,
+                    "pruebaDeVida": prueba_de_vida,
+                },
                 timeout=timeout_s,
             )
             return self._verificacion(respuesta)
@@ -133,6 +146,10 @@ class RegistroHttp:
 
     @staticmethod
     def _verificacion(respuesta: httpx.Response) -> RegistroVerificado:
+        if respuesta.status_code == 404:
+            codigo, _ = _error(respuesta)
+            if codigo == "CLIENTE_NO_REGISTRADO":
+                raise ClienteNoRegistrado()
         if respuesta.status_code == 409:
             codigo, _ = _error(respuesta)
             if codigo == "REGISTRO_CORREO_DISTINTO":

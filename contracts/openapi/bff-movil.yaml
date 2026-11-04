@@ -243,9 +243,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'CLIENTE_NO_REGISTRADO: ningún asesor dio de alta ese documento'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
         '409':
-          description: REGISTRO_CORREO_DISTINTO (la verificación va ligada a un correo)
-            o REGISTRO_YA_VINCULADO (la cuenta de este registro ya existe)
+          description: REGISTRO_CORREO_DISTINTO (el correo no es el que el asesor o
+            el primer intento ligaron) o REGISTRO_YA_VINCULADO (la cuenta de este registro
+            ya existe)
           headers:
             X-Correlation-Id:
               description: Identificador de correlación de la solicitud
@@ -1710,6 +1722,14 @@ components:
           format: uuid
           title: Registroid
           description: UUID que genera la app y reutiliza en cada reintento
+        tipoDocumento:
+          type: string
+          pattern: ^[A-Z]{2,3}$
+          title: Tipodocumento
+        numeroDocumento:
+          type: string
+          pattern: ^[A-Za-z0-9]{3,20}$
+          title: Numerodocumento
         correo:
           type: string
           maxLength: 254
@@ -1728,6 +1748,8 @@ components:
       type: object
       required:
       - registroId
+      - tipoDocumento
+      - numeroDocumento
       - correo
       - selfie
       - pruebaDeVida
