@@ -42,6 +42,7 @@ def _estado() -> object:
 def estado_poliza() -> dict[str, object]:
     return {
         "polizaId": match.regex(POLIZA_ID, regex=UUID_RE),
+        "clienteId": match.regex("00000000-0000-4000-8000-0000000000c1", regex=UUID_RE),
         "numero": match.regex("100-2026-000001", regex=r"^[0-9]{3}-[0-9]{4}-[0-9]{6}$"),
         "estado": _estado(),
         "fechaActualizacion": match.regex("2026-10-24T15:00:05.250000Z", regex=FECHA),

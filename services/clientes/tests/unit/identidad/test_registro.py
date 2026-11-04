@@ -13,6 +13,7 @@ from clientes.application.identidad.casos import (
 )
 from clientes.config import SECRETO_LOCAL
 from clientes.domain.identidad.modelos import (
+    ClienteNoRegistrado,
     EstadoIdentidad,
     IdentidadNoDisponible,
     RegistroConCorreoDistinto,
@@ -49,9 +50,28 @@ class VerificacionFalsa:
         return respuesta
 
 
-def _verificar(repositorio: Any, verificacion: VerificacionFalsa) -> VerificarRegistro:
+TIPO_DOC, NUMERO_DOC = "CC", "1234567890"
+
+
+class _Registro:
+    """El caso real tras el alta de un asesor con el documento de las pruebas."""
+
+    def __init__(self, repositorio: Any, caso: VerificarRegistro) -> None:
+        self._repositorio = repositorio
+        self._caso = caso
+
+    async def ejecutar(
+        self, registro_id: UUID, correo: str, selfie: str, prueba: dict[str, Any]
+    ) -> Any:
+        if self._repositorio.por_documento(TIPO_DOC, NUMERO_DOC) is None:
+            self._repositorio.dar_de_alta()
+        return await self._caso.ejecutar(registro_id, TIPO_DOC, NUMERO_DOC, correo, selfie, prueba)
+
+
+def _verificar(repositorio: Any, verificacion: VerificacionFalsa) -> _Registro:
     verificador = VerificarIdentidad(repositorio, verificacion, reloj=lambda: AHORA)
-    return VerificarRegistro(repositorio, verificador, SECRETO_LOCAL, reloj=lambda: AHORA)
+    caso = VerificarRegistro(repositorio, verificador, SECRETO_LOCAL, reloj=lambda: AHORA)
+    return _Registro(repositorio, caso)
 
 
 def _vincular(repositorio: Any, ahora: datetime = AHORA) -> VincularRegistro:
@@ -154,6 +174,56 @@ async def test_un_registro_con_cuenta_no_se_vuelve_a_verificar(repositorio: Any)
     with pytest.raises(RegistroYaVinculado):
         await _verificar(repositorio, verificacion).ejecutar(REGISTRO, CORREO, "selfie", {})
     assert verificacion.llamadas == 0
+
+
+async def test_un_documento_sin_alta_no_puede_registrarse(repositorio: Any) -> None:
+    verificacion = VerificacionFalsa()
+    caso = VerificarRegistro(
+        repositorio, VerificarIdentidad(repositorio, verificacion), SECRETO_LOCAL
+    )
+
+    with pytest.raises(ClienteNoRegistrado):
+        await caso.ejecutar(REGISTRO, TIPO_DOC, NUMERO_DOC, CORREO, "selfie", {})
+    assert verificacion.llamadas == 0 and not repositorio.clientes
+
+
+async def test_el_cliente_dado_de_alta_se_liga_al_registro_sin_crear_otro(
+    repositorio: Any,
+) -> None:
+    alta = repositorio.dar_de_alta()
+    verificacion = VerificacionFalsa(Veredicto(ResultadoKyc.APROBADO))
+
+    registro = await _verificar(repositorio, verificacion).ejecutar(REGISTRO, CORREO, "s", {})
+
+    assert len(repositorio.clientes) == 1
+    ligado = repositorio.por_registro(REGISTRO)
+    assert ligado is not None and ligado.id == alta.id
+    assert ligado.correo == "persona@ejemplo.co"
+    assert registro.token is not None
+
+
+async def test_con_correo_del_asesor_solo_se_registra_con_ese_correo(repositorio: Any) -> None:
+    repositorio.dar_de_alta("asesor@ejemplo.co")
+    verificacion = VerificacionFalsa(Veredicto(ResultadoKyc.APROBADO))
+    caso = _verificar(repositorio, verificacion)
+
+    with pytest.raises(RegistroConCorreoDistinto):
+        await caso.ejecutar(REGISTRO, "otro@ejemplo.co", "selfie", {})
+    assert verificacion.llamadas == 0
+    assert repositorio.por_registro(REGISTRO) is None
+
+    registro = await caso.ejecutar(REGISTRO, " Asesor@Ejemplo.co ", "selfie", {})
+    assert registro.token is not None
+
+
+async def test_un_cliente_con_cuenta_no_se_registra_de_nuevo_con_otro_registro(
+    repositorio: Any,
+) -> None:
+    token = await _registrar(repositorio)
+    await _vincular(repositorio).ejecutar(REGISTRO, "sub-1", token)
+
+    with pytest.raises(RegistroYaVinculado):
+        await _verificar(repositorio, VerificacionFalsa()).ejecutar(uuid4(), CORREO, "s", {})
 
 
 async def test_la_evidencia_y_el_correo_no_quedan_en_logs_ni_spans(
@@ -272,7 +342,8 @@ async def test_token_con_otro_cliente_del_mismo_registro(repositorio: Any) -> No
 
 
 async def test_un_cliente_no_verificado_no_se_vincula(repositorio: Any) -> None:
-    cliente = repositorio.asegurar_registro(REGISTRO, "persona@ejemplo.co")
+    cliente = repositorio.dar_de_alta()
+    cliente = repositorio.asignar_registro(cliente.id, REGISTRO, "persona@ejemplo.co")
     token, _ = token_registro.emitir(
         SECRETO_LOCAL, str(REGISTRO), str(cliente.id), CORREO, ahora=int(AHORA.timestamp())
     )

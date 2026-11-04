@@ -167,6 +167,10 @@ def crear_app(
                 from psycopg_pool import AsyncConnectionPool
 
                 migrar(settings.database_url)
+                if settings.semilla_polizas:
+                    from consulta.adapters.outbound.semilla_polizas import sembrar
+
+                    sembrar(settings.database_url)
                 pool_base = AsyncConnectionPool(
                     settings.database_url,
                     min_size=1,

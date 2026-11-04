@@ -29,6 +29,7 @@ import psycopg
 import pytest
 import uvicorn
 from bff_web.adapters.inbound import estado_polizas as ruta
+from bff_web.adapters.outbound.clientes import ClientesCliente
 from bff_web.adapters.outbound.consulta import ConsultaCliente
 from bff_web.application.estado_poliza import EstadoPolizas
 from bff_web.config import settings
@@ -209,7 +210,9 @@ def entorno() -> Iterator[Entorno]:
 @contextmanager
 def _portal(url: str, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     monkeypatch.setattr(settings, "jwt_issuers", {"backoffice": BACKOFFICE})
-    servicio = EstadoPolizas(ConsultaCliente(url, settings.consulta_timeout_ms))
+    servicio = EstadoPolizas(
+        ConsultaCliente(url, settings.consulta_timeout_ms), _clientes_caido(), 500
+    )
     portal_app.dependency_overrides[ruta.estados] = lambda: servicio
     try:
         cliente = TestClient(portal_app)
@@ -361,9 +364,17 @@ def test_n2_7_con_consulta_detenido_el_bff_responde_503(
 @contextmanager
 def _portal_sin_calentar(url: str, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     monkeypatch.setattr(settings, "jwt_issuers", {"backoffice": BACKOFFICE})
-    servicio = EstadoPolizas(ConsultaCliente(url, settings.consulta_timeout_ms))
+    servicio = EstadoPolizas(
+        ConsultaCliente(url, settings.consulta_timeout_ms), _clientes_caido(), 500
+    )
     portal_app.dependency_overrides[ruta.estados] = lambda: servicio
     try:
         yield TestClient(portal_app)
     finally:
         portal_app.dependency_overrides.clear()
+
+
+def _clientes_caido() -> ClientesCliente:
+    return ClientesCliente(
+        "http://clientes:8080", 500, httpx.MockTransport(lambda _: httpx.Response(503))
+    )

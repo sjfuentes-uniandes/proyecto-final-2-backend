@@ -38,6 +38,7 @@ enable_tracing = true
 service_environment = {
   clientes = { CLIENTES_SEMILLA_SINTETICA = "true" }
   catalogo = { CATALOGO_PRODUCTOS_QA = "true" }
+  consulta = { CONSULTA_SEMILLA_POLIZAS = "true" }
   # DEF-03: en int cada salto por Service Connect suma 60–100 ms y una fuente pasa por dos
   # (cotizacion → adaptador-datos → simulador). Presupuestos con margen, sin pasar el corte de 700 ms.
   cotizacion = {

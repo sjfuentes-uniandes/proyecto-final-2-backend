@@ -133,30 +133,50 @@ def test_por_registro_mapea_y_devuelve_none_si_no_existe(monkeypatch: pytest.Mon
     assert repositorio.por_registro(REGISTRO) is None
 
 
-def test_asegurar_registro_inserta_sin_pisar_y_lee_el_cliente(
+def test_asignar_registro_solo_liga_a_un_cliente_sin_cuenta(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     conexion = _conectar(monkeypatch, FILA)
 
     assert (
-        RepositorioPostgres("postgresql://u@h/clientes").asegurar_registro(
-            REGISTRO, "persona@ejemplo.co"
+        RepositorioPostgres("postgresql://u@h/clientes").asignar_registro(
+            ID, REGISTRO, "persona@ejemplo.co"
         )
         == CLIENTE
     )
-    (crear, parametros), (leer, parametros_leer) = conexion.sentencias
-    assert crear == postgres._CREAR_REGISTRO and "ON CONFLICT (registro_id) DO NOTHING" in crear
-    assert parametros[1:] == (REGISTRO, "persona@ejemplo.co")
-    assert (leer, parametros_leer) == (postgres._POR_REGISTRO, (REGISTRO,))
+    assert conexion.sentencias == [
+        (postgres._ASIGNAR_REGISTRO, (REGISTRO, "persona@ejemplo.co", ID))
+    ]
+    assert "sub IS NULL" in postgres._ASIGNAR_REGISTRO
 
 
-def test_asegurar_registro_falla_si_el_cliente_no_existe_tras_crearlo(
+def test_asignar_registro_a_un_cliente_con_cuenta_es_registro_ya_vinculado(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _conectar(monkeypatch, None)
 
-    with pytest.raises(RuntimeError):
-        RepositorioPostgres("postgresql://u@h/clientes").asegurar_registro(REGISTRO, "a@b.co")
+    with pytest.raises(RegistroYaVinculado):
+        RepositorioPostgres("postgresql://u@h/clientes").asignar_registro(ID, REGISTRO, "a@b.co")
+
+
+def test_asignar_registro_de_otro_cliente_es_registro_ya_vinculado(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conexion = _conectar(monkeypatch, FILA)
+    conexion.error = psycopg.errors.UniqueViolation()
+
+    with pytest.raises(RegistroYaVinculado):
+        RepositorioPostgres("postgresql://u@h/clientes").asignar_registro(ID, REGISTRO, "a@b.co")
+
+
+def test_por_documento_mapea_y_devuelve_none_si_no_existe(monkeypatch: pytest.MonkeyPatch) -> None:
+    conexion = _conectar(monkeypatch, FILA)
+    repositorio = RepositorioPostgres("postgresql://u@h/clientes")
+
+    assert repositorio.por_documento("CC", "1020456789") == CLIENTE
+    assert conexion.sentencias[-1] == (postgres._POR_DOCUMENTO, ("CC", "1020456789"))
+    conexion.fila = None
+    assert repositorio.por_documento("CC", "1020456789") is None
 
 
 def test_vincular_asocia_el_sub_solo_si_esta_libre_o_es_el_mismo(
@@ -210,7 +230,7 @@ def test_asegurar_por_documento_distingue_el_alta_del_reintento(
     (crear, parametros), (leer, parametros_leer) = conexion.sentencias
     assert crear == postgres._CREAR_DOCUMENTO
     assert "ON CONFLICT (tipo_documento, numero_documento) DO NOTHING RETURNING id" in crear
-    assert parametros[1:] == ("CC", "1020456789", "Natalia González Ruiz", date(1990, 4, 18))
+    assert parametros[1:] == ("CC", "1020456789", "Natalia González Ruiz", date(1990, 4, 18), None)
     assert (leer, parametros_leer) == (postgres._POR_DOCUMENTO, ("CC", "1020456789"))
 
 

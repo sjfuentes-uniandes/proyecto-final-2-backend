@@ -21,6 +21,7 @@ import httpx
 import pytest
 import uvicorn
 from bff_web.adapters.inbound import estado_polizas as ruta
+from bff_web.adapters.outbound.clientes import ClientesCliente
 from bff_web.adapters.outbound.consulta import ConsultaCliente
 from bff_web.application.estado_poliza import EstadoPolizas
 from bff_web.config import settings
@@ -146,7 +147,9 @@ def _consulta_real() -> Any:
 @contextmanager
 def _portal(url: str, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     monkeypatch.setattr(settings, "jwt_issuers", {"backoffice": BACKOFFICE})
-    servicio = EstadoPolizas(ConsultaCliente(url, settings.consulta_timeout_ms))
+    servicio = EstadoPolizas(
+        ConsultaCliente(url, settings.consulta_timeout_ms), _clientes_caido(), 500
+    )
     portal_app.dependency_overrides[ruta.estados] = lambda: servicio
     try:
         yield TestClient(portal_app)
@@ -294,3 +297,9 @@ def test_si_consulta_rechaza_al_bff_es_503(monkeypatch: pytest.MonkeyPatch, esta
                 "SERVICIO_NO_DISPONIBLE",
             )
             assert "ROL_NO_AUTORIZADO" not in respuesta.text
+
+
+def _clientes_caido() -> ClientesCliente:
+    return ClientesCliente(
+        "http://clientes:8080", 500, httpx.MockTransport(lambda _: httpx.Response(503))
+    )

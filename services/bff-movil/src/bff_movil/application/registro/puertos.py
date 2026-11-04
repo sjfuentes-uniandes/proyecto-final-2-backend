@@ -6,9 +6,16 @@ from bff_movil.domain.registro.modelos import ClienteVinculado, RegistroVerifica
 
 class ServicioRegistro(Protocol):
     async def verificar(
-        self, registro_id: UUID, correo: str, selfie: str, prueba_de_vida: dict[str, Any]
+        self,
+        registro_id: UUID,
+        tipo_documento: str,
+        numero_documento: str,
+        correo: str,
+        selfie: str,
+        prueba_de_vida: dict[str, Any],
     ) -> RegistroVerificado:
-        """Lanza RegistroConCorreoDistinto, RegistroYaVinculado o ServicioNoDisponible."""
+        """Lanza ClienteNoRegistrado, RegistroConCorreoDistinto, RegistroYaVinculado o
+        ServicioNoDisponible."""
         ...
 
     async def vincular(self, registro_id: UUID, sub: str, token_registro: str) -> ClienteVinculado:

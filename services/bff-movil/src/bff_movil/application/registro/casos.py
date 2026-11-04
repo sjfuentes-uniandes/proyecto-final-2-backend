@@ -10,6 +10,7 @@ from solventa_common.telemetry import (
 
 from bff_movil.application.registro.puertos import ServicioRegistro
 from bff_movil.domain.registro.modelos import (
+    ClienteNoRegistrado,
     ClienteVinculado,
     RegistroConCorreoDistinto,
     RegistroVerificado,
@@ -29,18 +30,24 @@ class VerificarRegistro:
         self._servicio = servicio
 
     async def ejecutar(
-        self, registro_id: UUID, correo: str, selfie: str, prueba_de_vida: dict[str, Any]
+        self,
+        registro_id: UUID,
+        tipo_documento: str,
+        numero_documento: str,
+        correo: str,
+        selfie: str,
+        prueba_de_vida: dict[str, Any],
     ) -> RegistroVerificado:
         """Envía la evidencia a `clientes`. No la guarda ni la registra."""
         with operacion("registro.verificar") as op:
             try:
                 registro = await self._servicio.verificar(
-                    registro_id, correo, selfie, prueba_de_vida
+                    registro_id, tipo_documento, numero_documento, correo, selfie, prueba_de_vida
                 )
             except ServicioNoDisponible as error:
                 op.marcar(_resultado(error))
                 raise
-            except (RegistroConCorreoDistinto, RegistroYaVinculado):
+            except (ClienteNoRegistrado, RegistroConCorreoDistinto, RegistroYaVinculado):
                 op.marcar(RESULTADO_RECHAZADO)
                 raise
             if registro.resultado is not ResultadoKyc.APROBADO:

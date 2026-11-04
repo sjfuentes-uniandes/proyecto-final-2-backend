@@ -1,0 +1,32 @@
+{
+  "name": "kyc documento aprobado (lote de pruebas 1020456000-1020456999 y 1015415158)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/kyc/v1/verificaciones/documento",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.numeroDocumento",
+          "matches": "^(1020456[0-9]{3}|1015415158)$"
+        }
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "resultado": "APROBADO",
+      "motivo": null,
+      "referencia": "kyc-doc-ref-lote"
+    },
+    "fixedDelayMilliseconds": 50
+  }
+}

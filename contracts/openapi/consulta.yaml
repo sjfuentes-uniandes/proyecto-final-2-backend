@@ -42,7 +42,13 @@ components:
       title: ErrorDto
       type: object
     EstadoPolizaDto:
+      description: '`cliente_id` es para que `bff-web` componga el titular; no llega
+        al navegador.'
       properties:
+        clienteId:
+          format: uuid
+          title: Clienteid
+          type: string
         coberturas:
           items:
             $ref: '#/components/schemas/CoberturaDto'
@@ -89,6 +95,7 @@ components:
           $ref: '#/components/schemas/VigenciaDto'
       required:
       - polizaId
+      - clienteId
       - numero
       - estado
       - fechaActualizacion

@@ -145,6 +145,18 @@ def test_sembrar_inserta_todo_en_una_transaccion(conexion: ConexionFalsa) -> Non
     assert VENCIDO_VIGENTE_HASTA < OTORGADO_EN
 
 
+def test_el_cliente_movil_recibe_su_titular_sin_pisar_lo_existente(
+    conexion: ConexionFalsa,
+) -> None:
+    sembrar("postgresql://falsa")
+
+    [(sql, parametros)] = [(s, p) for s, p in conexion.sentencias if s.startswith("UPDATE cliente")]
+    assert "numero_documento IS NULL" in sql and "NOT EXISTS" in sql
+    assert parametros[4] == semilla_sintetica.CLIENTE_MOVIL_ID
+    assert parametros[1] == semilla_sintetica.CLIENTE_MOVIL_DOCUMENTO
+    assert parametros[1] not in {c.numero_documento for c in CLIENTES_SINTETICOS}
+
+
 def test_sembrar_otra_vez_no_crea_nada(conexion: ConexionFalsa) -> None:
     conexion.filas_por_cliente = 0
 

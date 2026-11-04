@@ -418,9 +418,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'CLIENTE_NO_REGISTRADO: ningún asesor dio de alta ese documento'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
         '409':
-          description: REGISTRO_CORREO_DISTINTO (la verificación va ligada a un correo)
-            o REGISTRO_YA_VINCULADO (la cuenta de este registro ya existe)
+          description: REGISTRO_CORREO_DISTINTO (el correo no es el que el asesor o
+            el primer intento ligaron) o REGISTRO_YA_VINCULADO (la cuenta de este registro
+            ya existe)
           content:
             application/json:
               schema:
@@ -1208,6 +1215,16 @@ components:
           - type: string
           - type: 'null'
           title: Nombrecompleto
+        tipoDocumento:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tipodocumento
+        documentoEnmascarado:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Documentoenmascarado
       type: object
       required:
       - clienteId
@@ -1216,15 +1233,20 @@ components:
       - proveedor
       - referencia
       - nombreCompleto
+      - tipoDocumento
+      - documentoEnmascarado
       title: ClienteLecturaDto
-      description: 'La lectura del asesor: el estado y la traza más el nombre con
-        que se dio de alta.
+      description: 'La lectura del asesor: el estado y la traza más el titular del
+        alta.
 
 
-        Solo el nombre: ni el documento ni la fecha de nacimiento. `null` si el cliente
-        nació por su
+        Del titular solo salen el nombre, el tipo de documento y el número enmascarado:
+        nunca el número
 
-        ingreso o su registro (sin alta por documento).'
+        completo ni la fecha de nacimiento. Los tres son `null` si el cliente nació
+        por su ingreso o su
+
+        registro (sin alta por documento).'
     ConsentimientoDto:
       properties:
         consentimientoId:
@@ -1414,6 +1436,14 @@ components:
           type: string
           format: date
           title: Fechanacimiento
+        correo:
+          anyOf:
+          - type: string
+            maxLength: 254
+            minLength: 3
+            pattern: ^[^@ ]+@[^@ ]+\.[^@ ]+$
+          - type: 'null'
+          title: Correo
       type: object
       required:
       - tipoDocumento
@@ -1495,6 +1525,14 @@ components:
       title: SolicitudVerificacionConsentimiento
     SolicitudVerificacionRegistro:
       properties:
+        tipoDocumento:
+          type: string
+          pattern: ^[A-Z]{2,3}$
+          title: Tipodocumento
+        numeroDocumento:
+          type: string
+          pattern: ^[A-Za-z0-9]{3,20}$
+          title: Numerodocumento
         correo:
           type: string
           maxLength: 254
@@ -1512,6 +1550,8 @@ components:
           title: Pruebadevida
       type: object
       required:
+      - tipoDocumento
+      - numeroDocumento
       - correo
       - selfie
       - pruebaDeVida

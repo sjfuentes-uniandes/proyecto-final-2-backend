@@ -218,10 +218,12 @@ def test_contrato_del_registro() -> None:
     rutas = app.openapi()["paths"]
     verificar = rutas["/v1/registros/{registro_id}/verificaciones"]["post"]
     vincular = rutas["/v1/registros/{registro_id}/vinculacion"]["post"]
-    assert set(verificar["responses"]) == {"200", "400", "409", "422", "503"}
+    assert set(verificar["responses"]) == {"200", "400", "404", "409", "422", "503"}
     assert set(vincular["responses"]) == {"200", "400", "401", "403", "409", "422"}
     esquemas = app.openapi()["components"]["schemas"]
     assert set(esquemas["SolicitudVerificacionRegistro"]["required"]) == {
+        "tipoDocumento",
+        "numeroDocumento",
         "correo",
         "selfie",
         "pruebaDeVida",

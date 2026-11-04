@@ -15,8 +15,11 @@ class RepositorioClientes(Protocol):
         """Devuelve el cliente del `sub`, creándolo si no existe. Idempotente (AC3)."""
         ...
 
-    def asegurar_registro(self, registro_id: UUID, correo: str) -> Cliente:
-        """Devuelve el cliente del registro, creándolo si no existe. Idempotente (AC3)."""
+    def por_documento(self, tipo_documento: str, numero_documento: str) -> Cliente | None: ...
+
+    def asignar_registro(self, cliente_id: UUID, registro_id: UUID, correo: str) -> Cliente:
+        """Liga el registro y el correo a un cliente sin cuenta. Lanza RegistroYaVinculado si el
+        cliente ya tiene cuenta o el `registro_id` pertenece a otro cliente."""
         ...
 
     def vincular(self, cliente_id: UUID, sub: str) -> Cliente:

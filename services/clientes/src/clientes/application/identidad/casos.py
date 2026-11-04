@@ -20,6 +20,7 @@ from clientes.application.identidad.puertos import ConsultaVerificacion, Reposit
 from clientes.domain.identidad.modelos import (
     Cliente,
     ClienteNoEncontrado,
+    ClienteNoRegistrado,
     IdentidadNoDisponible,
     RegistroConCorreoDistinto,
     RegistroYaVinculado,
@@ -108,19 +109,35 @@ class VerificarRegistro:
         self._reloj = reloj
 
     async def ejecutar(
-        self, registro_id: UUID, correo: str, selfie: str, prueba_de_vida: dict[str, Any]
+        self,
+        registro_id: UUID,
+        tipo_documento: str,
+        numero_documento: str,
+        correo: str,
+        selfie: str,
+        prueba_de_vida: dict[str, Any],
     ) -> RegistroVerificado:
-        """El cliente se resuelve por `registro_id` y se crea una sola vez (AC3).
+        """Solo puede registrarse quien un asesor dio de alta: el cliente se resuelve por su
+        documento y se le liga el `registro_id` y el correo (AC3: reintentar no crea otro).
 
-        Solo una verificación exitosa devuelve el token que exige el pre sign-up de Cognito, y
-        va ligado al correo: no sirve para crear la cuenta con otro.
+        Si el asesor informó un correo, es el único con el que puede registrarse. Solo una
+        verificación exitosa devuelve el token que exige el pre sign-up de Cognito, y va ligado
+        al correo: no sirve para crear la cuenta con otro.
         """
         correo = token_registro.normalizar_correo(correo)
-        cliente = await asyncio.to_thread(self._repositorio.asegurar_registro, registro_id, correo)
-        if cliente.correo != correo:
-            raise RegistroConCorreoDistinto()
+        cliente = await asyncio.to_thread(
+            self._repositorio.por_documento, tipo_documento, numero_documento
+        )
+        if cliente is None:
+            raise ClienteNoRegistrado()
         if cliente.sub is not None:
             raise RegistroYaVinculado()
+        if cliente.correo is not None and cliente.correo != correo:
+            raise RegistroConCorreoDistinto()
+        if cliente.registro_id != registro_id or cliente.correo != correo:
+            cliente = await asyncio.to_thread(
+                self._repositorio.asignar_registro, cliente.id, registro_id, correo
+            )
         resultado = await self._verificador.verificar_cliente(cliente, selfie, prueba_de_vida)
         if not resultado.cliente.verificado:
             return RegistroVerificado(resultado, None, None)

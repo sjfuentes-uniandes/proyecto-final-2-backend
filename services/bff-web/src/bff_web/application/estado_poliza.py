@@ -15,7 +15,9 @@ import httpx
 from solventa_common.errors import ErrorNegocio
 from solventa_common.telemetry import RESULTADO_RECHAZADO, operacion
 
+from bff_web.adapters.outbound.clientes import ClientesCliente
 from bff_web.adapters.outbound.consulta import ConsultaCliente, ErrorConsulta
+from bff_web.application.nombres import titular_de_cliente
 
 SERVICIO_NO_DISPONIBLE = "SERVICIO_NO_DISPONIBLE"
 CODIGOS_CONSULTA = frozenset({"POLIZA_NO_ENCONTRADA", "SOLICITUD_INVALIDA"})
@@ -44,17 +46,32 @@ async def _proteger(llamada: Awaitable[Any]) -> Any:
 
 
 class EstadoPolizas:
-    def __init__(self, consulta: ConsultaCliente) -> None:
+    def __init__(
+        self,
+        consulta: ConsultaCliente,
+        clientes: ClientesCliente,
+        nombre_timeout_ms: int,
+    ) -> None:
         self.consulta = consulta
+        self.clientes = clientes
+        self._nombre_timeout_s = nombre_timeout_ms / 1000
 
     async def estado(self, poliza_id: UUID, actor: str) -> Any:
+        """El estado de consulta más el titular de clientes; el `clienteId` no sale de aquí."""
         with operacion("poliza.estado") as op:
             try:
-                return await _proteger(self.consulta.estado(poliza_id, actor))
+                cuerpo = await _proteger(self.consulta.estado(poliza_id, actor))
             except ErrorNegocio as error:
                 if error.estado_http < 500:
                     op.marcar(RESULTADO_RECHAZADO)
                 raise
+            if not isinstance(cuerpo, dict):
+                return cuerpo
+            cliente_id = cuerpo.pop("clienteId", None)
+            titular = await titular_de_cliente(
+                self.clientes, cliente_id, actor, self._nombre_timeout_s
+            )
+            return {**cuerpo, **titular}
 
     async def listar(self, parametros: dict[str, Any], actor: str) -> Any:
         with operacion("poliza.listar") as op:

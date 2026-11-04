@@ -36,7 +36,13 @@ CLIENTE_ID = UUID("00000000-0000-4000-8000-000000000001")
 CUERPO_VERIFICACION = {"selfie": "selfie-sintetica-aprobada", "pruebaDeVida": {"completado": True}}
 REGISTRO_ID = UUID("00000000-0000-4000-8000-0000000000aa")
 CORREO = "persona@ejemplo.co"
-CUERPO_REGISTRO = {"registroId": str(REGISTRO_ID), "correo": CORREO, **CUERPO_VERIFICACION}
+CUERPO_REGISTRO = {
+    "registroId": str(REGISTRO_ID),
+    "tipoDocumento": "CC",
+    "numeroDocumento": "1234567890",
+    "correo": CORREO,
+    **CUERPO_VERIFICACION,
+}
 TOKEN_REGISTRO = "v1.token-sintetico.firma-sintetica"
 CONSENTIMIENTO_ID = UUID("00000000-0000-4000-9000-000000000001")
 IDEMPOTENCY_KEY = "6f1c2b9e-3d4a-4e8f-9b7c-1a2b3c4d5e6f"

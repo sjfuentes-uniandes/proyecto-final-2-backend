@@ -1,0 +1,88 @@
+[
+  {
+    "polizaId": "5eed0000-0000-4000-8000-000000000001",
+    "clienteId": "fde3e6dd-3426-467a-b3b2-69e7cebb6d05",
+    "numero": "900-2026-000001",
+    "productoId": "semilla-vida",
+    "productoVersion": "1",
+    "productoNombre": "Póliza de vida (prueba)",
+    "ramo": "VIDA",
+    "vigenciaDesde": "2026-10-01",
+    "vigenciaHasta": "2027-09-30",
+    "prima": 120000,
+    "sumaAsegurada": 50000000,
+    "moneda": "COP",
+    "periodicidad": "MENSUAL",
+    "coberturas": [
+      { "codigo": "MUERTE", "nombre": "Muerte por cualquier causa", "obligatoria": true },
+      { "codigo": "INCAPACIDAD", "nombre": "Incapacidad total y permanente", "obligatoria": false }
+    ],
+    "documentoHuella": "sha256:semilla-1",
+    "firmaId": "SEMILLA-FIRMA-1",
+    "emitidaEn": "2026-10-01T15:00:00Z"
+  },
+  {
+    "polizaId": "5eed0000-0000-4000-8000-000000000002",
+    "clienteId": "fde3e6dd-3426-467a-b3b2-69e7cebb6d05",
+    "numero": "900-2025-000002",
+    "productoId": "semilla-vida",
+    "productoVersion": "1",
+    "productoNombre": "Póliza de vida (prueba, vencida)",
+    "ramo": "VIDA",
+    "vigenciaDesde": "2025-10-01",
+    "vigenciaHasta": "2026-09-30",
+    "prima": 100000,
+    "sumaAsegurada": 40000000,
+    "moneda": "COP",
+    "periodicidad": "MENSUAL",
+    "coberturas": [
+      { "codigo": "MUERTE", "nombre": "Muerte por cualquier causa", "obligatoria": true }
+    ],
+    "documentoHuella": "sha256:semilla-2",
+    "firmaId": "SEMILLA-FIRMA-2",
+    "emitidaEn": "2025-10-01T15:00:00Z"
+  },
+  {
+    "polizaId": "5eed0000-0000-4000-8000-000000000003",
+    "clienteId": "00000000-0000-4000-8000-000000000001",
+    "numero": "900-2026-000003",
+    "productoId": "semilla-vida",
+    "productoVersion": "1",
+    "productoNombre": "Póliza de vida (prueba, titular C01)",
+    "ramo": "VIDA",
+    "vigenciaDesde": "2026-10-15",
+    "vigenciaHasta": "2027-10-14",
+    "prima": 85000,
+    "sumaAsegurada": 30000000,
+    "moneda": "COP",
+    "periodicidad": "MENSUAL",
+    "coberturas": [
+      { "codigo": "MUERTE", "nombre": "Muerte por cualquier causa", "obligatoria": true }
+    ],
+    "documentoHuella": "sha256:semilla-3",
+    "firmaId": "SEMILLA-FIRMA-3",
+    "emitidaEn": "2026-10-15T15:00:00Z"
+  },
+  {
+    "polizaId": "5eed0000-0000-4000-8000-000000000004",
+    "clienteId": "00000000-0000-4000-8000-000000000002",
+    "numero": "900-2025-000004",
+    "productoId": "semilla-hogar",
+    "productoVersion": "1",
+    "productoNombre": "Póliza de hogar (prueba, por vencer)",
+    "ramo": "HOGAR",
+    "vigenciaDesde": "2025-11-21",
+    "vigenciaHasta": "2026-11-20",
+    "prima": 60000,
+    "sumaAsegurada": 80000000,
+    "moneda": "COP",
+    "periodicidad": "MENSUAL",
+    "coberturas": [
+      { "codigo": "INCENDIO", "nombre": "Incendio y rayo", "obligatoria": true },
+      { "codigo": "HURTO", "nombre": "Hurto calificado", "obligatoria": false }
+    ],
+    "documentoHuella": "sha256:semilla-4",
+    "firmaId": "SEMILLA-FIRMA-4",
+    "emitidaEn": "2025-11-21T15:00:00Z"
+  }
+]

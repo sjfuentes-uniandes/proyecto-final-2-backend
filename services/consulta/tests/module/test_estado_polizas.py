@@ -114,7 +114,8 @@ async def test_detalle_por_estado(
     assert datetime.fromisoformat(cuerpo["emitidaEn"]) == p.emitida_en
     assert cuerpo["coberturas"] == [{"codigo": "MUERTE", "nombre": "Muerte", "obligatoria": True}]
     assert Decimal(cuerpo["prima"]) == Decimal("64638.10")
-    for campo in ("clienteId", "documentoHuella", "firmaId"):
+    assert cuerpo["clienteId"] == str(p.cliente_id)
+    for campo in ("documentoHuella", "firmaId"):
         assert campo not in r.text
 
 

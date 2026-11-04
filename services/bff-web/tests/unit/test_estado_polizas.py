@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 import pytest
 from bff_web.adapters.inbound import estado_polizas as ruta
+from bff_web.adapters.outbound.clientes import ClientesCliente
 from bff_web.adapters.outbound.consulta import ConsultaCliente
 from bff_web.application.estado_poliza import EstadoPolizas
 from bff_web.config import settings
@@ -22,6 +23,7 @@ BACKOFFICE = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_back"
 POLIZA_ID = "00000000-0000-4000-9000-000000000001"
 RUTA_ESTADO = f"/v1/polizas/{POLIZA_ID}/estado"
 RUTA_LISTADO = "/v1/polizas"
+CLIENTE_ID = "00000000-0000-4000-9000-0000000000c1"
 ESTADOS = ["NO_INICIADA", "VIGENTE", "POR_VENCER", "VENCIDA"]
 DETALLE: dict[str, Any] = {
     "polizaId": POLIZA_ID,
@@ -37,7 +39,14 @@ DETALLE: dict[str, Any] = {
     "periodicidad": "MENSUAL",
     "emitidaEn": "2026-10-24T15:00:03.500000Z",
     "coberturas": [{"codigo": "MUERTE", "nombre": "Muerte", "obligatoria": True}],
+    "clienteId": CLIENTE_ID,
 }
+TITULAR: dict[str, Any] = {
+    "titularNombre": "Natalia González Ruiz",
+    "tipoDocumento": "CC",
+    "documentoEnmascarado": "1.020.***.456",
+}
+SIN_TITULAR: dict[str, Any] = dict.fromkeys(TITULAR)
 RESUMEN: dict[str, Any] = {
     "polizaId": POLIZA_ID,
     "numero": "100-2026-000001",
@@ -85,6 +94,21 @@ class Simulado:
     def __init__(self) -> None:
         self.pedidos: list[httpx.Request] = []
         self.responder: Callable[[httpx.Request], httpx.Response] = self._por_ruta
+        self.pedidos_clientes: list[httpx.Request] = []
+        self.responder_clientes: Callable[[httpx.Request], httpx.Response] = lambda _: (
+            httpx.Response(
+                200,
+                json={
+                    "nombreCompleto": TITULAR["titularNombre"],
+                    "tipoDocumento": TITULAR["tipoDocumento"],
+                    "documentoEnmascarado": TITULAR["documentoEnmascarado"],
+                },
+            )
+        )
+
+    def clientes(self, pedido: httpx.Request) -> httpx.Response:
+        self.pedidos_clientes.append(pedido)
+        return self.responder_clientes(pedido)
 
     @staticmethod
     def _por_ruta(pedido: httpx.Request) -> httpx.Response:
@@ -102,7 +126,8 @@ def consulta(monkeypatch: pytest.MonkeyPatch) -> Iterator[Simulado]:
     simulado = Simulado()
     monkeypatch.setattr(settings, "jwt_issuers", {"backoffice": BACKOFFICE})
     cliente = ConsultaCliente("http://consulta:8080", 700, httpx.MockTransport(simulado))
-    app.dependency_overrides[ruta.estados] = lambda: EstadoPolizas(cliente)
+    clientes = ClientesCliente("http://clientes:8080", 5000, httpx.MockTransport(simulado.clientes))
+    app.dependency_overrides[ruta.estados] = lambda: EstadoPolizas(cliente, clientes, 5000)
     yield simulado
     app.dependency_overrides.clear()
 
@@ -130,7 +155,8 @@ RUTAS = pytest.mark.parametrize("ruta_", [RUTA_ESTADO, RUTA_LISTADO], ids=["esta
 
 def test_el_asesor_recibe_el_estado_y_la_fecha_de_actualizacion(consulta: Simulado) -> None:
     respuesta = _get(RUTA_ESTADO)
-    assert (respuesta.status_code, respuesta.json()) == (200, DETALLE)
+    esperado = {k: v for k, v in DETALLE.items() if k != "clienteId"} | TITULAR
+    assert (respuesta.status_code, respuesta.json()) == (200, esperado)
     [pedido] = consulta.pedidos
     assert (pedido.method, pedido.url.path) == ("GET", RUTA_ESTADO)
     assert (pedido.headers["X-Actor-Id"], pedido.headers["X-Actor-Rol"]) == ("sub-asesor", "ASESOR")
@@ -192,13 +218,13 @@ def test_ningun_dato_del_cliente_llega_al_portal(consulta: Simulado) -> None:
     consulta.responder = lambda pedido: httpx.Response(
         200,
         json=(
-            {**DETALLE, "clienteId": "c-1", "documentoHuella": "h", "nombre": "N"}
+            {**DETALLE, "documentoHuella": "h", "nombre": "N"}
             if pedido.url.path.endswith("/estado")
             else {**PAGINA, "items": [{**RESUMEN, "clienteId": "c-1", "documento": "1"}]}
         ),
     )
     detalle, pagina = _get(RUTA_ESTADO).json(), _get(RUTA_LISTADO).json()
-    assert detalle == DETALLE
+    assert detalle == {k: v for k, v in DETALLE.items() if k != "clienteId"} | TITULAR
     assert pagina["items"] == [RESUMEN]
 
 
@@ -357,6 +383,65 @@ def test_sin_sesion_ni_datos_en_los_logs(
 
 
 # --- Configuración y cliente ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "falla",
+    [
+        _json(503, {}),
+        _json(404, {"codigo": "CLIENTE_NO_ENCONTRADO"}),
+        _lanza(httpx.ConnectError),
+        _lanza(httpx.ReadTimeout),
+        _json(200, ["no es un objeto"]),
+    ],
+    ids=["5xx", "404", "caida", "timeout", "cuerpo-invalido"],
+)
+def test_si_clientes_falla_la_poliza_responde_con_el_titular_nulo(
+    consulta: Simulado, falla: Callable[[httpx.Request], httpx.Response]
+) -> None:
+    consulta.responder_clientes = falla
+    respuesta = _get(RUTA_ESTADO)
+    assert respuesta.status_code == 200
+    assert {k: respuesta.json()[k] for k in TITULAR} == SIN_TITULAR
+
+
+def test_un_documento_sin_enmascarar_se_descarta(consulta: Simulado) -> None:
+    consulta.responder_clientes = _json(
+        200, {"nombreCompleto": "Natalia", "tipoDocumento": "CC", "documentoEnmascarado": "1020456"}
+    )
+    cuerpo = _get(RUTA_ESTADO).json()
+    assert cuerpo["titularNombre"] == "Natalia"
+    assert cuerpo["documentoEnmascarado"] is None
+    assert "1020456" not in str(cuerpo)
+
+
+def test_el_cliente_id_no_llega_al_portal_y_clientes_se_consulta_por_el_dueno(
+    consulta: Simulado,
+) -> None:
+    cuerpo = _get(RUTA_ESTADO).json()
+    assert "clienteId" not in cuerpo
+    [pedido] = consulta.pedidos_clientes
+    assert CLIENTE_ID in pedido.url.path
+
+
+def test_el_titular_no_aparece_en_los_logs(
+    consulta: Simulado, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    _get(RUTA_ESTADO)
+    assert "Natalia" not in caplog.text
+    assert "1.020.***.456" not in caplog.text
+
+
+def test_la_poliza_ajena_o_inexistente_sigue_en_404_sin_llamar_a_clientes(
+    consulta: Simulado,
+) -> None:
+    consulta.responder = _json(404, NO_ENCONTRADA)
+    assert _get(RUTA_ESTADO).status_code == 404
+    assert consulta.pedidos_clientes == []
+
+
+# --- Configuración y cliente (cont.) ----------------------------------------------------------
 
 
 def test_consulta_tiene_corte_duro_de_700_ms() -> None:

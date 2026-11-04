@@ -26,14 +26,15 @@ _POR_REGISTRO = _SELECT + " WHERE registro_id = %s"
 _POR_DOCUMENTO = _SELECT + " WHERE tipo_documento = %s AND numero_documento = %s"
 # DO NOTHING + SELECT: dos solicitudes simultáneas del mismo `sub` terminan con un solo cliente.
 _CREAR = "INSERT INTO cliente (id, sub, estado) VALUES (%s, %s, 'PENDIENTE') ON CONFLICT (sub) DO NOTHING"
-_CREAR_REGISTRO = (
-    "INSERT INTO cliente (id, registro_id, correo, estado) VALUES (%s, %s, %s, 'PENDIENTE') "
-    "ON CONFLICT (registro_id) DO NOTHING"
+# Solo liga si el cliente aún no tiene cuenta.
+_ASIGNAR_REGISTRO = (
+    "UPDATE cliente SET registro_id = %s, correo = %s WHERE id = %s AND sub IS NULL "
+    f"RETURNING {_COLUMNAS}"
 )
 # RETURNING solo devuelve fila si este INSERT creó el cliente: distingue el alta del reintento.
 _CREAR_DOCUMENTO = (
     "INSERT INTO cliente (id, tipo_documento, numero_documento, nombre_completo, "
-    "fecha_nacimiento, estado) VALUES (%s, %s, %s, %s, %s, 'PENDIENTE') "
+    "fecha_nacimiento, correo, estado) VALUES (%s, %s, %s, %s, %s, %s, 'PENDIENTE') "
     "ON CONFLICT (tipo_documento, numero_documento) DO NOTHING RETURNING id"
 )
 _ACTUALIZAR = (
@@ -142,12 +143,21 @@ class RepositorioPostgres:
             raise RuntimeError("El cliente no existe tras crearlo")
         return _cliente(fila)
 
-    def asegurar_registro(self, registro_id: UUID, correo: str) -> Cliente:
+    def por_documento(self, tipo_documento: str, numero_documento: str) -> Cliente | None:
         with self._conectar() as conexion:
-            conexion.execute(_CREAR_REGISTRO, (uuid4(), registro_id, correo))
-            fila = conexion.execute(_POR_REGISTRO, (registro_id,)).fetchone()
+            fila = conexion.execute(_POR_DOCUMENTO, (tipo_documento, numero_documento)).fetchone()
+        return _cliente(fila) if fila else None
+
+    def asignar_registro(self, cliente_id: UUID, registro_id: UUID, correo: str) -> Cliente:
+        try:
+            with self._conectar() as conexion:
+                fila = conexion.execute(
+                    _ASIGNAR_REGISTRO, (registro_id, correo, cliente_id)
+                ).fetchone()
+        except psycopg.errors.UniqueViolation as error:
+            raise RegistroYaVinculado() from error
         if fila is None:
-            raise RuntimeError("El cliente no existe tras crearlo")
+            raise RegistroYaVinculado()
         return _cliente(fila)
 
     def asegurar_por_documento(self, datos: DatosCliente) -> tuple[Cliente, bool]:
@@ -161,6 +171,7 @@ class RepositorioPostgres:
                         datos.numero_documento,
                         datos.nombre_completo,
                         datos.fecha_nacimiento,
+                        datos.correo,
                     ),
                 ).fetchone()
                 is not None
