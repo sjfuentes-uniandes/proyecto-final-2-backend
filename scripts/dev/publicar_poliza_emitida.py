@@ -68,6 +68,8 @@ def construir_evento(
             "claveRecaudo": str(uuid.uuid4()),
             "clienteId": str(cliente_id),
             "producto": {"id": "vida-deudor", "version": "1.0.0"},
+            "ramo": {"codigo": "100", "nombre": "Vida deudor"},
+            "coberturas": [{"codigo": "MUERTE", "nombre": "Muerte", "obligatoria": True}],
             "vigencia": {"desde": desde.isoformat(), "hasta": hasta.isoformat()},
             "prima": "64638.10",
             "sumaAsegurada": "50000000",
