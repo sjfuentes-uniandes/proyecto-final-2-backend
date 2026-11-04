@@ -13,6 +13,7 @@ import pytest
 from clientes.adapters.outbound.postgres import RepositorioPostgres, crear_pool, migrar
 from clientes.config import Settings
 from clientes.domain.identidad.modelos import (
+    Cliente,
     DatosCliente,
     EstadoIdentidad,
     RegistroYaVinculado,
@@ -156,30 +157,65 @@ def test_inexistentes_devuelven_none(repo: RepositorioPostgres) -> None:
     assert repo.por_registro(uuid4()) is None
 
 
-def test_asegurar_registro_es_idempotente_y_no_pisa_el_correo(repo: RepositorioPostgres) -> None:
+def _alta_del_asesor(repo: RepositorioPostgres) -> Cliente:
+    """Un cliente creado por documento, como lo deja el alta del asesor."""
+    numero = str(uuid4().int)[:10]
+    cliente, _ = repo.asegurar_por_documento(DatosCliente("CC", numero, "A B", date(1990, 4, 18)))
+    return cliente
+
+
+def _con_registro(repo: RepositorioPostgres) -> Cliente:
+    return repo.asignar_registro(_alta_del_asesor(repo).id, uuid4(), "a@b.co")
+
+
+def test_asignar_registro_liga_el_registro_y_el_correo_al_cliente_del_asesor(
+    repo: RepositorioPostgres,
+) -> None:
+    cliente = _alta_del_asesor(repo)
     registro = uuid4()
 
-    primero = repo.asegurar_registro(registro, "uno@ejemplo.co")
-    segundo = repo.asegurar_registro(registro, "otro@ejemplo.co")
+    ligado = repo.asignar_registro(cliente.id, registro, "uno@ejemplo.co")
 
-    assert primero == segundo
-    assert primero.sub is None and primero.correo == "uno@ejemplo.co"
-    assert primero.registro_id == registro
-    assert repo.por_registro(registro) == primero
+    assert ligado.id == cliente.id and ligado.sub is None
+    assert ligado.registro_id == registro and ligado.correo == "uno@ejemplo.co"
+    assert ligado.numero_documento == cliente.numero_documento
+    assert repo.por_registro(registro) == ligado
+    assert _contar(repo) == 1
 
 
-def test_asegurar_registro_concurrente_deja_un_solo_cliente(repo: RepositorioPostgres) -> None:
+def test_asignar_registro_concurrente_deja_un_solo_cliente(repo: RepositorioPostgres) -> None:
     """AC3: reintentos simultáneos del mismo registro no crean un segundo cliente."""
+    cliente = _alta_del_asesor(repo)
     registro = uuid4()
     with ThreadPoolExecutor(max_workers=10) as pool:
         ids = {
-            c.id for c in pool.map(lambda _: repo.asegurar_registro(registro, "a@b.co"), range(20))
+            c.id
+            for c in pool.map(
+                lambda _: repo.asignar_registro(cliente.id, registro, "a@b.co"), range(20)
+            )
         }
-    assert len(ids) == 1
+    assert ids == {cliente.id}
+    assert _contar(repo) == 1
+
+
+def test_asignar_registro_a_un_cliente_que_ya_tiene_cuenta(repo: RepositorioPostgres) -> None:
+    cliente = _con_registro(repo)
+    repo.vincular(cliente.id, "sub-con-cuenta")
+
+    with pytest.raises(RegistroYaVinculado):
+        repo.asignar_registro(cliente.id, uuid4(), "otro@ejemplo.co")
+
+
+def test_un_registro_no_se_liga_a_dos_clientes(repo: RepositorioPostgres) -> None:
+    registro = uuid4()
+    repo.asignar_registro(_alta_del_asesor(repo).id, registro, "a@b.co")
+
+    with pytest.raises(RegistroYaVinculado):
+        repo.asignar_registro(_alta_del_asesor(repo).id, registro, "c@d.co")
 
 
 def test_vincular_asocia_el_sub_y_es_idempotente(repo: RepositorioPostgres) -> None:
-    cliente = repo.asegurar_registro(uuid4(), "a@b.co")
+    cliente = _con_registro(repo)
 
     vinculado = repo.vincular(cliente.id, "sub-vinculo")
 
@@ -189,7 +225,7 @@ def test_vincular_asocia_el_sub_y_es_idempotente(repo: RepositorioPostgres) -> N
 
 
 def test_vincular_un_cliente_que_ya_es_de_otro_sub(repo: RepositorioPostgres) -> None:
-    cliente = repo.asegurar_registro(uuid4(), "a@b.co")
+    cliente = _con_registro(repo)
     repo.vincular(cliente.id, "sub-dueno")
 
     with pytest.raises(RegistroYaVinculado):
@@ -199,7 +235,7 @@ def test_vincular_un_cliente_que_ya_es_de_otro_sub(repo: RepositorioPostgres) ->
 
 def test_vincular_un_sub_que_ya_tiene_otro_cliente(repo: RepositorioPostgres) -> None:
     repo.asegurar("sub-con-cliente")
-    cliente = repo.asegurar_registro(uuid4(), "a@b.co")
+    cliente = _con_registro(repo)
 
     with pytest.raises(RegistroYaVinculado):
         repo.vincular(cliente.id, "sub-con-cliente")
@@ -209,7 +245,7 @@ def test_vincular_un_sub_que_ya_tiene_otro_cliente(repo: RepositorioPostgres) ->
 def test_vinculos_simultaneos_de_distintos_titulares_dejan_un_solo_dueno(
     repo: RepositorioPostgres,
 ) -> None:
-    cliente = repo.asegurar_registro(uuid4(), "a@b.co")
+    cliente = _con_registro(repo)
 
     def intentar(sub: str) -> str:
         try:
@@ -272,7 +308,14 @@ def test_flujo_de_registro_con_reintentos_sobre_postgres(repo: RepositorioPostgr
     registro = uuid4()
     verificar = f"/v1/registros/{registro}/verificaciones"
     vincular = f"/v1/registros/{registro}/vinculacion"
-    cuerpo = {"correo": "Persona@Ejemplo.co", **SELFIE}
+    # El asesor ya dio de alta al cliente: el registro lo encuentra por su documento.
+    repo.asegurar_por_documento(DatosCliente("CC", "1020456789", "A B", date(1990, 4, 18)))
+    cuerpo = {
+        "tipoDocumento": "CC",
+        "numeroDocumento": "1020456789",
+        "correo": "Persona@Ejemplo.co",
+        **SELFIE,
+    }
     sub = {"X-Actor-Id": "sub-registro-1", "X-Actor-Rol": "CLIENTE"}
     cliente = _app(
         repo,
@@ -396,7 +439,7 @@ def test_el_cliente_por_documento_y_el_de_registro_conviven_tras_migrar_de_nuevo
 ) -> None:
     """La migración es idempotente y no rompe a los clientes de la HU-M06."""
     repo.asegurar("sub-m06")
-    repo.asegurar_registro(uuid4(), "a@b.co")
+    _con_registro(repo)
     repo.asegurar_por_documento(DatosCliente("CC", "1020456789", "A B", date(1990, 4, 18)))
     migrar(base)
     assert _contar(repo) == 3
