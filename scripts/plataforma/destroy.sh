@@ -37,13 +37,16 @@ empty_bucket() {
   done
 }
 
-log "2/5 Vaciando los buckets de auditoría (Object Lock en modo GOVERNANCE) y de pólizas"
+log "2/5 Vaciando los buckets de auditoría (Object Lock en modo GOVERNANCE), de pólizas y de evidencias"
 tf_init platform
 if state_has_resources platform; then
   empty_bucket "$(platform_output platform | jq -r '.audit_bucket.name')" --bypass-governance-retention
   # Con policy_documents_force_destroy = false, destroy no borra un bucket con versiones.
   documents=$(platform_output platform | jq -r '.policy_documents_bucket.name // empty')
   [ -z "${documents}" ] || empty_bucket "${documents}"
+  # HU-S03: igual con evidence_force_destroy = false (evidencias y archivo de telemetría).
+  evidence=$(platform_output platform | jq -r '.evidence_bucket.name // empty')
+  [ -z "${evidence}" ] || empty_bucket "${evidence}"
 
   # force_delete del estado puede ser false (repositorios creados antes de
   # activarlo): se borran las imágenes para que destroy no dependa de ello.
