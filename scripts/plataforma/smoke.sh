@@ -80,6 +80,8 @@ find_marker() {
     handle=$(jq -r --arg m "${marker}" '[.Messages[]? | select(.Body | contains($m)) | .ReceiptHandle][0] // empty' <<<"${batch}")
     [ -n "${handle}" ] && { echo "${handle}"; return 0; }
   done
+  # Sin marca no es error: con set -e, `handle=$(find_marker ...)` abortaría el script.
+  return 0
 }
 
 log "1. Servicios ECS (${ENV})"
