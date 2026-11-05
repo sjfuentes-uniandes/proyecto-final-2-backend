@@ -2,7 +2,7 @@
 
 Documento de la historia [HU-W19](https://github.com/sjfuentes-uniandes/proyecto-final/issues/61) (Sprint 3, recorrido R7). Es la evidencia de contrato que pide el issue: el modelo, los estados, el reloj del compromiso y el esquema de las tablas. Decisiones de diseño: DS3-01 a DS3-11 y DS3-14 del plan maestro del Sprint 3.
 
-Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (servicio y dominio)** ✅ · B3 (aplicación, S3 y HTTP) · B4 (`bff-web`, semilla y guía, §8) · F1–F3 (portal) · C (cierre).
+Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (servicio y dominio)** ✅ · **B3 (aplicación, S3 y HTTP)** ✅ · B4 (`bff-web`, semilla y guía, §8) · F1–F3 (portal) · C (cierre).
 
 ## 1. Qué entrega la historia
 
@@ -24,7 +24,7 @@ Contratos: [`siniestros.yaml`](../contracts/openapi/siniestros.yaml) (interno), 
 | `siniestros` | Exige `X-Actor-Id` (401 `ACTOR_REQUERIDO` si falta) y `X-Actor-Rol = ANALISTA_SINIESTROS`. Si el rol falta o es otro: 403 `ROL_NO_AUTORIZADO` y una fila `AccesoSiniestroDenegado` (`origen = SINIESTROS`) en el Outbox, **antes** de responder (DS3-09) |
 | Bucket de evidencias | Solo `siniestros` lo lee, escribe y firma; ningún BFF accede a él. Todo `PutObject` envía `ServerSideEncryption = EVIDENCIAS_BUCKET_SSE` |
 
-`accesos-denegados` solo exige `X-Actor-Id` y no valida el rol: únicamente audita (ver la decisión R-04 de la bitácora). `X-Actor-Nombre` lo envía `bff-web` y `siniestros` lo guarda en el historial; los nombres de **clientes** nunca se guardan en `siniestros`: los compone `bff-web` desde `clientes`.
+`X-Actor-Id` debe ser un UUID (el `sub` de Cognito) en las rutas que asignan o filtran por analista. `accesos-denegados` solo exige `X-Actor-Id` y no valida el rol: únicamente audita (ver la decisión R-04 de la bitácora). `X-Actor-Nombre` lo envía `bff-web` y `siniestros` lo guarda en el historial; los nombres de **clientes** nunca se guardan en `siniestros`: los compone `bff-web` desde `clientes`.
 
 ## 3. Estados (DS3-02)
 
@@ -86,7 +86,7 @@ Función pura sobre la **copia de la póliza** guardada al reportar. Devuelve se
 | `archivosAlterados` | evidencias con integridad `ALTERADA` |
 | `resultado` | `INCONSISTENTE` si `diferenciaMin < 0`, `ubicacionCoincide = false` o hay alterados; `NO_EVALUABLE` si no hay ninguna captura con fecha; `COHERENTE` en otro caso |
 
-**Integridad por evidencia:** `HeadObject` con `ChecksumMode=ENABLED` compara el `ChecksumSHA256` de S3 con el `sha256` registrado: coincide → `VERIFICADA`; difiere → `ALTERADA`; el objeto no existe → `NO_DISPONIBLE` (AC4: el detalle responde 200 y el resto se consulta); el objeto no trae checksum o el `HeadObject` excede 300 ms → `NO_VERIFICABLE`. Los `HeadObject` van en paralelo, fuera de la transacción y **sin conexión de base abierta** mientras esperan. No se descargan objetos para recalcular el hash. La carga de M01 debe exigir `x-amz-checksum-sha256`.
+**Integridad por evidencia:** `HeadObject` con `ChecksumMode=ENABLED` (un solo intento, sin reintentos) compara el `ChecksumSHA256` de S3 con el `sha256` registrado: coincide → `VERIFICADA`; difiere → `ALTERADA`; el objeto no existe → `NO_DISPONIBLE` (AC4: el detalle responde 200 y el resto se consulta); el objeto no trae checksum o el `HeadObject` excede 300 ms → `NO_VERIFICABLE`. Los `HeadObject` van en paralelo, fuera de la transacción y **sin conexión de base abierta** mientras esperan. No se descargan objetos para recalcular el hash. La carga de M01 debe exigir `x-amz-checksum-sha256`.
 
 ## 7. Esquema de datos (base `siniestros`)
 

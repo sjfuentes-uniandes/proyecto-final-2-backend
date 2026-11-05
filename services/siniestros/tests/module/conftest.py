@@ -7,8 +7,9 @@ abre una conexión autocommit sobre ella. Se omiten si Docker no está disponibl
 
 import asyncio
 import os
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
+from uuid import uuid4
 
 import psycopg
 import pytest
@@ -58,3 +59,59 @@ def limpia(base: str) -> str:
 def conexion(limpia: str) -> Iterator[psycopg.Connection[Any]]:
     with psycopg.connect(limpia, autocommit=True) as abierta:
         yield abierta
+
+
+# --- Pool, LocalStack y S3 -------------------------------------------------------------------------
+# La imagen del equipo; `SINIESTROS_LOCALSTACK_IMAGE` permite usar otra ya descargada (p. ej. la
+# `localstack/localstack:3` de compose.yaml) cuando el registro no está disponible.
+IMAGEN_LOCALSTACK = os.environ.get("SINIESTROS_LOCALSTACK_IMAGE", "localstack/localstack:4.14.0")
+REGION = "us-east-1"
+SSE = "AES256"
+
+
+@pytest.fixture
+async def pool(limpia: str) -> AsyncIterator[Any]:
+    from psycopg_pool import AsyncConnectionPool
+
+    async with AsyncConnectionPool(limpia, min_size=1, max_size=25, open=False) as abierto:
+        yield abierto
+
+
+@pytest.fixture(scope="module")
+def localstack() -> Iterator[str]:
+    _docker_disponible()
+    from testcontainers.community.localstack import LocalStackContainer
+
+    with LocalStackContainer(image=IMAGEN_LOCALSTACK, region_name=REGION).with_services(
+        "s3", "sns", "sqs"
+    ) as contenedor:
+        yield contenedor.get_url()
+
+
+@pytest.fixture
+def credenciales(monkeypatch: pytest.MonkeyPatch) -> None:
+    # LocalStack acepta cualquier credencial; boto3 usa la cadena por defecto.
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
+
+
+@pytest.fixture
+def s3(localstack: str, credenciales: None) -> Any:
+    """Un cliente S3 de pruebas (sin corte corto) contra LocalStack."""
+    import boto3
+    from botocore.config import Config
+
+    return boto3.client(
+        "s3",
+        region_name=REGION,
+        endpoint_url=localstack,
+        config=Config(s3={"addressing_style": "path"}),
+    )
+
+
+@pytest.fixture
+def bucket(s3: Any) -> str:
+    nombre = f"evidencias-{uuid4().hex[:12]}"
+    s3.create_bucket(Bucket=nombre)
+    return nombre

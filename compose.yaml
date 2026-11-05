@@ -246,6 +246,8 @@ services:
       # scripts/dev/localstack-init.sh. Las credenciales son las ficticias de LocalStack.
       EVIDENCIAS_BUCKET: solventa-local-evidencias
       EVIDENCIAS_BUCKET_SSE: AES256
+      # Las URL prefirmadas se firman con el endpoint que alcanza el navegador del analista.
+      SOLVENTA_EVIDENCIAS_ENDPOINT_PUBLICO: http://localhost:4566
       SOLVENTA_SEMILLA_SINIESTROS_QA: "true"
       SQS_SINIESTROS_INDEMNIZACIONES_URL: http://localstack:4566/000000000000/solventa-local-siniestros-indemnizaciones
       OUTBOX_ENABLED: "true"
