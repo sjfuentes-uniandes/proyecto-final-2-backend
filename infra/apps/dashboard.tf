@@ -19,11 +19,15 @@ locals {
   # Filas del Sprint 2 (HU-S02), bajo las de infraestructura.
   contracting_row      = 46 + local.row
   query_row            = local.contracting_row + 10
+  claims_row           = local.query_row + 7
   contracting_services = ["polizas", "dinero", "adaptador-pagos", "adaptador-firma"]
   query_services       = ["consulta", "avisos"]
   contracting_queues   = [for name in ["dinero-aceptaciones", "polizas-recaudos"] : name if contains(keys(local.p.queues), name)]
   query_queues         = [for name in ["consulta-proyeccion", "avisos"] : name if contains(keys(local.p.queues), name)]
-  services_filter      = { for group, names in { contratacion = local.contracting_services, consulta = local.query_services } : group => "(${join(" OR ", [for name in names : "Service=\"${name}\""])})" }
+  # Fila del Sprint 3 (HU-S03): siniestros, eventos paramétricos e indemnizaciones.
+  claims_services = ["siniestros", "pagos-parametricos", "adaptador-telemetria"]
+  claims_queues   = [for name in ["parametricos-eventos", "parametricos-polizas", "dinero-indemnizaciones", "siniestros-indemnizaciones"] : name if contains(keys(local.p.queues), name)]
+  services_filter = { for group, names in { contratacion = local.contracting_services, consulta = local.query_services, siniestros = local.claims_services } : group => "(${join(" OR ", [for name in names : "Service=\"${name}\""])})" }
   sprint2_alarm_arns = [
     for name in concat(keys(local.provider_alarms), length(local.pending_collection_queues) > 0 ? ["recaudos-pendientes"] : [], ["avisos-push-fallos"]) :
     "arn:${local.partition}:cloudwatch:${local.p.region}:${local.p.account_id}:alarm:${local.prefix}-${name}"
@@ -247,7 +251,38 @@ locals {
           [for id in local.p.cache.cluster_ids : ["AWS/ElastiCache", "EngineCPUUtilization", "CacheClusterId", id, { stat = "Average", yAxis = "right" }]]
         )
       }
-    }] : []
+    }] : [],
+    # --- Siniestros: casos, eventos paramétricos e indemnizaciones (HU-W19 a HU-W24) ---
+    [
+      {
+        type       = "text", x = 0, y = local.claims_row, width = 24, height = 1
+        properties = { markdown = "### Siniestros · ${join(", ", local.claims_services)} · colas ${join(", ", local.claims_queues)}" }
+      },
+      {
+        type = "metric", x = 0, y = local.claims_row + 1, width = 8, height = 6
+        properties = {
+          title   = "Siniestros: p95 por operación (ms)", region = local.p.region, period = 60, stat = "p95"
+          metrics = [[{ expression = "SEARCH('{${local.ns},Environment,Operation,Service} MetricName=\"OperationDuration\" ${local.env_filter} ${local.services_filter.siniestros}', 'p95', 60)", id = "p95s" }]]
+        }
+      },
+      {
+        type = "metric", x = 8, y = local.claims_row + 1, width = 8, height = 6
+        properties = {
+          title   = "Siniestros: errores por operación", region = local.p.region, period = 60, stat = "Sum"
+          metrics = [[{ expression = "SEARCH('{${local.ns},Environment,Operation,Service} MetricName=\"OperationErrors\" ${local.env_filter} ${local.services_filter.siniestros}', 'Sum', 60)", id = "errs" }]]
+        }
+      },
+      {
+        type = "metric", x = 16, y = local.claims_row + 1, width = 8, height = 6
+        properties = {
+          title = "Paramétricos e indemnizaciones: antigüedad (s) y DLQ", region = local.p.region, period = 60, stat = "Maximum"
+          metrics = concat(
+            [for name in local.claims_queues : ["AWS/SQS", "ApproximateAgeOfOldestMessage", "QueueName", local.p.queues[name].name]],
+            [for name in local.claims_queues : ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", local.p.queues[name].dlq_name, { yAxis = "right" }]]
+          )
+        }
+      },
+    ]
   )
 }
 

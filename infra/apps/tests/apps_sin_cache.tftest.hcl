@@ -61,6 +61,7 @@ override_data {
         alerts_topic_arn        = "arn:aws:sns:us-east-1:123456789012:solventa-int-alertas"
         audit_bucket            = { name = "solventa-int-auditoria-123456789012", arn = "arn:aws:s3:::solventa-int-auditoria-123456789012" }
         policy_documents_bucket = { name = "solventa-int-polizas-123456789012", arn = "arn:aws:s3:::solventa-int-polizas-123456789012", sse = "AES256" }
+        evidence_bucket         = { name = "solventa-int-evidencias-123456789012", arn = "arn:aws:s3:::solventa-int-evidencias-123456789012", sse = "AES256", telemetry_prefix = "telemetria/" }
         cache                   = { enabled = false, url = "", security_group_id = null, cluster_ids = [], services = ["catalogo", "consulta", "cotizacion"] }
         allies                  = {}
         registro                = { token_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solventa-int/registro/token" }

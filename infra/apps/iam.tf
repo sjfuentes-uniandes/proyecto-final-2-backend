@@ -17,6 +17,13 @@ locals {
   # (HU-M10), porque bff-movil no llama a polizas. Ningún BFF accede al bucket.
   document_writers = ["polizas"]
   document_readers = ["polizas", "consulta"]
+  # HU-S03: solo siniestros lee, escribe y firma URL de evidencias (AtencionSiniestros -->
+  # Evidencias); adaptador-telemetria solo escribe el original de cada evento bajo
+  # telemetria/ (HU-W21). Ningún BFF accede al bucket.
+  evidence_writers     = ["siniestros"]
+  evidence_readers     = ["siniestros"]
+  telemetria_archivers = ["adaptador-telemetria"]
+  evidence_services    = setunion(local.evidence_writers, local.evidence_readers, local.telemetria_archivers)
   # HU-W05: presupuesto de latencia por operación (LATENCY_BUDGET_MS). cotizacion fija el deadline
   # del recorrido; api-socios y bff-web inician el X-Deadline-Ms con el suyo.
   latency_budget_readers = ["cotizacion", "api-socios", "bff-web"]
@@ -142,6 +149,20 @@ locals {
       contains(local.document_readers, name) ? [
         { Effect = "Allow", Action = ["s3:GetObject", "s3:GetObjectVersion"], Resource = ["${local.p.policy_documents_bucket.arn}/*"] },
       ] : [],
+      # Evidencias (HU-S03): mismo esquema que los documentos de póliza. El archivo de
+      # telemetría queda fuera del alcance de siniestros con una negación explícita.
+      contains(local.evidence_writers, name) ? [
+        { Effect = "Allow", Action = ["s3:PutObject"], Resource = ["${local.p.evidence_bucket.arn}/*"] },
+      ] : [],
+      contains(local.evidence_readers, name) ? [
+        { Effect = "Allow", Action = ["s3:GetObject", "s3:GetObjectVersion"], Resource = ["${local.p.evidence_bucket.arn}/*"] },
+      ] : [],
+      contains(local.evidence_writers, name) || contains(local.evidence_readers, name) ? [
+        { Effect = "Deny", Action = ["s3:*"], Resource = ["${local.p.evidence_bucket.arn}/${local.p.evidence_bucket.telemetry_prefix}*"] },
+      ] : [],
+      contains(local.telemetria_archivers, name) ? [
+        { Effect = "Allow", Action = ["s3:PutObject"], Resource = ["${local.p.evidence_bucket.arn}/${local.p.evidence_bucket.telemetry_prefix}*"] },
+      ] : [],
       # HU-W01/HU-W02: alta, desactivación y cuota de socios en tiempo de ejecución.
       contains(local.partner_admins, name) ? [
         {
@@ -184,7 +205,7 @@ locals {
         },
       ] : [],
       # Clave de la plataforma para mensajería, auditoría y documentos cifrados.
-      local.p.kms_key_arn != null && (service.publishes || length(service.consumes) > 0 || contains(local.audit_writers, name) || contains(local.document_writers, name) || contains(local.document_readers, name)) ? [
+      local.p.kms_key_arn != null && (service.publishes || length(service.consumes) > 0 || contains(local.audit_writers, name) || contains(local.document_writers, name) || contains(local.document_readers, name) || contains(local.evidence_services, name)) ? [
         { Effect = "Allow", Action = ["kms:Decrypt", "kms:GenerateDataKey"], Resource = [local.p.kms_key_arn] },
       ] : [],
     )
