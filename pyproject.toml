@@ -40,6 +40,7 @@ show_error_codes = true
 # Layout src/ del workspace: los módulos se nombran desde estas raíces.
 # HU-W13: catalogo, polizas, cotizacion y bff-web también, para `make typecheck SERVICE=<servicio>` (fuera de la CI,
 # ADR 0008). HU-W16: dinero y adaptador-pagos. HU-W17: adaptador-firma. HU-M10: consulta.
+# HU-S03: siniestros, pagos-parametricos y adaptador-telemetria.
 mypy_path = [
   "libs/solventa-common/src",
   "services/clientes/src",
@@ -52,6 +53,9 @@ mypy_path = [
   "services/adaptador-pagos/src",
   "services/adaptador-firma/src",
   "services/consulta/src",
+  "services/siniestros/src",
+  "services/pagos-parametricos/src",
+  "services/adaptador-telemetria/src",
 ]
 explicit_package_bases = true
 

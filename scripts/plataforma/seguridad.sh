@@ -4,7 +4,8 @@
 #   2. Falla si queda algún hallazgo CRITICAL que no esté justificado en
 #      infra/.trivyignore.yaml.
 # Usa trivy del PATH o, si no está, la imagen aquasec/trivy con Docker.
-# Variables: TRIVY_VERSION (imagen de Docker), TRIVY=0 omite el escaneo.
+# Variables: ENV (valores de infra/envs/<ENV>/platform.tfvars; int por defecto),
+# TRIVY_VERSION (imagen de Docker), TRIVY=0 omite el escaneo.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 TRIVY_VERSION="${TRIVY_VERSION:-0.67.2}"
@@ -22,7 +23,7 @@ else
   die "Falta trivy o docker en el PATH (TRIVY=0 omite el escaneo)."
 fi
 
-args=(config --quiet --ignorefile infra/.trivyignore.yaml --tf-vars infra/envs/int/platform.tfvars)
+args=(config --quiet --ignorefile infra/.trivyignore.yaml --tf-vars "infra/envs/${ENV}/platform.tfvars")
 
 log "Trivy: hallazgos HIGH (informativos)"
 trivy_run "${args[@]}" --severity HIGH --exit-code 0 infra

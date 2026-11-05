@@ -27,11 +27,15 @@ audit_lock_mode      = "GOVERNANCE"
 policy_documents_force_destroy   = true
 policy_documents_noncurrent_days = 90
 
+# Evidencias de siniestros y archivo de telemetría (HU-S03): en int se pueden destruir con objetos.
+evidence_force_destroy   = true
+evidence_noncurrent_days = 90
+
 # Caché Valkey de catalogo, cotizacion y consulta. false = sin ElastiCache (lecturas a RDS).
 cache_enabled   = true
 cache_node_type = "cache.t3.micro" # capa gratuita de ElastiCache (750 h/mes)
 
-# WAF siempre activo (~7 USD/mes: Web ACL + 2 reglas). Solicitudes por IP en 5 min.
+# WAF siempre activo (~8 USD/mes: Web ACL + 3 reglas). Solicitudes por IP en 5 min.
 waf_rate_limit = 2000
 
 # "prueba" es una cuota pequeña y determinista para las pruebas N2/N3 de HU-W02:

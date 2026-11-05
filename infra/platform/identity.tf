@@ -161,6 +161,8 @@ resource "aws_cognito_user_group" "backoffice" {
     asesores               = "Perfila clientes y prepara ofertas"
     operacion              = "Consulta tableros, trazas y alertas"
     suscriptores           = "Decide los casos de suscripción en revisión"
+    # HU-S03 (HU-W20, HU-W22): revisan, piden soporte y deciden los siniestros.
+    analistas-siniestros = "Revisa, solicita soporte y decide los siniestros"
   }
   name         = each.key
   description  = each.value

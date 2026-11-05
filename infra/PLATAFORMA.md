@@ -1,6 +1,6 @@
 # Plataforma Solventa en AWS
 
-Infraestructura para ejecutar en AWS las 13 historias de la columna **Ready** del backlog y, desde HU-S02, los servicios, datos, colas, secretos, almacenamiento y alarmas del Sprint 2 (cotización, contratación, emisión y consulta; sección [Sprint 2](#sprint-2-hu-s02)). Se basa en el modelo de despliegue (`docs/arquitectura/modelo_despliegue.puml`, `diagrama_despliegue_ecs_fargate.puml`), en la Entrega 8 de arquitectura (componentes, conectores y patrones).
+Infraestructura para ejecutar en AWS las 13 historias de la columna **Ready** del backlog y, desde HU-S02, los servicios, datos, colas, secretos, almacenamiento y alarmas del Sprint 2 (cotización, contratación, emisión y consulta; sección [Sprint 2](#sprint-2-hu-s02)) y, desde HU-S03, los de siniestros, eventos paramétricos e indemnizaciones y el ambiente de experimentos `exp` (sección [Sprint 3](#sprint-3-hu-s03)). Se basa en el modelo de despliegue (`docs/arquitectura/modelo_despliegue.puml`, `diagrama_despliegue_ecs_fargate.puml`), en la Entrega 8 de arquitectura (componentes, conectores y patrones).
 
 | Raíz | Qué crea | Depende de |
 | --- | --- | --- |
@@ -44,7 +44,7 @@ Socio ──HTTPS (+mTLS opc.)──► WAF ─► API Gateway "socios" ──�
 | **HU-W11** Cálculo perfil de riesgo | Servicios `cotizacion` y `catalogo`, cada uno con su base (versiones de reglas y perfiles). |
 | **HU-W12** Consulta fuentes en paralelo | Un adaptador por grupo de aliados (*bulkhead*). `ALLY_*_TIMEOUT_MS` por dependencia. Trazas padre/hijas en X-Ray a través de ADOT. |
 | **HU-W27** Correlación de métricas y trazas | API Gateway con X-Ray y logs de acceso JSON (`requestId`, `xrayTraceId`). Encabezado `X-Request-Id` inyectado en cada solicitud. Colector ADOT por tarea (OTLP → X-Ray + EMF). Tablero por ambiente. |
-| **HU-W28** Generación de alertas | Tópico SNS `alertas` con correo (`alert_emails`). Cada meta tiene una alarma de advertencia (`warning_ratio`, 90 %) y una crítica: p95 del perfilamiento (400 ms) y de otras operaciones (`latency_targets`), tasa de error técnico por servicio (`OperationErrors / SampleCount(OperationDuration)`), disponibilidad por API y cuota de socio (`PartnerQuotaUsage`). Además: 5XX y p95 del API, destinos saludables, CPU/memoria, atraso de colas, DLQ (informativa) y RDS. Las alarmas no tienen acciones: dos reglas de EventBridge envían un correo en español al pasar a `ALARM` y al volver a `OK` desde `ALARM`. `bff-web` expone las alertas abiertas, los umbrales y el resumen del mes. Los umbrales se configuran en `apps.tfvars`. Guía: [docs/hu-w28-alertas.md](../docs/hu-w28-alertas.md). |
+| **HU-W28** Generación de alertas | Tópico SNS `alertas` con correo (`alert_emails`). Cada meta tiene una alarma crítica en la meta (y una advertencia en `warning_ratio`, 90 %, solo con `warning_alarms = true`): p95 del perfilamiento (400 ms) y de otras operaciones (`latency_targets`), tasa de error técnico por servicio (`OperationErrors / SampleCount(OperationDuration)`), disponibilidad por API y cuota de socio (`PartnerQuotaUsage`). Además: 5XX y p95 del API, destinos saludables, CPU/memoria, atraso de colas, DLQ (informativa) y RDS. Las alarmas no tienen acciones: dos reglas de EventBridge envían un correo en español al pasar a `ALARM` y al volver a `OK` desde `ALARM`. `bff-web` expone las alertas abiertas, los umbrales y el resumen del mes. Los umbrales se configuran en `apps.tfvars`. Guía: [docs/hu-w28-alertas.md](../docs/hu-w28-alertas.md). |
 | **HU-W03** Cálculo de prima | `catalogo` (base propia: `productos` y `reglas_prima` versionadas) y `cotizacion` (tabla `cotizaciones`). Caché Valkey de HU-S02: `catalogo` la llena e invalida, `cotizacion` solo la lee. `bff-web` → `cotizacion` → `catalogo` y `clientes` (llamadas existentes). Meta p95 de la operación `cotizacion` en `latency_targets`. Sin recursos nuevos (sección [HU-W03](#hu-w03-cálculo-de-prima)). |
 | **HU-W05** Límite de tiempo por dependencia | Sin recursos nuevos. `LATENCY_BUDGET_MS` llega también a `api-socios` y `bff-web` (`latency_budget_readers`). `latency_budget_ms` de `int`: `cotizacion` 700 (deadline del recorrido), `socio.cotizar` y `portal.cotizar` 1600 (inician el encabezado `X-Deadline-Ms`). Cada timeout de dependencia debe ser menor que su presupuesto o el servicio no arranca. El timeout queda en un WARNING con proveedor, operación y correlación, y en X-Ray con `solventa.presupuesto_ms`, `solventa.restante_ms` y `solventa.timeout_ms` (metadatos del segmento). Contrato del encabezado: [contracts/encabezados.md](../contracts/encabezados.md). Guía: [docs/hu-w05-limite-tiempo.md](../docs/hu-w05-limite-tiempo.md). |
 | **HU-W30** Verificación de identidad | Servicios `clientes` (base propia) y `adaptador-identidad` (secreto `kyc`, timeout propio para distinguir PENDIENTE de RECHAZADO). |
@@ -55,6 +55,8 @@ Socio ──HTTPS (+mTLS opc.)──► WAF ─► API Gateway "socios" ──�
 | **HU-M09** Revocación de consentimiento | Igual que HU-M08, más la cola `consentimientos-cotizacion`. |
 
 **Sprint 2 (HU-S02):** HU-W03 a HU-W06 (cotización, caché y presupuesto de latencia), HU-W13 a HU-W17 (suscripción, aceptación, recaudo, firma y emisión), HU-W18, HU-M10 y HU-M11 (consulta y avisos). Detalle en la sección [Sprint 2](#sprint-2-hu-s02).
+
+**Sprint 3 (HU-S03):** HU-W19 a HU-W24 (evidencias, peritaje, evento paramétrico, creación del siniestro e indemnización), HU-M01 a HU-M05 (siniestros desde la app), HU-W26 y HU-W29 (experimentos en `exp`). Detalle en la sección [Sprint 3](#sprint-3-hu-s03).
 
 Transversal (ARQ-001/002/003): tareas repartidas en dos zonas con rebalanceo, circuito de despliegue con rollback, Service Connect, autoescalado (APIs por CPU y workers por profundidad de cola), RDS Multi-AZ con `high_availability = true`, cifrado con KMS y secretos fuera de las imágenes.
 
@@ -72,7 +74,7 @@ Ninguna configuración con ECS Fargate es 100 % gratuita, porque **Fargate no ti
 | WAF | Web ACL mínimo: límite por IP + reglas comunes de AWS | Sin capa gratuita | ~7 USD/mes |
 | Secrets Manager | 16 secretos (8 bases, 6 aliados, maestro de RDS y token de registro) | 30 días de prueba | ~6,4 USD/mes |
 | Caché (Sprint 2) | ElastiCache Valkey `cache.t3.micro`, un nodo (`cache_enabled`) | 750 h/mes: 0 USD | ~10 USD/mes |
-| Alarmas CloudWatch | ~101 con los 16 servicios (~146 métricas: metric math cobra cada métrica) | 10 métricas gratis | ~14 USD/mes |
+| Alarmas CloudWatch | ~105 con los 19 servicios y solo la alarma crítica por meta (~135 métricas: metric math cobra cada métrica; con `warning_alarms = true`, ~128 alarmas y ~183 métricas) | 10 métricas gratis | ~13,5 USD/mes (~18 con advertencias) |
 | API Gateway, Cognito (usuarios), CloudFront, S3, SNS, SQS, ECR, X-Ray | Volumen de pruebas | Dentro de la capa gratuita | Centavos |
 
 Estimado con los 16 servicios encendidos 24/7 (los 10 del Sprint 1 + 6 de HU-S02):
@@ -110,7 +112,7 @@ La NAT solo permite conexiones que salen desde la VPC: nadie en Internet puede a
 - **API Gateway REST en lugar de HTTP API:** los planes de uso, las API keys y WAF solo existen en REST. REST se integra en privado con el **ALB** mediante un **VPC Link v2** (`integration_target`). El ALB tiene un listener por servicio de acceso (8081 `bff-web`, 8082 `bff-movil`, 8083 `api-socios`) y solo acepta tráfico del grupo de seguridad del VPC Link.
 - **Dos APIs** (`canales` y `socios`): el mTLS aplica a todo un dominio. Separarlos permite exigir certificado solo a los socios y desactivar el endpoint `execute-api` del API de socios cuando existe dominio propio.
 - **Endpoints de interfaz:** opcionales (`interface_endpoints`, ~7 USD/mes cada uno por zona). El endpoint *gateway* de S3 es gratuito y siempre se crea, así que las capas de ECR y la auditoría no pasan por la NAT.
-- **Caché de catálogo (ElastiCache)**, **proyección CQRS** y **Saga** se crean desde HU-S02 (sección [Sprint 2](#sprint-2-hu-s02)). **Evidencias de siniestros** no se crea porque ninguna historia del Sprint 2 la usa.
+- **Caché de catálogo (ElastiCache)**, **proyección CQRS** y **Saga** se crean desde HU-S02 (sección [Sprint 2](#sprint-2-hu-s02)). **Evidencias de siniestros** se crea en HU-S03 (sección [Sprint 3](#sprint-3-hu-s03)).
 
 ## Sprint 2 (HU-S02)
 
@@ -215,6 +217,140 @@ Pausado (`paused = true`), el delta baja a ≈ 9 USD/mes (≈ 19 sin capa gratui
 - **Estado y variables:** los secretos de aliados son marcadores (`CAMBIAR`, con `ignore_changes`); la caché no tiene auth token; `apps.tfvars` y `platform.tfvars` no tienen secretos. Las contraseñas de las bases nuevas salen de `random_password`, como las del Sprint 1, y por eso **sí** quedan en el estado de `platform` (cifrado en S3).
 - **Trivy:** sin hallazgos CRITICAL ni HIGH en los recursos nuevos (ver [Validación sin desplegar](#validación-sin-desplegar)).
 
+## Sprint 3 (HU-S03)
+
+Igual que en HU-S02, todo se declara en el catálogo (`local.catalog`, `local.queues`, `local.allies`): ECR, base y usuario por servicio (`db-bootstrap`), colas con DLQ, secretos, IAM, ECS, autoescalado y alarmas salen de los mecanismos existentes. Lo nuevo fuera del catálogo es el bucket de evidencias, el grupo de Cognito, la entrada de telemetría con su regla de WAF y el ambiente `exp`. Guía para los equipos: [docs/hu-s03-infraestructura.md](../docs/hu-s03-infraestructura.md).
+
+### Servicios
+
+| Servicio | `tier` | Base | Publica | Consume | Llama a | Aliados | Escala por |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `siniestros` | `nucleo` | Sí | Sí | `siniestros-indemnizaciones` | — | — | CPU |
+| `pagos-parametricos` | `worker` | Sí (Inbox, coberturas activas y evaluaciones) | Sí | `parametricos-eventos`, `parametricos-polizas` | `siniestros` | — | Profundidad de sus dos colas |
+| `adaptador-telemetria` | `adaptador` (listener 8084 del ALB) | Sí (Outbox) | Sí | — | — | `telemetria` | CPU |
+
+Además: `bff-web` y `bff-movil` llaman a `siniestros`, y `dinero` consume `dinero-indemnizaciones` (HU-W23).
+
+**Decisiones contra los diagramas (`docs/arquitectura`):**
+- `bff-web` → `siniestros` y `bff-movil` → `siniestros`: `ServiciosWeb --> AtencionSiniestros` y `ServiciosMovil --> AtencionSiniestros` (`modelo_componentes.puml`, `modelo_despliegue.puml`).
+- `pagos-parametricos` → `siniestros`: `PagosParametricos --> AtencionSiniestros` y `modelo_concurrencia.puml` (9), "Un evento paramétrico válido crea un siniestro una sola vez".
+- Base y Outbox de `adaptador-telemetria`: `ConexionTelemetria --> PublicadoresOutbox` (`modelo_componentes.puml`) y `ControlDependencias --> TransaccionOutbox : eventos externos válidos` (`modelo_concurrencia.puml`). No publica directo a SNS.
+- Indemnización por evento y no por REST: `SiniestroAprobado` la inicia (`modelo_componentes.puml` (6); `modelo_concurrencia.puml` (5) y (6)) y el resultado vuelve por `siniestros-indemnizaciones` ((8)). La flecha `Siniestros -right-> Dinero : REST` de `diagrama_componentes_responsabilidades.puml` queda sin uso, como `Polizas → Dinero` en el Sprint 2.
+- No se agrega `siniestros` → `adaptador-telemetria` (`AtencionSiniestros --> ConexionTelemetria`) mientras ninguna historia lo use.
+
+**Capas de Service Connect:** `siniestros` y `adaptador-telemetria` quedan en la capa 0 y `pagos-parametricos` en la 1. `bff-movil` sigue en la 3, `bff-web` en la 5 y **ningún servicio previo cambia de `module.layer_N` ni se recrea** (assert de `local.depth` en `infra/apps/tests/apps.tftest.hcl`). `dinero`, `bff-web` y `bff-movil` solo reciben una revisión nueva de su tarea.
+
+### Colas y eventos
+
+| Cola | Consumidor | Filtro `eventType` | `visibility_timeout` | Retención | Para qué |
+| --- | --- | --- | --- | --- | --- |
+| `parametricos-eventos` | `pagos-parametricos` | `EventoParametricoObservado` | 30 s | 4 días (explícita, HU-W24) | Evaluar el evento externo (HU-W21) |
+| `parametricos-polizas` | `pagos-parametricos` | Prefijo `Poliza` | 30 s | 4 días | Copia local de las coberturas paramétricas activas (HU-W21) |
+| `dinero-indemnizaciones` | `dinero` | `SiniestroAprobado` | 60 s | 4 días | Iniciar la indemnización (HU-W23) |
+| `siniestros-indemnizaciones` | `siniestros` | Prefijo `Indemnizacion` | 30 s | 4 días | Actualizar el resultado del siniestro (HU-W23) |
+
+- `consulta-proyeccion` agrega el prefijo `Indemnizacion` (HU-M05). El cambio es de la suscripción (`filter_policy`) y no recrea la cola.
+- `auditoria` sigue sin filtro (D3) y `avisos` no cambia.
+- `message_retention_seconds` es opcional en `local.queues`; sin él, la cola retiene 4 días como antes. Las DLQ retienen 14 días.
+- D2: cola SQS estándar por grupo de consumidores, sin FIFO. El resultado no depende del orden (Inbox por `eventId` y clave única de negocio).
+
+Recorrido: `adaptador-telemetria` valida la firma y escribe `EventoParametricoObservado` en su Outbox → `pagos-parametricos` evalúa y crea el siniestro en `siniestros` → `SiniestroAprobado` → `dinero` indemniza → `Indemnizacion*` → `siniestros` actualiza el caso y `consulta` la vista.
+
+### Entrada de telemetría
+
+`POST /telemetria/v1/eventos` en el API `canales` → VPC Link → listener 8084 del ALB → `adaptador-telemetria` (`/v1/eventos`), con integración `HTTP_PROXY` (el cuerpo y los encabezados llegan intactos para la firma) y timeout de 5 s.
+
+- **Sin JWT:** la autenticidad es la firma HMAC-SHA256 con el secreto `telemetria` y un desfase máximo de 5 min (D5). El adaptador no recibe `JWT_ISSUERS`.
+- **Respaldo:** `ConexionTelemetria --> OtrosProveedores : mTLS / evento autenticado` (se usa la variante "evento autenticado"), `Telemetria --> CanalEventos : evento autenticado` (`modelo_informacion.puml`) y `modelo_componentes.puml` (1), "El API Gateway autentica, autoriza, limita cuotas y enruta".
+- **Límites:** tope propio en el stage (`telemetria_eventos_throttle`, 50/100 en `int`) y regla por IP del WAF (`waf_telemetria_rate_limit`, 10 000 en 5 min). La regla general `rate-limit-ip` excluye esa ruta para que el aliado no agote el límite de los canales. La regla compara el final de la ruta porque la URL `execute-api` antepone el stage (`/v1/telemetria/v1/eventos`).
+- **Nombre del destino:** el ALB admite hasta 32 caracteres, así que el destino es `<prefijo>-telemetria`. Los destinos previos conservan su nombre.
+
+### Bucket de evidencias
+
+`<prefijo>-evidencias-<cuenta>` (`infra/platform/storage.tf`) tiene la misma protección que el de pólizas: versionado, cifrado SSE-S3 (SSE-KMS con `use_customer_managed_key`), bloqueo de acceso público, `BucketOwnerEnforced` y una política que niega transporte sin TLS, TLS anterior a 1.2, `PutObject` sin `x-amz-server-side-encryption` y `PutObject` con otro cifrado.
+
+- **`tmp/`:** las cargas temporales expiran a 1 día. S3 cuenta hasta la medianoche UTC siguiente, así que un objeto vive entre 24 y 48 h.
+- **`telemetria/`:** archivo de los eventos originales (HU-W21).
+- **Versiones anteriores:** expiran a los `evidence_noncurrent_days` (90).
+- **Destrucción:** `evidence_force_destroy = true` en `int` y `exp`; `destroy.sh` vacía el bucket en cualquier caso.
+
+### Mínimo privilegio
+
+| Recurso | Quién accede | Cómo se garantiza |
+| --- | --- | --- |
+| Bucket de evidencias | `siniestros` escribe y lee (`evidence_writers`, `evidence_readers`: `PutObject`, `GetObject`, `GetObjectVersion`) para guardar el objeto con su hash y firmar URL prefirmadas | Rol de tarea sobre `<bucket>/*` y **`Deny s3:*` explícito sobre `<bucket>/telemetria/*`** |
+| Prefijo `telemetria/` | Solo `adaptador-telemetria` escribe (`telemetria_archivers`: `PutObject`) | Rol de tarea solo sobre `<bucket>/telemetria/*`; sin lectura |
+| Secreto `telemetria` (`{"hmac_secret": ...}`) | Solo `adaptador-telemetria` | Rol de ejecución: solo los secretos de sus `allies` |
+| Bases `siniestros`, `pagos_parametricos`, `adaptador_telemetria` | Cada servicio a la suya | Usuario y secreto propios (`db-bootstrap`) |
+| Grupo `analistas-siniestros` (pool `backoffice`) | Analistas de siniestros (HU-W20, HU-W22) | Lo asignan los administradores desde Administración › Usuarios (`bff_web.domain.usuarios.GRUPOS`) |
+
+Ningún BFF accede al bucket, nadie tiene `DeleteObject` ni `ListBucket`, y no hay comodines de recurso nuevos (assert en `apps.tftest.hcl`).
+
+### Variables nuevas
+
+| Raíz | Variable | Por omisión | Para qué |
+| --- | --- | --- | --- |
+| `platform` | `evidence_force_destroy`, `evidence_noncurrent_days` | `false`, 90 | Bucket de evidencias |
+| `platform` | `telemetria_eventos_throttle`, `waf_telemetria_rate_limit` | 50/100, 10 000 | Límites de la entrada de telemetría |
+| `platform` | `manage_apigateway_account` | `true` | Rol de logs de API Gateway (ajuste de la cuenta); `false` en un segundo ambiente desplegado a la vez |
+| `apps` (entorno de la tarea) | `EVIDENCIAS_BUCKET`, `EVIDENCIAS_BUCKET_SSE` | — | `siniestros` y `adaptador-telemetria` |
+| `apps` (entorno de la tarea) | `TELEMETRIA_ARCHIVO_PREFIJO` (`telemetria/`) | — | `adaptador-telemetria` |
+
+### Alarmas y tablero
+
+- **Colas:** `<prefijo>-cola-<cola>-atraso` y `-dlq` de las 4 colas nuevas (mecanismo existente). Además, tasa de error (solo la crítica, salvo con `warning_alarms = true`), CPU y memoria de los 3 servicios, y destinos saludables de `adaptador-telemetria`, que tiene listener.
+- **Telemetría:** no hay alarma de proveedor degradado, porque Solventa no llama al proveedor.
+- **Tablero:** fila **Siniestros** con p95 y errores por operación de los 3 servicios, y antigüedad y DLQ de las 4 colas.
+
+### Ambiente de experimentos `exp`
+
+`infra/envs/exp/{platform,apps}.tfvars` (D4; HU-W26, HU-W29). Comparte la cuenta con `int`, pero tiene sus propios recursos, y se crea y destruye con los mismos targets (`make infra-desplegar ENV=exp`, `make infra-destruir ENV=exp`). Detalle y diferencias con `int`: DESPLIEGUE.md, [sección 3.1](DESPLIEGUE.md#31-ambiente-de-experimentos-exp-hu-s03).
+
+| Ajuste | Valor |
+| --- | --- |
+| `high_availability` | `false` por ahora. `true` activa RDS Multi-AZ y un NAT Gateway por zona: es el requisito de AC4 y debe activarse antes de HU-W29 |
+| `egress_mode` | `nat_gateway` (1 con una zona, 2 con dos) |
+| RDS | `db.t4g.small`, sin protección contra borrado ni snapshot final |
+| Tareas | FARGATE, sin Spot; `min_replicas = 2` (una por zona), `max_replicas = 6`; `pagos-parametricos` hasta 10 |
+| Borde | Plan de uso `experimento` (500/s, 5 M al día) con `socio-exp`; canales 1000/2000; telemetría 500/1000; WAF 50 000 y 200 000 por IP en 5 min |
+| Destrucción | Auditoría GOVERNANCE de 1 día y buckets con `force_destroy` |
+
+`terraform test` la valida con su archivo versionado (`tests/exp`, incluido en `make infra-validar`).
+
+### Costo del delta del Sprint 3 (`int`)
+
+| Componente | Mensual |
+| --- | --- |
+| 3 tareas FARGATE_SPOT de 0,25 vCPU / 1 GB | ~9,6 USD |
+| Secrets Manager: 3 bases y el aliado `telemetria` | ~1,6 USD |
+| Alarmas: 18 nuevas, solo críticas (~21 métricas; 21 y ~27 con `warning_alarms`) | ~2,1 USD |
+| WAF: una regla más | ~1 USD |
+| Bucket de evidencias, 4 colas + 4 DLQ, 3 repositorios ECR, logs | < 1 USD |
+| **Total del delta** | **≈ 15 USD/mes** (igual sin capa gratuita: ninguno de estos recursos tiene capa gratuita) |
+
+Pausado (`paused = true`), el delta baja a ≈ 5 USD/mes: solo quedan secretos, alarmas y la regla de WAF.
+
+### Costo por hora de `exp` encendido
+
+Son 19 servicios × 2 réplicas en FARGATE. Precios de `us-east-1`, sin capa gratuita.
+
+| Componente | Una zona (actual) | Dos zonas (`high_availability = true`) |
+| --- | --- | --- |
+| Fargate: 38 tareas (13 de 0,25 vCPU/1 GB; 5 de 0,5/1 GB; `simulador-aliados` de 1/2 GB) | 0,72 USD/h | 0,72 USD/h |
+| RDS `db.t4g.small` + 20 GB | 0,035 USD/h | 0,07 USD/h (Multi-AZ) |
+| NAT Gateway + IPv4 pública | 0,05 USD/h | 0,10 USD/h |
+| ALB interno, ElastiCache `cache.t3.micro` | 0,04 USD/h | 0,04 USD/h |
+| WAF, Secrets Manager (20) y alarmas (~105) prorrateados | 0,05 USD/h | 0,05 USD/h |
+| **Total** | **≈ 0,90 USD/h** (~7 USD por una jornada de 8 h) | **≈ 0,98 USD/h** |
+
+A eso se suman los costos por uso de la carga: API Gateway, 3,5 USD por millón de solicitudes; WAF, 0,6 USD por millón; NAT, 0,045 USD por GB; y la ingesta de logs, 0,5 USD por GB. Destruido, `exp` cuesta 0 (el bucket de estado es compartido). Son estimaciones: confirmarlas en la calculadora de AWS.
+
+### Seguridad del Sprint 3
+
+- **IAM:** ver [Mínimo privilegio](#mínimo-privilegio). Con clave propia, solo los servicios con acceso al bucket reciben `kms:Decrypt` y `GenerateDataKey`.
+- **Estado y variables:** el secreto `telemetria` es un marcador (`CAMBIAR`, con `ignore_changes`) y los `tfvars` de `int` y `exp` no tienen secretos. Las contraseñas de las 3 bases nuevas salen de `random_password` y quedan en el estado de `platform`, cifrado en S3, como las de los Sprints 1 y 2.
+- **Trivy (`ENV=int` y `ENV=exp`):** sin hallazgos CRITICAL. Los 3 HIGH informativos son previos a HU-S03 (`bootstrap/main.tf` y `platform/web.tf`).
+
 ## HU-W03: cálculo de prima
 
 HU-W03 no agrega recursos, variables ni llamadas al catálogo de infraestructura: usa lo que HU-S02 ya declaró para ella (`catalogo` y `cotizacion` con `cache = true`; `cotizacion` → `catalogo`, `clientes`; `bff-web` → `cotizacion`; `api-socios` → `cotizacion` para HU-W04). Se despliega con los mismos targets y workflows (`make infra-microservicios SERVICES=catalogo,cotizacion,bff-web` o el workflow **Infra - Desplegar**; **CD servicios** sigue siendo un marcador). Diseño y pruebas: [docs/hu-w03-prima.md](../docs/hu-w03-prima.md).
@@ -299,7 +435,7 @@ El perfilamiento debe usar `Service=cotizacion` y `Operation=perfilamiento`. Las
 
 ```bash
 make infra-probar-alerta ENV=int                    # NIVEL=critica: 900-1000 ms
-NIVEL=advertencia make infra-probar-alerta ENV=int  # entre la advertencia y la meta
+NIVEL=advertencia make infra-probar-alerta ENV=int  # entre la advertencia y la meta (warning_alarms = true)
 ```
 
 El script publica `OperationDuration` sintético con las dimensiones de la alarma (`Environment`, `Service=cotizacion`, `Operation=perfilamiento`) cada minuto, espera `ALARM`, deja de publicar y espera `OK` (`treat_missing_data = notBreaching`). Imprime los tiempos y sale con 0 o 1. Las alarmas del perfilamiento existen aunque `cotizacion` no esté desplegado. Detalle y correos esperados: [DESPLIEGUE.md](DESPLIEGUE.md#52-probar-las-alertas-hu-w28).

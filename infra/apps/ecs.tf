@@ -89,6 +89,12 @@ locals {
         POLIZAS_BUCKET     = local.p.policy_documents_bucket.name
         POLIZAS_BUCKET_SSE = local.p.policy_documents_bucket.sse
       } : {},
+      # HU-S03: evidencias de siniestros y archivo de los eventos de telemetría originales.
+      contains(local.evidence_services, name) ? {
+        EVIDENCIAS_BUCKET     = local.p.evidence_bucket.name
+        EVIDENCIAS_BUCKET_SSE = local.p.evidence_bucket.sse
+      } : {},
+      contains(local.telemetria_archivers, name) ? { TELEMETRIA_ARCHIVO_PREFIJO = local.p.evidence_bucket.telemetry_prefix } : {},
       # Cache-Aside: vacía con cache_enabled = false; el servicio lee de RDS.
       service.cache ? { CACHE_URL = local.p.cache.url } : {},
       contains(local.latency_budget_readers, name) ? { LATENCY_BUDGET_MS = jsonencode(var.latency_budget_ms) } : {},
@@ -105,10 +111,11 @@ locals {
       contains(local.cors_services, name) ? { CORS_ORIGINS = jsonencode(local.web_origins) } : {},
       contains(local.backoffice_user_admins, name) ? { BACKOFFICE_USER_POOL_ID = local.p.cognito.backoffice_pool_id } : {},
       contains(local.alert_readers, name) ? {
-        ALERTAS_PREFIJO            = "${local.prefix}-"
-        ALERTAS_CATALOGO           = jsonencode(local.alert_catalog)
-        ALERTAS_UMBRALES           = jsonencode(local.alert_thresholds)
-        ALERTAS_ADVERTENCIA_PCT    = tostring(var.warning_ratio * 100)
+        ALERTAS_PREFIJO  = "${local.prefix}-"
+        ALERTAS_CATALOGO = jsonencode(local.alert_catalog)
+        ALERTAS_UMBRALES = jsonencode(local.alert_thresholds)
+        # Sin warning_alarms la advertencia es la meta (100 %), como en ALERTAS_UMBRALES.
+        ALERTAS_ADVERTENCIA_PCT    = var.warning_alarms ? tostring(var.warning_ratio * 100) : "100"
         ALERTAS_ATENCION_MIN       = tostring(var.alert_attention_minutes)
         ALERTAS_FALSO_POSITIVO_MIN = tostring(var.false_positive_minutes)
       } : {},

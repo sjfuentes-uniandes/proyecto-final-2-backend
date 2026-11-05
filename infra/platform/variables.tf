@@ -124,6 +124,18 @@ variable "policy_documents_noncurrent_days" {
   default     = 90
 }
 
+variable "evidence_force_destroy" {
+  description = "true = destroy elimina el bucket de evidencias aunque tenga objetos (ambientes de prueba)."
+  type        = bool
+  default     = false
+}
+
+variable "evidence_noncurrent_days" {
+  description = "Días que se conservan las versiones anteriores de una evidencia o de un evento archivado."
+  type        = number
+  default     = 90
+}
+
 variable "cache_enabled" {
   description = "Caché ElastiCache (Valkey) para catalogo, cotizacion y consulta. false: sin recursos y los servicios leen de RDS."
   type        = bool
@@ -242,9 +254,31 @@ variable "custom_domain" {
 }
 
 variable "waf_rate_limit" {
-  description = "Solicitudes por IP en 5 minutos antes de bloquear."
+  description = "Solicitudes por IP en 5 minutos antes de bloquear (todo salvo la entrada de telemetría)."
   type        = number
   default     = 2000
+}
+
+variable "waf_telemetria_rate_limit" {
+  description = "Solicitudes por IP en 5 minutos a /telemetria/ antes de bloquear (HU-S03). El aliado envía desde pocas IP, por eso tiene su propio límite."
+  type        = number
+  default     = 10000
+}
+
+variable "telemetria_eventos_throttle" {
+  description = "Tope de la entrada pública POST /telemetria/v1/eventos (HU-S03) en el stage de canales. Sin JWT: la autenticidad la valida adaptador-telemetria con la firma HMAC (D5)."
+  type        = object({ rate = number, burst = number })
+  default     = { rate = 50, burst = 100 }
+  validation {
+    condition     = var.telemetria_eventos_throttle.rate >= 1 && var.telemetria_eventos_throttle.burst >= var.telemetria_eventos_throttle.rate
+    error_message = "telemetria_eventos_throttle: rate debe ser >= 1 y burst >= rate."
+  }
+}
+
+variable "manage_apigateway_account" {
+  description = "true = este ambiente configura el rol de CloudWatch de API Gateway (ajuste único de la cuenta y región). false en un segundo ambiente que conviva con otro desplegado en la misma cuenta (ver infra/DESPLIEGUE.md, ambiente exp)."
+  type        = bool
+  default     = true
 }
 
 variable "web_callback_urls" {

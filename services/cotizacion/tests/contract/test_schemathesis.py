@@ -1,6 +1,7 @@
 """Schemathesis 4 contra la app con los puertos en fakes (C01 nominal y reloj fijo); incluye\nlas rutas de la cotización (HU-W03)."""
 
 from collections.abc import Iterator
+from datetime import datetime
 from typing import Any
 
 import pytest
@@ -11,6 +12,16 @@ from fastapi.testclient import TestClient
 from hypothesis import settings
 from schemathesis.checks import not_a_server_error
 from schemathesis.specs.openapi.checks import response_schema_conformance
+
+
+class ListadoVacio:
+    """Listado del portal sin filas: sin el puerto, GET /v1/cotizaciones responde 503."""
+
+    async def listar(self, filtros: Any, ahora: datetime, limite: int, despues: Any) -> list[Any]:
+        return []
+
+    async def contar(self, filtros: Any, ahora: datetime) -> int:
+        return 0
 
 
 @pytest.fixture
@@ -26,6 +37,7 @@ def esquema(escenario: Any, escenario_cotizacion: Any, perfil_c01: Any) -> Itera
         # HU-W03: producto y reglas de la semilla y cotizaciones en memoria.
         productos=escenario_cotizacion.productos,
         cotizaciones=escenario_cotizacion.repo,
+        listado=ListadoVacio(),
     )
     app = crear_app(Settings(), puertos=puertos)
     # El lifespan crea los casos de uso en app.state.

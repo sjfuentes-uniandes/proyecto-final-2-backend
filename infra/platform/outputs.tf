@@ -44,6 +44,8 @@ output "platform" {
     audit_bucket     = { name = aws_s3_bucket.audit.id, arn = aws_s3_bucket.audit.arn }
     # Documentos de póliza (HU-W17): sse es el valor que exige la política del bucket al escribir.
     policy_documents_bucket = { name = aws_s3_bucket.policy_documents.id, arn = aws_s3_bucket.policy_documents.arn, sse = local.audit_sse }
+    # Evidencias de siniestros y archivo de telemetría (HU-S03).
+    evidence_bucket = { name = aws_s3_bucket.evidence.id, arn = aws_s3_bucket.evidence.arn, sse = local.audit_sse, telemetry_prefix = local.telemetry_archive_prefix }
     # Caché (cache_enabled): url vacía y sin grupo de seguridad cuando está deshabilitada.
     cache = {
       enabled           = var.cache_enabled

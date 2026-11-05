@@ -224,5 +224,53 @@ services:
       ALLY_OPEN_FINANCE_CREDENTIALS: '{"client_id":"local-sintetico","client_secret":"local-sintetico"}'
       ALLY_DATOS_ABIERTOS_CREDENTIALS: '{"client_id":"local-sintetico","client_secret":"local-sintetico"}'
 
+  # HU-S03: esqueletos del Sprint 3 (HU-W19 a HU-W23 completan su lógica). Sin las colas SQS_* los
+  # consumidores no arrancan (en local se alimentan desde las pruebas).
+  siniestros:
+    <<: *servicio
+    build: { context: ., dockerfile: services/siniestros/Dockerfile }
+    ports: ["8091:8080"]
+    # El ancla define environment: se repiten sus variables junto con las propias.
+    environment:
+      SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_PROPAGATORS: tracecontext,baggage,xray
+      OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
+      DB_HOST: postgres
+
+  # PagosParametricos --> AtencionSiniestros (modelo_concurrencia.puml (9)).
+  pagos-parametricos:
+    <<: *servicio
+    build: { context: ., dockerfile: services/pagos-parametricos/Dockerfile }
+    ports: ["8092:8080"]
+    depends_on:
+      postgres: { condition: service_started }
+      localstack: { condition: service_started }
+      otel-collector: { condition: service_started }
+      siniestros: { condition: service_started }
+    # El ancla define environment: se repiten sus variables junto con las propias.
+    environment:
+      SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_PROPAGATORS: tracecontext,baggage,xray
+      OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
+      DB_HOST: postgres
+      SINIESTROS_URL: http://siniestros:8080
+
+  # Entrada de telemetría con firma HMAC (D5) y Outbox propio (ConexionTelemetria --> PublicadoresOutbox).
+  adaptador-telemetria:
+    <<: *servicio
+    build: { context: ., dockerfile: services/adaptador-telemetria/Dockerfile }
+    ports: ["8093:8080"]
+    # El ancla define environment: se repiten sus variables junto con las propias.
+    environment:
+      SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_PROPAGATORS: tracecontext,baggage,xray
+      OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
+      DB_HOST: postgres
+      # Secreto sintético solo para el ambiente local (en AWS viene de Secrets Manager).
+      ALLY_TELEMETRIA_CREDENTIALS: '{"hmac_secret":"local-sintetico"}'
+
 volumes:
   pgdata:

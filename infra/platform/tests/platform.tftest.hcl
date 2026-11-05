@@ -89,7 +89,7 @@ run "minimo_costo" {
     error_message = "Solo los administradores crean usuarios del back-office (grupo administradores)."
   }
   assert {
-    condition     = toset(keys(aws_cognito_user_group.backoffice)) == toset(["administradores", "administradores-socios", "asesores", "operacion", "suscriptores"])
+    condition     = toset(keys(aws_cognito_user_group.backoffice)) == toset(["administradores", "administradores-socios", "asesores", "operacion", "suscriptores", "analistas-siniestros"])
     error_message = "Los grupos del pool backoffice deben coincidir con los que asigna el portal (bff_web.domain.usuarios.GRUPOS)."
   }
   assert {
@@ -101,11 +101,12 @@ run "minimo_costo" {
     error_message = "Debe existir un repositorio ECR por servicio del catálogo."
   }
   assert {
-    condition     = toset(keys(aws_lb_listener.access)) == toset(["bff-web", "bff-movil", "api-socios"])
-    error_message = "Solo los servicios de acceso se publican en el ALB."
+    # HU-S03: adaptador-telemetria también, para la entrada POST /telemetria/v1/eventos.
+    condition     = toset(keys(aws_lb_listener.access)) == toset(["bff-web", "bff-movil", "api-socios", "adaptador-telemetria"])
+    error_message = "Solo los servicios de acceso y la entrada de telemetría se publican en el ALB."
   }
   assert {
-    condition     = toset(keys(aws_secretsmanager_secret.service_db)) == toset(["api-socios", "clientes", "catalogo", "cotizacion", "polizas", "dinero", "consulta", "avisos"])
+    condition     = toset(keys(aws_secretsmanager_secret.service_db)) == toset(["api-socios", "clientes", "catalogo", "cotizacion", "polizas", "dinero", "consulta", "avisos", "siniestros", "pagos-parametricos", "adaptador-telemetria"])
     error_message = "Cada servicio con base debe tener su propio secreto."
   }
   assert {
@@ -170,8 +171,8 @@ run "minimo_costo" {
     error_message = "Cada 429 se atribuye a la API key del socio en Solventa/Socios PartnerThrottled (HU-W02 AC2)."
   }
   assert {
-    condition     = length(aws_wafv2_web_acl_association.api) == 2 && length(aws_wafv2_web_acl.api.rule) == 2
-    error_message = "WAF mínimo (2 reglas) debe proteger ambos APIs."
+    condition     = length(aws_wafv2_web_acl_association.api) == 2 && length(aws_wafv2_web_acl.api.rule) == 3
+    error_message = "WAF mínimo (2 reglas más el límite de la telemetría, HU-S03) debe proteger ambos APIs."
   }
   assert {
     condition     = contains(local.discoverable, "simulador-aliados") && !contains(local.discoverable, "bff-web")
@@ -250,7 +251,7 @@ run "sprint2" {
         OfertaAceptada         = ["auditoria", "dinero-aceptaciones"]
         RecaudoConfirmado      = ["auditoria", "polizas-recaudos", "avisos"]
         RecaudoRechazado       = ["auditoria", "polizas-recaudos"]
-        PolizaEmitida          = ["auditoria", "consulta-proyeccion", "avisos"]
+        PolizaEmitida          = ["auditoria", "consulta-proyeccion", "avisos", "parametricos-polizas"] # HU-S03: coberturas paramétricas
         ConsentimientoRevocado = ["auditoria", "consentimientos-cotizacion"]
         } : toset(queues) == toset([
           for name, subscription in aws_sns_topic_subscription.queue : name
@@ -273,7 +274,7 @@ run "sprint2" {
     error_message = "AC2: cada cola nueva tiene su DLQ con redrive tras 5 recepciones y está cifrada."
   }
   assert {
-    condition     = toset(keys(aws_secretsmanager_secret.ally)) == toset(["open-finance", "datos-abiertos", "kyc", "pagos", "firma", "push"]) && aws_secretsmanager_secret.ally["pagos"].name == "solventa-int/aliados/pagos"
+    condition     = toset(keys(aws_secretsmanager_secret.ally)) == toset(["open-finance", "datos-abiertos", "kyc", "pagos", "firma", "push", "telemetria"]) && aws_secretsmanager_secret.ally["pagos"].name == "solventa-int/aliados/pagos"
     error_message = "Secretos de aliados pagos, firma y push (con valor de marcador, fuera del estado)."
   }
   assert {
@@ -287,8 +288,9 @@ run "sprint2" {
   }
   assert {
     condition = (
-      local.catalog["bff-web"].calls == ["clientes", "cotizacion", "api-socios", "polizas", "consulta"] &&
-      local.catalog["bff-movil"].calls == ["clientes", "consulta", "avisos"] && local.catalog["consulta"].calls == ["catalogo"] &&
+      # HU-S03 agrega siniestros al final de las llamadas de ambos BFF.
+      local.catalog["bff-web"].calls == ["clientes", "cotizacion", "api-socios", "polizas", "consulta", "siniestros"] &&
+      local.catalog["bff-movil"].calls == ["clientes", "consulta", "avisos", "siniestros"] && local.catalog["consulta"].calls == ["catalogo"] &&
       local.catalog["dinero"].calls == ["adaptador-pagos"] && local.catalog["polizas"].calls == ["adaptador-firma", "cotizacion", "catalogo"] &&
       alltrue([for name in ["polizas", "consulta", "avisos", "adaptador-pagos", "adaptador-firma"] : contains(local.discoverable, name)]) &&
       !contains(local.discoverable, "dinero")
@@ -344,6 +346,173 @@ run "sprint2" {
   assert {
     condition     = output.platform.cache.enabled && output.platform.cache.url == "rediss://solventa-int-cache.abc.cache.amazonaws.com:6379" && output.platform.policy_documents_bucket.sse == "AES256"
     error_message = "El contrato hacia apps incluye la caché y el bucket de pólizas."
+  }
+}
+
+run "sprint3" {
+  command = plan
+
+  override_resource {
+    target          = aws_s3_bucket.evidence
+    override_during = plan
+    values          = { id = "solventa-int-evidencias-123456789012", arn = "arn:aws:s3:::solventa-int-evidencias-123456789012" }
+  }
+  override_resource {
+    target          = aws_sqs_queue.dlq
+    override_during = plan
+    values          = { arn = "arn:aws:sqs:us-east-1:123456789012:dlq" }
+  }
+
+  assert {
+    condition = alltrue([
+      for name in ["siniestros", "pagos-parametricos", "adaptador-telemetria"] :
+      aws_ecr_repository.service[name].name == "solventa-int/${name}" &&
+      strcontains(local.db_bootstrap_script, "role=${replace(name, "-", "_")}") && contains(keys(aws_secretsmanager_secret.service_db), name) &&
+      local.catalog[name].publishes
+    ])
+    error_message = "AC1: siniestros, pagos-parametricos y adaptador-telemetria tienen repositorio, base propia y publican eventos (Outbox)."
+  }
+  assert {
+    condition = (
+      local.catalog["siniestros"].tier == "nucleo" && local.catalog["siniestros"].calls == [] && local.catalog["siniestros"].consumes == ["siniestros-indemnizaciones"] &&
+      local.catalog["pagos-parametricos"].tier == "worker" && local.catalog["pagos-parametricos"].calls == ["siniestros"] &&
+      local.catalog["pagos-parametricos"].consumes == ["parametricos-eventos", "parametricos-polizas"] &&
+      local.catalog["adaptador-telemetria"].tier == "adaptador" && local.catalog["adaptador-telemetria"].allies == ["telemetria"] &&
+      local.catalog["dinero"].consumes == ["dinero-aceptaciones", "dinero-indemnizaciones"] &&
+      contains(local.catalog["bff-web"].calls, "siniestros") && contains(local.catalog["bff-movil"].calls, "siniestros") &&
+      contains(local.discoverable, "siniestros") && !contains(local.discoverable, "pagos-parametricos") && !contains(local.discoverable, "adaptador-telemetria")
+    )
+    error_message = "Servicios, llamadas y colas del Sprint 3 como los declara HU-S03."
+  }
+  assert {
+    condition = alltrue([
+      for event, queues in {
+        EventoParametricoObservado = ["auditoria", "parametricos-eventos"]
+        PolizaEmitida              = ["auditoria", "consulta-proyeccion", "avisos", "parametricos-polizas"]
+        PolizaCancelada            = ["auditoria", "consulta-proyeccion", "parametricos-polizas"]
+        SiniestroAprobado          = ["auditoria", "consulta-proyeccion", "dinero-indemnizaciones"]
+        SiniestroRegistrado        = ["auditoria", "consulta-proyeccion"]
+        IndemnizacionConfirmada    = ["auditoria", "consulta-proyeccion", "siniestros-indemnizaciones"]
+        IndemnizacionRechazada     = ["auditoria", "consulta-proyeccion", "siniestros-indemnizaciones"]
+        } : toset(queues) == toset([
+          for name, subscription in aws_sns_topic_subscription.queue : name
+          if subscription.filter_policy == null || anytrue([
+            for rule in try(jsondecode(subscription.filter_policy).eventType, []) : try(startswith(event, rule.prefix), rule == event)
+          ])
+      ])
+    ])
+    error_message = "AC2: cada evento del Sprint 3 llega solo a las colas cuyo filtro lo admite; auditoria recibe todo (D3)."
+  }
+  assert {
+    condition = alltrue([
+      for name, timeout in { parametricos-eventos = 30, parametricos-polizas = 30, dinero-indemnizaciones = 60, siniestros-indemnizaciones = 30 } :
+      aws_sqs_queue.main[name].visibility_timeout_seconds == timeout &&
+      aws_sqs_queue.dlq[name].name == "solventa-int-${name}-dlq" && aws_sqs_queue.dlq[name].message_retention_seconds == 1209600 &&
+      jsondecode(aws_sqs_queue.main[name].redrive_policy).maxReceiveCount == 5 &&
+      aws_sqs_queue.main[name].sqs_managed_sse_enabled && aws_sns_topic_subscription.queue[name].raw_message_delivery
+    ])
+    error_message = "AC2: cada cola nueva tiene su visibilidad, su DLQ con redrive tras 5 recepciones y cifrado."
+  }
+  assert {
+    condition = (
+      aws_sqs_queue.main["parametricos-eventos"].message_retention_seconds == 345600 &&
+      alltrue([for name, queue in aws_sqs_queue.main : queue.message_retention_seconds == 345600])
+    )
+    error_message = "HU-W24: parametricos-eventos retiene 4 días; las colas sin message_retention_seconds conservan los 4 días de siempre."
+  }
+  assert {
+    condition     = aws_sns_topic_subscription.queue["auditoria"].filter_policy == null
+    error_message = "D3: la auditoría sigue sin filtro."
+  }
+  assert {
+    condition = (
+      jsondecode(aws_secretsmanager_secret_version.ally["telemetria"].secret_string) == { hmac_secret = "CAMBIAR" } &&
+      jsondecode(aws_secretsmanager_secret_version.ally["pagos"].secret_string) == { client_id = "CAMBIAR", client_secret = "CAMBIAR" } &&
+      length([for name, service in local.catalog : name if contains(service.allies, "telemetria")]) == 1
+    )
+    error_message = "AC3: el secreto telemetria es un marcador HMAC que solo usa adaptador-telemetria; los demás aliados no cambian."
+  }
+  assert {
+    condition = (
+      aws_s3_bucket.evidence.bucket == "solventa-int-evidencias-123456789012" && !aws_s3_bucket.evidence.force_destroy &&
+      aws_s3_bucket_versioning.evidence.versioning_configuration[0].status == "Enabled" &&
+      one(one(aws_s3_bucket_server_side_encryption_configuration.evidence.rule).apply_server_side_encryption_by_default).sse_algorithm == "AES256" &&
+      aws_s3_bucket_public_access_block.evidence.block_public_acls && aws_s3_bucket_public_access_block.evidence.block_public_policy &&
+      aws_s3_bucket_public_access_block.evidence.ignore_public_acls && aws_s3_bucket_public_access_block.evidence.restrict_public_buckets &&
+      aws_s3_bucket_ownership_controls.evidence.rule[0].object_ownership == "BucketOwnerEnforced"
+    )
+    error_message = "AC3: el bucket de evidencias es versionado, cifrado, sin acceso público y no se destruye con objetos por omisión."
+  }
+  assert {
+    condition = anytrue([
+      for rule in aws_s3_bucket_lifecycle_configuration.evidence.rule :
+      rule.id == "cargas-temporales" && rule.status == "Enabled" && one(rule.filter).prefix == "tmp/" && one(rule.expiration).days == 1
+    ])
+    error_message = "Las cargas de tmp/ expiran a 1 día (24 h hasta la medianoche UTC siguiente)."
+  }
+  assert {
+    condition = (
+      contains(jsondecode(aws_s3_bucket_policy.evidence.policy).Statement, {
+        Sid       = "DenyInsecureTransport", Effect = "Deny", Principal = "*", Action = "s3:*"
+        Resource  = ["arn:aws:s3:::solventa-int-evidencias-123456789012", "arn:aws:s3:::solventa-int-evidencias-123456789012/*"]
+        Condition = { Bool = { "aws:SecureTransport" = "false" } }
+      }) &&
+      contains(jsondecode(aws_s3_bucket_policy.evidence.policy).Statement, {
+        Sid       = "DenyOutdatedTls", Effect = "Deny", Principal = "*", Action = "s3:*"
+        Resource  = ["arn:aws:s3:::solventa-int-evidencias-123456789012", "arn:aws:s3:::solventa-int-evidencias-123456789012/*"]
+        Condition = { NumericLessThan = { "s3:TlsVersion" = "1.2" } }
+      }) &&
+      contains(jsondecode(aws_s3_bucket_policy.evidence.policy).Statement, {
+        Sid       = "DenyUnencryptedWrites", Effect = "Deny", Principal = "*", Action = "s3:PutObject"
+        Resource  = "arn:aws:s3:::solventa-int-evidencias-123456789012/*"
+        Condition = { Null = { "s3:x-amz-server-side-encryption" = "true" } }
+      }) &&
+      alltrue([for statement in jsondecode(aws_s3_bucket_policy.evidence.policy).Statement : statement.Effect == "Deny"])
+    )
+    error_message = "AC3: el bucket de evidencias rechaza transporte sin TLS 1.2 y objetos sin cifrar, y su política no concede acceso."
+  }
+  assert {
+    condition     = output.platform.evidence_bucket.name == "solventa-int-evidencias-123456789012" && output.platform.evidence_bucket.sse == "AES256" && output.platform.evidence_bucket.telemetry_prefix == "telemetria/"
+    error_message = "El contrato hacia apps incluye el bucket de evidencias y el prefijo del archivo de telemetría."
+  }
+  assert {
+    condition     = aws_cognito_user_group.backoffice["analistas-siniestros"].name == "analistas-siniestros"
+    error_message = "AC3: grupo analistas-siniestros en el pool backoffice."
+  }
+  assert {
+    condition = (
+      aws_lb_target_group.access["adaptador-telemetria"].name == "solventa-int-telemetria" &&
+      aws_lb_target_group.access["bff-web"].name == "solventa-int-bff-web" &&
+      aws_lb_listener.access["adaptador-telemetria"].port == 8084
+    )
+    error_message = "La entrada de telemetría tiene su listener 8084; el destino se acorta a 32 caracteres sin renombrar los previos."
+  }
+  assert {
+    condition = (
+      aws_api_gateway_method.telemetria_eventos.authorization == "NONE" && aws_api_gateway_method.telemetria_eventos.http_method == "POST" &&
+      aws_api_gateway_resource.telemetria.path_part == "telemetria" && aws_api_gateway_resource.telemetria_eventos.path_part == "eventos" &&
+      aws_api_gateway_integration.telemetria_eventos.type == "HTTP_PROXY" &&
+      aws_api_gateway_integration.telemetria_eventos.uri == "http://access.elb.amazonaws.com:8084/v1/eventos" &&
+      aws_api_gateway_method_settings.telemetria_eventos.method_path == "telemetria/v1/eventos/POST" &&
+      one(aws_api_gateway_method_settings.telemetria_eventos.settings).throttling_rate_limit == 50 &&
+      one(aws_api_gateway_method_settings.telemetria_eventos.settings).throttling_burst_limit == 100
+    )
+    error_message = "POST /telemetria/v1/eventos llega sin JWT a adaptador-telemetria (D5) con tope propio en el stage."
+  }
+  assert {
+    condition = anytrue([
+      for rule in aws_wafv2_web_acl.api.rule :
+      rule.name == "rate-limit-telemetria" && one(one(rule.statement).rate_based_statement).limit == 10000 &&
+      one(one(one(one(rule.statement).rate_based_statement).scope_down_statement).byte_match_statement).search_string == "/telemetria/v1/eventos"
+      ]) && anytrue([
+      for rule in aws_wafv2_web_acl.api.rule :
+      rule.name == "rate-limit-ip" && length(one(one(one(rule.statement).rate_based_statement).scope_down_statement).not_statement) == 1
+    ])
+    error_message = "El WAF limita la telemetría por IP con su propio umbral y la excluye del límite general."
+  }
+  assert {
+    condition     = length(aws_api_gateway_account.main) == 1 && length(aws_iam_role.apigateway_logs) == 1
+    error_message = "Por omisión el ambiente administra el rol de logs de API Gateway (int, como antes de HU-S03)."
   }
 }
 

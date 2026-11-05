@@ -79,12 +79,15 @@ infra-salidas: ## URLs de APIs, portal, Cognito y tablero del ambiente
 	  $(TF) -chdir=infra/platform output cognito && tf_init apps && \
 	  $(TF) -chdir=infra/apps output dashboard_url 2>/dev/null || true
 
-infra-validar: ## fmt, validate, pruebas de Terraform y Trivy sin críticos (sin AWS; TRIVY=0 omite Trivy)
+infra-validar: ## fmt, validate, pruebas de Terraform (también con envs/exp) y Trivy sin críticos (sin AWS; TRIVY=0 omite Trivy)
 	@for root in bootstrap platform apps; do \
 	  echo "== $$root"; \
 	  $(TF) -chdir=infra/$$root init -backend=false -input=false >/dev/null && \
 	  $(TF) -chdir=infra/$$root fmt -check -recursive && \
 	  $(TF) -chdir=infra/$$root validate -no-color || exit 1; \
 	  if [ -d infra/$$root/tests ]; then $(TF) -chdir=infra/$$root test -no-color || exit 1; fi; \
+	  if [ -d infra/$$root/tests/exp ]; then \
+	    $(TF) -chdir=infra/$$root test -no-color -test-directory=tests/exp -var-file=../envs/exp/$$root.tfvars || exit 1; \
+	  fi; \
 	done
 	@$(PLATAFORMA_SCRIPTS)/seguridad.sh

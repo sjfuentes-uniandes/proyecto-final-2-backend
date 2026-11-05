@@ -1,4 +1,6 @@
-# HU-W28: umbrales en apps.tfvars; advertencia (warning_ratio) y crítica por meta.
+# HU-W28: umbrales en apps.tfvars; una alarma crítica por meta (la meta del AC) y,
+# con warning_alarms = true, también la advertencia (warning_ratio). Sin la advertencia
+# cada meta usa la mitad de las métricas de alarma (costo de CloudWatch).
 # Sin acciones: notifications.tf notifica. Guía: docs/hu-w28-alertas.md
 locals {
   dashboard_url = "https://${local.p.region}.console.aws.amazon.com/cloudwatch/home?region=${local.p.region}#dashboards/dashboard/${local.prefix}"
@@ -21,7 +23,10 @@ locals {
     [{ id = "perfilamiento", label = "Perfilamiento p95", service = "cotizacion", operation = "perfilamiento", target_ms = var.profiling_p95_ms, warning_ms = null }],
     var.latency_targets,
   )
-  latency_alarms = merge([
+  # Gemelos de advertencia: solo con warning_alarms (los AC de HU-W28 piden la meta).
+  warning_levels = var.warning_alarms ? ["advertencia", "critica"] : ["critica"]
+
+  latency_alarms = { for key, alarm in merge([
     for slo in local.latency_slos : {
       "${slo.id}-p95-advertencia" = {
         slo   = slo, severity = "advertencia", threshold = tonumber(format("%.0f", coalesce(slo.warning_ms, slo.target_ms * var.warning_ratio)))
@@ -32,10 +37,10 @@ locals {
         title = "${slo.label} por encima de la meta"
       }
     }
-  ]...)
+  ]...) : key => alarm if contains(local.warning_levels, alarm.severity) }
 
   # --- Tasa de error técnico por servicio desplegado (AC2) ---------------------------
-  error_rate_alarms = merge({}, [
+  error_rate_alarms = { for key, alarm in merge({}, [
     for name in keys(local.deployed) : {
       "${name}-errores-advertencia" = {
         service = name, severity = "advertencia", threshold = local.error_rate_warning
@@ -46,10 +51,10 @@ locals {
         title   = "Tasa de error técnico de ${name} sobre la meta"
       }
     }
-  ]...)
+  ]...) : key => alarm if contains(local.warning_levels, alarm.severity) }
 
   # --- Disponibilidad por API: 1 - 5XX / solicitudes ------------------------------
-  availability_alarms = merge({}, [
+  availability_alarms = { for key, alarm in merge({}, [
     for name, api in local.p.apis : {
       "api-${name}-disponibilidad-advertencia" = {
         api   = api, severity = "advertencia", threshold = local.availability_warning
@@ -60,13 +65,13 @@ locals {
         title = "Disponibilidad del API ${name} bajo la meta"
       }
     }
-  ]...)
+  ]...) : key => alarm if contains(local.warning_levels, alarm.severity) }
 
   # --- Cuota de socio: el mayor consumo entre los socios del ambiente ---------------
-  partner_quota_alarms = {
+  partner_quota_alarms = { for key, alarm in {
     "socio-cuota-advertencia" = { severity = "advertencia", threshold = local.partner_quota_warn, title = "Socio sobre el ${local.warning_pct} % de su cuota" }
     "socio-cuota-critica"     = { severity = "critica", threshold = var.partner_quota_percent, title = "Socio con la cuota agotada" }
-  }
+  } : key => alarm if contains(local.warning_levels, alarm.severity) }
 
   saturation_alarms = {
     for pair in setproduct(keys(local.deployed), ["CPUUtilization", "MemoryUtilization"]) :
@@ -125,13 +130,15 @@ locals {
     }
   }
 
-  # Umbrales configurados (tabla de la pantalla), en el orden de las metas.
+  # Umbrales configurados (tabla de la pantalla), en el orden de las metas. Sin
+  # warning_alarms, la advertencia es la propia meta: no hay banda previa (el contrato de
+  # ALERTAS_UMBRALES con bff-web no cambia).
   alert_thresholds = concat(
-    [for slo in local.latency_slos : { metrica = slo.label, unidad = "ms", meta = slo.target_ms, advertencia = tonumber(format("%.0f", coalesce(slo.warning_ms, slo.target_ms * var.warning_ratio))), critica = slo.target_ms }],
+    [for slo in local.latency_slos : { metrica = slo.label, unidad = "ms", meta = slo.target_ms, advertencia = var.warning_alarms ? tonumber(format("%.0f", coalesce(slo.warning_ms, slo.target_ms * var.warning_ratio))) : slo.target_ms, critica = slo.target_ms }],
     [
-      { metrica = "Tasa de error técnico", unidad = "%", meta = var.error_rate_percent, advertencia = local.error_rate_warning, critica = var.error_rate_percent },
-      { metrica = "Cuota de socio", unidad = "%", meta = var.partner_quota_percent, advertencia = local.partner_quota_warn, critica = var.partner_quota_percent },
-      { metrica = "Disponibilidad", unidad = "%", meta = var.availability_percent, advertencia = local.availability_warning, critica = var.availability_percent },
+      { metrica = "Tasa de error técnico", unidad = "%", meta = var.error_rate_percent, advertencia = var.warning_alarms ? local.error_rate_warning : var.error_rate_percent, critica = var.error_rate_percent },
+      { metrica = "Cuota de socio", unidad = "%", meta = var.partner_quota_percent, advertencia = var.warning_alarms ? local.partner_quota_warn : var.partner_quota_percent, critica = var.partner_quota_percent },
+      { metrica = "Disponibilidad", unidad = "%", meta = var.availability_percent, advertencia = var.warning_alarms ? local.availability_warning : var.availability_percent, critica = var.availability_percent },
     ],
   )
 }

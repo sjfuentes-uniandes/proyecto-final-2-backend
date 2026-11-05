@@ -6,3 +6,7 @@ CREATE DATABASE catalogo;
 CREATE DATABASE cotizacion;
 CREATE DATABASE polizas;
 CREATE DATABASE consulta;
+-- HU-S03: siniestros, pagos-parametricos (Inbox y coberturas) y adaptador-telemetria (Outbox).
+CREATE DATABASE siniestros;
+CREATE DATABASE pagos_parametricos;
+CREATE DATABASE adaptador_telemetria;

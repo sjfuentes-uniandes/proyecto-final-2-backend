@@ -51,8 +51,10 @@ resource "aws_lb" "access" {
 
 # Destinos IP registrados por los servicios ECS de apps (retiro de no saludables).
 resource "aws_lb_target_group" "access" {
-  for_each             = local.access_services
-  name                 = "${local.prefix}-${each.key}"
+  for_each = local.access_services
+  # El ALB admite nombres de hasta 32 caracteres: solventa-int-adaptador-telemetria (HU-S03)
+  # se acorta a solventa-int-telemetria. Los demás conservan su nombre y no se recrean.
+  name                 = length("${local.prefix}-${each.key}") <= 32 ? "${local.prefix}-${each.key}" : "${local.prefix}-${trimprefix(each.key, "adaptador-")}"
   port                 = 8080
   protocol             = "HTTP"
   target_type          = "ip"
@@ -88,8 +90,11 @@ resource "aws_apigatewayv2_vpc_link" "access" {
 }
 
 # --- Registro de API Gateway en CloudWatch (configuración de la cuenta/región) ---
+# Ajuste único por cuenta y región: con dos ambientes a la vez (int y exp), solo uno lo
+# administra (manage_apigateway_account); si no, destruir uno deja al otro sin logs.
 resource "aws_iam_role" "apigateway_logs" {
-  name = "${local.prefix}-apigateway-logs"
+  count = var.manage_apigateway_account ? 1 : 0
+  name  = "${local.prefix}-apigateway-logs"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -101,12 +106,30 @@ resource "aws_iam_role" "apigateway_logs" {
 }
 
 resource "aws_iam_role_policy_attachment" "apigateway_logs" {
-  role       = aws_iam_role.apigateway_logs.name
+  count      = var.manage_apigateway_account ? 1 : 0
+  role       = aws_iam_role.apigateway_logs[0].name
   policy_arn = "arn:${local.partition}:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs"
 }
 
+# Estas direcciones no tenían count hasta HU-S03: se mueven sin recrearse.
+moved {
+  from = aws_iam_role.apigateway_logs
+  to   = aws_iam_role.apigateway_logs[0]
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.apigateway_logs
+  to   = aws_iam_role_policy_attachment.apigateway_logs[0]
+}
+
+moved {
+  from = aws_api_gateway_account.main
+  to   = aws_api_gateway_account.main[0]
+}
+
 resource "aws_api_gateway_account" "main" {
-  cloudwatch_role_arn = aws_iam_role.apigateway_logs.arn
+  count               = var.manage_apigateway_account ? 1 : 0
+  cloudwatch_role_arn = aws_iam_role.apigateway_logs[0].arn
   depends_on          = [aws_iam_role_policy_attachment.apigateway_logs]
 }
 
@@ -335,6 +358,53 @@ resource "aws_api_gateway_gateway_response" "main" {
     "application/json" = "{\"error\":\"${each.value.type}\",\"message\":$context.error.messageString,\"correlationId\":\"$context.requestId\"}"
   }
 }
+# --- Entrada de telemetría (HU-S03, HU-W21): eventos paramétricos del aliado ---------
+# Pública y sin JWT: la autenticidad es la firma HMAC-SHA256 que valida adaptador-telemetria con
+# el secreto del aliado telemetria (D5: ConexionTelemetria --> OtrosProveedores : mTLS / evento
+# autenticado; Telemetria --> CanalEventos : evento autenticado, modelo_informacion.puml). El borde
+# limita y enruta (modelo_componentes.puml (1)): tope propio en el stage y límite por IP en el WAF.
+# HTTP_PROXY entrega el cuerpo y los encabezados sin cambios, como los necesita la firma.
+resource "aws_api_gateway_resource" "telemetria" {
+  rest_api_id = aws_api_gateway_rest_api.main["canales"].id
+  parent_id   = aws_api_gateway_rest_api.main["canales"].root_resource_id
+  path_part   = "telemetria"
+}
+
+resource "aws_api_gateway_resource" "telemetria_v1" {
+  rest_api_id = aws_api_gateway_rest_api.main["canales"].id
+  parent_id   = aws_api_gateway_resource.telemetria.id
+  path_part   = "v1"
+}
+
+resource "aws_api_gateway_resource" "telemetria_eventos" {
+  rest_api_id = aws_api_gateway_rest_api.main["canales"].id
+  parent_id   = aws_api_gateway_resource.telemetria_v1.id
+  path_part   = "eventos"
+}
+
+resource "aws_api_gateway_method" "telemetria_eventos" {
+  rest_api_id   = aws_api_gateway_rest_api.main["canales"].id
+  resource_id   = aws_api_gateway_resource.telemetria_eventos.id
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "telemetria_eventos" {
+  rest_api_id             = aws_api_gateway_rest_api.main["canales"].id
+  resource_id             = aws_api_gateway_resource.telemetria_eventos.id
+  http_method             = aws_api_gateway_method.telemetria_eventos.http_method
+  type                    = "HTTP_PROXY"
+  integration_http_method = "POST"
+  connection_type         = "VPC_LINK"
+  connection_id           = aws_apigatewayv2_vpc_link.access.id
+  integration_target      = aws_lb.access.arn
+  uri                     = "http://${aws_lb.access.dns_name}:${local.catalog["adaptador-telemetria"].listener_port}/v1/eventos"
+  # Valida, escribe el Outbox y archiva el original: sin llamadas a otros servicios.
+  timeout_milliseconds = 5000
+  request_parameters = {
+    "integration.request.header.X-Request-Id" = "context.requestId"
+  }
+}
 
 # --- Despliegue y stage --------------------------------------------------------
 resource "aws_api_gateway_deployment" "main" {
@@ -354,13 +424,16 @@ resource "aws_api_gateway_deployment" "main" {
         aws_api_gateway_resource.registro_verificaciones.id,
         aws_api_gateway_method.registro_verificaciones,
         aws_api_gateway_integration.registro_verificaciones,
+        aws_api_gateway_resource.telemetria_eventos.id,
+        aws_api_gateway_method.telemetria_eventos,
+        aws_api_gateway_integration.telemetria_eventos,
       ]],
     ]))
   }
   lifecycle {
     create_before_destroy = true
   }
-  depends_on = [aws_api_gateway_integration.proxy, aws_api_gateway_integration.preflight, aws_api_gateway_integration.registro_verificaciones]
+  depends_on = [aws_api_gateway_integration.proxy, aws_api_gateway_integration.preflight, aws_api_gateway_integration.registro_verificaciones, aws_api_gateway_integration.telemetria_eventos]
 }
 
 resource "aws_cloudwatch_log_group" "api" {
@@ -423,6 +496,21 @@ resource "aws_api_gateway_method_settings" "registro_verificaciones" {
     data_trace_enabled     = false
     throttling_rate_limit  = var.registro_verificaciones_throttle.rate
     throttling_burst_limit = var.registro_verificaciones_throttle.burst
+  }
+  depends_on = [aws_api_gateway_method_settings.main]
+}
+
+# Tope propio de la entrada de telemetría (HU-S03).
+resource "aws_api_gateway_method_settings" "telemetria_eventos" {
+  rest_api_id = aws_api_gateway_rest_api.main["canales"].id
+  stage_name  = aws_api_gateway_stage.main["canales"].stage_name
+  method_path = "telemetria/v1/eventos/POST"
+  settings {
+    metrics_enabled        = true
+    logging_level          = "ERROR"
+    data_trace_enabled     = false
+    throttling_rate_limit  = var.telemetria_eventos_throttle.rate
+    throttling_burst_limit = var.telemetria_eventos_throttle.burst
   }
   depends_on = [aws_api_gateway_method_settings.main]
 }

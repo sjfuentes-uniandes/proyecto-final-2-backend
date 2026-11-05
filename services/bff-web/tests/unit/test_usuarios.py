@@ -225,6 +225,7 @@ def test_grupos_disponibles(http: Any) -> None:
         "asesores",
         "operacion",
         "suscriptores",
+        "analistas-siniestros",
     ]
 
 
