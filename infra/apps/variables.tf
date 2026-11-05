@@ -161,13 +161,19 @@ variable "log_retention_days" {
 
 # --- Umbrales de alarmas (HU-W28): configurados aquí, no en los servicios -----
 variable "profiling_p95_ms" {
-  description = "Meta p95 del perfilamiento: alerta crítica (HU-W28 AC1). La advertencia es warning_ratio de la meta."
+  description = "Meta p95 del perfilamiento: alerta crítica (HU-W28 AC1). Con warning_alarms, la advertencia es warning_ratio de la meta."
   type        = number
   default     = 400
 }
 
+variable "warning_alarms" {
+  description = "true = además de la alarma crítica de cada meta (p95, tasa de error, disponibilidad y cuota de socio) crea su advertencia en warning_ratio. false (por omisión) deja solo la crítica: los AC de HU-W28 piden la meta y cada advertencia duplica las métricas de alarma que se cobran."
+  type        = bool
+  default     = false
+}
+
 variable "warning_ratio" {
-  description = "Fracción de la meta que abre la alerta de advertencia (0.9 = 90 %)."
+  description = "Fracción de la meta que abre la alerta de advertencia (0.9 = 90 %). Solo con warning_alarms = true."
   type        = number
   default     = 0.9
   validation {

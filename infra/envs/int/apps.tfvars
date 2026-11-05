@@ -67,9 +67,12 @@ latency_budget_ms = {
   "portal.cotizar" = 1600
 }
 
-# Umbrales de alertas (HU-W28). Cada meta abre una advertencia en warning_ratio
-# de la meta y una alerta crítica en la meta. Guía: docs/hu-w28-alertas.md
-profiling_p95_ms          = 400
+# Umbrales de alertas (HU-W28). Cada meta abre una alerta crítica en la meta; con
+# warning_alarms = true, también una advertencia en warning_ratio. Guía: docs/hu-w28-alertas.md
+profiling_p95_ms = 400
+# Solo la alarma crítica de cada meta; true agrega la advertencia en warning_ratio
+# (el doble de métricas de alarma; útil para una demostración).
+warning_alarms            = false
 warning_ratio             = 0.9
 api_5xx_rate              = 0.05
 alarm_evaluation_periods  = 5

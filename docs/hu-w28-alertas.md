@@ -41,8 +41,10 @@ make desplegar ENV=int
 ## 1. N2: activar y recuperar la alarma con una métrica sintética (AC1, AC2, AC3, AC4)
 
 ```bash
-NIVEL=advertencia make infra-probar-alerta ENV=int   # 1 correo de ALARMA y 1 de RECUPERADA
-make infra-probar-alerta ENV=int                     # crítica: 2 y 2 (advertencia y crítica)
+make infra-probar-alerta ENV=int                     # crítica: 1 correo de ALARMA y 1 de RECUPERADA
+# Con warning_alarms = true en apps.tfvars (advertencia y crítica por meta):
+make infra-probar-alerta ENV=int                     # 2 y 2 (advertencia y crítica)
+NIVEL=advertencia make infra-probar-alerta ENV=int   # 1 y 1 (solo la advertencia)
 ```
 
 **Verificar:**
@@ -62,7 +64,7 @@ Con un usuario del grupo `operacion` (`EMAIL=<correo> make infra-usuario-admin`)
 
 **Verificar:**
 - "Alertas abiertas" muestra la alarma con su severidad, el valor actual, el umbral y hace cuánto se abrió. "Ver traza" abre Operación › Trazas filtrando por la duración mínima del umbral.
-- "Umbrales configurados" coincide con `apps.tfvars` (meta, advertencia y crítica).
+- "Umbrales configurados" coincide con `apps.tfvars` (meta, advertencia y crítica; sin `warning_alarms`, la advertencia es la meta).
 - "Resumen del mes" cuenta la alerta al recuperarse.
 - Captura de los dos correos y del tablero enlazado (`make infra-salidas` imprime `dashboard_url`).
 
@@ -72,7 +74,7 @@ Con un usuario del grupo `operacion` (`EMAIL=<correo> make infra-usuario-admin`)
 | --- | --- |
 | Correo legible | Dos reglas de EventBridge (`solventa-<env>-alertas-alarma` y `-recuperada`) con *input transformer* hacia el tópico, sin Lambda. **Reemplazan** las acciones directas de las alarmas: si se mantuvieran ambas, llegarían dos correos por cambio (JSON en inglés y texto en español). La política del tópico solo admite esas reglas (`aws:SourceArn`). El asunto lo fija SNS (`AWS Notification Message`) y no se puede cambiar sin Lambda. |
 | Duplicados (AC2) | CloudWatch emite el evento solo cuando cambia el estado. Una condición sostenida produce un solo correo, sin importar cuántas mediciones lleguen. `INSUFFICIENT_DATA` no notifica, y OK solo notifica si viene de ALARM. |
-| Severidad | Por meta, una alarma de advertencia (`warning_ratio`, 90 %; se puede fijar por meta con `warning_ms` o `*_warning_percent`) y una crítica (la meta). La DLQ es informativa. La severidad va en la descripción y en `ALERTAS_CATALOGO`. |
+| Severidad | Por meta, una alarma crítica en la meta, que es lo que piden AC1 y AC2. La advertencia (`warning_ratio`, 90 %; se puede fijar por meta con `warning_ms` o `*_warning_percent`) solo existe con `warning_alarms = true`: duplica las métricas de alarma que cobra CloudWatch, así que por omisión no se crea. Sin ella, la columna "advertencia" de la pantalla muestra la meta. La DLQ es informativa. La severidad va en la descripción y en `ALERTAS_CATALOGO`. |
 | Tasa de error | Por servicio desplegado: `IF(total > 0, 100 * FILL(errores, 0) / total, 0)` con `OperationErrors` (Sum) y `OperationDuration` (SampleCount), dimensiones `Environment` y `Service`. Se mide como proporción, no como cantidad. |
 | Disponibilidad | Por API: `100 * (1 - 5XXError / Count)` en ventanas de `availability_period_seconds` (1 h). La meta mensual se vigila por hora: una alarma mensual no se puede evaluar en CloudWatch. |
 | Cuota de socio | `api-socios` publica `PartnerQuotaUsage` cada 5 min. Las alarmas usan Metrics Insights (`MAX` entre socios), porque los socios se crean en tiempo de ejecución y Terraform no puede crear una alarma por socio. |

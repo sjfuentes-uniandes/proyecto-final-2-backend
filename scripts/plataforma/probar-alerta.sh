@@ -4,8 +4,9 @@
 # alarma cada minuto, espera ALARM, deja de publicar y espera OK. Solo lee las
 # alarmas del perfilamiento: no cambia su configuración ni su estado.
 #
-#   NIVEL=critica      900-1000 ms: se abren la advertencia y la crítica.
-#   NIVEL=advertencia  entre la advertencia y la meta: solo se abre la advertencia.
+#   NIVEL=critica      900-1000 ms: se abre la crítica (y la advertencia, si existe).
+#   NIVEL=advertencia  entre la advertencia y la meta: solo se abre la advertencia. Requiere
+#                      warning_alarms = true en apps.tfvars (por omisión solo hay crítica).
 #
 # Variables: ENV, AWS_REGION, NIVEL (critica), PUBLICAR_MIN (5), ESPERA_ALARMA_S (600),
 # ESPERA_OK_S (900), SONDEO_S (15), METRICS_NAMESPACE (Solventa).
@@ -27,7 +28,7 @@ esac
 
 prefijo="${NAME}-${ENV}-perfilamiento-p95"
 alarma="${prefijo}-${NIVEL}"
-alarmas=("${prefijo}-advertencia" "${prefijo}-critica")
+alarmas=("${prefijo}-critica")
 dimensiones="Environment=${ENV},Service=cotizacion,Operation=perfilamiento"
 envios=0
 
@@ -65,6 +66,15 @@ publicar_metrica() {
   printf '  %s  publicado %s/%s: %s ms\n' "$(hora)" "${envios}" "${PUBLICAR_MIN}" "${valores}"
 }
 
+# La advertencia solo existe con warning_alarms = true (infra/apps/alarms.tf).
+advertencia_existe=false
+if [ "$(estado "${prefijo}-advertencia")" != "None" ]; then
+  advertencia_existe=true
+  alarmas=("${prefijo}-advertencia" "${prefijo}-critica")
+elif [ "${NIVEL}" = "advertencia" ]; then
+  die "No existe ${prefijo}-advertencia: ponga warning_alarms = true en infra/envs/${ENV}/apps.tfvars y ejecute make infra-aplicaciones ENV=${ENV}."
+fi
+
 log "Alarmas del perfilamiento en ${ENV}"
 for nombre in "${alarmas[@]}"; do
   actual="$(estado "${nombre}")"
@@ -80,12 +90,12 @@ for nombre in "${alarmas[@]}"; do
   fi
 done
 
-advertencia="$(umbral "${prefijo}-advertencia")"
 critica="$(umbral "${prefijo}-critica")"
 if [ "${NIVEL}" = "critica" ]; then
   valores="$(jq -rn --argjson c "${critica}" '[900, 950, 1000] | map(if . > $c then . else $c + . / 10 end | floor) | join(" ")')"
   conteos="20 20 20"
 else
+  advertencia="$(umbral "${prefijo}-advertencia")"
   valores="$(jq -rn --argjson a "${advertencia}" --argjson c "${critica}" '($a + $c) / 2 | floor')"
   conteos="60"
 fi
@@ -112,5 +122,11 @@ printf '  %s  alarmas del perfilamiento en OK a los %s s de la alerta\n' "$(hora
 log "Resultado: OK"
 printf '  Alerta:      %s s desde la primera publicación\n' $((en_alarma - inicio))
 printf '  Recuperada:  %s s desde la alerta\n' $((recuperada - en_alarma))
-printf '  Correos esperados en alert_emails: %s\n' \
-  "$([ "${NIVEL}" = "critica" ] && echo "2 de ALARMA (advertencia y crítica) y 2 de RECUPERADA" || echo "1 de ALARMA y 1 de RECUPERADA (advertencia)")"
+if [ "${NIVEL}" = "advertencia" ]; then
+  esperados="1 de ALARMA y 1 de RECUPERADA (advertencia)"
+elif [ "${advertencia_existe}" = "true" ]; then
+  esperados="2 de ALARMA (advertencia y crítica) y 2 de RECUPERADA"
+else
+  esperados="1 de ALARMA y 1 de RECUPERADA (crítica)"
+fi
+printf '  Correos esperados en alert_emails: %s\n' "${esperados}"

@@ -67,7 +67,31 @@ cp -r infra/envs/int infra/envs/qa
 make infra-desplegar ENV=qa
 ```
 
-**Secretos de aliados:** Terraform crea los secretos `solventa-<ambiente>/aliados/{kyc,open-finance,datos-abiertos,pagos,firma,push}` con un valor de marcador. Mientras no se carguen las credenciales reales, los adaptadores usan `simulador-aliados`. Para cargarlas, después del paso 1:
+### 3.1 Ambiente de experimentos `exp` (HU-S03)
+
+`infra/envs/exp/` es un segundo ambiente versionado para los experimentos de disponibilidad y carga del Sprint 3 (HU-W29 y HU-W26, decisión D4). Vive en la misma cuenta que `int`, pero con recursos propios: prefijo `solventa-exp-`, VPC `10.61.0.0/16`, estado `exp/{platform,apps}.tfstate`, pools de Cognito, API, tablero y alarmas propios. Se enciende solo para un experimento y se destruye al terminar:
+
+```bash
+make infra-desplegar ENV=exp     # plataforma, bases, imágenes y servicios (~25-35 min)
+make infra-probar ENV=exp        # humo (sección 5.1 y 5.6)
+make infra-destruir ENV=exp      # todo, sin pasos manuales (escribir "exp" para confirmar)
+```
+
+| Ajuste | `int` | `exp` |
+| --- | --- | --- |
+| Zonas de la base y la salida (`high_availability`) | Una | Una por ahora; `true` = RDS Multi-AZ y un NAT Gateway por zona (D4, antes de HU-W29) |
+| Salida a Internet (`egress_mode`) | NAT instance `t3.micro` | NAT Gateway administrado |
+| RDS (`db_instance_class`) | `db.t3.micro` | `db.t4g.small`, sin protección contra borrado |
+| Tareas | FARGATE_SPOT, 1 réplica | FARGATE (sin Spot), 2 réplicas (una por zona), hasta 6; más CPU para el recorrido paramétrico |
+| Límites del borde | Canales 100/200, WAF 2000 por IP, telemetría 50/100 | Canales 1000/2000, WAF 50 000, telemetría 500/1000 y WAF 200 000 |
+| Socio de prueba | `socio-a`, `socio-b` (plan `prueba`) | `socio-exp` (plan `experimento`: 500/s, 5 M al día) |
+| Destrucción | — | Auditoría GOVERNANCE de 1 día y buckets con `force_destroy` |
+
+**Si `int` y `exp` están desplegados a la vez:** el rol de CloudWatch de API Gateway es un ajuste único de la cuenta y la región. Lo administra el ambiente con `manage_apigateway_account = true` (el de omisión). Con `int` arriba, poner `false` en `infra/envs/exp/platform.tfvars` antes de desplegar `exp`; así destruir `exp` no deja a `int` sin logs del API. Si se olvidó, `make infra-plataforma ENV=int` después de destruir `exp` lo restablece. Con `int` apagado no hay que hacer nada.
+
+El costo por hora de `exp` encendido está en PLATAFORMA.md, sección [Sprint 3](PLATAFORMA.md#sprint-3-hu-s03).
+
+**Secretos de aliados:** Terraform crea los secretos `solventa-<ambiente>/aliados/{kyc,open-finance,datos-abiertos,pagos,firma,push,telemetria}` con un valor de marcador (`telemetria` guarda `{"hmac_secret": "..."}`; los demás, `client_id` y `client_secret`). Mientras no se carguen las credenciales reales, los adaptadores usan `simulador-aliados`. Para cargarlas, después del paso 1:
 
 ```bash
 aws secretsmanager put-secret-value --secret-id solventa-int/aliados/kyc \
@@ -117,7 +141,7 @@ Ejecuta en orden los cuatro pasos de la sección 1:
 | `make infra-plan` | Ver los cambios de ambas raíces sin aplicar |
 | `make infra-pausar` / `make infra-reanudar` | Llevar todos los servicios a 0 tareas o volver a las réplicas configuradas |
 | `make infra-salidas` | URLs de los APIs, portal, Cognito y tablero |
-| `make infra-probar` | Prueba del ambiente desplegado, incluido el Sprint 2: servicios, enrutamiento de eventos y DLQ (secciones 5.1 y 5.3) |
+| `make infra-probar` | Prueba del ambiente desplegado, incluidos los Sprints 2 y 3: servicios, enrutamiento de eventos, entrada de telemetría y DLQ (secciones 5.1, 5.3 y 5.6) |
 | `make infra-probar-alerta` | Activa y recupera la alarma del perfilamiento con una métrica sintética (sección 5.2) |
 
 ### 5.1 Prueba rápida del ambiente
@@ -141,6 +165,7 @@ make infra-probar ENV=int                                           # SMOKE_ALER
 | Socio con token, sin API key | 401/403 | Plan de uso por API key (HU-W02) |
 | Socio con token y API key | 200 desde `api-socios` | Recorrido completo: WAF → API Gateway → VPC Link v2 → ALB → ECS |
 | Sprint 2: servicios nuevos, `OfertaAceptada` y DLQ | Ver sección 5.3 (`SMOKE_DLQ=0` omite la DLQ, ~6–10 min) | AC1 y AC2 de HU-S02 |
+| Sprint 3: servicios nuevos, `SiniestroAprobado` y entrada de telemetría | Ver sección 5.6 | AC1, AC2 y AC3 de HU-S03 |
 | HU-W03: caché de catálogo | Ver sección 5.4 | Valkey disponible y `CACHE_URL` en `catalogo` y `cotizacion` |
 | `SMOKE_ALERTA=1` | Llega el correo de prueba | Tópico de alertas y suscripción confirmada (HU-W28). La prueba de las alarmas es la sección 5.2 |
 
@@ -154,14 +179,16 @@ Activa y recupera la alarma de p95 del perfilamiento publicando una métrica sin
 
 ```bash
 make infra-probar-alerta ENV=int                    # NIVEL=critica (por defecto)
-NIVEL=advertencia make infra-probar-alerta ENV=int  # solo la advertencia
+NIVEL=advertencia make infra-probar-alerta ENV=int  # solo la advertencia (requiere warning_alarms = true)
 ```
+
+Por omisión (`warning_alarms = false`) cada meta tiene solo su alarma crítica: el script sigue esa alarma y `NIVEL=advertencia` termina con un mensaje que pide activar `warning_alarms`.
 
 | Paso | Qué hace | Tiempo |
 | --- | --- | --- |
-| 0 | Muestra el estado y el umbral de `solventa-<env>-perfilamiento-p95-advertencia` y `-critica`. Si una quedó en ALARM por una ejecución anterior, espera a que vuelva a OK | — |
+| 0 | Muestra el estado y el umbral de `solventa-<env>-perfilamiento-p95-critica` (y de `-advertencia`, si existe). Si una quedó en ALARM por una ejecución anterior, espera a que vuelva a OK | — |
 | 1 | Publica `OperationDuration` cada minuto (hasta `PUBLICAR_MIN=5`) con `Environment=<env>`, `Service=cotizacion`, `Operation=perfilamiento`: 900, 950 y 1000 ms con `NIVEL=critica`, o el punto medio entre la advertencia y la meta con `NIVEL=advertencia`. Se detiene al ver ALARM | 3–5 min (3 de 5 periodos de 60 s) |
-| 2 | Deja de publicar y espera OK en las dos alarmas (`treat_missing_data = notBreaching`) | 3–5 min |
+| 2 | Deja de publicar y espera OK en las alarmas del perfilamiento (`treat_missing_data = notBreaching`) | 3–5 min |
 | 3 | Imprime los tiempos y sale con 0, o con 1 si no hubo ALARM en `ESPERA_ALARMA_S` (600) o OK en `ESPERA_OK_S` (900) | — |
 
 No cambia la configuración ni el estado de ninguna alarma, y solo publica en la serie del perfilamiento: se puede repetir.
@@ -170,8 +197,9 @@ No cambia la configuración ni el estado de ninguna alarma, y solo publica en la
 
 | `NIVEL` | Correos |
 | --- | --- |
-| `advertencia` | 1 de ALARMA y 1 de RECUPERADA (advertencia) |
-| `critica` | 2 de ALARMA y 2 de RECUPERADA (advertencia y crítica, porque 900 ms supera ambos umbrales) |
+| `critica` (por omisión, solo la crítica) | 1 de ALARMA y 1 de RECUPERADA |
+| `critica` con `warning_alarms = true` | 2 de ALARMA y 2 de RECUPERADA (advertencia y crítica, porque 900 ms supera ambos umbrales) |
+| `advertencia` (requiere `warning_alarms = true`) | 1 de ALARMA y 1 de RECUPERADA (advertencia) |
 
 ```text
 ALARMA - Solventa int
@@ -248,6 +276,27 @@ uv run pytest tests/e2e -k hu_w04                                               
 
 `catalogo` siembra la versión `2026.10.1` de las reglas de `vida-hipotecario` (mismas tarifas, con vigencia de la oferta, exclusiones y suma por cobertura; vigente desde 2026-10-22) y `cotizacion` crea `ofertas` (migración `004`, aditiva; reversa en `migraciones/down/004_ofertas.sql`, antes de la de `003`). No hay pasos manuales de base de datos.
 
+### 5.6 Humo extendido del Sprint 3 (HU-S03)
+
+Los servicios nuevos solo tienen `GET /health` hasta que sus historias implementen la lógica (HU-W19 a HU-W23). En un ambiente destruido basta con `make infra-desplegar ENV=int`. Para agregar el Sprint 3 a un ambiente que ya está arriba:
+
+```bash
+make infra-plan ENV=int          # revisar: sin reemplazos de RDS, Cognito, API Gateway, tópico ni colas previas (AC5)
+make infra-plataforma ENV=int    # 3 servicios en el catálogo, 4 colas, secreto telemetria, bucket de evidencias, grupo, ruta y WAF
+make infra-bases ENV=int         # bases siniestros, pagos_parametricos y adaptador_telemetria (idempotente)
+make infra-microservicios SERVICES=siniestros,pagos-parametricos,adaptador-telemetria,dinero,bff-web,bff-movil ENV=int
+make infra-probar ENV=int SMOKE_DLQ_COLA=dinero-indemnizaciones
+```
+
+`dinero`, `bff-web` y `bff-movil` reciben una revisión nueva de su tarea (`SQS_DINERO_INDEMNIZACIONES_URL` y `SINIESTROS_URL`); ningún servicio cambia de capa de Service Connect y ninguno se recrea.
+
+| Paso de `infra-probar` | Esperado | Qué valida |
+| --- | --- | --- |
+| 10. Servicios | `siniestros`, `pagos-parametricos` y `adaptador-telemetria` con tareas corriendo = deseadas y todas `HEALTHY` | Imagen, roles, base propia, logs (AC1) |
+| 11. Enrutamiento | Un `SiniestroAprobado` sintético llega a `dinero-indemnizaciones` y `consulta-proyeccion`, y a ninguna otra cola salvo `auditoria` | Filtros de `eventType` (AC2) |
+| 12. Entrada de telemetría | `POST /telemetria/v1/eventos` sin firma responde desde el adaptador (`404` con el esqueleto; `400`/`401` de la app cuando HU-W21 valide la firma), no un `401`/`403` del borde ni un `5xx` | Ruta sin JWT, listener 8084 del ALB y WAF (D5) |
+| 8. DLQ con `SMOKE_DLQ_COLA=dinero-indemnizaciones` | El mensaje envenenado termina en `<prefijo>-dinero-indemnizaciones-dlq` y la alarma pasa a ALARM | Redrive y alarma de una cola nueva (AC2). Usar una cola sin consumidor real: hasta HU-W23 `dinero` no la lee |
+
 ### Imágenes de los microservicios
 
 - **Convención:** `services/<servicio>/Dockerfile`, construido con contexto en la raíz del repo para que la imagen incluya `libs/`. El nombre de la carpeta debe coincidir con el del catálogo (`bff-web`, `clientes`, `adaptador-identidad`…). Con `SRC_DIR=otra/carpeta` se usa otra raíz.
@@ -274,14 +323,14 @@ AUTO_APPROVE=1 make infra-destruir ENV=int  # sin pregunta (CI)
 | Orden | Qué pasa |
 | --- | --- |
 | 1 | Destruye `apps` (servicios, IAM, alarmas, reglas de alertas de EventBridge, tablero). |
-| 2 | Vacía el bucket de auditoría saltando la retención GOVERNANCE de Object Lock y el de documentos de póliza (todas las versiones). Con `audit_lock_mode = "COMPLIANCE"`, AWS no permite borrar antes del vencimiento y la destrucción de ese bucket falla. |
+| 2 | Vacía el bucket de auditoría saltando la retención GOVERNANCE de Object Lock, el de documentos de póliza y el de evidencias (todas las versiones). Con `audit_lock_mode = "COMPLIANCE"`, AWS no permite borrar antes del vencimiento y la destrucción de ese bucket falla. |
 | 3 | Borra todas las imágenes de los repositorios ECR del ambiente, así la destrucción no depende de que el estado tenga `force_delete = true`. |
 | 4 | Destruye `platform`: RDS sin snapshot final, caché ElastiCache, repositorios ECR, Cognito, colas, NAT, ALB, API Gateway, WAF y VPC. |
 
 - **Idempotencia:** si una raíz ya no tiene recursos, se omite.
 - **Lo que se conserva:** el bucket de estado y el rol de GitHub (bootstrap).
 - **Recrear:** volver a ejecutar `make infra-desplegar`; las imágenes se reconstruyen porque ECR se borró con el ambiente. Después hay que crear de nuevo el primer administrador y publicar el portal (sección 6.1).
-- **Datos:** la base de datos, los usuarios de Cognito, la auditoría y los documentos de póliza **se pierden**. Exportar lo necesario antes de destruir.
+- **Datos:** la base de datos, los usuarios de Cognito, la auditoría, los documentos de póliza y las evidencias **se pierden**. Exportar lo necesario antes de destruir.
 - **Reproducibilidad:** después de recrear, `make infra-plan` no debe mostrar cambios en ninguna raíz (HU-S02).
 
 ### 6.1 Volver a levantar el ambiente después de destruirlo
@@ -324,7 +373,7 @@ Si el correo no llega, volver a ejecutar el paso 2: mientras el usuario no haya 
    - `AWS_ROLE_ARN`: el valor que imprimió el bootstrap.
    - `AWS_REGION`: por ejemplo `us-east-1`.
    Deben ser variables **del repositorio**, no del environment: los jobs de plan no usan el environment.
-3. Opcional: en **Settings → Environments**, crear el ambiente (`int`, `qa`…) con *required reviewers* para exigir aprobación antes de desplegar o destruir. En **Infra - Desplegar** solo los jobs que aplican usan `environment: <ambiente>`, así que la aprobación se pide cuando el plan ya está en el resumen de la ejecución.
+3. Opcional: en **Settings → Environments**, crear el ambiente (`int`, `exp`, `qa`…) con *required reviewers* para exigir aprobación antes de desplegar o destruir. En **Infra - Desplegar** solo los jobs que aplican usan `environment: <ambiente>`, así que la aprobación se pide cuando el plan ya está en el resumen de la ejecución.
 4. Los workflows `workflow_dispatch` solo aparecen en la pestaña **Actions** cuando están en la rama por defecto (`main`).
 
 5. En el repo **proyecto-final-2-frontend**, crear las variables `AWS_WEB_ROLE_ARN` (salida `github_web_role_arn`) y `AWS_REGION`, y el environment `int` (opcionalmente con *required reviewers*). El workflow **CD web** publica el portal en cada push a `main` (ambiente `int`) o a mano en otro ambiente.
