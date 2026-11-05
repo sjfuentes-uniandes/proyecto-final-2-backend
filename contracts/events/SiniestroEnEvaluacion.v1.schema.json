@@ -1,0 +1,87 @@
+{
+  "$defs": {
+    "SiniestroEnEvaluacionV1": {
+      "description": "El caso qued\u00f3 asignado a un analista y pas\u00f3 a EN_EVALUACION. `aggregateId` = `siniestroId`.",
+      "properties": {
+        "analistaId": {
+          "format": "uuid",
+          "title": "Analistaid",
+          "type": "string"
+        },
+        "codigo": {
+          "pattern": "^88-[0-9]{4}-[0-9]{4,}$",
+          "title": "Codigo",
+          "type": "string"
+        },
+        "motivo": {
+          "const": "ASIGNACION",
+          "title": "Motivo",
+          "type": "string"
+        },
+        "polizaId": {
+          "format": "uuid",
+          "title": "Polizaid",
+          "type": "string"
+        },
+        "siniestroId": {
+          "format": "uuid",
+          "title": "Siniestroid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "siniestroId",
+        "codigo",
+        "polizaId",
+        "analistaId",
+        "motivo"
+      ],
+      "title": "SiniestroEnEvaluacionV1",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/SiniestroEnEvaluacionV1"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreEvento[SiniestroEnEvaluacionV1]",
+  "type": "object"
+}

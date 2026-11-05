@@ -62,6 +62,12 @@ Nombres de `Operation` en `OperationDuration` y `OperationErrors` (`solventa_com
 | `firma.documento` | `adaptador-firma` | Caso de uso `Firmar` (firma de la huella sha256 del documento de póliza con el proveedor de firma, aliado `firma`, HU-W17): `POST /v1/firmas`, con `documentoId` como `Idempotency-Key` y sin reintentos | `ok`, `timeout`, `error` (también la firma de otro documento u otra huella). Sin `rechazado`: el proveedor no rechaza firmas (plan W17, §b, decisión 9) |
 | `notificacion.push` | `adaptador-firma` | Prevista (HU-M11): envío de un aviso push al proveedor (aliado `push`) | `ok`, `timeout`, `error`, `rechazado` (token de dispositivo inválido) |
 | `aviso.push` | `avisos` | Prevista (HU-M11): envío de un aviso a un dispositivo (llamada a `adaptador-firma`) | `ok`, `timeout`, `error`, `rechazado` |
+| `siniestro.bandeja` | `siniestros`, `bff-web` | Lista de la bandeja del analista o de la cola general (HU-W19; H01 y H02); en `bff-web` incluye el nombre del cliente y también cubre `GET /v1/siniestros/resumen` y `POST /v1/siniestros/siguiente` | `ok`, `rechazado` (rol o grupo no permitido), `error` / `timeout` (5xx, solo `bff-web`) |
+| `siniestro.resumen` | `siniestros` | Indicadores de la bandeja (HU-W19). Derivada del plan del Sprint 3 | `ok`, `rechazado`, `error` |
+| `siniestro.tomar` | `siniestros` | «Tomar el siguiente de la cola»: asignación atómica con `FOR UPDATE SKIP LOCKED` (HU-W19, DS3-03). Derivada del plan del Sprint 3 | `asignado`, `cola_vacia` (404 `COLA_SIN_CASOS`), `rechazado`, `error` |
+| `siniestro.consultar` | `siniestros`, `bff-web` | Detalle del siniestro con la verificación de cobertura y la coherencia de la evidencia (HU-W19); los `HeadObject` van fuera de la transacción. En `bff-web` compone el nombre del cliente y la póliza | `ok`, `rechazado` (inexistente o rol no permitido), `error` / `timeout` (5xx, solo `bff-web`) |
+| `evidencia.enlace` | `siniestros`, `bff-web` | Emisión de la URL prefirmada de una evidencia, ≤ 300 s, y su `EvidenciaConsultada` (HU-W19, DS3-08) | `ok`, `no_disponible` (404 `EVIDENCIA_NO_DISPONIBLE`), `rechazado` (inexistente o rol no permitido), `error` / `timeout` |
+| `siniestro.acceso_denegado` | `siniestros` | Registro de un acceso rechazado y su `AccesoSiniestroDenegado` (HU-W19, DS3-09), venga de `bff-web` o del propio servicio. Derivada del plan del Sprint 3 | `ok`, `error` |
 
 `<FUENTE>` ∈ {`FA_PRODUCTOS_VIGENTES`, `FA_HISTORIAL_PAGOS_12M`, `FA_INGRESOS_AGREGADOS`, `DA_REGISTROS_PUBLICOS`}.
 
@@ -76,6 +82,8 @@ Nombres de `Operation` en `OperationDuration` y `OperationErrors` (`solventa_com
 **Aviso de alternativas no disponibles (HU-W14):** `logger.warning("alternativas no disponibles", extra={"decision_id": …, "version_reglas": …, "dependencia": "catalogo", "resultado": "error" | "timeout"})` cuando `catalogo` no entrega la versión de reglas de un rechazo; la decisión se comunica con `alternativas = []`.
 
 **Log de cierre del perfilamiento:** `logger.info("perfil calculado", extra={"perfil_id": …, "estado": …, "dependencias": [{"nombre": …, "ms": …, "resultado": …}]})`, dentro de la `operacion`. Las dependencias van en una **lista** para que `sanitizar` no redacte valores por el nombre de la clave.
+
+**Log de cierre de la bandeja y del detalle (HU-W19):** `logger.info("siniestro consultado", extra={"siniestro_id": …, "operacion": …, "resultado": …})`, solo identificadores. **Nunca** la URL prefirmada, `X-Amz-Signature`, la clave del objeto, nombres de clientes o de analistas, ni cuentas (SEC-W19-01 lo verifica).
 
 ## Degradación por proveedor (HU-W06)
 

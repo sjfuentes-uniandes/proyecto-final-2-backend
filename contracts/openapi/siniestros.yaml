@@ -1,0 +1,1463 @@
+openapi: 3.1.0
+info:
+  title: siniestros
+  version: 0.1.0
+paths:
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Health Get
+  /v1/siniestros:
+    get:
+      tags:
+      - siniestros
+      summary: Bandeja
+      description: 'Bandeja del analista (H01) o cola general (H02). `q` busca por
+        código de siniestro o por
+
+        número de póliza (CF-S3-06).'
+      operationId: bandeja_v1_siniestros_get
+      parameters:
+      - name: bandeja
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/TipoBandeja'
+          description: 'MIA: asignados al actor'
+          default: MIA
+        description: 'MIA: asignados al actor'
+      - name: estado
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/EstadoSiniestro'
+          - type: 'null'
+          title: Estado
+      - name: origen
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/OrigenSiniestro'
+          - type: 'null'
+          title: Origen
+      - name: prioridad
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/PrioridadSiniestro'
+          - type: 'null'
+          title: Prioridad
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 64
+          - type: 'null'
+          title: Q
+      - name: limite
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limite
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Cursor
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      - name: X-Actor-Nombre
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Nombre
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BandejaSiniestrosRespuesta'
+        '401':
+          description: 'ACTOR_REQUERIDO: falta X-Actor-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol falta o no es ANALISTA_SINIESTROS
+            (se audita con AccesoSiniestroDenegado)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (también si el cursor no es válido)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/resumen:
+    get:
+      tags:
+      - siniestros
+      summary: Resumen
+      description: Indicadores de la bandeja; `desde` y `hasta` delimitan el día del
+        usuario.
+      operationId: resumen_v1_siniestros_resumen_get
+      parameters:
+      - name: desde
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+          description: Inicio (incluido), ISO-8601 con zona
+          title: Desde
+        description: Inicio (incluido), ISO-8601 con zona
+      - name: hasta
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+          description: Fin (excluido), ISO-8601 con zona
+          title: Hasta
+        description: Fin (excluido), ISO-8601 con zona
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      - name: X-Actor-Nombre
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Nombre
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumenBandejaSiniestros'
+        '401':
+          description: 'ACTOR_REQUERIDO: falta X-Actor-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol falta o no es ANALISTA_SINIESTROS
+            (se audita con AccesoSiniestroDenegado)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (también si desde ≥ hasta)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/siguiente:
+    post:
+      tags:
+      - siniestros
+      summary: Tomar Siguiente
+      description: 'Asigna al actor el caso REPORTADO más antiguo (FOR UPDATE SKIP
+        LOCKED) y lo pasa a
+
+        EN_EVALUACION. La misma Idempotency-Key devuelve el mismo caso.'
+      operationId: tomar_siguiente_v1_siniestros_siguiente_post
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Idempotency-Key
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      - name: X-Actor-Nombre
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Nombre
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumenSiniestro'
+        '401':
+          description: 'ACTOR_REQUERIDO: falta X-Actor-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol falta o no es ANALISTA_SINIESTROS
+            (se audita con AccesoSiniestroDenegado)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'COLA_SIN_CASOS: no hay siniestros REPORTADOS sin analista
+            (estado H02)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA o IDEMPOTENCIA_CONFLICTO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/{siniestroId}:
+    get:
+      tags:
+      - siniestros
+      summary: Detalle
+      description: 'Detalle del caso con la verificación de cobertura y la coherencia
+        de la evidencia. Una
+
+        evidencia cuyo objeto no existe viene como NO_DISPONIBLE y no impide la respuesta
+        (AC4).
+
+        Abrir un caso no lo asigna.'
+      operationId: detalle_v1_siniestros__siniestroId__get
+      parameters:
+      - name: siniestroId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Siniestroid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      - name: X-Actor-Nombre
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Nombre
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetalleSiniestro'
+        '401':
+          description: 'ACTOR_REQUERIDO: falta X-Actor-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol falta o no es ANALISTA_SINIESTROS
+            (se audita con AccesoSiniestroDenegado)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SINIESTRO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/siniestros/{siniestroId}/evidencias/{evidenciaId}/enlace:
+    post:
+      tags:
+      - siniestros
+      summary: Emitir Enlace
+      description: 'Emite una URL prefirmada de lectura (≤ 300 s) y escribe EvidenciaConsultada
+        en el Outbox.
+
+        La URL no se guarda ni se registra.'
+      operationId: emitir_enlace_v1_siniestros__siniestroId__evidencias__evidenciaId__enlace_post
+      parameters:
+      - name: siniestroId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Siniestroid
+      - name: evidenciaId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Evidenciaid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      - name: X-Actor-Nombre
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Nombre
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnlaceEvidencia'
+        '401':
+          description: 'ACTOR_REQUERIDO: falta X-Actor-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol falta o no es ANALISTA_SINIESTROS
+            (se audita con AccesoSiniestroDenegado)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'SINIESTRO_NO_ENCONTRADO, EVIDENCIA_NO_ENCONTRADA o EVIDENCIA_NO_DISPONIBLE
+            (el objeto no existe: no se emite la URL)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia = evidencias)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/siniestros/accesos-denegados:
+    post:
+      tags:
+      - siniestros
+      summary: Registrar Acceso Denegado
+      description: 'Registra el rechazo de un usuario que `bff-web` no dejó pasar
+        (DS3-09). Solo exige
+
+        X-Actor-Id; no valida el rol (solo audita). Escribe AccesoSiniestroDenegado
+        en el Outbox.'
+      operationId: registrar_acceso_denegado_v1_siniestros_accesos_denegados_post
+      parameters:
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      - name: X-Actor-Nombre
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Nombre
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudAccesoDenegado'
+      responses:
+        '202':
+          description: Successful Response
+        '401':
+          description: 'ACTOR_REQUERIDO: falta X-Actor-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+components:
+  schemas:
+    AmparoCopiaDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        nombre:
+          type: string
+          title: Nombre
+        sumaAsegurada:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Sumaasegurada
+          description: Suma asegurada del amparo (DS2-16)
+      type: object
+      required:
+      - codigo
+      - nombre
+      - sumaAsegurada
+      title: AmparoCopiaDto
+    BandejaSiniestrosRespuesta:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ResumenSiniestro'
+          type: array
+          title: Items
+          description: 'MIA: menor tiempo restante primero. SIN_ASIGNAR: el más antiguo
+            primero'
+        siguienteCursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Siguientecursor
+        total:
+          type: integer
+          title: Total
+          description: Casos que cumplen los filtros
+      type: object
+      required:
+      - items
+      - siguienteCursor
+      - total
+      title: BandejaSiniestrosRespuesta
+    BeneficiarioDto:
+      properties:
+        beneficiarioRef:
+          type: string
+          title: Beneficiarioref
+          description: Identificador opaco; nunca la cuenta
+        cuentaMascarada:
+          type: string
+          title: Cuentamascarada
+          description: Cuenta enmascarada, p. ej. ****1234
+      type: object
+      required:
+      - beneficiarioRef
+      - cuentaMascarada
+      title: BeneficiarioDto
+    CodigoVerificacion:
+      type: string
+      enum:
+      - VIGENCIA
+      - AMPARO
+      - CARENCIA
+      - PLAZO_AVISO
+      - PRIMAS
+      - SOPORTES
+      title: CodigoVerificacion
+    CoherenciaDto:
+      properties:
+        fechaDeclarada:
+          type: string
+          format: date-time
+          title: Fechadeclarada
+        primeraCaptura:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Primeracaptura
+        diferenciaMin:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Diferenciamin
+          description: primeraCaptura − fechaDeclarada, en minutos
+        ubicacionCoincide:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Ubicacioncoincide
+          description: Distancia ≤ 1 km (configurable); null si falta alguna de las
+            dos ubicaciones
+        archivosAlterados:
+          type: integer
+          title: Archivosalterados
+        resultado:
+          $ref: '#/components/schemas/ResultadoCoherencia'
+      type: object
+      required:
+      - fechaDeclarada
+      - primeraCaptura
+      - diferenciaMin
+      - ubicacionCoincide
+      - archivosAlterados
+      - resultado
+      title: CoherenciaDto
+    CopiaPolizaDto:
+      properties:
+        numero:
+          type: string
+          pattern: ^[0-9]{3}-[0-9]{4}-[0-9]{6}$
+          title: Numero
+        ramo:
+          type: string
+          title: Ramo
+        vigencia:
+          $ref: '#/components/schemas/VigenciaCopiaDto'
+        amparos:
+          items:
+            $ref: '#/components/schemas/AmparoCopiaDto'
+          type: array
+          title: Amparos
+          description: Amparos contratados; `causa` es uno de ellos
+        moneda:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Moneda
+        carenciaDias:
+          type: integer
+          minimum: 0.0
+          title: Carenciadias
+        plazoAvisoDias:
+          type: integer
+          minimum: 0.0
+          title: Plazoavisodias
+        primasAlDia:
+          type: boolean
+          title: Primasaldia
+        beneficiario:
+          $ref: '#/components/schemas/BeneficiarioDto'
+      type: object
+      required:
+      - numero
+      - ramo
+      - vigencia
+      - amparos
+      - moneda
+      - carenciaDias
+      - plazoAvisoDias
+      - primasAlDia
+      - beneficiario
+      title: CopiaPolizaDto
+      description: Copia de la póliza tomada al reportar (fuente de la verificación
+        de cobertura).
+    DetalleSiniestro:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        codigo:
+          type: string
+          pattern: ^88-[0-9]{4}-[0-9]{4,}$
+          title: Codigo
+        polizaId:
+          type: string
+          format: uuid
+          title: Polizaid
+        polizaNumero:
+          type: string
+          pattern: ^[0-9]{3}-[0-9]{4}-[0-9]{6}$
+          title: Polizanumero
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        ramo:
+          type: string
+          title: Ramo
+          description: Nombre del ramo (copia de la póliza al reportar)
+        origen:
+          $ref: '#/components/schemas/OrigenSiniestro'
+        estado:
+          $ref: '#/components/schemas/EstadoSiniestro'
+        prioridad:
+          $ref: '#/components/schemas/PrioridadSiniestro'
+          description: 'Derivada del tiempo restante: ALTA si está vencido o le quedan
+            < 8 h; MEDIA si le quedan < 24 h; BAJA en otro caso (DS3-04)'
+        reportadoEn:
+          type: string
+          format: date-time
+          title: Reportadoen
+        analistaId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Analistaid
+          description: Null mientras el caso no tiene analista
+        tiempoRestanteMin:
+          type: integer
+          title: Tiemporestantemin
+          description: Minutos que faltan para el compromiso de 48 h; negativo si
+            está vencido
+        relojPausado:
+          type: boolean
+          title: Relojpausado
+          description: true en FALTA_SOPORTE (el reloj se reanuda al volver)
+        causa:
+          type: string
+          title: Causa
+          description: Código del amparo reclamado (uno de poliza.amparos)
+        fechaEvento:
+          type: string
+          format: date-time
+          title: Fechaevento
+        ubicacionDeclarada:
+          $ref: '#/components/schemas/UbicacionSiniestroDto'
+        poliza:
+          $ref: '#/components/schemas/CopiaPolizaDto'
+        verificacionCobertura:
+          items:
+            $ref: '#/components/schemas/VerificacionCoberturaDto'
+          type: array
+          title: Verificacioncobertura
+          description: Seis verificaciones, en el orden de CodigoVerificacion
+        coherencia:
+          $ref: '#/components/schemas/CoherenciaDto'
+        evidencias:
+          items:
+            $ref: '#/components/schemas/EvidenciaVista'
+          type: array
+          title: Evidencias
+        soportesPendientes:
+          items:
+            $ref: '#/components/schemas/SoportePendienteDto'
+          type: array
+          title: Soportespendientes
+        tramite:
+          items:
+            $ref: '#/components/schemas/PasoTramiteDto'
+          type: array
+          title: Tramite
+        historial:
+          items:
+            $ref: '#/components/schemas/EntradaHistorial'
+          type: array
+          title: Historial
+          description: Del más antiguo al más reciente
+        liquidacion:
+          anyOf:
+          - $ref: '#/components/schemas/LiquidacionDto'
+          - type: 'null'
+        evento:
+          anyOf:
+          - $ref: '#/components/schemas/EventoParametricoDto'
+          - type: 'null'
+        pago:
+          anyOf:
+          - $ref: '#/components/schemas/PagoDto'
+          - type: 'null'
+      type: object
+      required:
+      - id
+      - codigo
+      - polizaId
+      - polizaNumero
+      - clienteId
+      - ramo
+      - origen
+      - estado
+      - prioridad
+      - reportadoEn
+      - analistaId
+      - tiempoRestanteMin
+      - relojPausado
+      - causa
+      - fechaEvento
+      - ubicacionDeclarada
+      - poliza
+      - verificacionCobertura
+      - coherencia
+      - evidencias
+      - soportesPendientes
+      - tramite
+      - historial
+      - liquidacion
+      - evento
+      - pago
+      title: DetalleSiniestro
+      description: Detalle (H03, H04, Cobertura e Historial). Las secciones de W20,
+        W22 y W23 vienen en null.
+    EnlaceEvidencia:
+      properties:
+        url:
+          type: string
+          title: Url
+        expiraEn:
+          type: string
+          format: date-time
+          title: Expiraen
+        tipoContenido:
+          type: string
+          title: Tipocontenido
+      type: object
+      required:
+      - url
+      - expiraEn
+      - tipoContenido
+      title: EnlaceEvidencia
+      description: 'URL prefirmada de lectura: expira en ≤ 300 s, no se guarda ni
+        se registra (DS3-08).'
+    EntradaHistorial:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        accion:
+          type: string
+          pattern: ^[A-Z_]{3,40}$
+          title: Accion
+        estadoAnterior:
+          anyOf:
+          - $ref: '#/components/schemas/EstadoSiniestro'
+          - type: 'null'
+        estadoNuevo:
+          anyOf:
+          - $ref: '#/components/schemas/EstadoSiniestro'
+          - type: 'null'
+        actorId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Actorid
+        actorRol:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Actorrol
+        actorNombre:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Actornombre
+        justificacion:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Justificacion
+        ocurridoEn:
+          type: string
+          format: date-time
+          title: Ocurridoen
+      type: object
+      required:
+      - id
+      - accion
+      - estadoAnterior
+      - estadoNuevo
+      - actorId
+      - actorRol
+      - actorNombre
+      - justificacion
+      - ocurridoEn
+      title: EntradaHistorial
+      description: 'Historial inmutable. `accion` es un código en mayúsculas (REPORTADO,
+        EVIDENCIAS_VALIDADAS,
+
+        ASIGNADO; W20 y W22 agregan los suyos).'
+    ErrorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        mensaje:
+          type: string
+          title: Mensaje
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          type: object
+          title: Detalles
+      type: object
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
+    EstadoPago:
+      type: string
+      enum:
+      - SIN_PAGO
+      - PENDIENTE
+      - CONFIRMADO
+      - RECHAZADO
+      title: EstadoPago
+    EstadoPaso:
+      type: string
+      enum:
+      - COMPLETADO
+      - ACTUAL
+      - PENDIENTE
+      title: EstadoPaso
+    EstadoSiniestro:
+      type: string
+      enum:
+      - REPORTADO
+      - EN_EVALUACION
+      - APROBADO
+      - RECHAZADO
+      - FALTA_SOPORTE
+      title: EstadoSiniestro
+    EstadoSoporte:
+      type: string
+      enum:
+      - FALTA
+      - SOLICITADO
+      title: EstadoSoporte
+    EventoParametricoDto:
+      properties:
+        eventoId:
+          type: string
+          format: uuid
+          title: Eventoid
+        fuente:
+          type: string
+          title: Fuente
+        tipoEvento:
+          type: string
+          title: Tipoevento
+        valorObservado:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Valorobservado
+        umbral:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Umbral
+        unidad:
+          type: string
+          title: Unidad
+        zona:
+          type: string
+          title: Zona
+        observadoEn:
+          type: string
+          format: date-time
+          title: Observadoen
+        regla:
+          type: string
+          title: Regla
+        versionRegla:
+          type: string
+          title: Versionregla
+      type: object
+      required:
+      - eventoId
+      - fuente
+      - tipoEvento
+      - valorObservado
+      - umbral
+      - unidad
+      - zona
+      - observadoEn
+      - regla
+      - versionRegla
+      title: EventoParametricoDto
+      description: Null hasta HU-W22.
+    EvidenciaVista:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        nombreArchivo:
+          type: string
+          title: Nombrearchivo
+        tipo:
+          $ref: '#/components/schemas/TipoEvidencia'
+        capturadaEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Capturadaen
+        ubicacion:
+          anyOf:
+          - $ref: '#/components/schemas/UbicacionSiniestroDto'
+          - type: 'null'
+        integridad:
+          $ref: '#/components/schemas/IntegridadEvidencia'
+      type: object
+      required:
+      - id
+      - nombreArchivo
+      - tipo
+      - capturadaEn
+      - ubicacion
+      - integridad
+      title: EvidenciaVista
+      description: Metadatos de una evidencia. Nunca la clave del objeto ni una URL
+        (DS3-08).
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    IntegridadEvidencia:
+      type: string
+      enum:
+      - VERIFICADA
+      - ALTERADA
+      - NO_VERIFICABLE
+      - NO_DISPONIBLE
+      title: IntegridadEvidencia
+    LiquidacionDto:
+      properties:
+        moneda:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Moneda
+        valorReclamado:
+          anyOf:
+          - type: string
+            pattern: ^-?\d+(\.\d+)?$
+          - type: 'null'
+          title: Valorreclamado
+        deducible:
+          anyOf:
+          - type: string
+            pattern: ^-?\d+(\.\d+)?$
+          - type: 'null'
+          title: Deducible
+        valorIndemnizar:
+          anyOf:
+          - type: string
+            pattern: ^-?\d+(\.\d+)?$
+          - type: 'null'
+          title: Valorindemnizar
+      type: object
+      required:
+      - moneda
+      - valorReclamado
+      - deducible
+      - valorIndemnizar
+      title: LiquidacionDto
+      description: Null hasta HU-W20.
+    MotivoDenegacion:
+      type: string
+      enum:
+      - SIN_GRUPO
+      - ROL_AUSENTE
+      - ROL_INVALIDO
+      title: MotivoDenegacion
+    OrigenSiniestro:
+      type: string
+      enum:
+      - MOVIL
+      - PORTAL
+      - PARAMETRICO
+      title: OrigenSiniestro
+    PagoDto:
+      properties:
+        estado:
+          $ref: '#/components/schemas/EstadoPago'
+        referencia:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Referencia
+        transaccionId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transaccionid
+        motivo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Motivo
+        intentos:
+          type: integer
+          title: Intentos
+        duplicadosDescartados:
+          type: integer
+          title: Duplicadosdescartados
+      type: object
+      required:
+      - estado
+      - referencia
+      - transaccionId
+      - motivo
+      - intentos
+      - duplicadosDescartados
+      title: PagoDto
+      description: Null hasta HU-W23.
+    PasoTramite:
+      type: string
+      enum:
+      - RECIBIDO
+      - EVIDENCIAS_VALIDADAS
+      - EN_EVALUACION
+      - DECISION
+      - PAGO_INDEMNIZACION
+      title: PasoTramite
+    PasoTramiteDto:
+      properties:
+        paso:
+          $ref: '#/components/schemas/PasoTramite'
+        estado:
+          $ref: '#/components/schemas/EstadoPaso'
+        ocurridoEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Ocurridoen
+        actorNombre:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Actornombre
+      type: object
+      required:
+      - paso
+      - estado
+      - ocurridoEn
+      - actorNombre
+      title: PasoTramiteDto
+    PrioridadSiniestro:
+      type: string
+      enum:
+      - ALTA
+      - MEDIA
+      - BAJA
+      title: PrioridadSiniestro
+    RecursoSiniestro:
+      type: string
+      enum:
+      - BANDEJA
+      - RESUMEN
+      - SIGUIENTE
+      - SINIESTRO
+      - EVIDENCIA
+      title: RecursoSiniestro
+    ResultadoCoherencia:
+      type: string
+      enum:
+      - COHERENTE
+      - INCONSISTENTE
+      - NO_EVALUABLE
+      title: ResultadoCoherencia
+    ResultadoVerificacion:
+      type: string
+      enum:
+      - CUMPLE
+      - NO_CUMPLE
+      - PARCIAL
+      - NO_EVALUABLE
+      title: ResultadoVerificacion
+    ResumenBandejaSiniestros:
+      properties:
+        pendientes:
+          type: integer
+          title: Pendientes
+          description: EN_EVALUACION asignados al analista que consulta (esperan su
+            evaluación)
+        vencenHoy:
+          type: integer
+          title: Vencenhoy
+          description: EN_EVALUACION del analista cuyo compromiso vence en [desde,
+            hasta)
+        fueraDeCompromiso:
+          type: integer
+          title: Fueradecompromiso
+          description: EN_EVALUACION del analista con tiempo restante < 0
+        resueltosSemana:
+          type: integer
+          title: Resueltossemana
+          description: APROBADO o RECHAZADO por el analista en los 7 días hasta `hasta`
+        resueltosSemanaPrevia:
+          type: integer
+          title: Resueltossemanaprevia
+          description: Ídem en los 7 días anteriores
+        tiempoMedioDecisionHoras:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Tiempomediodecisionhoras
+          description: Promedio reportado → decidido de los resueltos de la semana;
+            null sin datos
+        compromisoHoras:
+          type: integer
+          title: Compromisohoras
+        asignadosAlActor:
+          type: integer
+          title: Asignadosalactor
+          description: EN_EVALUACION y FALTA_SOPORTE asignados al analista que consulta
+        sinAsignar:
+          type: integer
+          title: Sinasignar
+          description: REPORTADO sin analista (cola general)
+      type: object
+      required:
+      - pendientes
+      - vencenHoy
+      - fueraDeCompromiso
+      - resueltosSemana
+      - resueltosSemanaPrevia
+      - tiempoMedioDecisionHoras
+      - compromisoHoras
+      - asignadosAlActor
+      - sinAsignar
+      title: ResumenBandejaSiniestros
+      description: Indicadores de H01 y H02. `desde`/`hasta` delimitan el día del
+        usuario (UTC).
+    ResumenSiniestro:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        codigo:
+          type: string
+          pattern: ^88-[0-9]{4}-[0-9]{4,}$
+          title: Codigo
+        polizaId:
+          type: string
+          format: uuid
+          title: Polizaid
+        polizaNumero:
+          type: string
+          pattern: ^[0-9]{3}-[0-9]{4}-[0-9]{6}$
+          title: Polizanumero
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        ramo:
+          type: string
+          title: Ramo
+          description: Nombre del ramo (copia de la póliza al reportar)
+        origen:
+          $ref: '#/components/schemas/OrigenSiniestro'
+        estado:
+          $ref: '#/components/schemas/EstadoSiniestro'
+        prioridad:
+          $ref: '#/components/schemas/PrioridadSiniestro'
+          description: 'Derivada del tiempo restante: ALTA si está vencido o le quedan
+            < 8 h; MEDIA si le quedan < 24 h; BAJA en otro caso (DS3-04)'
+        reportadoEn:
+          type: string
+          format: date-time
+          title: Reportadoen
+        analistaId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Analistaid
+          description: Null mientras el caso no tiene analista
+        tiempoRestanteMin:
+          type: integer
+          title: Tiemporestantemin
+          description: Minutos que faltan para el compromiso de 48 h; negativo si
+            está vencido
+        relojPausado:
+          type: boolean
+          title: Relojpausado
+          description: true en FALTA_SOPORTE (el reloj se reanuda al volver)
+      type: object
+      required:
+      - id
+      - codigo
+      - polizaId
+      - polizaNumero
+      - clienteId
+      - ramo
+      - origen
+      - estado
+      - prioridad
+      - reportadoEn
+      - analistaId
+      - tiempoRestanteMin
+      - relojPausado
+      title: ResumenSiniestro
+      description: Fila de la bandeja (H01) y respuesta de «tomar el siguiente».
+    SolicitudAccesoDenegado:
+      properties:
+        actorId:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Actorid
+        recurso:
+          $ref: '#/components/schemas/RecursoSiniestro'
+        recursoId:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Recursoid
+        motivo:
+          $ref: '#/components/schemas/MotivoDenegacion'
+      type: object
+      required:
+      - actorId
+      - recurso
+      - recursoId
+      - motivo
+      title: SolicitudAccesoDenegado
+    SoportePendienteDto:
+      properties:
+        tipo:
+          $ref: '#/components/schemas/TipoSoporte'
+        estado:
+          $ref: '#/components/schemas/EstadoSoporte'
+      type: object
+      required:
+      - tipo
+      - estado
+      title: SoportePendienteDto
+    TipoBandeja:
+      type: string
+      enum:
+      - MIA
+      - SIN_ASIGNAR
+      title: TipoBandeja
+    TipoEvidencia:
+      type: string
+      enum:
+      - FOTOGRAFIA
+      - VIDEO
+      - SOPORTE
+      title: TipoEvidencia
+    TipoSoporte:
+      type: string
+      enum:
+      - DOCUMENTO_IDENTIDAD
+      - FACTURA_COMPRA
+      - CERTIFICADO_REPARACION
+      - COTIZACION_REPUESTOS
+      - DENUNCIA_AUTORIDAD
+      - PERITAJE
+      title: TipoSoporte
+    UbicacionSiniestroDto:
+      properties:
+        descripcion:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Descripcion
+        lat:
+          anyOf:
+          - type: number
+            maximum: 90.0
+            minimum: -90.0
+          - type: 'null'
+          title: Lat
+        lon:
+          anyOf:
+          - type: number
+            maximum: 180.0
+            minimum: -180.0
+          - type: 'null'
+          title: Lon
+      type: object
+      required:
+      - descripcion
+      - lat
+      - lon
+      title: UbicacionSiniestroDto
+      description: 'Ubicación declarada o de captura: texto y/o coordenadas (WGS84).'
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    VerificacionCoberturaDto:
+      properties:
+        codigo:
+          $ref: '#/components/schemas/CodigoVerificacion'
+        resultado:
+          $ref: '#/components/schemas/ResultadoVerificacion'
+        detalle:
+          additionalProperties:
+            type: string
+          type: object
+          title: Detalle
+          description: 'Parámetros para el texto del portal (nunca texto libre). VIGENCIA:
+            fechaEvento, desde, hasta. AMPARO: amparo. CARENCIA: diasDesdeInicio,
+            carenciaDias. PLAZO_AVISO: minutosDesdeEvento, plazoAvisoDias. PRIMAS:
+            primasAlDia. SOPORTES: presentes, requeridos'
+      type: object
+      required:
+      - codigo
+      - resultado
+      - detalle
+      title: VerificacionCoberturaDto
+    VigenciaCopiaDto:
+      properties:
+        desde:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          title: Desde
+        hasta:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          title: Hasta
+      type: object
+      required:
+      - desde
+      - hasta
+      title: VigenciaCopiaDto

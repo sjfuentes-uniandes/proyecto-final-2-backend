@@ -1,0 +1,121 @@
+{
+  "$defs": {
+    "AccesoSiniestroDenegadoV1": {
+      "description": "Intento de acceso rechazado. `origen` dice qui\u00e9n lo detect\u00f3: `BFF_WEB` (el usuario no tiene el\ngrupo `analistas-siniestros`) o `SINIESTROS` (falta el rol ANALISTA_SINIESTROS). `aggregateId`\n= `recursoId` si es un UUID; si no, el `eventId`.",
+      "properties": {
+        "actorId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Actorid",
+          "type": "string"
+        },
+        "motivo": {
+          "enum": [
+            "SIN_GRUPO",
+            "ROL_AUSENTE",
+            "ROL_INVALIDO"
+          ],
+          "title": "Motivo",
+          "type": "string"
+        },
+        "origen": {
+          "enum": [
+            "BFF_WEB",
+            "SINIESTROS"
+          ],
+          "title": "Origen",
+          "type": "string"
+        },
+        "recurso": {
+          "enum": [
+            "BANDEJA",
+            "RESUMEN",
+            "SIGUIENTE",
+            "SINIESTRO",
+            "EVIDENCIA"
+          ],
+          "title": "Recurso",
+          "type": "string"
+        },
+        "recursoId": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Recursoid"
+        },
+        "rol": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Rol"
+        }
+      },
+      "required": [
+        "actorId",
+        "rol",
+        "recurso",
+        "recursoId",
+        "motivo",
+        "origen"
+      ],
+      "title": "AccesoSiniestroDenegadoV1",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/AccesoSiniestroDenegadoV1"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreEvento[AccesoSiniestroDenegadoV1]",
+  "type": "object"
+}

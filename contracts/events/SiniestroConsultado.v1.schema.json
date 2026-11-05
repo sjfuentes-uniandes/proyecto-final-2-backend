@@ -1,0 +1,76 @@
+{
+  "$defs": {
+    "SiniestroConsultadoV1": {
+      "description": "Un analista abri\u00f3 el detalle del caso. `aggregateId` = `siniestroId`.",
+      "properties": {
+        "actorId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Actorid",
+          "type": "string"
+        },
+        "codigo": {
+          "pattern": "^88-[0-9]{4}-[0-9]{4,}$",
+          "title": "Codigo",
+          "type": "string"
+        },
+        "siniestroId": {
+          "format": "uuid",
+          "title": "Siniestroid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "siniestroId",
+        "codigo",
+        "actorId"
+      ],
+      "title": "SiniestroConsultadoV1",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/SiniestroConsultadoV1"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreEvento[SiniestroConsultadoV1]",
+  "type": "object"
+}
