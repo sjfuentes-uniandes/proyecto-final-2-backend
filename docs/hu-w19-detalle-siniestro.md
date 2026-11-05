@@ -2,7 +2,7 @@
 
 Documento de la historia [HU-W19](https://github.com/sjfuentes-uniandes/proyecto-final/issues/61) (Sprint 3, recorrido R7). Es la evidencia de contrato que pide el issue: el modelo, los estados, el reloj del compromiso y el esquema de las tablas. Decisiones de diseño: DS3-01 a DS3-11 y DS3-14 del plan maestro del Sprint 3.
 
-Estado por fase: **B1 (contratos y documentación)** ✅ · B2 (servicio y dominio) · B3 (aplicación, S3 y HTTP) · B4 (`bff-web`, semilla y guía, §8) · F1–F3 (portal) · C (cierre).
+Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (servicio y dominio)** ✅ · B3 (aplicación, S3 y HTTP) · B4 (`bff-web`, semilla y guía, §8) · F1–F3 (portal) · C (cierre).
 
 ## 1. Qué entrega la historia
 
@@ -60,7 +60,7 @@ tiempoRestanteMin = floor((compromiso − transcurrido) / 60 s)        # negativ
 | `MEDIA` | `tiempoRestanteMin < 1440` (24 h) |
 | `BAJA` | en otro caso |
 
-Los límites son estrictos: justo 480 min es `MEDIA` y justo 1440 min es `BAJA`. «Fuera del compromiso» es tiempo restante < 0. Los colores del portal usan la regla de CF-S2-06: verde si se consumió menos del 50 %, ámbar entre 50 % y 100 %, rojo vencido («Vencido X h»). **(Por confirmar con el PO en G-F19.)**
+Los umbrales (8 h y 24 h), el compromiso y la distancia de coherencia son configurables (`COMPROMISO_HORAS`, `PRIORIDAD_ALTA_MIN`, `PRIORIDAD_MEDIA_MIN`, `COHERENCIA_DISTANCIA_MAX_M`). Los límites son estrictos: justo 480 min es `MEDIA` y justo 1440 min es `BAJA`. «Fuera del compromiso» es tiempo restante < 0. Los colores del portal usan la regla de CF-S2-06: verde si se consumió menos del 50 %, ámbar entre 50 % y 100 %, rojo vencido («Vencido X h»). **(Por confirmar con el PO en G-F19.)**
 
 ## 5. Verificación de cobertura (DS3-05)
 
@@ -75,7 +75,7 @@ Función pura sobre la **copia de la póliza** guardada al reportar. Devuelve se
 | `PRIMAS` | `primasAlDia` | `primasAlDia` |
 | `SOPORTES` | soportes presentes frente a los requeridos del amparo: todos → `CUMPLE`; algunos → `PARCIAL`; ninguno → `NO_CUMPLE` | `presentes`, `requeridos` |
 
-`NO_EVALUABLE` si falta el dato de la copia. Los soportes requeridos por amparo se configuran en `siniestros` (`semillas/soportes_requeridos.json`; la tabla de ejemplo está en `siniestros-r7.json`, `soportesRequeridosPorAmparo`) y pueden migrar a `catalogo` más adelante. Un soporte cuenta como presente cuando existe una evidencia con ese `soporte_tipo`. Los pendientes salen en `soportesPendientes` con estado `FALTA` (o `SOLICITADO`, desde W20).
+`NO_EVALUABLE` si falta el dato de la copia (o, en `SOPORTES`, si el amparo no tiene soportes requeridos). Las fechas de vigencia son días de calendario de Colombia: el instante del evento se lleva a UTC−5 antes de compararlo. Los soportes requeridos por amparo se configuran en `siniestros` (`semillas/soportes_requeridos.json`; la tabla de ejemplo está en `siniestros-r7.json`, `soportesRequeridosPorAmparo`) y pueden migrar a `catalogo` más adelante. Un soporte cuenta como presente cuando existe una evidencia con ese `soporte_tipo`. Los pendientes salen en `soportesPendientes` con estado `FALTA` (o `SOLICITADO`, desde W20).
 
 ## 6. Coherencia de la evidencia (DS3-06)
 
@@ -114,7 +114,7 @@ SQL idempotente en `adapters/outbound/migraciones/001_siniestros.sql` con su `do
 | `pago_estado`, `pago_referencia`, `pago_transaccion_id`, `pago_motivo`, `pago_intentos`, `pago_duplicados_descartados` | | nulos / 0; W23 (null = `SIN_PAGO`) |
 | `version`, `correlation_id`, `creado_en` | | |
 
-Índices: `(estado, analista_id, reportado_en)`, `(analista_id, estado)` y `(poliza_id)`.
+Índices: `(estado, analista_id, reportado_en)`, `(analista_id, estado)`, `(poliza_id)` y el parcial `(reportado_en, id) WHERE estado = 'REPORTADO'` para tomar el siguiente. La base también exige las invariantes del estado: un caso `REPORTADO` no tiene analista, uno `EN_EVALUACION` o `FALTA_SOPORTE` sí, el reloj solo se pausa en `FALTA_SOPORTE` y `decidido_en` solo existe en un caso decidido.
 
 **`evidencias`**: `id`, `siniestro_id` (FK), `nombre_archivo`, `tipo` (`FOTOGRAFIA`, `VIDEO`, `SOPORTE`), `soporte_tipo` (nulo salvo en `SOPORTE`; ver §5), `clave_objeto`, `sha256` (64 hex), `capturada_en`, `ubicacion` (`jsonb`), `tamano_bytes`, `tipo_contenido`. **`clave_objeto` nunca sale del servicio.**
 
