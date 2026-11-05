@@ -1,7 +1,10 @@
 # AWS WAF regional delante de ambos APIs (nodo "API Gateway + WAF" de la
-# Entrega 8). Configuración mínima: un Web ACL con dos reglas.
-#   1. Límite por IP (protege cuotas y capacidad ante abuso).
+# Entrega 8). Configuración mínima: un Web ACL con tres reglas.
+#   1. Límite por IP (protege cuotas y capacidad ante abuso), salvo la telemetría.
 #   2. Reglas comunes administradas por AWS (OWASP básico).
+#   3. Límite por IP propio de la entrada de telemetría (HU-S03): el aliado envía
+#      ráfagas desde pocas IP y no debe agotar el límite de los canales. Se compara
+#      el final de la ruta porque la URL execute-api antepone el stage (/v1/...).
 resource "aws_wafv2_web_acl" "api" {
   name  = "${local.prefix}-api"
   scope = "REGIONAL"
@@ -20,6 +23,23 @@ resource "aws_wafv2_web_acl" "api" {
       rate_based_statement {
         limit              = var.waf_rate_limit
         aggregate_key_type = "IP"
+        scope_down_statement {
+          not_statement {
+            statement {
+              byte_match_statement {
+                search_string         = "/telemetria/v1/eventos"
+                positional_constraint = "ENDS_WITH"
+                field_to_match {
+                  uri_path {}
+                }
+                text_transformation {
+                  priority = 0
+                  type     = "LOWERCASE"
+                }
+              }
+            }
+          }
+        }
       }
     }
     visibility_config {
@@ -51,6 +71,38 @@ resource "aws_wafv2_web_acl" "api" {
     visibility_config {
       cloudwatch_metrics_enabled = true
       metric_name                = "${local.prefix}-aws-common"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  rule {
+    name     = "rate-limit-telemetria"
+    priority = 2
+    action {
+      block {}
+    }
+    statement {
+      rate_based_statement {
+        limit              = var.waf_telemetria_rate_limit
+        aggregate_key_type = "IP"
+        scope_down_statement {
+          byte_match_statement {
+            search_string         = "/telemetria/v1/eventos"
+            positional_constraint = "ENDS_WITH"
+            field_to_match {
+              uri_path {}
+            }
+            text_transformation {
+              priority = 0
+              type     = "LOWERCASE"
+            }
+          }
+        }
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${local.prefix}-rate-limit-telemetria"
       sampled_requests_enabled   = true
     }
   }

@@ -23,7 +23,7 @@ resource "aws_sqs_queue" "main" {
   sqs_managed_sse_enabled    = var.use_customer_managed_key ? null : true
   visibility_timeout_seconds = each.value.visibility_timeout
   receive_wait_time_seconds  = 20
-  message_retention_seconds  = 345600
+  message_retention_seconds  = try(each.value.message_retention_seconds, 345600)
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.dlq[each.key].arn
     maxReceiveCount     = each.value.max_receive_count

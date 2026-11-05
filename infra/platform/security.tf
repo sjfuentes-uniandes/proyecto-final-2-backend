@@ -65,7 +65,7 @@ resource "aws_secretsmanager_secret" "ally" {
 resource "aws_secretsmanager_secret_version" "ally" {
   for_each      = local.allies
   secret_id     = aws_secretsmanager_secret.ally[each.key].id
-  secret_string = jsonencode({ client_id = "CAMBIAR", client_secret = "CAMBIAR" })
+  secret_string = jsonencode({ for key in try(each.value.secret_keys, ["client_id", "client_secret"]) : key => "CAMBIAR" })
   lifecycle {
     ignore_changes = [secret_string]
   }

@@ -11,6 +11,8 @@ GRUPOS = {
     "asesores": "Perfila clientes y prepara ofertas",
     "operacion": "Consulta tableros, trazas y alertas",
     "suscriptores": "Decide los casos de suscripción en revisión",
+    # HU-S03 (HU-W20, HU-W22).
+    "analistas-siniestros": "Revisa, solicita soporte y decide los siniestros",
 }
 _CORREO = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 
