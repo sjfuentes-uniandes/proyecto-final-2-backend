@@ -49,7 +49,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "solventa-common", editable = "libs/solventa-common" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
@@ -72,7 +72,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "solventa-common", editable = "libs/solventa-common" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
@@ -95,7 +95,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "solventa-common", editable = "libs/solventa-common" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
@@ -118,7 +118,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "solventa-common", editable = "libs/solventa-common" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
@@ -141,7 +141,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "solventa-common", editable = "libs/solventa-common" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
@@ -213,7 +213,7 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.35" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.28" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "solventa-common", editable = "libs/solventa-common" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
@@ -254,7 +254,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "solventa-common", editable = "libs/solventa-common" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
@@ -277,7 +277,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "solventa-common", editable = "libs/solventa-common" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
@@ -301,7 +301,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10" },
     { name = "solventa-common", editable = "libs/solventa-common" },
@@ -327,7 +327,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
     { name = "boto3", specifier = ">=1.35" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "solventa-common", editable = "libs/solventa-common" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
@@ -2063,7 +2063,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "solventa-common", editable = "libs/solventa-common" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
@@ -2980,7 +2980,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "solventa-common", editable = "libs/solventa-common" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
