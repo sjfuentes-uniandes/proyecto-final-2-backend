@@ -21,6 +21,14 @@
 #      definición de tarea de catalogo y cotizacion lleva CACHE_URL (catalogo la llena y
 #      la invalida; cotizacion solo la lee). Con cache_enabled = false se omite.
 #      La prima de punta a punta es N3: make test-e2e (tests/e2e/test_hu_w03_r1_prima.py).
+#   Sprint 3 (HU-S03):
+#  10. siniestros, pagos-parametricos y adaptador-telemetria con sus tareas HEALTHY.
+#  11. Un SiniestroAprobado sintético llega solo a dinero-indemnizaciones,
+#      consulta-proyeccion y auditoria.
+#  12. POST /telemetria/v1/eventos llega a adaptador-telemetria sin JWT (el borde no
+#      responde 401/403; la firma HMAC la valida el adaptador, D5).
+#   El mensaje envenenado del paso 8 se prueba en una cola nueva con
+#   SMOKE_DLQ_COLA=dinero-indemnizaciones.
 # Variables: SMOKE_DLQ_COLA, SMOKE_ESPERA_RUTA_S (60), SMOKE_ESPERA_ALARMA_S (600).
 # Los mensajes sintéticos llevan "sintetico": true; la auditoría (Object Lock) los conserva.
 # Sale con 1 si algún chequeo falla.
@@ -43,6 +51,7 @@ is() { if [[ "$1" =~ $2 ]]; then echo true; else echo false; fi; }
 http_code() { curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$@" || true; }
 
 SPRINT2_SERVICES="polizas dinero adaptador-pagos adaptador-firma consulta avisos"
+SPRINT3_SERVICES="siniestros pagos-parametricos adaptador-telemetria"
 SMOKE_DLQ_COLA="${SMOKE_DLQ_COLA:-avisos}"
 SMOKE_ESPERA_RUTA_S="${SMOKE_ESPERA_RUTA_S:-60}"
 SMOKE_ESPERA_ALARMA_S="${SMOKE_ESPERA_ALARMA_S:-600}"
@@ -148,8 +157,10 @@ if [ "${SMOKE_ALERTA:-0}" = "1" ]; then
   fi
 fi
 
-log "6. Servicios del Sprint 2: GET /health"
-for service in ${SPRINT2_SERVICES}; do
+# check_health <servicios...>: tareas RUNNING con el healthcheck del contenedor (GET /health) sano.
+check_health() {
+  local service name running desired tasks healthy
+  for service in "$@"; do
   name=$(jq -r --arg s "${service}" '.[$s].service_name // empty' <<<"${deployed}")
   if [ -z "${name}" ]; then
     skip "${service}: sin imagen publicada (make infra-microservicios SERVICES=${service})."
@@ -165,37 +176,53 @@ for service in ${SPRINT2_SERVICES}; do
     healthy=$(aws ecs describe-tasks --cluster "${cluster}" --tasks $(jq -r '.[]' <<<"${tasks}") \
       --query 'length(tasks[?healthStatus==`HEALTHY`])' --output text)
   fi
-  check "$([ "${desired}" -gt 0 ] && [ "${running}" = "${desired}" ] && [ "${healthy}" = "${desired}" ] && echo true || echo false)" \
-    "${service}: ${running}/${desired} tareas con /health sano" "${service}: ${running}/${desired} tareas, ${healthy} con /health sano"
-done
+    check "$([ "${desired}" -gt 0 ] && [ "${running}" = "${desired}" ] && [ "${healthy}" = "${desired}" ] && echo true || echo false)" \
+      "${service}: ${running}/${desired} tareas con /health sano" "${service}: ${running}/${desired} tareas, ${healthy} con /health sano"
+  done
+}
+
+# check_route <eventType> <colas esperadas...>: publica un evento sintético en el tópico de
+# negocio y verifica que llega a las colas esperadas (salvo auditoria, que recibe todo y la
+# consume el worker) y a ninguna otra. Las copias de las colas esperadas se borran.
+check_route() {
+  local type="$1" marker event queue handle deadline expected
+  shift
+  expected=" $* auditoria "
+  for queue in "$@"; do
+    [ -n "$(queue_url "${queue}")" ] || { skip "La cola ${queue} no existe (make infra-plataforma)."; return 0; }
+  done
+  marker="humo-$(date +%s)-${RANDOM}"
+  event=$(jq -nc --arg id "${marker}" --arg type "${type}" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{eventId: $id, aggregateId: $id, type: $type, version: 1, occurredAt: $at, correlationId: $id, sintetico: true, payload: {}}')
+  aws sns publish --topic-arn "$(jq -r '.events_topic_arn' <<<"${platform}")" --message "${event}" \
+    --message-attributes "$(jq -nc --arg t "${type}" '{eventType: {DataType: "String", StringValue: $t}}')" >/dev/null
+  for queue in "$@"; do
+    handle=""
+    deadline=$((SECONDS + SMOKE_ESPERA_RUTA_S))
+    while [ -z "${handle}" ] && [ "${SECONDS}" -lt "${deadline}" ]; do
+      # Visibilidad 60 s: el consumidor no lo procesa mientras se verifica; luego se borra.
+      handle=$(find_marker "$(queue_url "${queue}")" "${marker}" 60)
+    done
+    if [ -n "${handle}" ]; then
+      ok "${type} llegó a ${queue}"
+      aws sqs delete-message --queue-url "$(queue_url "${queue}")" --receipt-handle "${handle}"
+    else
+      ko "${type} no llegó a ${queue} en ${SMOKE_ESPERA_RUTA_S} s"
+    fi
+  done
+  for queue in $(jq -r '.queues | keys[]' <<<"${platform}"); do
+    case "${expected}" in *" ${queue} "*) continue ;; esac
+    check "$([ -z "$(find_marker "$(queue_url "${queue}")" "${marker}" 0)" ] && echo true || echo false)" \
+      "${queue}: no recibió ${type}" "${queue}: recibió ${type} (revisar su filtro en infra/platform/catalog.tf)"
+  done
+}
+
+log "6. Servicios del Sprint 2: GET /health"
+# shellcheck disable=SC2086 # lista separada por espacios.
+check_health ${SPRINT2_SERVICES}
 
 log "7. Enrutamiento de OfertaAceptada"
-if [ -z "$(queue_url dinero-aceptaciones)" ]; then
-  skip "La cola dinero-aceptaciones no existe (make infra-plataforma)."
-else
-  marker="humo-$(date +%s)-${RANDOM}"
-  event=$(jq -nc --arg id "${marker}" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '{eventId: $id, aggregateId: $id, type: "OfertaAceptada", version: 1, occurredAt: $at, correlationId: $id, sintetico: true, payload: {}}')
-  aws sns publish --topic-arn "$(jq -r '.events_topic_arn' <<<"${platform}")" --message "${event}" \
-    --message-attributes '{"eventType":{"DataType":"String","StringValue":"OfertaAceptada"}}' >/dev/null
-  handle=""
-  deadline=$((SECONDS + SMOKE_ESPERA_RUTA_S))
-  while [ -z "${handle}" ] && [ "${SECONDS}" -lt "${deadline}" ]; do
-    # Visibilidad 60 s: el consumidor no lo procesa mientras se verifica; luego se borra.
-    handle=$(find_marker "$(queue_url dinero-aceptaciones)" "${marker}" 60)
-  done
-  if [ -n "${handle}" ]; then
-    ok "OfertaAceptada llegó a dinero-aceptaciones"
-    aws sqs delete-message --queue-url "$(queue_url dinero-aceptaciones)" --receipt-handle "${handle}"
-  else
-    ko "OfertaAceptada no llegó a dinero-aceptaciones en ${SMOKE_ESPERA_RUTA_S} s"
-  fi
-  for queue in $(jq -r '.queues | keys[]' <<<"${platform}"); do
-    case "${queue}" in dinero-aceptaciones | auditoria) continue ;; esac
-    check "$([ -z "$(find_marker "$(queue_url "${queue}")" "${marker}" 0)" ] && echo true || echo false)" \
-      "${queue}: no recibió OfertaAceptada" "${queue}: recibió OfertaAceptada (revisar su filtro en infra/platform/catalog.tf)"
-  done
-fi
+check_route OfertaAceptada dinero-aceptaciones
 
 log "8. Mensaje envenenado en ${SMOKE_DLQ_COLA} -> DLQ con alarma"
 url="$(queue_url "${SMOKE_DLQ_COLA}")"
@@ -260,6 +287,24 @@ else
       --query 'taskDefinition.containerDefinitions[].environment[] | [?name==`CACHE_URL`].value | [0]' --output text)
     check "$(is "${url}" '^rediss://')" "${service}: CACHE_URL con TLS" "${service}: CACHE_URL '${url}' (esperado rediss://...)"
   done
+fi
+
+log "10. Servicios del Sprint 3: GET /health"
+# shellcheck disable=SC2086 # lista separada por espacios.
+check_health ${SPRINT3_SERVICES}
+
+log "11. Enrutamiento de SiniestroAprobado"
+check_route SiniestroAprobado dinero-indemnizaciones consulta-proyeccion
+
+log "12. Entrada de telemetría (${canales}/telemetria/v1/eventos)"
+if [ -z "$(jq -r '.["adaptador-telemetria"].service_name // empty' <<<"${deployed}")" ]; then
+  skip "adaptador-telemetria: sin imagen publicada (make infra-microservicios SERVICES=adaptador-telemetria)."
+else
+  # Sin firma: el adaptador debe rechazarlo (HU-W21) o, con el esqueleto, responder 404. Un 401 o
+  # 403 sería del borde (authorizer o WAF) y un 5xx, que el ALB no llega al adaptador.
+  code=$(http_code -X POST -H "Content-Type: application/json" -d '{"sintetico": true}' "${canales}/telemetria/v1/eventos")
+  check "$(is "${code}" '^(202|400|404|409|422)$')" "POST sin firma llegó a adaptador-telemetria (${code})" \
+    "POST sin firma -> ${code:-sin respuesta} (401/403 = borde; 5xx = ALB o adaptador)"
 fi
 
 log "Resultado: ${pass} OK, ${fail} con falla"
