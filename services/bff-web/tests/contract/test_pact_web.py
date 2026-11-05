@@ -13,8 +13,11 @@ del recaudo hacen que polizas responda el EstadoRecaudo de ese estado o el 404
 ACEPTACION_NO_ENCONTRADA; las interacciones las agrega el portal en la 16.15. HU-W17 (17.11): los
 estados de la póliza hacen que polizas responda la Poliza EMITIENDO o ACTIVA, el 404
 POLIZA_NO_ENCONTRADA, el EnlaceDocumento o el 409 POLIZA_NO_ACTIVA; las interacciones las agrega el
-portal en la 17.12. El verificador envía
-los encabezados que pone API Gateway para un usuario del grupo `asesores`.
+portal en la 17.12. HU-W18: el pacto trae también el listado y el estado de las pólizas (consulta
+simulada) y HU-W19 (CT-W19-02): la bandeja, el detalle con su 404 y su 403, y el enlace de una evidencia
+con su 404 EVIDENCIA_NO_DISPONIBLE (siniestros, clientes y consulta simulados). El verificador envía
+los encabezados que pone API Gateway para un usuario de los grupos `asesores` y
+`analistas-siniestros`; el estado del 403 hace que la ruta exija otro grupo mientras dura.
 """
 
 import asyncio
@@ -32,14 +35,20 @@ import httpx
 import pytest
 import uvicorn
 from bff_web.adapters.inbound import aceptaciones as ruta_aceptacion
+from bff_web.adapters.inbound import estado_polizas as ruta_estado
 from bff_web.adapters.inbound import polizas as ruta_poliza
 from bff_web.adapters.inbound import recaudos as ruta_recaudo
+from bff_web.adapters.inbound import siniestros as ruta_siniestros
 from bff_web.adapters.inbound import suscripciones as ruta
 from bff_web.adapters.outbound.clientes import ClientesCliente
+from bff_web.adapters.outbound.consulta import ConsultaCliente
 from bff_web.adapters.outbound.polizas import PolizasCliente
+from bff_web.adapters.outbound.siniestros import SiniestrosCliente
 from bff_web.application.aceptacion import Aceptaciones
+from bff_web.application.estado_poliza import EstadoPolizas
 from bff_web.application.poliza import Polizas
 from bff_web.application.recaudo import Recaudos
+from bff_web.application.siniestros import Siniestros
 from bff_web.application.suscripcion import Suscripciones
 from bff_web.config import settings
 from bff_web.main import app
@@ -100,6 +109,158 @@ TITULAR = {
     "proveedor": "KYC",
     "referencia": "kyc-ref-001",
     "nombreCompleto": TITULAR_NOMBRE,
+}
+# HU-W18: las interacciones de la consulta de pólizas que agrega el portal.
+POLIZAS_PROYECTADAS = "existen pólizas proyectadas para el asesor"
+POLIZA_PROYECTADA = "existe la póliza proyectada"
+POLIZA_NO_PROYECTADA = "la póliza no existe, es ajena o aún no se proyecta"
+ESTADOS_CONSULTA = {POLIZAS_PROYECTADAS, POLIZA_PROYECTADA, POLIZA_NO_PROYECTADA}
+# HU-W19 (CT-W19-02): siniestros del analista (web/pact/siniestros.pact.spec.ts).
+ANALISTA_CON_CASOS = "el analista tiene siniestros asignados"
+EXISTE_SINIESTRO = "existe el siniestro con sus evidencias"
+NO_EXISTE_SINIESTRO = "no existe el siniestro"
+SIN_GRUPO_ANALISTAS = "el usuario no pertenece al grupo analistas-siniestros"
+EVIDENCIA_CON_ARCHIVO = "existe la evidencia del siniestro con su archivo"
+EVIDENCIA_SIN_ARCHIVO = "la evidencia existe pero su archivo no está disponible"
+ESTADOS_SINIESTROS = {
+    ANALISTA_CON_CASOS,
+    EXISTE_SINIESTRO,
+    NO_EXISTE_SINIESTRO,
+    SIN_GRUPO_ANALISTAS,
+    EVIDENCIA_CON_ARCHIVO,
+    EVIDENCIA_SIN_ARCHIVO,
+}
+GRUPO_SIN_MIEMBROS = "grupo-sin-miembros"
+SINIESTRO_ID = "5e000000-0000-4000-8000-000004000000"
+EVIDENCIA_ID = "e0000000-0000-4000-8000-000004000001"
+ANALISTA_ID = "a0a0a0a0-0000-4000-8000-000000000001"
+CLIENTE_SINIESTRO = "00000000-0000-4000-8000-000000000001"
+POLIZA_SINIESTRO = "a0000000-0000-4000-8000-000004000000"
+RESUMEN_SINIESTRO: dict[str, Any] = {
+    "id": SINIESTRO_ID,
+    "codigo": "88-2026-0442",
+    "polizaId": POLIZA_SINIESTRO,
+    "polizaNumero": "220-2026-011294",
+    "clienteId": CLIENTE_SINIESTRO,
+    "ramo": "Dispositivos",
+    "origen": "MOVIL",
+    "estado": "EN_EVALUACION",
+    "prioridad": "BAJA",
+    "reportadoEn": "2026-11-05T01:00:00Z",
+    "analistaId": ANALISTA_ID,
+    "tiempoRestanteMin": 2040,
+    "relojPausado": False,
+}
+DETALLE_SINIESTRO: dict[str, Any] = {
+    **RESUMEN_SINIESTRO,
+    "causa": "DANO_ACCIDENTAL",
+    "fechaEvento": "2026-11-05T00:19:00Z",
+    "ubicacionDeclarada": {"descripcion": "Bogotá D.C.", "lat": 4.652, "lon": -74.0555},
+    "poliza": {
+        "numero": "220-2026-011294",
+        "ramo": "Dispositivos",
+        "vigencia": {"desde": "2026-05-09", "hasta": "2027-05-09"},
+        "amparos": [
+            {
+                "codigo": "DANO_ACCIDENTAL",
+                "nombre": "Daño accidental",
+                "sumaAsegurada": "3000000.00",
+            }
+        ],
+        "moneda": "COP",
+        "carenciaDias": 30,
+        "plazoAvisoDias": 30,
+        "primasAlDia": True,
+        "beneficiario": {"beneficiarioRef": "ben-sint-004", "cuentaMascarada": "****1004"},
+    },
+    "verificacionCobertura": [
+        {"codigo": "VIGENCIA", "resultado": "CUMPLE", "detalle": {"fechaEvento": "2026-11-04"}}
+    ],
+    "coherencia": {
+        "fechaDeclarada": "2026-11-05T00:19:00Z",
+        "primeraCaptura": "2026-11-05T00:53:00Z",
+        "diferenciaMin": 34,
+        "ubicacionCoincide": True,
+        "archivosAlterados": 0,
+        "resultado": "COHERENTE",
+    },
+    "evidencias": [
+        {
+            "id": EVIDENCIA_ID,
+            "nombreArchivo": "evidencia_dano_01.jpg",
+            "tipo": "FOTOGRAFIA",
+            "capturadaEn": "2026-11-05T00:53:00Z",
+            "ubicacion": {"descripcion": None, "lat": 4.6512, "lon": -74.056},
+            "integridad": "VERIFICADA",
+        }
+    ],
+    "soportesPendientes": [{"tipo": "CERTIFICADO_REPARACION", "estado": "FALTA"}],
+    # El pacto fija la forma de cada elemento con el ejemplo del portal (actorNombre y ocurridoEn
+    # con valor), por eso el estado siembra un solo paso: el ACTUAL (ver bitácora R-54).
+    "tramite": [
+        {
+            "paso": "EN_EVALUACION",
+            "estado": "ACTUAL",
+            "ocurridoEn": "2026-11-05T03:00:00Z",
+            "actorNombre": "Luis Mora",
+        }
+    ],
+    "historial": [
+        {
+            "id": "00000000-0000-4000-8000-0000000000a3",
+            "accion": "ASIGNADO",
+            "estadoAnterior": "REPORTADO",
+            "estadoNuevo": "EN_EVALUACION",
+            "actorId": ANALISTA_ID,
+            "actorRol": "ANALISTA_SINIESTROS",
+            "actorNombre": "Luis Mora",
+            "justificacion": None,
+            "ocurridoEn": "2026-11-05T03:00:00Z",
+        }
+    ],
+    "liquidacion": None,
+    "evento": None,
+    "pago": None,
+}
+ENLACE_SINIESTRO = {
+    "url": "https://evidencias.s3.amazonaws.com/o?X-Amz-Expires=300&X-Amz-Signature=sintetica",
+    "expiraEn": "2026-11-05T15:05:00Z",
+    "tipoContenido": "image/jpeg",
+}
+POLIZA_CONSULTA: dict[str, Any] = {
+    "polizaId": POLIZA_SINIESTRO,
+    "numero": "220-2026-011294",
+    "estado": "VIGENTE",
+    "productoId": "dispositivos",
+    "productoVersion": "1",
+    "productoNombre": "Dispositivos protegidos",
+    "ramo": "Dispositivos",
+    "vigencia": {"desde": "2026-05-09", "hasta": "2027-05-09"},
+    "vigente": True,
+    "prima": "10000.00",
+    "sumaAsegurada": "3000000.00",
+    "moneda": "COP",
+    "periodicidad": "MENSUAL",
+    "coberturas": [],
+    "documentoHuella": "h" * 64,
+    "firmaId": "FIR-SINT",
+    "emitidaEn": "2026-05-09T10:00:00Z",
+}
+ESTADO_CONSULTA: dict[str, Any] = {
+    "polizaId": "00000000-0000-4000-b000-000000000001",
+    "numero": "100-2026-000001",
+    "estado": "VIGENTE",
+    "fechaActualizacion": "2026-10-24T15:00:05.250000Z",
+    "producto": "Vida hipotecario",
+    "ramo": "Vida",
+    "vigencia": {"desde": "2026-10-25", "hasta": "2027-10-24"},
+    "prima": "64638.10",
+    "sumaAsegurada": "180000000",
+    "moneda": "COP",
+    "periodicidad": "MENSUAL",
+    "emitidaEn": "2026-10-24T15:00:03.500000Z",
+    "coberturas": [{"codigo": "MUERTE", "nombre": "Muerte", "obligatoria": True}],
+    "clienteId": TITULAR_ID,
 }
 SIN_DATOS: dict[str, Any] = {
     "vigenteHasta": None,
@@ -409,6 +570,77 @@ class ClientesSimulado:
         return httpx.Response(200, json={"id": cliente_id})
 
 
+class SiniestrosSimulado:
+    """siniestros (HU-W19): la bandeja, el detalle y el enlace según el estado sembrado, o el 404 del
+    contrato. Acepta el aviso de acceso denegado (DS3-09) y guarda cada actor y rol recibidos."""
+
+    def __init__(self) -> None:
+        self.estado: str | None = None
+        self.actores: list[tuple[str, str]] = []
+        self.avisos = 0
+
+    def responder(self, pedido: httpx.Request) -> httpx.Response:
+        ruta_ = pedido.url.path
+        if ruta_.endswith("/accesos-denegados"):
+            self.avisos += 1
+            return httpx.Response(202)
+        self.actores.append(
+            (pedido.headers.get("X-Actor-Id", ""), pedido.headers.get("X-Actor-Rol", ""))
+        )
+        if ruta_.endswith("/enlace"):
+            if self.estado == EVIDENCIA_CON_ARCHIVO:
+                return httpx.Response(200, json=ENLACE_SINIESTRO)
+            if self.estado == EVIDENCIA_SIN_ARCHIVO:
+                return _error("EVIDENCIA_NO_DISPONIBLE", 404)
+            return _error("SINIESTRO_NO_ENCONTRADO", 404)
+        if ruta_ == "/v1/siniestros":
+            cuerpo = {"items": [RESUMEN_SINIESTRO], "siguienteCursor": None, "total": 1}
+            return httpx.Response(200, json=cuerpo)
+        if self.estado == EXISTE_SINIESTRO and ruta_.endswith(SINIESTRO_ID):
+            return httpx.Response(200, json=DETALLE_SINIESTRO)
+        return _error("SINIESTRO_NO_ENCONTRADO", 404)
+
+
+class ConsultaSimulado:
+    """consulta: la póliza de un cliente (encabezado de siniestros, HU-W19) y, de HU-W18, el
+    listado y el estado de las pólizas proyectadas según el estado sembrado."""
+
+    def __init__(self) -> None:
+        self.estado: str | None = None
+        self.parametros: dict[str, Any] = {}
+
+    def responder(self, pedido: httpx.Request) -> httpx.Response:
+        ruta_ = pedido.url.path
+        if ruta_.startswith("/v1/clientes/"):
+            return httpx.Response(200, json=POLIZA_CONSULTA)
+        if ruta_ == "/v1/polizas" and self.estado == POLIZAS_PROYECTADAS:
+            resumen = {
+                "polizaId": ESTADO_CONSULTA["polizaId"],
+                "numero": ESTADO_CONSULTA["numero"],
+                "ramo": ESTADO_CONSULTA["ramo"],
+                "producto": ESTADO_CONSULTA["producto"],
+                "prima": ESTADO_CONSULTA["prima"],
+                "moneda": "COP",
+                "vigenciaHasta": ESTADO_CONSULTA["vigencia"]["hasta"],
+                "estado": "VIGENTE",
+                "fechaActualizacion": ESTADO_CONSULTA["fechaActualizacion"],
+            }
+            return httpx.Response(
+                200,
+                json={
+                    "items": [resumen],
+                    "total": 1,
+                    "pagina": 1,
+                    "tamano": 20,
+                    "actualizadoEn": ESTADO_CONSULTA["fechaActualizacion"],
+                },
+            )
+        if ruta_.endswith("/estado") and self.estado == POLIZA_PROYECTADA:
+            cuerpo = {**ESTADO_CONSULTA, "polizaId": ruta_.split("/")[-2]}
+            return httpx.Response(200, json={**cuerpo, "estado": self.parametros["estado"]})
+        return _error("POLIZA_NO_ENCONTRADA", 404)
+
+
 @contextmanager
 def _servir(aplicacion: FastAPI) -> Iterator[str]:
     zocalo = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -461,6 +693,29 @@ def _sembrar(
     polizas.decision = _decision(str(parametros["decisionId"]), str(parametros["caso"]))
 
 
+def _sembrar_siniestros_y_consulta(
+    siniestros: SiniestrosSimulado,
+    consulta: ConsultaSimulado,
+    clientes: ClientesSimulado,
+    state: str,
+    parametros: dict[str, Any],
+) -> bool:
+    """Siembra los estados de HU-W18 y HU-W19; devuelve False si el estado es de otra historia."""
+    siniestros.estado = None
+    consulta.estado = None
+    clientes.titular = None
+    if state in ESTADOS_SINIESTROS:
+        siniestros.estado = state
+        # El nombre del cliente sale de `clientes` (CF-S3-09), no de siniestros.
+        clientes.titular = TITULAR
+        return True
+    if state in ESTADOS_CONSULTA:
+        consulta.estado = state
+        consulta.parametros = parametros
+        return True
+    return False
+
+
 def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> None:
     assert PACTO.exists(), "Copiar el pacto del portal (web/pacts/portal-web-bff-web.json)"
     monkeypatch.setattr(settings, "jwt_issuers", {"backoffice": EMISOR})
@@ -480,14 +735,39 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
     app.dependency_overrides[ruta_poliza.polizas] = lambda: Polizas(
         cliente_polizas, cliente_clientes, 200
     )
+    siniestros = SiniestrosSimulado()
+    consulta = ConsultaSimulado()
+    cliente_consulta = ConsultaCliente(
+        "http://consulta:8080", 700, httpx.MockTransport(consulta.responder)
+    )
+    app.dependency_overrides[ruta_siniestros.siniestros_servicio] = lambda: Siniestros(
+        SiniestrosCliente(
+            "http://siniestros:8080", 1500, httpx.MockTransport(siniestros.responder)
+        ),
+        cliente_clientes,
+        cliente_consulta,
+        500,
+        700,
+        300,
+    )
+    app.dependency_overrides[ruta_estado.estados] = lambda: EstadoPolizas(
+        cliente_consulta, cliente_clientes, 500
+    )
+    grupo_original = settings.grupo_analistas_siniestros
     vistos: list[tuple[str, str | None]] = []
 
     def estado(state: str, action: str, parameters: dict[str, Any] | None) -> None:
         """Un estado por interacción; uno desconocido falla la verificación."""
         if action != "setup":
+            # El 403 de siniestros exige otro grupo solo mientras dura su estado.
+            settings.grupo_analistas_siniestros = grupo_original
             return
         parametros = parameters or {}
         vistos.append((state, parametros.get("caso")))
+        if state == SIN_GRUPO_ANALISTAS:
+            settings.grupo_analistas_siniestros = GRUPO_SIN_MIEMBROS
+        if _sembrar_siniestros_y_consulta(siniestros, consulta, clientes, state, parametros):
+            return
         _sembrar(polizas, clientes, state, parametros)
 
     try:
@@ -497,12 +777,13 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
             ).add_custom_headers(
                 {
                     "X-Authenticated-Sub": "sub-asesor-pact",
-                    "X-Authenticated-Groups": "[asesores]",
+                    "X-Authenticated-Groups": "[asesores, analistas-siniestros]",
                     "X-Authenticated-Issuer": EMISOR,
                 }
             ).state_handler(estado, teardown=True).verify()
     finally:
         app.dependency_overrides.clear()
+        settings.grupo_analistas_siniestros = grupo_original
     assert sorted(vistos, key=str) == sorted(
         [
             (EXISTE, "S01"),
@@ -527,9 +808,25 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
             (SIN_POLIZA, None),
             (DOCUMENTO_ACTIVA, None),
             (DOCUMENTO_EMITIENDO, None),
+            # HU-W18: el listado, el estado de una póliza y su 404.
+            (POLIZAS_PROYECTADAS, None),
+            (POLIZA_PROYECTADA, None),
+            (POLIZA_NO_PROYECTADA, None),
+            # HU-W19: la bandeja, el detalle (200, 404 y 403) y el enlace (200 y 404).
+            (ANALISTA_CON_CASOS, None),
+            (EXISTE_SINIESTRO, None),
+            (NO_EXISTE_SINIESTRO, None),
+            (SIN_GRUPO_ANALISTAS, None),
+            (EVIDENCIA_CON_ARCHIVO, None),
+            (EVIDENCIA_SIN_ARCHIVO, None),
         ],
         key=str,
     )
+    # siniestros recibe siempre al analista autenticado con el rol del servicio (DS3-10).
+    assert {rol for _, rol in siniestros.actores} == {"ANALISTA_SINIESTROS"}
+    # El 403 por grupo no llega a siniestros, pero el BFF le avisa del acceso denegado (DS3-09).
+    assert siniestros.avisos == 1
+    assert {actor for actor, _ in siniestros.actores} <= {"sub-asesor-pact"}
     # El asesor pide como ASESOR: polizas filtra las reglas reservadas (DS2-07, R-08).
     assert set(polizas.roles) == {"ASESOR"}
 

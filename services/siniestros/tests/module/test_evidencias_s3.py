@@ -5,6 +5,7 @@ import time
 from typing import Any
 from uuid import uuid4
 
+import anyio
 import httpx
 import pytest
 from siniestros.adapters.outbound.evidencias_s3 import EvidenciasS3, cliente_s3
@@ -99,3 +100,20 @@ async def test_la_url_se_firma_con_el_endpoint_publico(
     url = await EvidenciasS3(interno, bucket, 2000, publico).firmar_lectura(clave, 60, "image/png")
     assert url.startswith(f"http://localhost:4566/{bucket}/")
     assert "X-Amz-Expires=60" in url
+
+
+async def test_mt_w19_01_el_enlace_vencido_ya_no_descarga_el_objeto(
+    s3: Any, bucket: str, almacen: EvidenciasS3
+) -> None:
+    """MT-W19-01: tras la caducidad S3 rechaza la URL (403); el analista pide un enlace nuevo."""
+    clave = subir(s3, bucket, ChecksumSHA256=sha256_base64(CONTENIDO))
+    url = await almacen.firmar_lectura(clave, 1, "image/png")
+    async with httpx.AsyncClient() as http:
+        assert (await http.get(url)).status_code == 200
+        await anyio.sleep(2.5)
+        vencido = await http.get(url)
+        assert vencido.status_code == 403
+        assert "expired" in vencido.text.lower()
+        # Un enlace nuevo del mismo objeto sí descarga: el vencimiento es del enlace, no del archivo.
+        nuevo = await almacen.firmar_lectura(clave, 300, "image/png")
+        assert (await http.get(nuevo)).content == CONTENIDO

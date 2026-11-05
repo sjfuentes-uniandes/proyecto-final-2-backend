@@ -4,6 +4,7 @@ siguiente, detalle con S3, URL prefirmada y auditoría por Outbox → SNS → SQ
 import base64
 import hashlib
 import json
+import logging
 import time
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
@@ -338,3 +339,38 @@ def test_la_bandeja_de_un_analista_sin_casos_y_el_resumen(
 def test_la_aplicacion_arranca_migra_y_atiende_el_health(cliente: TestClient) -> None:
     assert cliente.get("/health").json() == {"status": "ok"}
     assert UUID(cliente.get("/v1/siniestros", headers=CABECERAS).headers["X-Correlation-Id"])
+
+
+def test_sec_w19_01_los_registros_no_contienen_url_ni_clave_ni_firma(
+    cliente: TestClient,
+    caso: dict[str, Any],
+    caplog: pytest.LogCaptureFixture,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """SEC-W19-01: ni la URL prefirmada, ni la firma, ni la clave del objeto llegan a los logs, aunque
+    el nivel sea DEBUG en los paquetes del proyecto (el recorrido incluye detalle, enlaces y errores)."""
+    caplog.set_level(logging.INFO)
+    for paquete in ("siniestros", "solventa", "solventa_common"):
+        logging.getLogger(paquete).setLevel(logging.DEBUG)
+    libre: Siniestro = caso["caso"]
+
+    cliente.get(f"/v1/siniestros/{libre.id}", headers=CABECERAS)
+    enlaces = [
+        cliente.post(
+            f"/v1/siniestros/{libre.id}/evidencias/{caso[nombre].id}/enlace", headers=CABECERAS
+        )
+        for nombre in ("integra", "alterada", "ausente")
+    ]
+    cliente.get(
+        f"/v1/siniestros/{libre.id}", headers={"X-Actor-Id": ANALISTA, "X-Actor-Rol": "CLIENTE"}
+    )
+    url = enlaces[0].json()["url"]
+    firma = url.split("X-Amz-Signature=")[1].split("&")[0]
+    assert len(firma) >= 32  # la URL sí trae firma: la prueba busca algo que existe
+
+    registros = "\n".join(r.getMessage() for r in caplog.records) + "\n" + capfd.readouterr().out
+    assert registros.strip(), "el recorrido debería haber registrado operaciones"
+    for prohibido in (url, firma, "X-Amz", "Signature", caso["integra"].clave_objeto):
+        assert prohibido not in registros
+    for evidencia in ("integra", "alterada", "ausente", "factura"):
+        assert caso[evidencia].clave_objeto not in registros

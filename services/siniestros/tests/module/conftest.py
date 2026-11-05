@@ -82,9 +82,14 @@ def localstack() -> Iterator[str]:
     _docker_disponible()
     from testcontainers.community.localstack import LocalStackContainer
 
-    with LocalStackContainer(image=IMAGEN_LOCALSTACK, region_name=REGION).with_services(
-        "s3", "sns", "sqs"
-    ) as contenedor:
+    # S3_SKIP_SIGNATURE_VALIDATION=0: LocalStack valida firma y caducidad de las URL prefirmadas como
+    # S3 real (por omisión las omite); MT-W19-01 depende de ello.
+    contenedor = (
+        LocalStackContainer(image=IMAGEN_LOCALSTACK, region_name=REGION)
+        .with_services("s3", "sns", "sqs")
+        .with_env("S3_SKIP_SIGNATURE_VALIDATION", "0")
+    )
+    with contenedor:
         yield contenedor.get_url()
 
 
