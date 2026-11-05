@@ -86,6 +86,16 @@ def servicios(request: Request) -> Servicios:
     return resultado
 
 
+def _nombre_utf8(valor: str | None) -> str | None:
+    """`bff-web` envía el nombre en UTF-8; el servidor HTTP lo entrega leído como latin-1."""
+    if valor is None:
+        return None
+    try:
+        return valor.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return valor
+
+
 def actor_siniestros(
     x_actor_id: Annotated[str | None, Header(alias="X-Actor-Id")] = None,
     x_actor_rol: Annotated[str | None, Header(alias="X-Actor-Rol")] = None,
@@ -93,7 +103,7 @@ def actor_siniestros(
 ) -> Actor:
     if not x_actor_id or not x_actor_id.strip() or len(x_actor_id) > MAX_ACTOR:
         raise ActorRequerido
-    return Actor(x_actor_id.strip(), x_actor_rol, x_actor_nombre)
+    return Actor(x_actor_id.strip(), x_actor_rol, _nombre_utf8(x_actor_nombre))
 
 
 ActorDep = Annotated[Actor, Depends(actor_siniestros)]

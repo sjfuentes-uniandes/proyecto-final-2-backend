@@ -549,3 +549,40 @@ def test_cabecera_de_correlacion_en_la_respuesta(cliente: TestClient) -> None:
         "/v1/siniestros", headers={**CABECERAS, "X-Correlation-Id": "corr-w19-http"}
     )
     assert respuesta.headers["X-Correlation-Id"] == "corr-w19-http"
+
+
+# --- Nombre del analista ---------------------------------------------------------------------------
+@pytest.mark.parametrize("nombre", ["Luis Mora", "José Muñoz Peña", "李雷"])
+def test_el_nombre_del_analista_con_tildes_llega_completo_al_historial(
+    cliente: TestClient,
+    repo,
+    siniestro: Callable[..., Siniestro],
+    nombre: str,  # type: ignore[no-untyped-def]
+) -> None:
+    repo.agregar(siniestro())
+    respuesta = cliente.post(
+        "/v1/siniestros/siguiente",
+        headers={
+            **CABECERAS,
+            "X-Actor-Nombre": nombre.encode("utf-8"),
+            "Idempotency-Key": str(uuid4()),
+        },  # type: ignore[dict-item]
+    )
+    assert respuesta.status_code == 200
+    assert repo.historial[0].actor_nombre == nombre
+
+
+@pytest.mark.parametrize(
+    ("recibido", "esperado"),
+    [
+        (None, None),
+        ("Luis Mora", "Luis Mora"),
+        ("José".encode().decode("latin-1"), "José"),
+        ("Jos\xe9", "Jos\xe9"),  # latin-1 real, no UTF-8: se deja tal cual
+        ("李雷", "李雷"),  # ya es texto: no cabe en latin-1
+    ],
+)
+def test_recuperar_el_nombre_en_utf8(recibido: str | None, esperado: str | None) -> None:
+    from siniestros.adapters.inbound.http.siniestros import _nombre_utf8
+
+    assert _nombre_utf8(recibido) == esperado

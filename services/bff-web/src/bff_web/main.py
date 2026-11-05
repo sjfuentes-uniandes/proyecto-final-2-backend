@@ -15,6 +15,7 @@ from bff_web.adapters.inbound import (
     perfilamiento,
     polizas,
     recaudos,
+    siniestros,
     socios,
     suscripciones,
     usuarios,
@@ -61,6 +62,8 @@ app.include_router(recaudos.router)
 app.include_router(polizas.router)
 # HU-W18: estado y listado de pólizas (consulta).
 app.include_router(estado_polizas.router)
+# HU-W19: siniestros del analista (siniestros).
+app.include_router(siniestros.router)
 
 
 @app.get("/health")

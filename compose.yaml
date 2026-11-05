@@ -77,6 +77,8 @@ services:
       POLIZAS_URL: http://polizas:8080
       # HU-W18: estado y listado de pólizas.
       CONSULTA_URL: http://consulta:8080
+      # HU-W19: siniestros del analista (grupo analistas-siniestros).
+      SINIESTROS_URL: http://siniestros:8080
 
   bff-movil:
     <<: *servicio

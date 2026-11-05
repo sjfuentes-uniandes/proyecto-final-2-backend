@@ -69,6 +69,16 @@ class Settings(ServiceSettings):
         validation_alias=AliasChoices("CONSULTA_URL", "SOLVENTA_CONSULTA_URL"),
     )
     consulta_timeout_ms: int = 700
+    # HU-W19: siniestros del analista (DS3-09 y DS3-10). El aviso de un acceso denegado no espera
+    # respuesta: corte de 300 ms y sin reintento. El nombre del cliente y la póliza del encabezado
+    # se componen con `nombre_cliente_timeout_ms` y `consulta_timeout_ms`.
+    siniestros_url: str = Field(
+        "http://localhost:8091",
+        validation_alias=AliasChoices("SINIESTROS_URL", "SOLVENTA_SINIESTROS_URL"),
+    )
+    siniestros_timeout_ms: int = 1500
+    acceso_denegado_timeout_ms: int = 300
+    grupo_analistas_siniestros: str = "analistas-siniestros"
     # Pool de Cognito del back-office (infra/apps/ecs.tf): Administración › Usuarios.
     backoffice_user_pool_id: str | None = Field(
         None,

@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from pydantic import AliasChoices, Field, model_validator
 from solventa_common import outbox
 from solventa_common.settings import ServiceSettings
@@ -66,6 +68,11 @@ class Settings(ServiceSettings):
     # HU-W19 (DS3-07): semilla sintética de QA (R7). Apagada por omisión; solo local e INT la
     # encienden, nunca producción.
     semilla_qa: bool = Field(False, validation_alias=_env("SEMILLA_SINIESTROS_QA"))
+    # En INT, el `sub` real del usuario de prueba que será el analista de los casos sembrados; sin él
+    # se usa el del archivo de la semilla.
+    semilla_analista_id: UUID | None = Field(
+        None, validation_alias=_env("SEMILLA_SINIESTROS_ANALISTA_ID")
+    )
 
     # Outbox (como dinero y polizas): la infraestructura pone OUTBOX_ENABLED="true" y el tópico a
     # todo servicio que publica (`publishes`); sin la variable el relay no arranca.

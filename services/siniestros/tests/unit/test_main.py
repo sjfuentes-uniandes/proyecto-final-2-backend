@@ -240,3 +240,104 @@ def test_si_el_relay_no_se_detiene_a_tiempo_se_cancela(
     with caplog.at_level(logging.WARNING), TestClient(construir(caplog, pool=PoolInerte())):  # type: ignore[arg-type]
         pass
     assert any(r.getMessage() == main.MENSAJE_RELAY_SIN_PARAR for r in caplog.records)
+
+
+# --- Semilla de QA ---------------------------------------------------------------------------------
+@pytest.fixture
+def semilla(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    llamadas: list[Any] = []
+
+    async def falsa(
+        parada: asyncio.Event,
+        pool: Any,
+        cliente: Any,
+        bucket: Any,
+        sse: Any,
+        reloj: Any,
+        analista: Any,
+    ) -> None:
+        llamadas.append((pool, cliente, bucket, sse, analista))
+        await parada.wait()
+
+    monkeypatch.setattr(main, "sembrar_con_reintentos", falsa)
+    return llamadas
+
+
+def test_la_semilla_esta_apagada_por_omision(semilla: list[Any]) -> None:
+    with TestClient(crear_app(pool=PoolInerte())):  # type: ignore[arg-type]
+        pass
+    assert semilla == []
+
+
+def test_encendida_siembra_con_el_bucket_el_cifrado_y_el_analista(
+    semilla: list[Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SOLVENTA_SEMILLA_SINIESTROS_QA", "true")
+    monkeypatch.setenv("EVIDENCIAS_BUCKET", "solventa-local-evidencias")
+    monkeypatch.setenv("EVIDENCIAS_BUCKET_SSE", "aws:kms")
+    monkeypatch.setenv(
+        "SOLVENTA_SEMILLA_SINIESTROS_ANALISTA_ID", "b0b0b0b0-0000-4000-8000-000000000009"
+    )
+    pool = PoolInerte()
+    app = crear_app(pool=pool)  # type: ignore[arg-type]
+    with TestClient(app):
+        tarea = app.state.semilla_qa
+    ((pool_usado, cliente, bucket, sse, analista),) = semilla
+    assert pool_usado is pool
+    assert cliente is not None
+    assert (bucket, sse, str(analista)) == (
+        "solventa-local-evidencias",
+        "aws:kms",
+        "b0b0b0b0-0000-4000-8000-000000000009",
+    )
+    assert tarea.done()
+
+
+def test_sin_bucket_siembra_solo_la_base(
+    semilla: list[Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SOLVENTA_SEMILLA_SINIESTROS_QA", "true")
+    with TestClient(crear_app(pool=PoolInerte())):  # type: ignore[arg-type]
+        pass
+    assert semilla[0][1:3] == (None, None)
+
+
+@pytest.mark.parametrize("ambiente", ["prod", "production", "PROD"])
+def test_en_produccion_no_se_siembra_aunque_este_encendida(
+    semilla: list[Any],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    ambiente: str,
+) -> None:
+    monkeypatch.setenv("SOLVENTA_SEMILLA_SINIESTROS_QA", "true")
+    monkeypatch.setenv("SOLVENTA_ENVIRONMENT", ambiente)
+    with caplog.at_level(logging.ERROR), TestClient(construir(caplog, pool=PoolInerte())):  # type: ignore[arg-type]
+        pass
+    assert semilla == []
+    assert any(r.getMessage() == main.MENSAJE_SEMILLA_EN_PRODUCCION for r in caplog.records)
+
+
+def test_sin_base_la_semilla_no_corre(
+    semilla: list[Any], monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setenv("SOLVENTA_SEMILLA_SINIESTROS_QA", "true")
+    with caplog.at_level(logging.ERROR), TestClient(construir(caplog)):
+        pass
+    assert semilla == []
+    assert any(getattr(r, "missing", None) == "base" for r in caplog.records)
+
+
+def test_un_error_de_la_semilla_no_tumba_la_app(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    async def revienta(*argumentos: Any) -> None:
+        raise ValueError("datos")
+
+    monkeypatch.setattr(main, "sembrar_con_reintentos", revienta)
+    monkeypatch.setenv("SOLVENTA_SEMILLA_SINIESTROS_QA", "true")
+    with (
+        caplog.at_level(logging.ERROR),
+        TestClient(construir(caplog, pool=PoolInerte())) as cliente,
+    ):  # type: ignore[arg-type]
+        assert cliente.get("/health").status_code == 200
+    assert any(r.getMessage() == main.MENSAJE_SEMILLA_DETENIDA for r in caplog.records)

@@ -2,7 +2,7 @@
 
 Documento de la historia [HU-W19](https://github.com/sjfuentes-uniandes/proyecto-final/issues/61) (Sprint 3, recorrido R7). Es la evidencia de contrato que pide el issue: el modelo, los estados, el reloj del compromiso y el esquema de las tablas. Decisiones de diseño: DS3-01 a DS3-11 y DS3-14 del plan maestro del Sprint 3.
 
-Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (servicio y dominio)** ✅ · **B3 (aplicación, S3 y HTTP)** ✅ · B4 (`bff-web`, semilla y guía, §8) · F1–F3 (portal) · C (cierre).
+Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (servicio y dominio)** ✅ · **B3 (aplicación, S3 y HTTP)** ✅ · **B4 (`bff-web`, semilla y guía)** ✅ · F1–F3 (portal) · C (cierre).
 
 ## 1. Qué entrega la historia
 
@@ -137,7 +137,88 @@ SQL idempotente en `adapters/outbound/migraciones/001_siniestros.sql` con su `do
 
 ## 9. Recorrido local
 
-_Se completa en la fase B4 (W19-B15): cómo levantar todo con la semilla, tomar un caso, abrir el detalle, pedir un enlace y dónde ver las filas de `outbox`._
+La semilla de QA (§9.2) deja 8 casos listos para recorrer H01 a H04 sin cargar nada a mano.
+
+### 9.1 Levantar todo
+
+```bash
+cd proyecto-final-2-backend
+docker compose down -v        # solo la primera vez: la base `siniestros` se crea al inicializar el volumen
+make dev-up
+```
+
+`make dev-up` levanta PostgreSQL (con la base `siniestros`), LocalStack, `siniestros` (8091) y `bff-web` (8080). `scripts/dev/localstack-init.sh` crea el tópico `solventa-local-eventos-negocio`, el bucket `solventa-local-evidencias` y las colas `solventa-local-auditoria` y `solventa-local-siniestros-indemnizaciones` (con sus DLQ). El bloque `siniestros` de `compose.yaml` enciende la semilla (`SOLVENTA_SEMILLA_SINIESTROS_QA=true`), el Outbox y la firma con `http://localhost:4566`, que es el endpoint que alcanza el navegador.
+
+> `docker compose down -v` borra los datos locales de todos los servicios. Si no quieres perderlos, crea la base a mano: `docker compose exec postgres psql -U solventa -c "CREATE DATABASE siniestros"`.
+
+En local no hay API Gateway: el portal y `curl` simulan al usuario con los encabezados que éste pondría.
+
+```bash
+B=http://localhost:8080
+H=(-H "X-Authenticated-Groups: [analistas-siniestros]" -H "X-Authenticated-Issuer: https://local" \
+   -H "X-Authenticated-Sub: a0a0a0a0-0000-4000-8000-000000000001")
+```
+
+El `sub` es el del analista de QA (`Luis Mora`). Si el usuario real tiene otro `sub`, defínelo con `SOLVENTA_SEMILLA_SINIESTROS_ANALISTA_ID` antes de levantar `siniestros`. El nombre sale del `name` del token (`Authorization`), o de la parte local del correo, o del `sub` (R-11).
+
+### 9.2 La semilla
+
+| Clave | Código | Estado | Para qué sirve |
+| --- | --- | --- | --- |
+| SIN-01 a SIN-03 | `88-2026-0431`, `0433`, `0436` | `REPORTADO` | La cola «Sin asignar» (H02); se toman del más antiguo al más nuevo |
+| EVA-01 | `88-2026-0442` | `EN_EVALUACION` | El caso de H03 y H04: cinco archivos íntegros y falta el certificado de reparación |
+| EVA-02 | `88-2026-0439` | `EN_EVALUACION` | Fuera del compromiso (vencido hace unas 2 h) |
+| AUS-01 | `88-2026-0440` | `EN_EVALUACION` | Un objeto falta en S3: `NO_DISPONIBLE`, el detalle responde igual (AC4) |
+| ALT-01 | `88-2026-0441` | `EN_EVALUACION` | La primera foto está alterada: `ALTERADA` y coherencia `INCONSISTENTE` |
+| VEN-01 | `88-2026-0437` | `EN_EVALUACION` | La póliza había vencido en la fecha del evento: `VIGENCIA` no cumple |
+
+Los instantes son relativos al momento de sembrar y la semilla es idempotente: reiniciar `siniestros` no duplica nada. Sin `clientes` ni `consulta` con datos, `clienteNombre` y `polizaVista` salen `null` (CF-S3-09) y el portal lo muestra como «no disponible».
+
+### 9.3 Recorrido
+
+```bash
+# Indicadores y mi bandeja (el vencido primero)
+curl -s "${H[@]}" "$B/v1/siniestros/resumen?desde=$(date -u -v-10H +%FT%TZ)&hasta=$(date -u -v+14H +%FT%TZ)"
+curl -s "${H[@]}" "$B/v1/siniestros?limite=10"
+
+# La cola general y tomar el siguiente (la misma Idempotency-Key devuelve el mismo caso)
+curl -s "${H[@]}" "$B/v1/siniestros?bandeja=SIN_ASIGNAR"
+K=$(uuidgen); curl -s -X POST "${H[@]}" -H "Idempotency-Key: $K" $B/v1/siniestros/siguiente
+
+# El detalle de H03/H04 y el enlace de un archivo (la URL vive 300 s y no se guarda)
+curl -s "${H[@]}" $B/v1/siniestros/5e000000-0000-4000-8000-000004000000
+curl -s -X POST "${H[@]}" $B/v1/siniestros/5e000000-0000-4000-8000-000004000000/evidencias/<evidenciaId>/enlace
+```
+
+Resultado esperado con la semilla recién sembrada: `pendientes 5`, `fueraDeCompromiso 1`, `asignadosAlActor 5`, `sinAsignar 3`; el siguiente de la cola es `88-2026-0436`; EVA-01 tiene `tiempoRestanteMin` cerca de 2040, cobertura con `SOPORTES = PARCIAL` y los cinco archivos `VERIFICADA`; AUS-01 tiene `evidencia_video.mp4` en `NO_DISPONIBLE` y su enlace responde 404 `EVIDENCIA_NO_DISPONIBLE`.
+
+Un usuario sin el grupo recibe 403 y `bff-web` avisa a `siniestros`:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -H "X-Authenticated-Groups: [asesores]" \
+  -H "X-Authenticated-Issuer: https://local" -H "X-Authenticated-Sub: sub-asesor" $B/v1/siniestros
+```
+
+### 9.4 Dónde ver el Outbox
+
+```bash
+docker compose exec postgres psql -U solventa -d siniestros \
+  -c "SELECT event_type, count(*) total, count(published_at) publicados FROM outbox GROUP BY 1"
+docker compose exec localstack awslocal sqs receive-message --max-number-of-messages 10 \
+  --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/solventa-local-auditoria
+```
+
+Debes ver `SiniestroEnEvaluacion` (al tomar), `SiniestroConsultado` (al abrir el detalle), `EvidenciaConsultada` (al pedir un enlace) y `AccesoSiniestroDenegado` (`origen = BFF_WEB` si lo avisó `bff-web`, `SINIESTROS` si el rol falló en el propio servicio). Ningún mensaje lleva la URL, su firma, la clave del objeto ni nombres. El historial inmutable está en `historial_siniestro`.
+
+### 9.5 Pruebas
+
+```bash
+make test-unit SERVICE=siniestros && make test-contract SERVICE=siniestros
+make test-module SERVICE=siniestros      # PostgreSQL y LocalStack con Testcontainers
+make test-contract SERVICE=bff-web
+```
+
+Las de módulo usan `localstack/localstack:4.14.0`; si no puedes descargarla, `SINIESTROS_LOCALSTACK_IMAGE=localstack/localstack:3`.
 
 ## 10. Fuera de alcance de W19
 
