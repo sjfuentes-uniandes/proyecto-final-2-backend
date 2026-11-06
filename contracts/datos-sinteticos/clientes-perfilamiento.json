@@ -1278,5 +1278,91 @@
         ]
       }
     }
+  },
+  {
+    "id": "C28",
+    "clienteId": "00000000-0000-4000-8000-00000000001c",
+    "identidad": "VERIFICADO",
+    "consentimiento": {
+      "decision": "PERMITIDO",
+      "consentimientoId": "00000000-0000-4000-9000-00000000001c",
+      "causa": null,
+      "alcancesPermitidos": [
+        "FA_PRODUCTOS_VIGENTES",
+        "FA_HISTORIAL_PAGOS_12M",
+        "FA_INGRESOS_AGREGADOS",
+        "DA_REGISTROS_PUBLICOS"
+      ]
+    },
+    "datosDeclarados": {
+      "fechaNacimiento": "1990-04-18",
+      "plazoCreditoMeses": 180,
+      "sumaAsegurada": 180000000
+    },
+    "simulador": {
+      "FA_PRODUCTOS_VIGENTES": {
+        "comportamiento": "nominal"
+      },
+      "FA_HISTORIAL_PAGOS_12M": {
+        "comportamiento": "nominal"
+      },
+      "FA_INGRESOS_AGREGADOS": {
+        "comportamiento": "nominal"
+      },
+      "DA_REGISTROS_PUBLICOS": {
+        "comportamiento": "nominal"
+      }
+    },
+    "esperado": {
+      "http": 201,
+      "estado": "CALCULADO",
+      "nivel": "BAJO",
+      "puntaje": 75.9,
+      "confianza": 0.92,
+      "llamadasAliados": 4
+    }
+  },
+  {
+    "id": "C29",
+    "clienteId": "00000000-0000-4000-8000-00000000001d",
+    "identidad": "VERIFICADO",
+    "consentimiento": {
+      "decision": "PERMITIDO",
+      "consentimientoId": "00000000-0000-4000-9000-00000000001d",
+      "causa": null,
+      "alcancesPermitidos": [
+        "FA_PRODUCTOS_VIGENTES",
+        "FA_HISTORIAL_PAGOS_12M",
+        "FA_INGRESOS_AGREGADOS",
+        "DA_REGISTROS_PUBLICOS"
+      ]
+    },
+    "datosDeclarados": {
+      "fechaNacimiento": "1990-04-18",
+      "plazoCreditoMeses": 180,
+      "sumaAsegurada": 180000000
+    },
+    "simulador": {
+      "FA_PRODUCTOS_VIGENTES": {
+        "comportamiento": "nominal"
+      },
+      "FA_HISTORIAL_PAGOS_12M": {
+        "comportamiento": "nominal"
+      },
+      "FA_INGRESOS_AGREGADOS": {
+        "comportamiento": "nominal"
+      },
+      "DA_REGISTROS_PUBLICOS": {
+        "comportamiento": "nominal"
+      }
+    },
+    "esperado": {
+      "http": 201,
+      "estado": "CALCULADO",
+      "nivel": "BAJO",
+      "puntaje": 75.9,
+      "confianza": 0.92,
+      "llamadasAliados": 4
+    }
   }
 ]

@@ -1,4 +1,4 @@
-"""Semilla de los clientes sintéticos C01–C27 (01 §3.5) para demostrar el perfilamiento en `int`.
+"""Semilla de los clientes sintéticos C01–C29 (01 §3.5) para demostrar el perfilamiento en `int`.
 
 C20–C27 (HU-W06) solo cambian el comportamiento de sus fuentes en el simulador (caída,
 malformada o lenta): aquí son clientes verificados con consentimiento vigente y todos los alcances.
@@ -103,7 +103,8 @@ _EXCEPCIONES = {
     17: ClienteSintetico(17, alcances=("DA_REGISTROS_PUBLICOS",)),
 }
 # HU-W06: C20–C27, casos de fallback (contracts/datos-sinteticos/clientes-perfilamiento.json).
-ULTIMO_CASO = 27
+# C28–C29: clones de C01 (aprobados de punta a punta, también cobro y firma en el simulador).
+ULTIMO_CASO = 29
 CLIENTES_SINTETICOS = tuple(
     _EXCEPCIONES.get(n, ClienteSintetico(n)) for n in range(1, ULTIMO_CASO + 1)
 )
