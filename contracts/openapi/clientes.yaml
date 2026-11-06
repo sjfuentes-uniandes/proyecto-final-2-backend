@@ -425,9 +425,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
         '409':
-          description: REGISTRO_CORREO_DISTINTO (el correo no es el que el asesor o
-            el primer intento ligaron) o REGISTRO_YA_VINCULADO (la cuenta de este registro
-            ya existe)
+          description: REGISTRO_CORREO_DISTINTO (el correo no es el que ligó el primer
+            intento) o REGISTRO_YA_VINCULADO (la cuenta de este registro ya existe)
           content:
             application/json:
               schema:
