@@ -67,8 +67,8 @@ def conexion(monkeypatch: pytest.MonkeyPatch) -> ConexionFalsa:
     return falsa
 
 
-def test_son_los_27_casos_con_su_uuid_y_su_documento() -> None:
-    assert [c.codigo for c in CLIENTES_SINTETICOS] == [f"C{n:02d}" for n in range(1, 28)]
+def test_son_los_33_casos_con_su_uuid_y_su_documento() -> None:
+    assert [c.codigo for c in CLIENTES_SINTETICOS] == [f"C{n:02d}" for n in range(1, 34)]
     # UUID con NN hexadecimal y documento con NN decimal (01 §3.5).
     esperados = {
         "C01": ("00000000-0000-4000-8000-000000000001", "9000000001"),
@@ -78,14 +78,21 @@ def test_son_los_27_casos_con_su_uuid_y_su_documento() -> None:
         # HU-W06: casos de fallback.
         "C20": ("00000000-0000-4000-8000-000000000014", "9000000020"),
         "C27": ("00000000-0000-4000-8000-00000000001b", "9000000027"),
+        # Clones de C01: emisión de punta a punta.
+        "C28": ("00000000-0000-4000-8000-00000000001c", "9000000028"),
+        "C29": ("00000000-0000-4000-8000-00000000001d", "9000000029"),
+        "C30": ("00000000-0000-4000-8000-00000000001e", "9000000030"),
+        "C31": ("00000000-0000-4000-8000-00000000001f", "9000000031"),
+        "C32": ("00000000-0000-4000-8000-000000000020", "9000000032"),
+        "C33": ("00000000-0000-4000-8000-000000000021", "9000000033"),
     }
     for codigo, (uuid, documento) in esperados.items():
         cliente = POR_CODIGO[codigo]
         assert (cliente.id, cliente.numero_documento) == (UUID(uuid), documento)
     assert POR_CODIGO["C10"].consentimiento_id == UUID("00000000-0000-4000-9000-00000000000a")
     assert POR_CODIGO["C07"].nombre_completo == "Cliente Prueba 07"
-    assert len({c.id for c in CLIENTES_SINTETICOS}) == 27
-    assert len({c.numero_documento for c in CLIENTES_SINTETICOS}) == 27
+    assert len({c.id for c in CLIENTES_SINTETICOS}) == 33
+    assert len({c.numero_documento for c in CLIENTES_SINTETICOS}) == 33
 
 
 def test_identidad_y_consentimiento_de_cada_caso() -> None:
@@ -108,11 +115,11 @@ def test_identidad_y_consentimiento_de_cada_caso() -> None:
 
 
 def test_sembrar_inserta_todo_en_una_transaccion(conexion: ConexionFalsa) -> None:
-    assert sembrar("postgresql://falsa") == 27
+    assert sembrar("postgresql://falsa") == 33
 
     assert conexion.transacciones == 1
     clientes = {p[0]: p for p in conexion.de("cliente")}
-    assert len(clientes) == 27
+    assert len(clientes) == 33
     assert clientes[POR_CODIGO["C01"].id][1:] == (
         "CC",
         "9000000001",
@@ -133,7 +140,7 @@ def test_sembrar_inserta_todo_en_una_transaccion(conexion: ConexionFalsa) -> Non
     assert clientes[POR_CODIGO["C12"].id][5:] == ("PENDIENTE", None, None, None)
 
     consentimientos = {p[-1]: p for p in conexion.de("consentimiento")}
-    assert len(consentimientos) == 26  # C10 no tiene ninguno
+    assert len(consentimientos) == 32  # C10 no tiene ninguno
     assert POR_CODIGO["C10"].id not in consentimientos
     c01_c = consentimientos[POR_CODIGO["C01"].id]
     assert (c01_c[5], c01_c[7], c01_c[8]) == ("ACTIVO", VIGENTE_HASTA, None)
@@ -171,7 +178,7 @@ def test_la_semilla_solo_registra_el_conteo(
     sembrar("postgresql://falsa")
 
     texto = salida.getvalue()
-    assert '"clientes_creados": 27' in texto
+    assert '"clientes_creados": 33' in texto
     assert "9000000001" not in texto and "Cliente Prueba" not in texto
 
 

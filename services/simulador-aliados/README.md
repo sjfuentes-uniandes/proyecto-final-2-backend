@@ -75,6 +75,7 @@ igual y no se solapan: estos exigen una `referencia` uuid.
 | Caso | Cliente (`pagador`) | Cobro | Consulta de estado |
 | --- | --- | --- | --- |
 | Aprobado | C01 `00000000-0000-4000-8000-000000000001` | 200 `{"referencia", "estado": "APROBADO", "transaccionId": "TX-SINT-C01", "motivo": null}`, 50 ms | 200, el mismo cuerpo |
+| Aprobado | C28–C33 `…00000000001c` a `…000000000021` (clones de C01) | Igual, con `TX-SINT-C28` … `TX-SINT-C33` | 200, el mismo cuerpo |
 | Rechazado | C02 `00000000-0000-4000-8000-000000000002` | 200 `{"referencia", "estado": "RECHAZADO", "transaccionId": null, "motivo": "FONDOS_INSUFICIENTES"}`, 50 ms | 200, el mismo cuerpo |
 | Malformado | C05 `00000000-0000-4000-8000-000000000005` | 200 con el cuerpo `{"estado": ` (JSON inválido) | 404 `referencia_no_reconocida` (respaldo) |
 | Lento (incierto) | C06 `00000000-0000-4000-8000-000000000006` | 200 `APROBADO` (`TX-SINT-C06`) en 8000 ms, por encima del timeout de 5 s | 200 `APROBADO` (`TX-SINT-C06`): el cobro sí ocurrió |
@@ -108,6 +109,7 @@ emitirse, y sin consulta de estado, porque reintentar con la misma `Idempotency-
 | Caso | Cliente (`firmante`) | Respuesta |
 | --- | --- | --- |
 | Firmado | C01 `00000000-0000-4000-8000-000000000001` | 200 `{"documentoId", "estado": "FIRMADO", "firmaId": "FIR-SINT-C01", "selloTiempo": "2026-01-01T00:00:00Z", "huella"}`, 50 ms |
+| Firmado | C28–C33 `…00000000001c` a `…000000000021` (clones de C01) | Igual, con `FIR-SINT-C28` … `FIR-SINT-C33` |
 | Malformado | C05 `00000000-0000-4000-8000-000000000005` | 200 con el cuerpo `{"estado": ` (JSON inválido) |
 | Lento (incierto) | C06 `00000000-0000-4000-8000-000000000006` | 200 `FIRMADO` (`FIR-SINT-C06`) en 8000 ms, por encima del timeout de 5 s: la firma sí ocurre |
 | Caído | C07 `00000000-0000-4000-8000-000000000007` | 503 `{"error": "unavailable"}` |
