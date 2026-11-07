@@ -10,6 +10,7 @@ from bff_web.adapters.inbound import (
     clientes,
     consentimientos,
     cotizaciones,
+    descartes,
     estado_polizas,
     operacion,
     perfilamiento,
@@ -61,6 +62,8 @@ app.include_router(recaudos.router)
 app.include_router(polizas.router)
 # HU-W18: estado y listado de pólizas (consulta).
 app.include_router(estado_polizas.router)
+# HU-W24: cola de descarte de los eventos paramétricos (pagos-parametricos).
+app.include_router(descartes.router)
 
 
 @app.get("/health")
