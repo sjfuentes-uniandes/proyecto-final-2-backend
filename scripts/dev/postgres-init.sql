@@ -10,3 +10,5 @@ CREATE DATABASE consulta;
 CREATE DATABASE siniestros;
 CREATE DATABASE pagos_parametricos;
 CREATE DATABASE adaptador_telemetria;
+-- HU-W24: auditoria (Inbox y cabeza de la cadena de lotes).
+CREATE DATABASE auditoria;
