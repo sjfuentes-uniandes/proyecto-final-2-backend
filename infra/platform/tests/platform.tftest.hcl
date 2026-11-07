@@ -106,7 +106,7 @@ run "minimo_costo" {
     error_message = "Solo los servicios de acceso y la entrada de telemetría se publican en el ALB."
   }
   assert {
-    condition     = toset(keys(aws_secretsmanager_secret.service_db)) == toset(["api-socios", "clientes", "catalogo", "cotizacion", "polizas", "dinero", "consulta", "avisos", "siniestros", "pagos-parametricos", "adaptador-telemetria"])
+    condition     = toset(keys(aws_secretsmanager_secret.service_db)) == toset(["api-socios", "clientes", "catalogo", "cotizacion", "polizas", "dinero", "consulta", "avisos", "siniestros", "pagos-parametricos", "adaptador-telemetria", "auditoria"])
     error_message = "Cada servicio con base debe tener su propio secreto."
   }
   assert {
@@ -289,7 +289,7 @@ run "sprint2" {
   assert {
     condition = (
       # HU-S03 agrega siniestros al final de las llamadas de ambos BFF.
-      local.catalog["bff-web"].calls == ["clientes", "cotizacion", "api-socios", "polizas", "consulta", "siniestros"] &&
+      local.catalog["bff-web"].calls == ["clientes", "cotizacion", "api-socios", "polizas", "consulta", "siniestros", "pagos-parametricos"] &&
       local.catalog["bff-movil"].calls == ["clientes", "consulta", "avisos", "siniestros"] && local.catalog["consulta"].calls == ["catalogo"] &&
       local.catalog["dinero"].calls == ["adaptador-pagos"] && local.catalog["polizas"].calls == ["adaptador-firma", "cotizacion", "catalogo"] &&
       alltrue([for name in ["polizas", "consulta", "avisos", "adaptador-pagos", "adaptador-firma"] : contains(local.discoverable, name)]) &&
@@ -380,7 +380,10 @@ run "sprint3" {
       local.catalog["adaptador-telemetria"].tier == "adaptador" && local.catalog["adaptador-telemetria"].allies == ["telemetria"] &&
       local.catalog["dinero"].consumes == ["dinero-aceptaciones", "dinero-indemnizaciones"] &&
       contains(local.catalog["bff-web"].calls, "siniestros") && contains(local.catalog["bff-movil"].calls, "siniestros") &&
-      contains(local.discoverable, "siniestros") && !contains(local.discoverable, "pagos-parametricos") && !contains(local.discoverable, "adaptador-telemetria")
+      contains(local.discoverable, "siniestros") && !contains(local.discoverable, "adaptador-telemetria") &&
+      # HU-W24 (B1): bff-web llama a pagos-parametricos para la cola de descarte.
+      contains(local.catalog["bff-web"].calls, "pagos-parametricos") && contains(local.discoverable, "pagos-parametricos") &&
+      local.catalog["auditoria"].database && contains(local.database_services, "auditoria")
     )
     error_message = "Servicios, llamadas y colas del Sprint 3 como los declara HU-S03."
   }

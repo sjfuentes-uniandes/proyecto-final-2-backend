@@ -27,6 +27,12 @@
 #      consulta-proyeccion y auditoria.
 #  12. POST /telemetria/v1/eventos llega a adaptador-telemetria sin JWT (el borde no
 #      responde 401/403; la firma HMAC la valida el adaptador, D5).
+#   HU-W24 (humo R5; SMOKE_W24=0 lo omite):
+#  13. SMOKE_W24_EVENTOS (5) EventoParametricoObservado sintéticos en el tópico: auditoria los
+#      escribe en objetos de lote cadena/*.json del bucket de auditoría (cada uno con su
+#      eventId una sola vez y el previousHash del anterior) y la cola auditoria queda vacía.
+#      Los eventos también llegan a parametricos-eventos; sin el consumidor de HU-W21 se quedan
+#      ahí y vencen a los 4 días (llevan "sintetico": true).
 #   El mensaje envenenado del paso 8 se prueba en una cola nueva con
 #   SMOKE_DLQ_COLA=dinero-indemnizaciones.
 # Variables: SMOKE_DLQ_COLA, SMOKE_ESPERA_RUTA_S (60), SMOKE_ESPERA_ALARMA_S (600).
@@ -194,8 +200,11 @@ check_route() {
     [ -n "$(queue_url "${queue}")" ] || { skip "La cola ${queue} no existe (make infra-plataforma)."; return 0; }
   done
   marker="humo-$(date +%s)-${RANDOM}"
-  event=$(jq -nc --arg id "${marker}" --arg type "${type}" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '{eventId: $id, aggregateId: $id, type: $type, version: 1, occurredAt: $at, correlationId: $id, sintetico: true, payload: {}}')
+  # HU-W24: eventId uuid (auditoria descarta como envenenado un sobre sin él); la marca va en
+  # correlationId, que es lo que busca find_marker en el cuerpo.
+  event=$(jq -nc --arg id "${marker}" --arg uuid "$(uuidgen | tr '[:upper:]' '[:lower:]')" --arg type "${type}" \
+    --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{eventId: $uuid, aggregateId: $uuid, type: $type, version: 1, occurredAt: $at, correlationId: $id, sintetico: true, payload: {}}')
   aws sns publish --topic-arn "$(jq -r '.events_topic_arn' <<<"${platform}")" --message "${event}" \
     --message-attributes "$(jq -nc --arg t "${type}" '{eventType: {DataType: "String", StringValue: $t}}')" >/dev/null
   for queue in "$@"; do
@@ -307,6 +316,49 @@ else
   code=$(http_code -X POST -H "Content-Type: application/json" -d '{"sintetico": true}' "${canales}/telemetria/v1/eventos")
   check "$(is "${code}" '^(202|400|404|409|422)$')" "POST sin firma llegó a adaptador-telemetria (${code})" \
     "POST sin firma -> ${code:-sin respuesta} (401/403 = borde; 5xx = ALB o adaptador)"
+fi
+
+if [ "${SMOKE_W24:-1}" = "1" ]; then
+  log "13. Auditoría por lotes (HU-W24, R5)"
+  if [ -z "$(jq -r '.auditoria.service_name // empty' <<<"${deployed}")" ]; then
+    skip "auditoria: sin imagen publicada (make infra-microservicios SERVICES=auditoria)."
+  else
+    bucket=$(jq -r '.audit_bucket.name' <<<"${platform}")
+    desde=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    ids=()
+    for _ in $(seq "${SMOKE_W24_EVENTOS:-5}"); do
+      id=$(uuidgen | tr '[:upper:]' '[:lower:]')
+      ids+=("${id}")
+      event=$(jq -nc --arg id "${id}" --arg at "${desde}" \
+        '{eventId: $id, aggregateId: $id, type: "EventoParametricoObservado", version: 1, occurredAt: $at, correlationId: ("humo-w24-" + $id), sintetico: true, payload: {}}')
+      aws sns publish --topic-arn "$(jq -r '.events_topic_arn' <<<"${platform}")" --message "${event}" \
+        --message-attributes '{"eventType": {"DataType": "String", "StringValue": "EventoParametricoObservado"}}' >/dev/null
+    done
+    deadline=$((SECONDS + SMOKE_ESPERA_RUTA_S))
+    encontrados=""
+    while [ "${SECONDS}" -lt "${deadline}" ]; do
+      sleep 5
+      claves=$(aws s3api list-objects-v2 --bucket "${bucket}" --prefix cadena/ \
+        --query "Contents[?LastModified>='${desde}'].Key" --output text 2>/dev/null || true)
+      encontrados=""
+      for clave in ${claves}; do
+        [ "${clave}" = "None" ] && continue
+        encontrados+=$(aws s3 cp "s3://${bucket}/${clave}" - 2>/dev/null | jq -r '.registros[].eventId')$'\n'
+      done
+      todos=true
+      for id in "${ids[@]}"; do grep -qx "${id}" <<<"${encontrados}" || todos=false; done
+      [ "${todos}" = true ] && break
+    done
+    for id in "${ids[@]}"; do
+      veces=$(grep -cx "${id}" <<<"${encontrados}" || true)
+      check "$([ "${veces}" = "1" ] && echo true || echo false)" "evento ${id} en un lote de auditoría, una vez" \
+        "evento ${id} aparece ${veces} veces en los lotes de auditoría (esperado 1)"
+    done
+    visibles=$(aws sqs get-queue-attributes --queue-url "$(queue_url auditoria)" \
+      --attribute-names ApproximateNumberOfMessages --query 'Attributes.ApproximateNumberOfMessages' --output text)
+    check "$([ "${visibles}" -lt 50 ] && echo true || echo false)" "cola auditoria al día (${visibles} visibles)" \
+      "cola auditoria con ${visibles} mensajes visibles: auditoria no drena"
+  fi
 fi
 
 log "Resultado: ${pass} OK, ${fail} con falla"
