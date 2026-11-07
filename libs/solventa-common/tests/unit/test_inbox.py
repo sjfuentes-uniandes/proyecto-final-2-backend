@@ -221,7 +221,12 @@ def _escenario(**manejador: Any) -> Escenario:
 
 
 def _registros(telemetria: Any) -> list[dict[str, Any]]:
-    return [r for r in telemetria.logs() if r.get("operation") == inbox.OPERACION]
+    """Los registros de la medición; los logs del manejador también llevan `operation` (HU-W24)."""
+    return [
+        r
+        for r in telemetria.logs()
+        if r.get("operation") == inbox.OPERACION and r["logger"] == "solventa.telemetria"
+    ]
 
 
 # --- Sobre --------------------------------------------------------------------------------------

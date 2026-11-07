@@ -249,11 +249,17 @@ class operacion:
     def __init__(self, nombre: str) -> None:
         self.nombre = nombre
         self.resultado: str | None = None
+        self.campos: dict[str, Any] = {}
         self._pila: list[tuple[Any, Any, float]] = []
 
     def marcar(self, resultado: str) -> None:
         """Fija un resultado sin excepción, por ejemplo RESULTADO_RECHAZADO."""
         self.resultado = resultado
+
+    def anotar(self, **campos: Any) -> None:
+        """Agrega campos al log de la operación (HU-W24: el desenlace de cada mensaje). Sin PII:
+        quien anota responde por lo que pasa."""
+        self.campos.update(campos)
 
     def __enter__(self) -> Self:
         span_cm = _estado.tracer.start_as_current_span(
@@ -266,6 +272,7 @@ class operacion:
         token = operacion_actual.set(self.nombre)
         self._pila.append((span_cm, (span, token), time.perf_counter()))
         self.resultado = None
+        self.campos = {}
         return self
 
     def __exit__(self, tipo, error, tb) -> Literal[False]:
@@ -273,7 +280,7 @@ class operacion:
         duracion_ms = (time.perf_counter() - inicio) * 1000
         resultado = self.resultado or _resultado_de(error)
         span.set_attribute("result", resultado)
-        extra: dict[str, Any] = {}
+        extra: dict[str, Any] = dict(self.campos)
         if error is not None:
             # Solo el tipo: el mensaje puede contener datos del cliente (AC4).
             extra["error_type"] = type(error).__name__
