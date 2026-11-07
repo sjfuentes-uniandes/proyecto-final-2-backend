@@ -41,6 +41,20 @@ def test_exito_registra_duracion_error_cero_span_y_log(telemetria: Telemetria) -
     assert isinstance(log["duration_ms"], float)
 
 
+def test_los_campos_anotados_van_al_log_y_se_reinician_en_cada_uso(telemetria: Telemetria) -> None:
+    # HU-W24: el consumidor anota el desenlace de cada mensaje.
+    medicion = operacion("inbox.consumir")
+    with medicion:
+        medicion.anotar(message_id="m-1", outcome="nuevo")
+    with medicion:
+        medicion.anotar(outcome="duplicado")
+    primero, segundo = [
+        log for log in telemetria.logs() if log.get("operation") == "inbox.consumir"
+    ]
+    assert (primero["message_id"], primero["outcome"]) == ("m-1", "nuevo")
+    assert segundo["outcome"] == "duplicado" and "message_id" not in segundo
+
+
 def test_error_cuenta_y_propaga_la_excepcion(telemetria: Telemetria) -> None:
     with pytest.raises(ValueError), operacion("emitir"):
         raise ValueError("ingresos=9500000 del cliente")

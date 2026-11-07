@@ -465,5 +465,10 @@ async def test_el_consumidor_no_borra_un_invalido_y_lo_mide_como_envenenado(
     assert await consumidor.ejecutar_una_vez() == 0
     assert receptor.borrados == []
     assert dobles.recaudos.resultados == {}
-    [medicion] = [log for log in telemetria.logs() if log.get("operation") == "inbox.consumir"]
+    # El log del manejador también lleva `operation` (HU-W24: el consumidor mide con `operacion`).
+    [medicion] = [
+        log
+        for log in telemetria.logs()
+        if log.get("operation") == "inbox.consumir" and log["logger"] == "solventa.telemetria"
+    ]
     assert (medicion["outcome"], medicion["reason"]) == ("envenenado", "esquema")
