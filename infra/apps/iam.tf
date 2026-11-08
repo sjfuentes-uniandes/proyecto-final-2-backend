@@ -23,7 +23,11 @@ locals {
   evidence_writers     = ["siniestros"]
   evidence_readers     = ["siniestros"]
   telemetria_archivers = ["adaptador-telemetria"]
-  evidence_services    = setunion(local.evidence_writers, local.evidence_readers, local.telemetria_archivers)
+  # HU-W24: cola de descarte visible y reprocesable (H10, H11). pagos-parametricos lee, libera y
+  # borra en la DLQ de parametricos-eventos y reenvía a la cola origen (SQS -right-> DLQ :
+  # reintentos agotados, diagrama_despliegue_ecs_fargate.puml; (8) de modelo_componentes.puml).
+  dlq_operators     = { "pagos-parametricos" = ["parametricos-eventos"] }
+  evidence_services = setunion(local.evidence_writers, local.evidence_readers, local.telemetria_archivers)
   # HU-W05: presupuesto de latencia por operación (LATENCY_BUDGET_MS). cotizacion fija el deadline
   # del recorrido; api-socios y bff-web inician el X-Deadline-Ms con el suyo.
   latency_budget_readers = ["cotizacion", "api-socios", "bff-web"]
@@ -134,6 +138,20 @@ locals {
           Effect   = "Allow"
           Action   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:ChangeMessageVisibility", "sqs:GetQueueAttributes", "sqs:GetQueueUrl"]
           Resource = [for queue in service.consumes : local.p.queues[queue].arn]
+        },
+      ] : [],
+      # HU-W24: la DLQ de sus colas (lectura con visibilidad corta, liberación y borrado) y el
+      # reenvío a la cola origen con el mismo eventId. Sin PurgeQueue ni StartMessageMoveTask.
+      contains(keys(local.dlq_operators), name) ? [
+        {
+          Effect   = "Allow"
+          Action   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:ChangeMessageVisibility", "sqs:GetQueueAttributes"]
+          Resource = [for queue in local.dlq_operators[name] : local.p.queues[queue].dlq_arn]
+        },
+        {
+          Effect   = "Allow"
+          Action   = ["sqs:SendMessage"]
+          Resource = [for queue in local.dlq_operators[name] : local.p.queues[queue].arn]
         },
       ] : [],
       # Registro inmutable de decisiones.

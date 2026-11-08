@@ -28,7 +28,7 @@ class DatosCliente:
     numero_documento: str
     nombre_completo: str
     fecha_nacimiento: date
-    # Opcional: si el asesor lo informa, el cliente solo podrá registrarse con ese correo.
+    # Opcional: el asesor puede informarlo, pero no condiciona el registro de la app móvil.
     correo: str | None = None
 
 

@@ -1,0 +1,152 @@
+{
+  "$defs": {
+    "Accion": {
+      "enum": [
+        "REPROCESADO",
+        "CORREGIDO",
+        "DESCARTADO"
+      ],
+      "title": "Accion",
+      "type": "string"
+    },
+    "Causa": {
+      "enum": [
+        "FORMATO_INVALIDO",
+        "REFERENCIA_INEXISTENTE",
+        "ERROR_PROCESAMIENTO",
+        "DESCONOCIDA"
+      ],
+      "title": "Causa",
+      "type": "string"
+    },
+    "DescarteParametricoResueltoV1": {
+      "additionalProperties": false,
+      "properties": {
+        "accion": {
+          "$ref": "#/$defs/Accion"
+        },
+        "actorId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Actorid",
+          "type": "string"
+        },
+        "causa": {
+          "$ref": "#/$defs/Causa",
+          "description": "La causa del descarte que vio el analista"
+        },
+        "corregido": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "El cuerpo reenviado, solo en CORREGIDO",
+          "title": "Corregido"
+        },
+        "eventoId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "El eventId del evento resuelto, si era un sobre",
+          "title": "Eventoid"
+        },
+        "messageId": {
+          "description": "El MessageId de SQS, el mismo en la cola y en la DLQ",
+          "title": "Messageid",
+          "type": "string"
+        },
+        "motivo": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Motivo"
+        },
+        "original": {
+          "description": "El cuerpo del mensaje tal como estaba en la DLQ",
+          "title": "Original",
+          "type": "string"
+        },
+        "resueltoEn": {
+          "format": "date-time",
+          "title": "Resueltoen",
+          "type": "string"
+        }
+      },
+      "required": [
+        "messageId",
+        "eventoId",
+        "accion",
+        "causa",
+        "actorId",
+        "original",
+        "corregido",
+        "resueltoEn"
+      ],
+      "title": "DescarteParametricoResueltoV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Sobre versionado con `type` fijo: es el atributo `eventType` del mensaje.",
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/DescarteParametricoResueltoV1"
+    },
+    "type": {
+      "const": "DescarteParametricoResuelto",
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreDescarteParametricoResueltoV1",
+  "type": "object"
+}

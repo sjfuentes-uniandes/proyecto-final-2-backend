@@ -32,6 +32,8 @@ class Settings(ServiceSettings):
     grupo_asesores: str = "asesores"
     # HU-W13 (DS2-12): bandeja de suscripción (E01) y revisión asistida (E04).
     grupo_suscriptores: str = "suscriptores"
+    # HU-W19 (bandeja, detalle y evidencias) y HU-W24 (cola de descarte, H10 y H11).
+    grupo_analistas_siniestros: str = "analistas-siniestros"
     api_socios_url: str = Field(
         "http://localhost:8082",
         validation_alias=AliasChoices("API_SOCIOS_URL", "SOLVENTA_API_SOCIOS_URL"),
@@ -78,7 +80,13 @@ class Settings(ServiceSettings):
     )
     siniestros_timeout_ms: int = 1500
     acceso_denegado_timeout_ms: int = 300
-    grupo_analistas_siniestros: str = "analistas-siniestros"
+    # HU-W24: cola de descarte en pagos-parametricos (decisión B1). Listar lee hasta 100 mensajes
+    # de la DLQ en lotes de 10; las acciones, uno o varios reenvíos.
+    pagos_parametricos_url: str = Field(
+        "http://localhost:8092",
+        validation_alias=AliasChoices("PAGOS_PARAMETRICOS_URL", "SOLVENTA_PAGOS_PARAMETRICOS_URL"),
+    )
+    pagos_parametricos_timeout_ms: int = 3000
     # Pool de Cognito del back-office (infra/apps/ecs.tf): Administración › Usuarios.
     backoffice_user_pool_id: str | None = Field(
         None,

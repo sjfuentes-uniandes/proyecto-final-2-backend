@@ -496,3 +496,50 @@ def test_contrato_de_estado_y_listado_de_polizas() -> None:
     # Solo se agregan rutas: las de la HU-W17 siguen igual.
     assert set(rutas[POLIZA]) == {"get"}
     assert set(rutas[DOCUMENTO]) == {"get"}
+
+
+# HU-W24: la cola de descarte de los eventos paramétricos; DTO copiados de pagos-parametricos.
+PAGOS_PARAMETRICOS = CONTRATO.parent / "pagos-parametricos.yaml"
+ESQUEMAS_DESCARTE = (
+    "Causa",
+    "Accion",
+    "MensajeDescarte",
+    "ConteoCausa",
+    "ListadoDescarte",
+    "ResolucionDto",
+    "DetalleDescarte",
+    "SolicitudReproceso",
+    "ResultadoReproceso",
+    "RespuestaReproceso",
+    "SolicitudCorreccion",
+    "SolicitudDescarte",
+)
+DESCARTES = "/v1/siniestros/parametricos/descartes"
+
+
+def test_dto_de_descarte_iguales_a_pagos_parametricos() -> None:
+    propios = app.openapi()["components"]["schemas"]
+    de_pagos = yaml.safe_load(PAGOS_PARAMETRICOS.read_text(encoding="utf-8"))["components"][
+        "schemas"
+    ]
+    for nombre in ESQUEMAS_DESCARTE:
+        assert propios[nombre] == de_pagos[nombre], nombre
+
+
+def test_contrato_de_la_cola_de_descarte() -> None:
+    rutas = app.openapi()["paths"]
+    assert set(rutas[DESCARTES]) == {"get"}
+    assert set(rutas[f"{DESCARTES}/{{messageId}}"]) == {"get"}
+    assert set(rutas[f"{DESCARTES}/reproceso"]) == {"post"}
+    assert set(rutas[f"{DESCARTES}/{{messageId}}/correccion"]) == {"post"}
+    assert set(rutas[f"{DESCARTES}/{{messageId}}/descarte"]) == {"post"}
+    assert set(rutas[DESCARTES]["get"]["responses"]) == {"200", "401", "403", "422", "503"}
+    assert set(rutas[f"{DESCARTES}/{{messageId}}/correccion"]["post"]["responses"]) == {
+        "200",
+        "401",
+        "403",
+        "404",
+        "409",
+        "422",
+        "503",
+    }

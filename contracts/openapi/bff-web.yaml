@@ -2692,20 +2692,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
-  /health:
-    get:
-      summary: Health
-      operationId: health_health_get
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                additionalProperties:
-                  type: string
-                type: object
-                title: Response Health Health Get
   /v1/siniestros:
     get:
       tags:
@@ -3129,8 +3115,391 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/parametricos/descartes:
+    get:
+      tags:
+      - descartes
+      summary: Listar
+      description: 'H10: los eventos que agotaron sus reintentos, con causa, intentos
+        y póliza referida.'
+      operationId: listar_v1_siniestros_parametricos_descartes_get
+      parameters:
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoDescarte'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo analistas-siniestros o no
+            es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/siniestros/parametricos/descartes/{messageId}:
+    get:
+      tags:
+      - descartes
+      summary: Detalle
+      description: 'H11: el contenido recibido, la causa y la verificación antes de
+        reprocesar.'
+      operationId: detalle_v1_siniestros_parametricos_descartes__messageId__get
+      parameters:
+      - name: messageId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Messageid
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetalleDescarte'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo analistas-siniestros o no
+            es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'DESCARTE_NO_ENCONTRADO: no está en la DLQ o lo revisa otro
+            analista'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/parametricos/descartes/reproceso:
+    post:
+      tags:
+      - descartes
+      summary: Reprocesar
+      description: 'H10 "Reprocesar seleccionados": cada uno vuelve a la cola con
+        el mismo eventId.'
+      operationId: reprocesar_v1_siniestros_parametricos_descartes_reproceso_post
+      parameters:
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudReproceso'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaReproceso'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo analistas-siniestros o no
+            es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: 'DESCARTE_YA_RESUELTO: el mensaje ya tiene otra resolución'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/parametricos/descartes/{messageId}/correccion:
+    post:
+      tags:
+      - descartes
+      summary: Corregir
+      description: 'H11 "Corregir y reprocesar": el original y la corrección quedan
+        en la auditoría.'
+      operationId: corregir_v1_siniestros_parametricos_descartes__messageId__correccion_post
+      parameters:
+      - name: messageId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Messageid
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudCorreccion'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolucionDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo analistas-siniestros o no
+            es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'DESCARTE_NO_ENCONTRADO: no está en la DLQ o lo revisa otro
+            analista'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: 'DESCARTE_YA_RESUELTO: el mensaje ya tiene otra resolución'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: CORRECCION_INVALIDA (detalles.campos) o SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/parametricos/descartes/{messageId}/descarte:
+    post:
+      tags:
+      - descartes
+      summary: Descartar
+      description: 'H11 "Descartar definitivamente": sale de la DLQ con registro auditado.'
+      operationId: descartar_v1_siniestros_parametricos_descartes__messageId__descarte_post
+      parameters:
+      - name: messageId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Messageid
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudDescarte'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolucionDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo analistas-siniestros o no
+            es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: SERVICIO_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: 'DESCARTE_NO_ENCONTRADO: no está en la DLQ o lo revisa otro
+            analista'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: 'DESCARTE_YA_RESUELTO: el mensaje ya tiene otra resolución'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Health Get
 components:
   schemas:
+    Accion:
+      type: string
+      enum:
+      - REPROCESADO
+      - CORREGIDO
+      - DESCARTADO
+      title: Accion
     AccionSugerida:
       type: string
       enum:
@@ -3500,6 +3869,14 @@ components:
       - antiguedadMinutos
       - clienteNombre
       title: CasoBandejaVista
+    Causa:
+      type: string
+      enum:
+      - FORMATO_INVALIDO
+      - REFERENCIA_INEXISTENTE
+      - ERROR_PROCESAMIENTO
+      - DESCONOCIDA
+      title: Causa
     ClienteDto:
       properties:
         clienteId:
@@ -3915,6 +4292,18 @@ components:
       title: ConsumoSocio
       description: 'Solo datos del socio consultado: el administrador nunca ve la
         API key.'
+    ConteoCausa:
+      properties:
+        causa:
+          $ref: '#/components/schemas/Causa'
+        cantidad:
+          type: integer
+          title: Cantidad
+      type: object
+      required:
+      - causa
+      - cantidad
+      title: ConteoCausa
     ContextoCasoDto:
       properties:
         nivelRiesgo:
@@ -4505,6 +4894,47 @@ components:
       - ajusteLimite
       - primaTotal
       title: DesglosePrimaDto
+    DetalleDescarte:
+      properties:
+        mensaje:
+          $ref: '#/components/schemas/MensajeDescarte'
+        contenido:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Contenido
+          description: El sobre recibido; null si no es JSON
+        texto:
+          type: string
+          title: Texto
+          description: El cuerpo tal como está en la DLQ
+        claveIdempotencia:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Claveidempotencia
+        verificacion:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Verificacion
+          description: Póliza vigente, cobertura activa y pago previo (HU-W21); null
+            si no hay
+        resolucion:
+          anyOf:
+          - $ref: '#/components/schemas/ResolucionDto'
+          - type: 'null'
+      type: object
+      required:
+      - mensaje
+      - contenido
+      - texto
+      - claveIdempotencia
+      - verificacion
+      - resolucion
+      title: DetalleDescarte
     DetalleSiniestroVista:
       properties:
         id:
@@ -5518,6 +5948,89 @@ components:
       - siguienteCursor
       - total
       title: ListadoCotizacionesVista
+    ListadoDescarte:
+      properties:
+        mensajes:
+          items:
+            $ref: '#/components/schemas/MensajeDescarte'
+          type: array
+          title: Mensajes
+        porCausa:
+          items:
+            $ref: '#/components/schemas/ConteoCausa'
+          type: array
+          title: Porcausa
+        total:
+          type: integer
+          title: Total
+        retencionDias:
+          type: integer
+          title: Retenciondias
+          description: Conservación de la DLQ (14 días en catalog.tf)
+        maxIntentos:
+          type: integer
+          title: Maxintentos
+          description: maxReceiveCount de la cola origen
+      type: object
+      required:
+      - mensajes
+      - porCausa
+      - total
+      - retencionDias
+      - maxIntentos
+      title: ListadoDescarte
+    MensajeDescarte:
+      properties:
+        messageId:
+          type: string
+          title: Messageid
+        eventoId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Eventoid
+          description: 'El eventId: también es la clave de idempotencia'
+        tipo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tipo
+        recibidoEn:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Recibidoen
+          description: Cuándo llegó el evento a la cola (SentTimestamp)
+        intentos:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Intentos
+        causa:
+          $ref: '#/components/schemas/Causa'
+        detalle:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Detalle
+          description: Tipo de error o motivo que anotó el consumidor
+        poliza:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Poliza
+          description: La póliza a la que se refiere el evento, si la trae
+      type: object
+      required:
+      - messageId
+      - eventoId
+      - tipo
+      - recibidoEn
+      - intentos
+      - causa
+      - detalle
+      - poliza
+      title: MensajeDescarte
     MotivoCliente:
       type: string
       enum:
@@ -6232,6 +6745,61 @@ components:
       - visibilidad
       - reservada
       title: ReglaEvaluadaDto
+    ResolucionDto:
+      properties:
+        messageId:
+          type: string
+          title: Messageid
+        eventoId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Eventoid
+        accion:
+          $ref: '#/components/schemas/Accion'
+        causa:
+          $ref: '#/components/schemas/Causa'
+        actorId:
+          type: string
+          title: Actorid
+        motivo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Motivo
+        resueltoEn:
+          type: string
+          format: date-time
+          title: Resueltoen
+        corregido:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Corregido
+          description: El sobre reenviado, solo en CORREGIDO
+      type: object
+      required:
+      - messageId
+      - eventoId
+      - accion
+      - causa
+      - actorId
+      - motivo
+      - resueltoEn
+      - corregido
+      title: ResolucionDto
+    RespuestaReproceso:
+      properties:
+        resultados:
+          items:
+            $ref: '#/components/schemas/ResultadoReproceso'
+          type: array
+          title: Resultados
+      type: object
+      required:
+      - resultados
+      title: RespuestaReproceso
     ResultadoCoherencia:
       type: string
       enum:
@@ -6253,6 +6821,21 @@ components:
       - NO_CUMPLE
       - NO_EVALUABLE
       title: ResultadoRegla
+    ResultadoReproceso:
+      properties:
+        messageId:
+          type: string
+          title: Messageid
+        resolucion:
+          anyOf:
+          - $ref: '#/components/schemas/ResolucionDto'
+          - type: 'null'
+          description: null si no está en la cola de descarte
+      type: object
+      required:
+      - messageId
+      - resolucion
+      title: ResultadoReproceso
     ResultadoVerificacion:
       type: string
       enum:
@@ -6843,6 +7426,34 @@ components:
       - nombreCompleto
       - fechaNacimiento
       title: SolicitudAltaCliente
+    SolicitudCorreccion:
+      properties:
+        cambios:
+          additionalProperties:
+            anyOf:
+            - type: string
+            - type: integer
+            - type: number
+            - type: boolean
+            - type: 'null'
+          propertyNames:
+            maxLength: 64
+            minLength: 1
+          type: object
+          maxProperties: 20
+          minProperties: 1
+          title: Cambios
+          description: Campos del payload y su valor corregido
+        motivo:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Motivo
+      type: object
+      required:
+      - cambios
+      title: SolicitudCorreccion
     SolicitudCotizacion:
       properties:
         clienteId:
@@ -6882,6 +7493,17 @@ components:
       - productoId
       - datosAsegurado
       title: SolicitudCotizacion
+    SolicitudDescarte:
+      properties:
+        motivo:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Motivo
+      type: object
+      required:
+      - motivo
+      title: SolicitudDescarte
     SolicitudPerfil:
       properties:
         clienteId:
@@ -6900,6 +7522,20 @@ components:
       - productoId
       - datosDeclarados
       title: SolicitudPerfil
+    SolicitudReproceso:
+      properties:
+        messageIds:
+          items:
+            type: string
+            format: uuid
+          type: array
+          maxItems: 50
+          minItems: 1
+          title: Messageids
+      type: object
+      required:
+      - messageIds
+      title: SolicitudReproceso
     SolicitudSuscripcion:
       properties:
         cotizacionId:

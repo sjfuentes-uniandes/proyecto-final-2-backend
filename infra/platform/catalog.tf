@@ -18,7 +18,10 @@ locals {
     "bff-web" = {
       tier = "acceso", listener_port = 8081, database = false, publishes = false, cache = false
       # HU-S03: siniestros por ServiciosWeb --> AtencionSiniestros (modelo_componentes.puml).
-      calls    = ["clientes", "cotizacion", "api-socios", "polizas", "consulta", "siniestros"]
+      # HU-W24 (decisión B1): pagos-parametricos para la cola de descarte (H10, H11). Sin flecha
+      # ServiciosWeb --> PagosParametricos en los diagramas: excepción aprobada y documentada en
+      # docs/hu-w24-particiones.md; la revisión de la DLQ es la (8) de modelo_componentes.puml.
+      calls    = ["clientes", "cotizacion", "api-socios", "polizas", "consulta", "siniestros", "pagos-parametricos"]
       consumes = [], allies = []
       stories  = ["HU-W01", "HU-W02", "HU-W10", "HU-W11", "HU-W12", "HU-W13", "HU-W14", "HU-W15", "HU-W18", "HU-W19", "HU-W20", "HU-W30", "HU-W31"]
     }
@@ -108,11 +111,14 @@ locals {
       consumes = ["avisos"], allies = []
       stories  = ["HU-M11"]
     }
+    # HU-W24: un objeto por lote en S3 encadenado por previousHash. La base guarda el Inbox
+    # (ConsumidoresAuditoria --> RegistroIdempotencia, modelo_concurrencia.puml) y la cabeza de
+    # la cadena, que pone en serie a las N tareas; el registro sigue siendo el de S3.
     "auditoria" = {
-      tier     = "worker", listener_port = null, database = false, publishes = false, cache = false
+      tier     = "worker", listener_port = null, database = true, publishes = false, cache = false
       calls    = []
       consumes = ["auditoria"], allies = []
-      stories  = ["HU-W31", "HU-M08", "HU-M09", "HU-W27"]
+      stories  = ["HU-W31", "HU-M08", "HU-M09", "HU-W27", "HU-W24"]
     }
     # --- Sprint 3 (HU-S03) ---------------------------------------------------------
     # Registra, evalúa y decide los casos; único dueño de las evidencias

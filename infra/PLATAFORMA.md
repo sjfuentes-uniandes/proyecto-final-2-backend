@@ -370,6 +370,29 @@ HU-W03 no agrega recursos, variables ni llamadas al catálogo de infraestructura
 
 **Costo del delta:** 0 USD. No hay tareas, nodos, colas, secretos ni alarmas nuevos (la alarma de la meta `cotizacion` ya existía y ahora recibe datos). Las tablas nuevas caben en el RDS existente y las claves de caché ocupan unos KB del nodo `cache.t3.micro`.
 
+## HU-W24: eventos paramétricos con particiones
+
+Las colas, las DLQ, la retención de 4 días de `parametricos-eventos` y sus alarmas de atraso y de DLQ las dejó HU-S03. HU-W24 agrega lo siguiente. Diseño y pruebas: [docs/hu-w24-particiones.md](../docs/hu-w24-particiones.md).
+
+| Pieza | Qué cambia | Diagrama que lo respalda |
+| --- | --- | --- |
+| `auditoria` | `database = true` en `catalog.tf`: base `auditoria`, secreto `solventa-<amb>/db/auditoria` y regla del grupo de seguridad de RDS. Guarda el Inbox y la cabeza de la cadena; el registro sigue siendo el objeto de S3 (`cadena/<secuencia>-<hash>.json`, uno por lote) | `ConsumidoresAuditoria --> RegistroIdempotencia` (`modelo_concurrencia.puml`); `RegistroAuditoria … previousHash` (`diagrama_flujo_estructuras_informacion.puml`); D3 |
+| `bff-web` → `pagos-parametricos` | `pagos-parametricos` en `bff-web.calls`: `PAGOS_PARAMETRICOS_URL` y nombre en Service Connect | **Sin flecha** `ServiciosWeb --> PagosParametricos`: decisión B1 de HU-W24, aprobada. La revisión de la DLQ es la (8) de `modelo_componentes.puml` |
+| IAM de `pagos-parametricos` | `dlq_operators` en `iam.tf`: `ReceiveMessage`, `DeleteMessage`, `ChangeMessageVisibility` y `GetQueueAttributes` sobre `parametricos-eventos-dlq`; `SendMessage` sobre `parametricos-eventos`. Sin `PurgeQueue` ni `StartMessageMoveTask` | `SQS -right-> DLQ : reintentos agotados` (`diagrama_despliegue_ecs_fargate.puml`) |
+| Escalado de `auditoria` | Ninguno nuevo: ya escala por la profundidad de su cola (política `backlog`, `max_replicas` de `int` = 3). El escalado por atraso lo ajusta HU-W25 | "Escalador de consumidores por atraso de particiones" (`modelo_concurrencia.puml`) |
+
+**Colas y eventos:** ninguna cola nueva. Evento nuevo `DescarteParametricoResuelto` v1 (Outbox de `pagos-parametricos`): solo lo recibe `auditoria`, porque ningún otro filtro lo admite.
+
+**Variables:** ninguna nueva en Terraform. Opcionales del código: `SQS_PARAMETRICOS_EVENTOS_DLQ_URL` (por omisión, `<cola>-dlq`), `DESCARTE_MAX_INTENTOS` (5) y `AUDIT_BUCKET_SSE` (sin valor, el cifrado por defecto del bucket).
+
+**Orden de despliegue:** `make infra-plataforma` (base y secreto de `auditoria`) → `make infra-bases` (crea la base en RDS) → `make infra-microservicios SERVICES=auditoria,pagos-parametricos,bff-web` (las imágenes nuevas y el IAM). `auditoria` migra su base al arrancar.
+
+**Humo (R5):** paso 13 de `make infra-probar` (`SMOKE_W24=0` lo omite). Desde HU-W24, los eventos sintéticos del humo llevan un `eventId` uuid: `auditoria` descarta como envenenado un sobre sin él.
+
+**Costo del delta:** una base más en el RDS existente y unos KB por lote en S3 (Object Lock). Las lecturas de la DLQ son de pocas solicitudes SQS por consulta. Sin tareas ni alarmas nuevas.
+
+**Seguridad:** solo `pagos-parametricos` opera una DLQ, y solo la suya (lo verifica `apps.tftest.hcl`). Los cuerpos de la DLQ (telemetría, sin datos personales) solo salen al portal por `bff-web`, para el grupo `analistas-siniestros`. Cada resolución queda en `resoluciones_descarte` y en `auditoria`.
+
 ## Despliegue
 
 El despliegue, las actualizaciones por microservicio y la destrucción están automatizados con `make infra-*` y con GitHub Actions. Ver **[DESPLIEGUE.md](DESPLIEGUE.md)** para el orden, los pasos intermedios, la dependencia de imágenes y la configuración de CI.

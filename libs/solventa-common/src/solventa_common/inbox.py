@@ -1,4 +1,4 @@
-"""Inbox y consumidor SQS (HU-W16, 16.5; ADR 0013, decisiones 2, 4 y 8).
+"""Inbox y consumidor SQS (HU-W16, 16.5; ADR 0013, decisiones 2, 4 y 8; HU-W24, contrapresión).
 
 Consume una cola SQS suscrita al tópico de negocio con entrega en crudo: el cuerpo es el sobre de
 `contracts/events/` y el atributo `eventType` (= `type`) es el que filtra la suscripción. Deduplica
@@ -28,17 +28,34 @@ por `eventId` con una tabla de inbox en la base del servicio.
   `EventoInvalido` y se registra igual, con el motivo `esquema`.
 - Dos consumidores con el mismo `eventId` a la vez: el `INSERT` del segundo espera al commit del
   primero y lo ve como duplicado (clave primaria del inbox). El efecto ocurre una sola vez.
-- **Visibilidad:** el consumidor **no** la extiende. El manejador y la continuación de cada mensaje
-  deben terminar muy por debajo de la visibilidad de su cola (`dinero-aceptaciones` 60 s,
-  `polizas-recaudos` 120 s), y como el lote va en secuencia, también `max_mensajes` veces su
-  duración. Si no, el mensaje reaparece mientras se procesa; el inbox evita el doble efecto, pero se
-  pierde trabajo.
-- Telemetría: `registrar("inbox.consumir", …)` por mensaje, con el `correlationId` del sobre en el
-  contexto (también para el manejador y la continuación) y el desenlace en `outcome`. Si el atributo
-  `eventType` no coincide con el `type` del sobre, un WARNING; el mensaje se procesa por su `type`.
+- **Visibilidad:** sin `visibilidad_s`, el consumidor **no** la extiende. El manejador y la
+  continuación de cada mensaje deben terminar muy por debajo de la visibilidad de su cola
+  (`dinero-aceptaciones` 60 s, `polizas-recaudos` 120 s), y como el lote va en secuencia, también
+  `max_mensajes` veces su duración. Si no, el mensaje reaparece mientras se procesa; el inbox evita
+  el doble efecto, pero se pierde trabajo. Con `visibilidad_s` (la de la cola), un latido renueva la
+  de cada mensaje cada `visibilidad_s / 2`, desde que se recibe hasta que termina (HU-W24).
+- **Contrapresión (HU-W24, AC1):** con `concurrencia` (`SQS_CONCURRENCIA` del servicio), el bucle
+  procesa hasta `concurrencia` mensajes a la vez y nunca tiene más recibidos sin terminar: pide a SQS
+  solo los huecos libres (`recibir_hasta`, como mucho `max_mensajes` del receptor; 10 es el lote de
+  SQS) y, sin huecos, no recibe. Lo demás espera en la cola, que es la que retiene el trabajo
+  pendiente. Sin `concurrencia`, el comportamiento de HU-W16: un lote en secuencia por ciclo.
+- Telemetría: `operacion("inbox.consumir")` por mensaje (span, `OperationDuration`,
+  `OperationErrors` y log), con el `correlationId` del sobre en el contexto (también para el
+  manejador y la continuación) y el desenlace en `outcome`. Si el atributo `eventType` no coincide
+  con el `type` del sobre, un WARNING; el mensaje se procesa por su `type`.
+- **Causa del fallo:** `al_fallar(mensaje, evento, desenlace)`, opcional, se llama tras cada
+  desenlace que no borra (envenenado, fallo de transacción o de continuación), fuera de la
+  transacción. Sirve para anotar la causa que luego muestra la DLQ (HU-W24, H10): SQS conserva el
+  `MessageId` al moverlo. Si falla, se registra y el mensaje sigue su curso.
 - No lee variables de entorno. boto3 es síncrono: se llama en un hilo. El timeout de lectura del
   cliente SQS supera la espera larga (`cliente_sqs` lo garantiza y `ReceptorSqs` lo comprueba).
-- La parada (`ejecutar`) se atiende entre ciclos: puede tardar una espera larga más el lote.
+- **Parada (`ejecutar`; SIGTERM, que uvicorn convierte en el cierre del lifespan; HU-W25 drena con
+  ella en el scale-in):** el consumidor deja de recibir. Con un `ReceptorControlado`, los mensajes
+  recibidos que aún no empezaron se **liberan** (visibilidad 0: otra tarea los toma enseguida); los
+  que están en curso tienen `plazo_parada_s` para terminar y, si no, se cancelan (rollback) y se
+  liberan. Con contrapresión, una espera larga en curso se abandona: lo que traiga se libera al
+  llegar, o reaparece tras la visibilidad de la cola; nunca se pierde. Sin `concurrencia`, la parada
+  se atiende entre ciclos, como en HU-W16, y el resto del lote se libera en vez de procesarse.
 
 Tabla recomendada (cada servicio la crea en su migración; las pruebas de módulo usan este DDL):
 
@@ -59,20 +76,19 @@ import asyncio
 import json
 import logging
 import re
-import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Protocol, TypeGuard
+from typing import TYPE_CHECKING, Any, Protocol, TypeGuard, runtime_checkable
 from uuid import UUID
 
 from psycopg import AsyncConnection, sql
 
 from solventa_common import correlation
 from solventa_common.outbox import ATRIBUTO_TIPO, describir_error, espera_tras_fallos
-from solventa_common.telemetry import RESULTADO_ERROR, RESULTADO_OK, registrar
+from solventa_common.telemetry import RESULTADO_ERROR, RESULTADO_OK, operacion
 
 if TYPE_CHECKING:
     from psycopg_pool import AsyncConnectionPool
@@ -84,6 +100,10 @@ MARGEN_LECTURA_S = 5.0
 # Lote en secuencia: con el corte de 5 s de pagos, 5 mensajes caben de sobra en los 60 s de
 # `dinero-aceptaciones`.
 MAX_MENSAJES = 5
+# HU-W24: el lote máximo de SQS, para los consumidores con contrapresión.
+LOTE_SQS = 10
+CONCURRENCIA_MAX = 100
+PLAZO_PARADA_S = 10.0
 TIMEOUT_CONEXION_S = 1.0
 INTENTOS_SQS = 2
 INTERVALO_S = 1.0
@@ -93,6 +113,10 @@ OPERACION = "inbox.consumir"
 MENSAJE_TIPO_DISTINTO = "inbox: el atributo eventType no coincide con el type del sobre"
 MENSAJE_RECEPCION_FALLIDA = "inbox: la recepción falló"
 MENSAJE_BORRADO_FALLIDO = "inbox: no se pudo borrar el mensaje"
+MENSAJE_LIBERADO = "inbox: mensaje liberado por la parada"
+MENSAJE_LIBERACION_FALLIDA = "inbox: no se pudo liberar el mensaje"
+MENSAJE_EXTENSION_FALLIDA = "inbox: no se pudo extender la visibilidad"
+MENSAJE_REGISTRO_FALLO_FALLIDO = "inbox: no se pudo registrar el fallo del mensaje"
 
 MOTIVO_JSON = "json_invalido"
 MOTIVO_EVENT_ID = "event_id_invalido"
@@ -208,6 +232,21 @@ class Receptor(Protocol):
     async def borrar(self, mensaje: MensajeSqs) -> None: ...
 
 
+@runtime_checkable
+class ReceptorControlado(Receptor, Protocol):
+    """HU-W24: el receptor que admite contrapresión, latido de visibilidad y liberación."""
+
+    async def recibir_hasta(self, maximo: int) -> list[MensajeSqs]:
+        """Recibe como mucho `maximo` mensajes (y nunca más que su lote)."""
+        ...
+
+    async def extender(self, mensaje: MensajeSqs, segundos: int) -> None: ...
+
+    async def liberar(self, mensaje: MensajeSqs) -> None:
+        """Visibilidad 0: el mensaje vuelve a la cola de inmediato, sin esperar la visibilidad."""
+        ...
+
+
 # --- Adaptador PostgreSQL ------------------------------------------------------------------------
 _REGISTRAR = sql.SQL(
     "INSERT INTO {tabla} (event_id, event_type, recibido_en) VALUES (%s, %s, %s) "
@@ -308,10 +347,13 @@ class ReceptorSqs:
         self.max_mensajes = max_mensajes
 
     async def recibir(self) -> list[MensajeSqs]:
+        return await self.recibir_hasta(self.max_mensajes)
+
+    async def recibir_hasta(self, maximo: int) -> list[MensajeSqs]:
         respuesta = await asyncio.to_thread(
             self._cliente.receive_message,
             QueueUrl=self._cola_url,
-            MaxNumberOfMessages=self.max_mensajes,
+            MaxNumberOfMessages=max(1, min(maximo, self.max_mensajes)),
             WaitTimeSeconds=self.espera_larga_s,
             MessageAttributeNames=[ATRIBUTO_TIPO],
             MessageSystemAttributeNames=["ApproximateReceiveCount"],
@@ -336,6 +378,17 @@ class ReceptorSqs:
             ReceiptHandle=mensaje.receipt_handle,
         )
 
+    async def extender(self, mensaje: MensajeSqs, segundos: int) -> None:
+        await asyncio.to_thread(
+            self._cliente.change_message_visibility,
+            QueueUrl=self._cola_url,
+            ReceiptHandle=mensaje.receipt_handle,
+            VisibilityTimeout=segundos,
+        )
+
+    async def liberar(self, mensaje: MensajeSqs) -> None:
+        await self.extender(mensaje, 0)
+
 
 # --- Consumidor ------------------------------------------------------------------------------------
 def _ahora() -> datetime:
@@ -349,8 +402,19 @@ async def _esperar(parada: asyncio.Event, segundos: float) -> None:
         pass
 
 
+async def _esperar_alguno(*eventos: asyncio.Event) -> None:
+    esperas = [asyncio.ensure_future(evento.wait()) for evento in eventos]
+    try:
+        await asyncio.wait(esperas, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        for espera in esperas:
+            espera.cancel()
+
+
 @dataclass(frozen=True)
-class _Desenlace:
+class Desenlace:
+    """Cómo terminó un mensaje; lo recibe `al_fallar` cuando no se borra."""
+
     outcome: str
     error_type: str | None = None
     reason: str | None = None
@@ -360,8 +424,23 @@ class _Desenlace:
         return self.outcome in (NUEVO, DUPLICADO)
 
 
+# Se llama tras un desenlace que no borra; `evento` es None si el sobre no se pudo leer.
+AlFallar = Callable[[MensajeSqs, EventoRecibido | None, Desenlace], Awaitable[None]]
+
+
+@dataclass
+class _EnCurso:
+    mensaje: MensajeSqs
+    # Ya se intentó borrar: si se cancela, no hay nada que liberar.
+    resuelto: bool = False
+
+
 class ConsumidorInbox[T: TransaccionInbox]:
-    """Consume una cola con inbox: un ciclo (`ejecutar_una_vez`) o en bucle (`ejecutar`)."""
+    """Consume una cola con inbox: un ciclo (`ejecutar_una_vez`) o en bucle (`ejecutar`).
+
+    `concurrencia` activa la contrapresión y `visibilidad_s` el latido; los dos piden un
+    `ReceptorControlado` (como `ReceptorSqs`).
+    """
 
     def __init__(
         self,
@@ -372,73 +451,240 @@ class ConsumidorInbox[T: TransaccionInbox]:
         intervalo_s: float = INTERVALO_S,
         intervalo_max_s: float = INTERVALO_MAX_S,
         reloj: Callable[[], datetime] = _ahora,
+        concurrencia: int | None = None,
+        visibilidad_s: int | None = None,
+        latido_s: float | None = None,
+        plazo_parada_s: float = PLAZO_PARADA_S,
+        al_fallar: AlFallar | None = None,
     ) -> None:
+        if concurrencia is not None and not 1 <= concurrencia <= CONCURRENCIA_MAX:
+            raise ValueError(f"concurrencia debe estar entre 1 y {CONCURRENCIA_MAX}")
+        if visibilidad_s is not None and visibilidad_s < 2:
+            raise ValueError("visibilidad_s debe ser de al menos 2 s")
+        if latido_s is not None and visibilidad_s is not None and latido_s >= visibilidad_s:
+            raise ValueError("latido_s debe ser menor que visibilidad_s")
+        controlado = isinstance(receptor, ReceptorControlado)
+        if (concurrencia is not None or visibilidad_s is not None) and not controlado:
+            raise TypeError("concurrencia y visibilidad_s piden un ReceptorControlado")
         self._receptor = receptor
         self._repositorio = repositorio
         self._manejador = manejador
         self._intervalo_s = intervalo_s
         self._intervalo_max_s = intervalo_max_s
         self._reloj = reloj
+        self._concurrencia = concurrencia
+        self._visibilidad_s = visibilidad_s
+        self._latido_s = latido_s if latido_s is not None else (visibilidad_s or 0) / 2
+        self._plazo_parada_s = plazo_parada_s
+        self._al_fallar = al_fallar
+        self._controlado = controlado
+        self._semaforo = asyncio.Semaphore(concurrencia or 1)
+        # Recibidos sin terminar (en curso o esperando turno): la medida de la contrapresión.
+        self._en_mano = 0
+        self._hueco = asyncio.Event()
+        self._parada: asyncio.Event | None = None
+
+    @property
+    def en_mano(self) -> int:
+        """Mensajes recibidos que aún no terminan (para pruebas y métricas del servicio)."""
+        return self._en_mano
 
     async def ejecutar_una_vez(self) -> int:
-        """Recibe un lote y lo procesa en secuencia; devuelve cuántos mensajes procesó (nuevos y
-        duplicados). Un fallo de recepción se propaga."""
-        procesados = 0
-        for mensaje in await self._receptor.recibir():
-            procesados += await self._procesar(mensaje)
-        return procesados
+        """Recibe un lote y lo procesa (en secuencia, o con `concurrencia` a la vez); devuelve
+        cuántos mensajes procesó (nuevos y duplicados). Un fallo de recepción se propaga."""
+        mensajes = await self._recibir()
+        if not mensajes:
+            return 0
+        resultados = await asyncio.gather(*(self._atender(mensaje) for mensaje in mensajes))
+        return sum(resultados)
 
     async def ejecutar(self, parada: asyncio.Event) -> None:
         """Repite ciclos hasta `parada`. Sin pausa tras una recepción (la espera larga ya marca el
         ritmo); tras fallos de recepción seguidos, una espera que crece hasta `intervalo_max_s`."""
+        self._parada = parada
+        if self._concurrencia is None:
+            await self._ejecutar_en_secuencia(parada)
+        else:
+            await self._ejecutar_con_contrapresion(parada)
+
+    async def _ejecutar_en_secuencia(self, parada: asyncio.Event) -> None:
         fallos_seguidos = 0
         while not parada.is_set():
             try:
                 await self.ejecutar_una_vez()
             except Exception as error:  # noqa: BLE001 - el siguiente ciclo lo reintenta
                 fallos_seguidos += 1
-                logger.error(
-                    MENSAJE_RECEPCION_FALLIDA, extra={"error_type": describir_error(error)}
-                )
-                espera = espera_tras_fallos(
-                    self._intervalo_s, self._intervalo_max_s, fallos_seguidos - 1
-                )
-                await _esperar(parada, espera)
+                await self._esperar_tras_fallo(parada, error, fallos_seguidos)
             else:
                 fallos_seguidos = 0
 
-    async def _procesar(self, mensaje: MensajeSqs) -> bool:
+    async def _ejecutar_con_contrapresion(self, parada: asyncio.Event) -> None:
+        """Recibe solo los huecos libres y procesa sin esperar al lote; con la parada, drena."""
+        assert self._concurrencia is not None
+        tareas: set[asyncio.Task[bool]] = set()
+        fallos_seguidos = 0
+        while not parada.is_set():
+            if self._en_mano >= self._concurrencia:
+                self._hueco.clear()
+                if self._en_mano >= self._concurrencia:
+                    await _esperar_alguno(parada, self._hueco)
+                continue
+            try:
+                mensajes = await self._recibir_o_parar(parada)
+            except Exception as error:  # noqa: BLE001 - el siguiente ciclo lo reintenta
+                fallos_seguidos += 1
+                await self._esperar_tras_fallo(parada, error, fallos_seguidos)
+                continue
+            fallos_seguidos = 0
+            for mensaje in mensajes:
+                tarea = asyncio.create_task(self._atender(mensaje))
+                tareas.add(tarea)
+                tarea.add_done_callback(tareas.discard)
+        await self._drenar(tareas)
+
+    async def _esperar_tras_fallo(
+        self, parada: asyncio.Event, error: Exception, fallos_seguidos: int
+    ) -> None:
+        logger.error(MENSAJE_RECEPCION_FALLIDA, extra={"error_type": describir_error(error)})
+        espera = espera_tras_fallos(self._intervalo_s, self._intervalo_max_s, fallos_seguidos - 1)
+        await _esperar(parada, espera)
+
+    async def _recibir(self) -> list[MensajeSqs]:
+        """Con contrapresión pide solo los huecos libres; los recibidos quedan "en mano"."""
+        if self._concurrencia is None:
+            mensajes = await self._receptor.recibir()
+        else:
+            assert isinstance(self._receptor, ReceptorControlado)
+            libres = self._concurrencia - self._en_mano
+            mensajes = await self._receptor.recibir_hasta(min(libres, LOTE_SQS))
+        self._en_mano += len(mensajes)
+        return mensajes
+
+    async def _recibir_o_parar(self, parada: asyncio.Event) -> list[MensajeSqs]:
+        """La espera larga no detiene la parada: si llega antes, se abandona la recepción. Lo que
+        traiga se libera si aún hay tiempo; si no, reaparece tras la visibilidad de la cola."""
+        recepcion = asyncio.ensure_future(self._recibir())
+        senal = asyncio.ensure_future(parada.wait())
+        await asyncio.wait({recepcion, senal}, return_when=asyncio.FIRST_COMPLETED)
+        senal.cancel()
+        if recepcion.done():
+            return recepcion.result()
+        recepcion.add_done_callback(self._liberar_tardios)
+        return []
+
+    def _liberar_tardios(self, recepcion: "asyncio.Future[list[MensajeSqs]]") -> None:
+        if recepcion.cancelled() or recepcion.exception() is not None:
+            return
+        for mensaje in recepcion.result():
+            asyncio.ensure_future(self._liberar_y_soltar(mensaje))
+
+    async def _liberar_y_soltar(self, mensaje: MensajeSqs) -> None:
+        try:
+            await self._liberar(mensaje)
+        finally:
+            self._soltar()
+
+    async def _drenar(self, tareas: set["asyncio.Task[bool]"]) -> None:
+        """Los que esperan turno se liberan solos (ven la parada); los en curso tienen el plazo."""
+        if not tareas:
+            return
+        _, pendientes = await asyncio.wait(set(tareas), timeout=self._plazo_parada_s)
+        for tarea in pendientes:
+            tarea.cancel()
+        await asyncio.gather(*pendientes, return_exceptions=True)
+
+    def _detenido(self) -> bool:
+        return self._parada is not None and self._parada.is_set()
+
+    def _soltar(self) -> None:
+        self._en_mano -= 1
+        self._hueco.set()
+
+    async def _atender(self, mensaje: MensajeSqs) -> bool:
+        """Turno, latido y liberación de un mensaje recibido; True si quedó procesado."""
+        en_curso = _EnCurso(mensaje)
+        latido = (
+            asyncio.create_task(self._latir(mensaje)) if self._visibilidad_s is not None else None
+        )
+        try:
+            async with self._semaforo:
+                if self._detenido() and self._controlado:
+                    await self._liberar(mensaje)
+                    return False
+                return await self._procesar(en_curso)
+        except asyncio.CancelledError:
+            if self._controlado and not en_curso.resuelto:
+                await asyncio.shield(self._liberar(mensaje))
+            raise
+        finally:
+            if latido is not None:
+                latido.cancel()
+            self._soltar()
+
+    async def _latir(self, mensaje: MensajeSqs) -> None:
+        assert self._visibilidad_s is not None
+        assert isinstance(self._receptor, ReceptorControlado)
+        while True:
+            await asyncio.sleep(self._latido_s)
+            try:
+                await self._receptor.extender(mensaje, self._visibilidad_s)
+            except Exception as error:  # noqa: BLE001 - el siguiente latido lo reintenta
+                logger.warning(
+                    MENSAJE_EXTENSION_FALLIDA,
+                    extra={"message_id": mensaje.message_id, "error_type": describir_error(error)},
+                )
+
+    async def _liberar(self, mensaje: MensajeSqs) -> None:
+        assert isinstance(self._receptor, ReceptorControlado)
+        try:
+            await self._receptor.liberar(mensaje)
+        except Exception as error:  # noqa: BLE001 - reaparece tras la visibilidad de la cola
+            logger.error(
+                MENSAJE_LIBERACION_FALLIDA,
+                extra={"message_id": mensaje.message_id, "error_type": describir_error(error)},
+            )
+        else:
+            logger.info(MENSAJE_LIBERADO, extra={"message_id": mensaje.message_id})
+
+    async def _procesar(self, en_curso: _EnCurso) -> bool:
         """Procesa un mensaje y lo mide; True si quedó procesado (y se intentó borrar)."""
-        inicio = time.perf_counter()
+        mensaje = en_curso.mensaje
         try:
             evento = leer_sobre(mensaje)
         except SobreInvalido as invalido:
-            self._medir(inicio, mensaje, None, _Desenlace(ENVENENADO, reason=invalido.motivo))
+            with operacion(OPERACION) as medicion:
+                desenlace = Desenlace(ENVENENADO, reason=invalido.motivo)
+                await self._registrar_fallo(mensaje, None, desenlace)
+                self._anotar(medicion, mensaje, None, desenlace)
             return False
         token = correlation.establecer(evento.correlation_id) if evento.correlation_id else None
         try:
-            if mensaje.tipo_atributo != evento.event_type:
-                logger.warning(
-                    MENSAJE_TIPO_DISTINTO,
-                    extra={
-                        "message_id": mensaje.message_id,
-                        "event_id": str(evento.event_id),
-                        "event_type": evento.event_type,
-                        "attribute_event_type": mensaje.tipo_atributo
-                        if _es_nombre_evento(mensaje.tipo_atributo)
-                        else None,
-                    },
-                )
-            desenlace = await self._aplicar(evento)
-            if desenlace.procesado:
-                await self._borrar(mensaje)
-            self._medir(inicio, mensaje, evento, desenlace)
+            with operacion(OPERACION) as medicion:
+                if mensaje.tipo_atributo != evento.event_type:
+                    logger.warning(
+                        MENSAJE_TIPO_DISTINTO,
+                        extra={
+                            "message_id": mensaje.message_id,
+                            "event_id": str(evento.event_id),
+                            "event_type": evento.event_type,
+                            "attribute_event_type": mensaje.tipo_atributo
+                            if _es_nombre_evento(mensaje.tipo_atributo)
+                            else None,
+                        },
+                    )
+                desenlace = await self._aplicar(evento)
+                if desenlace.procesado:
+                    en_curso.resuelto = True
+                    await self._borrar(mensaje)
+                else:
+                    await self._registrar_fallo(mensaje, evento, desenlace)
+                self._anotar(medicion, mensaje, evento, desenlace)
         finally:
             if token is not None:
                 correlation.restablecer(token)
         return desenlace.procesado
 
-    async def _aplicar(self, evento: EventoRecibido) -> _Desenlace:
+    async def _aplicar(self, evento: EventoRecibido) -> Desenlace:
         """Inbox y manejador en una transacción; después, la continuación (modo b)."""
         continuacion: Continuacion | None = None
         try:
@@ -447,17 +693,17 @@ class ConsumidorInbox[T: TransaccionInbox]:
                 if nuevo:
                     continuacion = await self._manejador(evento, tx)
         except EventoInvalido:
-            return _Desenlace(ENVENENADO, reason=MOTIVO_ESQUEMA)
+            return Desenlace(ENVENENADO, reason=MOTIVO_ESQUEMA)
         except Exception as error:  # noqa: BLE001 - el mensaje vuelve tras la visibilidad
-            return _Desenlace(FALLO_TRANSACCION, error_type=describir_error(error))
+            return Desenlace(FALLO_TRANSACCION, error_type=describir_error(error))
         if not nuevo:
-            return _Desenlace(DUPLICADO)
+            return Desenlace(DUPLICADO)
         if continuacion is not None:
             try:
                 await continuacion()
             except Exception as error:  # noqa: BLE001 - la reentrega será un duplicado
-                return _Desenlace(FALLO_CONTINUACION, error_type=describir_error(error))
-        return _Desenlace(NUEVO)
+                return Desenlace(FALLO_CONTINUACION, error_type=describir_error(error))
+        return Desenlace(NUEVO)
 
     async def _borrar(self, mensaje: MensajeSqs) -> None:
         try:
@@ -468,12 +714,25 @@ class ConsumidorInbox[T: TransaccionInbox]:
                 extra={"message_id": mensaje.message_id, "error_type": describir_error(error)},
             )
 
+    async def _registrar_fallo(
+        self, mensaje: MensajeSqs, evento: EventoRecibido | None, desenlace: Desenlace
+    ) -> None:
+        if self._al_fallar is None:
+            return
+        try:
+            await self._al_fallar(mensaje, evento, desenlace)
+        except Exception as error:  # noqa: BLE001 - la causa es informativa; el mensaje sigue
+            logger.error(
+                MENSAJE_REGISTRO_FALLO_FALLIDO,
+                extra={"message_id": mensaje.message_id, "error_type": describir_error(error)},
+            )
+
     @staticmethod
-    def _medir(
-        inicio: float,
+    def _anotar(
+        medicion: operacion,
         mensaje: MensajeSqs,
         evento: EventoRecibido | None,
-        desenlace: _Desenlace,
+        desenlace: Desenlace,
     ) -> None:
         extra: dict[str, Any] = {
             "message_id": mensaje.message_id,
@@ -486,9 +745,5 @@ class ConsumidorInbox[T: TransaccionInbox]:
             extra["error_type"] = desenlace.error_type
         if desenlace.reason is not None:
             extra["reason"] = desenlace.reason
-        registrar(
-            OPERACION,
-            (time.perf_counter() - inicio) * 1000,
-            RESULTADO_OK if desenlace.procesado else RESULTADO_ERROR,
-            **extra,
-        )
+        medicion.anotar(**extra)
+        medicion.marcar(RESULTADO_OK if desenlace.procesado else RESULTADO_ERROR)
