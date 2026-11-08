@@ -44,6 +44,10 @@ services:
     environment:
       SERVICES: sns,sqs,s3
     ports: ["4566:4566"]
+    volumes:
+      # HU-W19: tópico de negocio, bucket de evidencias y colas. Archivo compartido: cada HU agrega
+      # sus colas al final (scripts/dev/localstack-init.sh).
+      - ./scripts/dev/localstack-init.sh:/etc/localstack/init/ready.d/10-recursos.sh:ro
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.111.0
@@ -73,6 +77,8 @@ services:
       POLIZAS_URL: http://polizas:8080
       # HU-W18: estado y listado de pólizas.
       CONSULTA_URL: http://consulta:8080
+      # HU-W19: siniestros del analista (grupo analistas-siniestros).
+      SINIESTROS_URL: http://siniestros:8080
 
   bff-movil:
     <<: *servicio
@@ -237,6 +243,20 @@ services:
       OTEL_PROPAGATORS: tracecontext,baggage,xray
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
       DB_HOST: postgres
+      # HU-W19: evidencias en S3 (LocalStack), Outbox hacia el tópico local y semilla sintética de
+      # QA (DS3-07; apagada por omisión y nunca en producción). Los recursos los crea
+      # scripts/dev/localstack-init.sh. Las credenciales son las ficticias de LocalStack.
+      EVIDENCIAS_BUCKET: solventa-local-evidencias
+      EVIDENCIAS_BUCKET_SSE: AES256
+      # Las URL prefirmadas se firman con el endpoint que alcanza el navegador del analista.
+      SOLVENTA_EVIDENCIAS_ENDPOINT_PUBLICO: http://localhost:4566
+      SOLVENTA_SEMILLA_SINIESTROS_QA: "true"
+      SQS_SINIESTROS_INDEMNIZACIONES_URL: http://localstack:4566/000000000000/solventa-local-siniestros-indemnizaciones
+      OUTBOX_ENABLED: "true"
+      EVENTS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:solventa-local-eventos-negocio
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
 
   # PagosParametricos --> AtencionSiniestros (modelo_concurrencia.puml (9)).
   pagos-parametricos:

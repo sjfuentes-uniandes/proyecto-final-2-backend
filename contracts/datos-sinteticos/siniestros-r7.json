@@ -1,0 +1,1249 @@
+{
+  "descripcion": "Siniestros sintéticos de R7 (HU-W19, DS3-07). La semilla de QA de `siniestros` (SOLVENTA_SEMILLA_SINIESTROS_QA=true, solo local e int) los inserta de forma idempotente y sube sus objetos a S3 con ChecksumSHA256. Instantes y fechas son relativos al momento de sembrar. Datos 100 % sintéticos; sin nombres de clientes (los pone `clientes`).",
+  "version": "1",
+  "analistaQa": {
+    "analistaId": "a0a0a0a0-0000-4000-8000-000000000001",
+    "nombre": "Luis Mora"
+  },
+  "soportesRequeridosPorAmparo": {
+    "DANO_ACCIDENTAL": [
+      "FACTURA_COMPRA",
+      "DOCUMENTO_IDENTIDAD",
+      "CERTIFICADO_REPARACION"
+    ],
+    "ROBO": [
+      "DOCUMENTO_IDENTIDAD",
+      "DENUNCIA_AUTORIDAD"
+    ],
+    "PERDIDA_EQUIPAJE": [
+      "DOCUMENTO_IDENTIDAD",
+      "DENUNCIA_AUTORIDAD"
+    ],
+    "INCAPACIDAD_TOTAL": [
+      "DOCUMENTO_IDENTIDAD",
+      "PERITAJE"
+    ]
+  },
+  "objetos": {
+    "png-dano-1": {
+      "tipoContenido": "image/png",
+      "tamanoBytes": 584,
+      "sha256": "18953517df6ebcf523bf42bd0f5f5595fa3b6eca576a30a8ddaec0e5cfa03527",
+      "base64": "iVBORw0KGgoAAAANSUhEUgAAAUAAAADwCAIAAAD+Tyo8AAACD0lEQVR42u3TQQkAAAgEwUtsCJMY1Q7+hIFJsLCpHuCpSAAGBgwMGBgMDBgYMDBgYDAwYGDAwGBgwMCAgQEDg4EBAwMGBgwMBgYMDBgYDAwYGDAwYGAwMGBgwMCAgcHAgIEBA4OBAQMDBgYMDAYGDAwYGAysAhgYMDBgYDAwYGDAwICBwcCAgQEDg4EBAwMGBgwMBgYMDBgYMDAYGDAwYGAwMGBgwMCAgcHAgIEBAwMGBgMDBgYMDAYGDAwYGDAwGBgwMGBgMDBgYMDAgIHBwICBAQMDBgYDAwYGDAwGBgwMGBgwMBgYMDBgYMDAYGDAwICBwcCAgQEDAwYGAwMGBgwMGBgMDBgYMDAYGDAwYGDAwGBgwMCAgcHAgIEBAwMGBgMDBgYMDBgYDAwYGDAwGBgwMGBgwMBgYMDAgIEBA4OBAQMDBgYDAwYGDAwYGAwMGBgwMBhYBTAwYGDAwGBgwMCAgQEDg4EBAwMGBgMDBgYMDBgYDAwYGDAwYGAwMGBgwMBgYMDAgIEBA4OBAQMDBgYMDAYGDAwYGAwMGBgwMGBgMDBgYMDAYGDAwICBAQODgQEDAwYGDAwGBgwMGBgMDBgYMDBgYDAwYGDAwICBwcCAgQEDg4EBAwMGBgwMBgYMDBgYMDAYGDAwYGAwMGBgwMCAgcHAgIEBA4OBAQMDBgYMDAYGDAwYGDAwGBgwMHC3PTbbbXXL3XcAAAAASUVORK5CYII="
+    },
+    "png-dano-2": {
+      "tipoContenido": "image/png",
+      "tamanoBytes": 584,
+      "sha256": "ec3ba8e7cdd9c866c0a11cd03cdd4aef47fa1842ca28cf837ccee7d030804299",
+      "base64": "iVBORw0KGgoAAAANSUhEUgAAAUAAAADwCAIAAAD+Tyo8AAACD0lEQVR42u3TQQkAAAgEwYvt2xDmtYM/YWASLGxqGngqEoCBAQMDBgYDAwYGDAwYGAwMGBgwMBgYMDBgYMDAYGDAwICBAQODgQEDAwYGAwMGBgwMGBgMDBgYMDBgYDAwYGDAwGBgwMCAgQEDg4EBAwMGBgOrAAYGDAwYGAwMGBgwMGBgMDBgYMDAYGDAwICBAQODgQEDAwYGDAwGBgwMGBgMDBgYMDBgYDAwYGDAwICBwcCAgQEDg4EBAwMGBgwMBgYMDBgYDAwYGDAwYGAwMGBgwMCAgcHAgIEBA4OBAQMDBgYMDAYGDAwYGDAwGBgwMGBgMDBgYMDAgIHBwICBAQMDBgYDAwYGDAwGBgwMGBgwMBgYMDBgYDAwYGDAwICBwcCAgQEDAwYGAwMGBgwMBgYMDBgYMDAYGDAwYGDAwGBgwMCAgcHAgIEBAwMGBgMDBgYMDAZWAQwMGBgwMBgYMDBgYMDAYGDAwICBwcCAgQEDAwYGAwMGBgwMGBgMDBgYMDAYGDAwYGDAwGBgwMCAgQEDg4EBAwMGBgMDBgYMDBgYDAwYGDAwGBgwMGBgwMBgYMDAgIEBA4OBAQMDBgYDAwYGDAwYGAwMGBgwMGBgMDBgYMDAYGDAwICBAQODgQEDAwYGDAwGBgwMGBgMDBgYMDBgYDAwYGDAwGBgwMCAgQEDg4EBAwMGBgwMBgYMDNwtH/fbbX4eQMAAAAAASUVORK5CYII="
+    },
+    "png-equipaje": {
+      "tipoContenido": "image/png",
+      "tamanoBytes": 584,
+      "sha256": "5be33216a1c0344b28b666175057244e540e5c8a6732916832505de29cb195ba",
+      "base64": "iVBORw0KGgoAAAANSUhEUgAAAUAAAADwCAIAAAD+Tyo8AAACD0lEQVR42u3TQQkAAAgEwUtsEt/mtYM/YWASLGymC3gqEoCBAQMDBgYDAwYGDAwYGAwMGBgwMBgYMDBgYMDAYGDAwICBAQODgQEDAwYGAwMGBgwMGBgMDBgYMDBgYDAwYGDAwGBgwMCAgQEDg4EBAwMGBgOrAAYGDAwYGAwMGBgwMGBgMDBgYMDAYGDAwICBAQODgQEDAwYGDAwGBgwMGBgMDBgYMDBgYDAwYGDAwICBwcCAgQEDg4EBAwMGBgwMBgYMDBgYDAwYGDAwYGAwMGBgwMCAgcHAgIEBA4OBAQMDBgYMDAYGDAwYGDAwGBgwMGBgMDBgYMDAgIHBwICBAQMDBgYDAwYGDAwGBgwMGBgwMBgYMDBgYDAwYGDAwICBwcCAgQEDAwYGAwMGBgwMBgYMDBgYMDAYGDAwYGDAwGBgwMCAgcHAgIEBAwMGBgMDBgYMDAZWAQwMGBgwMBgYMDBgYMDAYGDAwICBwcCAgQEDAwYGAwMGBgwMGBgMDBgYMDAYGDAwYGDAwGBgwMCAgQEDg4EBAwMGBgMDBgYMDBgYDAwYGDAwGBgwMGBgwMBgYMDAgIEBA4OBAQMDBgYDAwYGDAwYGAwMGBgwMGBgMDBgYMDAYGDAwICBAQODgQEDAwYGDAwGBgwMGBgMDBgYMDBgYDAwYGDAwGBgwMCAgQEDg4EBAwMGBgwMBgYMDNwtu13bbQnN3I8AAAAASUVORK5CYII="
+    },
+    "png-alterado": {
+      "tipoContenido": "image/png",
+      "tamanoBytes": 583,
+      "sha256": "2ba9478c8590469b218c18f38898243c52f2ae24564a2bc81c69881f6bda3308",
+      "base64": "iVBORw0KGgoAAAANSUhEUgAAAUAAAADwCAIAAAD+Tyo8AAACDklEQVR42u3TQQkAAAwDsQqr9mmbh/0GgSg4uEwLPBUJwMCAgQEDg4EBAwMGBgwMBgYMDBgYDAwYGDAwYGAwMGBgwMCAgcHAgIEBA4OBAQMDBgYMDAYGDAwYGDAwGBgwMGBgMDBgYMDAgIHBwICBAQODgVUAAwMGBgwMBgYMDBgYMDAYGDAwYGAwMGBgwMCAgcHAgIEBAwMGBgMDBgYMDAYGDAwYGDAwGBgwMGBgwMBgYMDAgIHBwICBAQMDBgYDAwYGDAwGBgwMGBgwMBgYMDBgYMDAYGDAwICBwcCAgQEDAwYGAwMGBgwMGBgMDBgYMDAYGDAwYGDAwGBgwMCAgQEDg4EBAwMGBgMDBgYMDBgYDAwYGDAwGBgwMGBgwMBgYMDAgIEBA4OBAQMDBgYDAwYGDAwYGAwMGBgwMGBgMDBgYMDAYGDAwICBAQODgQEDAwYGA6sABgYMDBgYDAwYGDAwYGAwMGBgwMBgYMDAgIEBA4OBAQMDBgYMDAYGDAwYGAwMGBgwMGBgMDBgYMDAgIHBwICBAQODgQEDAwYGDAwGBgwMGBgMDBgYMDBgYDAwYGDAwICBwcCAgQEDg4EBAwMGBgwMBgYMDBgYMDAYGDAwYGAwMGBgwMCAgcHAgIEBAwMGBgMDBgYMDAYGDAwYGDAwGBgwMGBgMDBgYMDAgIHBwICBAQMDBgYDAwYG7haGxF1GRM7P6QAAAABJRU5ErkJggg=="
+    },
+    "mp4-dano": {
+      "tipoContenido": "video/mp4",
+      "tamanoBytes": 5364,
+      "sha256": "abc25a49f96cfe291cd7eaea47d08828b64ec25baec0784a32b2cda8384c673d",
+      "base64": "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"
+    },
+    "pdf-factura": {
+      "tipoContenido": "application/pdf",
+      "tamanoBytes": 602,
+      "sha256": "9eb22f5b9c901f4758368fa6b8b808723480259775eb0b09e8265bf0725cf590",
+      "base64": "JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAzMDAgMTYwXSAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAwIFIgPj4gPj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA1OCA+PgpzdHJlYW0KQlQgL0YxIDE4IFRmIDQwIDEwMCBUZCAoRmFjdHVyYSBzaW50ZXRpY2EgZGUgY29tcHJhKSBUaiBFVAplbmRzdHJlYW0KZW5kb2JqCjUgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1OCAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4gCjAwMDAwMDAyNDEgMDAwMDAgbiAKMDAwMDAwMDM0OSAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjQxOQolJUVPRgo="
+    },
+    "pdf-cedula": {
+      "tipoContenido": "application/pdf",
+      "tamanoBytes": 607,
+      "sha256": "c27e4b55160372cb335502af91ea9a3d4a5db1a9e6e6400fa7c2c654cc6b26a9",
+      "base64": "JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAzMDAgMTYwXSAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAwIFIgPj4gPj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA2MyA+PgpzdHJlYW0KQlQgL0YxIDE4IFRmIDQwIDEwMCBUZCAoRG9jdW1lbnRvIGRlIGlkZW50aWRhZCBzaW50ZXRpY28pIFRqIEVUCmVuZHN0cmVhbQplbmRvYmoKNSAwIG9iago8PCAvVHlwZSAvRm9udCAvU3VidHlwZSAvVHlwZTEgL0Jhc2VGb250IC9IZWx2ZXRpY2EgPj4KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU4IDAwMDAwIG4gCjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAwMDAwMDI0MSAwMDAwMCBuIAowMDAwMDAwMzU0IDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNDI0CiUlRU9GCg=="
+    },
+    "pdf-denuncia": {
+      "tipoContenido": "application/pdf",
+      "tamanoBytes": 611,
+      "sha256": "c502e35025f1c867d22c09dd89eaed471c501dcc7e7e9af1cfe31fa65f7ec440",
+      "base64": "JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAzMDAgMTYwXSAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAwIFIgPj4gPj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA2NyA+PgpzdHJlYW0KQlQgL0YxIDE4IFRmIDQwIDEwMCBUZCAoRGVudW5jaWEgc2ludGV0aWNhIGFudGUgbGEgYXV0b3JpZGFkKSBUaiBFVAplbmRzdHJlYW0KZW5kb2JqCjUgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1OCAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4gCjAwMDAwMDAyNDEgMDAwMDAgbiAKMDAwMDAwMDM1OCAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjQyOAolJUVPRgo="
+    },
+    "pdf-peritaje": {
+      "tipoContenido": "application/pdf",
+      "tamanoBytes": 593,
+      "sha256": "06d6dd420b9ddfeac516f4c2e1d21ed347d266253ab02161bc20e0ffb7a6974a",
+      "base64": "JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAzMDAgMTYwXSAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAwIFIgPj4gPj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA0OSA+PgpzdHJlYW0KQlQgL0YxIDE4IFRmIDQwIDEwMCBUZCAoUGVyaXRhamUgc2ludGV0aWNvKSBUaiBFVAplbmRzdHJlYW0KZW5kb2JqCjUgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1OCAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4gCjAwMDAwMDAyNDEgMDAwMDAgbiAKMDAwMDAwMDM0MCAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjQxMAolJUVPRgo="
+    }
+  },
+  "casos": [
+    {
+      "clave": "SIN-01",
+      "nota": "Cola general, el más reciente: queda de último al tomar el siguiente.",
+      "id": "5e000000-0000-4000-8000-000001000000",
+      "codigo": "88-2026-0431",
+      "origen": "MOVIL",
+      "estado": "REPORTADO",
+      "analistaId": null,
+      "reportadoHaceMin": 360,
+      "fechaEventoMinAntesDeReporte": 41,
+      "causa": "DANO_ACCIDENTAL",
+      "ubicacionDeclarada": {
+        "descripcion": "Bogotá D.C.",
+        "lat": 4.652,
+        "lon": -74.0555
+      },
+      "clienteId": "00000000-0000-4000-8000-000000000002",
+      "poliza": {
+        "polizaId": "a0000000-0000-4000-8000-000001000000",
+        "numero": "220-2026-011291",
+        "ramo": {
+          "codigo": "220",
+          "nombre": "Dispositivos"
+        },
+        "vigenciaDesdeHaceDias": 180,
+        "vigenciaHastaEnDias": 185,
+        "amparos": [
+          {
+            "codigo": "DANO_ACCIDENTAL",
+            "nombre": "Daño accidental",
+            "sumaAsegurada": "3000000.00"
+          }
+        ],
+        "moneda": "COP",
+        "carenciaDias": 30,
+        "plazoAvisoDias": 30,
+        "primasAlDia": true,
+        "beneficiario": {
+          "beneficiarioRef": "ben-sint-001",
+          "cuentaMascarada": "****1001"
+        }
+      },
+      "evidencias": [
+        {
+          "id": "e0000000-0000-4000-8000-000001000001",
+          "nombreArchivo": "evidencia_dano_01.jpg",
+          "tipo": "FOTOGRAFIA",
+          "soporteTipo": null,
+          "capturadaMinAntesDeReporte": 7,
+          "ubicacion": {
+            "descripcion": null,
+            "lat": 4.6512,
+            "lon": -74.056
+          },
+          "objetoRegistrado": "png-dano-1",
+          "objetoSubido": "png-dano-1"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000001000002",
+          "nombreArchivo": "evidencia_dano_02.jpg",
+          "tipo": "FOTOGRAFIA",
+          "soporteTipo": null,
+          "capturadaMinAntesDeReporte": 6,
+          "ubicacion": {
+            "descripcion": null,
+            "lat": 4.6512,
+            "lon": -74.056
+          },
+          "objetoRegistrado": "png-dano-2",
+          "objetoSubido": "png-dano-2"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000001000003",
+          "nombreArchivo": "evidencia_video.mp4",
+          "tipo": "VIDEO",
+          "soporteTipo": null,
+          "capturadaMinAntesDeReporte": 5,
+          "ubicacion": {
+            "descripcion": null,
+            "lat": 4.6512,
+            "lon": -74.056
+          },
+          "objetoRegistrado": "mp4-dano",
+          "objetoSubido": "mp4-dano"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000001000004",
+          "nombreArchivo": "factura_celular.pdf",
+          "tipo": "SOPORTE",
+          "soporteTipo": "FACTURA_COMPRA",
+          "capturadaMinAntesDeReporte": 4,
+          "ubicacion": {
+            "descripcion": "Escaneado en el sitio",
+            "lat": null,
+            "lon": null
+          },
+          "objetoRegistrado": "pdf-factura",
+          "objetoSubido": "pdf-factura"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000001000005",
+          "nombreArchivo": "cedula.pdf",
+          "tipo": "SOPORTE",
+          "soporteTipo": "DOCUMENTO_IDENTIDAD",
+          "capturadaMinAntesDeReporte": 3,
+          "ubicacion": {
+            "descripcion": "Escaneado en el sitio",
+            "lat": null,
+            "lon": null
+          },
+          "objetoRegistrado": "pdf-cedula",
+          "objetoSubido": "pdf-cedula"
+        }
+      ],
+      "historial": [
+        {
+          "accion": "REPORTADO",
+          "estadoAnterior": null,
+          "estadoNuevo": "REPORTADO",
+          "actorId": "00000000-0000-4000-8000-000000000002",
+          "actorRol": "CLIENTE",
+          "actorNombre": null,
+          "minDespuesDeReporte": 0
+        },
+        {
+          "accion": "EVIDENCIAS_VALIDADAS",
+          "estadoAnterior": null,
+          "estadoNuevo": null,
+          "actorId": null,
+          "actorRol": "SISTEMA",
+          "actorNombre": null,
+          "minDespuesDeReporte": 16
+        }
+      ],
+      "esperado": {
+        "tiempoRestanteMinAlSembrar": 2520,
+        "prioridad": "BAJA",
+        "verificacionCobertura": {
+          "VIGENCIA": "CUMPLE",
+          "AMPARO": "CUMPLE",
+          "CARENCIA": "CUMPLE",
+          "PLAZO_AVISO": "CUMPLE",
+          "PRIMAS": "CUMPLE",
+          "SOPORTES": "PARCIAL"
+        },
+        "coherencia": "COHERENTE",
+        "integridadEvidencias": [
+          "VERIFICADA",
+          "VERIFICADA",
+          "VERIFICADA",
+          "VERIFICADA",
+          "VERIFICADA"
+        ],
+        "soportesPendientes": [
+          "CERTIFICADO_REPARACION"
+        ]
+      }
+    },
+    {
+      "clave": "SIN-02",
+      "nota": "Cola general, soportes completos.",
+      "id": "5e000000-0000-4000-8000-000002000000",
+      "codigo": "88-2026-0433",
+      "origen": "PORTAL",
+      "estado": "REPORTADO",
+      "analistaId": null,
+      "reportadoHaceMin": 1200,
+      "fechaEventoMinAntesDeReporte": 90,
+      "causa": "PERDIDA_EQUIPAJE",
+      "ubicacionDeclarada": {
+        "descripcion": "Bogotá D.C.",
+        "lat": 4.652,
+        "lon": -74.0555
+      },
+      "clienteId": "00000000-0000-4000-8000-000000000003",
+      "poliza": {
+        "polizaId": "a0000000-0000-4000-8000-000002000000",
+        "numero": "230-2026-011292",
+        "ramo": {
+          "codigo": "230",
+          "nombre": "Viaje"
+        },
+        "vigenciaDesdeHaceDias": 180,
+        "vigenciaHastaEnDias": 185,
+        "amparos": [
+          {
+            "codigo": "PERDIDA_EQUIPAJE",
+            "nombre": "Pérdida de equipaje",
+            "sumaAsegurada": "5000000.00"
+          }
+        ],
+        "moneda": "COP",
+        "carenciaDias": 0,
+        "plazoAvisoDias": 15,
+        "primasAlDia": true,
+        "beneficiario": {
+          "beneficiarioRef": "ben-sint-002",
+          "cuentaMascarada": "****1002"
+        }
+      },
+      "evidencias": [
+        {
+          "id": "e0000000-0000-4000-8000-000002000001",
+          "nombreArchivo": "equipaje_01.jpg",
+          "tipo": "FOTOGRAFIA",
+          "soporteTipo": null,
+          "capturadaMinAntesDeReporte": 5,
+          "ubicacion": {
+            "descripcion": null,
+            "lat": 4.6512,
+            "lon": -74.056
+          },
+          "objetoRegistrado": "png-equipaje",
+          "objetoSubido": "png-equipaje"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000002000002",
+          "nombreArchivo": "cedula.pdf",
+          "tipo": "SOPORTE",
+          "soporteTipo": "DOCUMENTO_IDENTIDAD",
+          "capturadaMinAntesDeReporte": 4,
+          "ubicacion": {
+            "descripcion": "Escaneado en el sitio",
+            "lat": null,
+            "lon": null
+          },
+          "objetoRegistrado": "pdf-cedula",
+          "objetoSubido": "pdf-cedula"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000002000003",
+          "nombreArchivo": "denuncia.pdf",
+          "tipo": "SOPORTE",
+          "soporteTipo": "DENUNCIA_AUTORIDAD",
+          "capturadaMinAntesDeReporte": 3,
+          "ubicacion": {
+            "descripcion": "Escaneado en el sitio",
+            "lat": null,
+            "lon": null
+          },
+          "objetoRegistrado": "pdf-denuncia",
+          "objetoSubido": "pdf-denuncia"
+        }
+      ],
+      "historial": [
+        {
+          "accion": "REPORTADO",
+          "estadoAnterior": null,
+          "estadoNuevo": "REPORTADO",
+          "actorId": "00000000-0000-4000-8000-000000000003",
+          "actorRol": "CLIENTE",
+          "actorNombre": null,
+          "minDespuesDeReporte": 0
+        },
+        {
+          "accion": "EVIDENCIAS_VALIDADAS",
+          "estadoAnterior": null,
+          "estadoNuevo": null,
+          "actorId": null,
+          "actorRol": "SISTEMA",
+          "actorNombre": null,
+          "minDespuesDeReporte": 16
+        }
+      ],
+      "esperado": {
+        "tiempoRestanteMinAlSembrar": 1680,
+        "prioridad": "BAJA",
+        "verificacionCobertura": {
+          "VIGENCIA": "CUMPLE",
+          "AMPARO": "CUMPLE",
+          "CARENCIA": "CUMPLE",
+          "PLAZO_AVISO": "CUMPLE",
+          "PRIMAS": "CUMPLE",
+          "SOPORTES": "CUMPLE"
+        },
+        "coherencia": "COHERENTE",
+        "integridadEvidencias": [
+          "VERIFICADA",
+          "VERIFICADA",
+          "VERIFICADA"
+        ],
+        "soportesPendientes": []
+      }
+    },
+    {
+      "clave": "SIN-03",
+      "nota": "Cola general, el más antiguo: el primero que sale con «tomar el siguiente»; primas en mora.",
+      "id": "5e000000-0000-4000-8000-000003000000",
+      "codigo": "88-2026-0436",
+      "origen": "MOVIL",
+      "estado": "REPORTADO",
+      "analistaId": null,
+      "reportadoHaceMin": 1800,
+      "fechaEventoMinAntesDeReporte": 55,
+      "causa": "ROBO",
+      "ubicacionDeclarada": {
+        "descripcion": "Bogotá D.C.",
+        "lat": 4.652,
+        "lon": -74.0555
+      },
+      "clienteId": "00000000-0000-4000-8000-000000000004",
+      "poliza": {
+        "polizaId": "a0000000-0000-4000-8000-000003000000",
+        "numero": "220-2026-011293",
+        "ramo": {
+          "codigo": "220",
+          "nombre": "Dispositivos"
+        },
+        "vigenciaDesdeHaceDias": 180,
+        "vigenciaHastaEnDias": 185,
+        "amparos": [
+          {
+            "codigo": "ROBO",
+            "nombre": "Robo",
+            "sumaAsegurada": "3000000.00"
+          }
+        ],
+        "moneda": "COP",
+        "carenciaDias": 30,
+        "plazoAvisoDias": 30,
+        "primasAlDia": false,
+        "beneficiario": {
+          "beneficiarioRef": "ben-sint-003",
+          "cuentaMascarada": "****1003"
+        }
+      },
+      "evidencias": [
+        {
+          "id": "e0000000-0000-4000-8000-000003000001",
+          "nombreArchivo": "lugar_del_robo.jpg",
+          "tipo": "FOTOGRAFIA",
+          "soporteTipo": null,
+          "capturadaMinAntesDeReporte": 6,
+          "ubicacion": {
+            "descripcion": null,
+            "lat": 4.6512,
+            "lon": -74.056
+          },
+          "objetoRegistrado": "png-dano-2",
+          "objetoSubido": "png-dano-2"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000003000002",
+          "nombreArchivo": "cedula.pdf",
+          "tipo": "SOPORTE",
+          "soporteTipo": "DOCUMENTO_IDENTIDAD",
+          "capturadaMinAntesDeReporte": 4,
+          "ubicacion": {
+            "descripcion": "Escaneado en el sitio",
+            "lat": null,
+            "lon": null
+          },
+          "objetoRegistrado": "pdf-cedula",
+          "objetoSubido": "pdf-cedula"
+        }
+      ],
+      "historial": [
+        {
+          "accion": "REPORTADO",
+          "estadoAnterior": null,
+          "estadoNuevo": "REPORTADO",
+          "actorId": "00000000-0000-4000-8000-000000000004",
+          "actorRol": "CLIENTE",
+          "actorNombre": null,
+          "minDespuesDeReporte": 0
+        },
+        {
+          "accion": "EVIDENCIAS_VALIDADAS",
+          "estadoAnterior": null,
+          "estadoNuevo": null,
+          "actorId": null,
+          "actorRol": "SISTEMA",
+          "actorNombre": null,
+          "minDespuesDeReporte": 16
+        }
+      ],
+      "esperado": {
+        "tiempoRestanteMinAlSembrar": 1080,
+        "prioridad": "MEDIA",
+        "verificacionCobertura": {
+          "VIGENCIA": "CUMPLE",
+          "AMPARO": "CUMPLE",
+          "CARENCIA": "CUMPLE",
+          "PLAZO_AVISO": "CUMPLE",
+          "PRIMAS": "NO_CUMPLE",
+          "SOPORTES": "PARCIAL"
+        },
+        "coherencia": "COHERENTE",
+        "integridadEvidencias": [
+          "VERIFICADA",
+          "VERIFICADA"
+        ],
+        "soportesPendientes": [
+          "DENUNCIA_AUTORIDAD"
+        ]
+      }
+    },
+    {
+      "clave": "EVA-01",
+      "nota": "El caso de H03 y H04: cinco evidencias verificadas y falta el certificado de reparación.",
+      "id": "5e000000-0000-4000-8000-000004000000",
+      "codigo": "88-2026-0442",
+      "origen": "MOVIL",
+      "estado": "EN_EVALUACION",
+      "analistaId": "a0a0a0a0-0000-4000-8000-000000000001",
+      "reportadoHaceMin": 840,
+      "fechaEventoMinAntesDeReporte": 41,
+      "causa": "DANO_ACCIDENTAL",
+      "ubicacionDeclarada": {
+        "descripcion": "Bogotá D.C.",
+        "lat": 4.652,
+        "lon": -74.0555
+      },
+      "clienteId": "00000000-0000-4000-8000-000000000001",
+      "poliza": {
+        "polizaId": "a0000000-0000-4000-8000-000004000000",
+        "numero": "220-2026-011294",
+        "ramo": {
+          "codigo": "220",
+          "nombre": "Dispositivos"
+        },
+        "vigenciaDesdeHaceDias": 180,
+        "vigenciaHastaEnDias": 185,
+        "amparos": [
+          {
+            "codigo": "DANO_ACCIDENTAL",
+            "nombre": "Daño accidental",
+            "sumaAsegurada": "3000000.00"
+          }
+        ],
+        "moneda": "COP",
+        "carenciaDias": 30,
+        "plazoAvisoDias": 30,
+        "primasAlDia": true,
+        "beneficiario": {
+          "beneficiarioRef": "ben-sint-004",
+          "cuentaMascarada": "****1004"
+        }
+      },
+      "evidencias": [
+        {
+          "id": "e0000000-0000-4000-8000-000004000001",
+          "nombreArchivo": "evidencia_dano_01.jpg",
+          "tipo": "FOTOGRAFIA",
+          "soporteTipo": null,
+          "capturadaMinAntesDeReporte": 7,
+          "ubicacion": {
+            "descripcion": null,
+            "lat": 4.6512,
+            "lon": -74.056
+          },
+          "objetoRegistrado": "png-dano-1",
+          "objetoSubido": "png-dano-1"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000004000002",
+          "nombreArchivo": "evidencia_dano_02.jpg",
+          "tipo": "FOTOGRAFIA",
+          "soporteTipo": null,
+          "capturadaMinAntesDeReporte": 6,
+          "ubicacion": {
+            "descripcion": null,
+            "lat": 4.6512,
+            "lon": -74.056
+          },
+          "objetoRegistrado": "png-dano-2",
+          "objetoSubido": "png-dano-2"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000004000003",
+          "nombreArchivo": "evidencia_video.mp4",
+          "tipo": "VIDEO",
+          "soporteTipo": null,
+          "capturadaMinAntesDeReporte": 5,
+          "ubicacion": {
+            "descripcion": null,
+            "lat": 4.6512,
+            "lon": -74.056
+          },
+          "objetoRegistrado": "mp4-dano",
+          "objetoSubido": "mp4-dano"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000004000004",
+          "nombreArchivo": "factura_celular.pdf",
+          "tipo": "SOPORTE",
+          "soporteTipo": "FACTURA_COMPRA",
+          "capturadaMinAntesDeReporte": 4,
+          "ubicacion": {
+            "descripcion": "Escaneado en el sitio",
+            "lat": null,
+            "lon": null
+          },
+          "objetoRegistrado": "pdf-factura",
+          "objetoSubido": "pdf-factura"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000004000005",
+          "nombreArchivo": "cedula.pdf",
+          "tipo": "SOPORTE",
+          "soporteTipo": "DOCUMENTO_IDENTIDAD",
+          "capturadaMinAntesDeReporte": 3,
+          "ubicacion": {
+            "descripcion": "Escaneado en el sitio",
+            "lat": null,
+            "lon": null
+          },
+          "objetoRegistrado": "pdf-cedula",
+          "objetoSubido": "pdf-cedula"
+        }
+      ],
+      "historial": [
+        {
+          "accion": "REPORTADO",
+          "estadoAnterior": null,
+          "estadoNuevo": "REPORTADO",
+          "actorId": "00000000-0000-4000-8000-000000000001",
+          "actorRol": "CLIENTE",
+          "actorNombre": null,
+          "minDespuesDeReporte": 0
+        },
+        {
+          "accion": "EVIDENCIAS_VALIDADAS",
+          "estadoAnterior": null,
+          "estadoNuevo": null,
+          "actorId": null,
+          "actorRol": "SISTEMA",
+          "actorNombre": null,
+          "minDespuesDeReporte": 16
+        },
+        {
+          "accion": "ASIGNADO",
+          "estadoAnterior": "REPORTADO",
+          "estadoNuevo": "EN_EVALUACION",
+          "actorId": "a0a0a0a0-0000-4000-8000-000000000001",
+          "actorRol": "ANALISTA_SINIESTROS",
+          "actorNombre": "Luis Mora",
+          "minDespuesDeReporte": 120
+        }
+      ],
+      "esperado": {
+        "tiempoRestanteMinAlSembrar": 2040,
+        "prioridad": "BAJA",
+        "verificacionCobertura": {
+          "VIGENCIA": "CUMPLE",
+          "AMPARO": "CUMPLE",
+          "CARENCIA": "CUMPLE",
+          "PLAZO_AVISO": "CUMPLE",
+          "PRIMAS": "CUMPLE",
+          "SOPORTES": "PARCIAL"
+        },
+        "coherencia": "COHERENTE",
+        "integridadEvidencias": [
+          "VERIFICADA",
+          "VERIFICADA",
+          "VERIFICADA",
+          "VERIFICADA",
+          "VERIFICADA"
+        ],
+        "soportesPendientes": [
+          "CERTIFICADO_REPARACION"
+        ]
+      }
+    },
+    {
+      "clave": "EVA-02",
+      "nota": "Fuera del compromiso de 48 h (vencido 2 h).",
+      "id": "5e000000-0000-4000-8000-000005000000",
+      "codigo": "88-2026-0439",
+      "origen": "PORTAL",
+      "estado": "EN_EVALUACION",
+      "analistaId": "a0a0a0a0-0000-4000-8000-000000000001",
+      "reportadoHaceMin": 3000,
+      "fechaEventoMinAntesDeReporte": 120,
+      "causa": "PERDIDA_EQUIPAJE",
+      "ubicacionDeclarada": {
+        "descripcion": "Bogotá D.C.",
+        "lat": 4.652,
+        "lon": -74.0555
+      },
+      "clienteId": "00000000-0000-4000-8000-000000000005",
+      "poliza": {
+        "polizaId": "a0000000-0000-4000-8000-000005000000",
+        "numero": "230-2026-011295",
+        "ramo": {
+          "codigo": "230",
+          "nombre": "Viaje"
+        },
+        "vigenciaDesdeHaceDias": 180,
+        "vigenciaHastaEnDias": 185,
+        "amparos": [
+          {
+            "codigo": "PERDIDA_EQUIPAJE",
+            "nombre": "Pérdida de equipaje",
+            "sumaAsegurada": "5000000.00"
+          }
+        ],
+        "moneda": "COP",
+        "carenciaDias": 0,
+        "plazoAvisoDias": 15,
+        "primasAlDia": true,
+        "beneficiario": {
+          "beneficiarioRef": "ben-sint-005",
+          "cuentaMascarada": "****1005"
+        }
+      },
+      "evidencias": [
+        {
+          "id": "e0000000-0000-4000-8000-000005000001",
+          "nombreArchivo": "equipaje_01.jpg",
+          "tipo": "FOTOGRAFIA",
+          "soporteTipo": null,
+          "capturadaMinAntesDeReporte": 5,
+          "ubicacion": {
+            "descripcion": null,
+            "lat": 4.6512,
+            "lon": -74.056
+          },
+          "objetoRegistrado": "png-equipaje",
+          "objetoSubido": "png-equipaje"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000005000002",
+          "nombreArchivo": "cedula.pdf",
+          "tipo": "SOPORTE",
+          "soporteTipo": "DOCUMENTO_IDENTIDAD",
+          "capturadaMinAntesDeReporte": 4,
+          "ubicacion": {
+            "descripcion": "Escaneado en el sitio",
+            "lat": null,
+            "lon": null
+          },
+          "objetoRegistrado": "pdf-cedula",
+          "objetoSubido": "pdf-cedula"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000005000003",
+          "nombreArchivo": "denuncia.pdf",
+          "tipo": "SOPORTE",
+          "soporteTipo": "DENUNCIA_AUTORIDAD",
+          "capturadaMinAntesDeReporte": 3,
+          "ubicacion": {
+            "descripcion": "Escaneado en el sitio",
+            "lat": null,
+            "lon": null
+          },
+          "objetoRegistrado": "pdf-denuncia",
+          "objetoSubido": "pdf-denuncia"
+        }
+      ],
+      "historial": [
+        {
+          "accion": "REPORTADO",
+          "estadoAnterior": null,
+          "estadoNuevo": "REPORTADO",
+          "actorId": "00000000-0000-4000-8000-000000000005",
+          "actorRol": "CLIENTE",
+          "actorNombre": null,
+          "minDespuesDeReporte": 0
+        },
+        {
+          "accion": "EVIDENCIAS_VALIDADAS",
+          "estadoAnterior": null,
+          "estadoNuevo": null,
+          "actorId": null,
+          "actorRol": "SISTEMA",
+          "actorNombre": null,
+          "minDespuesDeReporte": 16
+        },
+        {
+          "accion": "ASIGNADO",
+          "estadoAnterior": "REPORTADO",
+          "estadoNuevo": "EN_EVALUACION",
+          "actorId": "a0a0a0a0-0000-4000-8000-000000000001",
+          "actorRol": "ANALISTA_SINIESTROS",
+          "actorNombre": "Luis Mora",
+          "minDespuesDeReporte": 120
+        }
+      ],
+      "esperado": {
+        "tiempoRestanteMinAlSembrar": -120,
+        "prioridad": "ALTA",
+        "verificacionCobertura": {
+          "VIGENCIA": "CUMPLE",
+          "AMPARO": "CUMPLE",
+          "CARENCIA": "CUMPLE",
+          "PLAZO_AVISO": "CUMPLE",
+          "PRIMAS": "CUMPLE",
+          "SOPORTES": "CUMPLE"
+        },
+        "coherencia": "COHERENTE",
+        "integridadEvidencias": [
+          "VERIFICADA",
+          "VERIFICADA",
+          "VERIFICADA"
+        ],
+        "soportesPendientes": []
+      }
+    },
+    {
+      "clave": "AUS-01",
+      "nota": "AC4: el objeto del video no existe en S3; el detalle responde 200 y su enlace, 404.",
+      "id": "5e000000-0000-4000-8000-000006000000",
+      "codigo": "88-2026-0440",
+      "origen": "MOVIL",
+      "estado": "EN_EVALUACION",
+      "analistaId": "a0a0a0a0-0000-4000-8000-000000000001",
+      "reportadoHaceMin": 600,
+      "fechaEventoMinAntesDeReporte": 41,
+      "causa": "DANO_ACCIDENTAL",
+      "ubicacionDeclarada": {
+        "descripcion": "Bogotá D.C.",
+        "lat": 4.652,
+        "lon": -74.0555
+      },
+      "clienteId": "00000000-0000-4000-8000-000000000006",
+      "poliza": {
+        "polizaId": "a0000000-0000-4000-8000-000006000000",
+        "numero": "220-2026-011296",
+        "ramo": {
+          "codigo": "220",
+          "nombre": "Dispositivos"
+        },
+        "vigenciaDesdeHaceDias": 180,
+        "vigenciaHastaEnDias": 185,
+        "amparos": [
+          {
+            "codigo": "DANO_ACCIDENTAL",
+            "nombre": "Daño accidental",
+            "sumaAsegurada": "3000000.00"
+          }
+        ],
+        "moneda": "COP",
+        "carenciaDias": 30,
+        "plazoAvisoDias": 30,
+        "primasAlDia": true,
+        "beneficiario": {
+          "beneficiarioRef": "ben-sint-006",
+          "cuentaMascarada": "****1006"
+        }
+      },
+      "evidencias": [
+        {
+          "id": "e0000000-0000-4000-8000-000006000001",
+          "nombreArchivo": "evidencia_dano_01.jpg",
+          "tipo": "FOTOGRAFIA",
+          "soporteTipo": null,
+          "capturadaMinAntesDeReporte": 7,
+          "ubicacion": {
+            "descripcion": null,
+            "lat": 4.6512,
+            "lon": -74.056
+          },
+          "objetoRegistrado": "png-dano-1",
+          "objetoSubido": "png-dano-1"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000006000002",
+          "nombreArchivo": "evidencia_dano_02.jpg",
+          "tipo": "FOTOGRAFIA",
+          "soporteTipo": null,
+          "capturadaMinAntesDeReporte": 6,
+          "ubicacion": {
+            "descripcion": null,
+            "lat": 4.6512,
+            "lon": -74.056
+          },
+          "objetoRegistrado": "png-dano-2",
+          "objetoSubido": "png-dano-2"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000006000003",
+          "nombreArchivo": "evidencia_video.mp4",
+          "tipo": "VIDEO",
+          "soporteTipo": null,
+          "capturadaMinAntesDeReporte": 5,
+          "ubicacion": {
+            "descripcion": null,
+            "lat": 4.6512,
+            "lon": -74.056
+          },
+          "objetoRegistrado": "mp4-dano",
+          "objetoSubido": null
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000006000004",
+          "nombreArchivo": "factura_celular.pdf",
+          "tipo": "SOPORTE",
+          "soporteTipo": "FACTURA_COMPRA",
+          "capturadaMinAntesDeReporte": 4,
+          "ubicacion": {
+            "descripcion": "Escaneado en el sitio",
+            "lat": null,
+            "lon": null
+          },
+          "objetoRegistrado": "pdf-factura",
+          "objetoSubido": "pdf-factura"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000006000005",
+          "nombreArchivo": "cedula.pdf",
+          "tipo": "SOPORTE",
+          "soporteTipo": "DOCUMENTO_IDENTIDAD",
+          "capturadaMinAntesDeReporte": 3,
+          "ubicacion": {
+            "descripcion": "Escaneado en el sitio",
+            "lat": null,
+            "lon": null
+          },
+          "objetoRegistrado": "pdf-cedula",
+          "objetoSubido": "pdf-cedula"
+        }
+      ],
+      "historial": [
+        {
+          "accion": "REPORTADO",
+          "estadoAnterior": null,
+          "estadoNuevo": "REPORTADO",
+          "actorId": "00000000-0000-4000-8000-000000000006",
+          "actorRol": "CLIENTE",
+          "actorNombre": null,
+          "minDespuesDeReporte": 0
+        },
+        {
+          "accion": "EVIDENCIAS_VALIDADAS",
+          "estadoAnterior": null,
+          "estadoNuevo": null,
+          "actorId": null,
+          "actorRol": "SISTEMA",
+          "actorNombre": null,
+          "minDespuesDeReporte": 16
+        },
+        {
+          "accion": "ASIGNADO",
+          "estadoAnterior": "REPORTADO",
+          "estadoNuevo": "EN_EVALUACION",
+          "actorId": "a0a0a0a0-0000-4000-8000-000000000001",
+          "actorRol": "ANALISTA_SINIESTROS",
+          "actorNombre": "Luis Mora",
+          "minDespuesDeReporte": 120
+        }
+      ],
+      "esperado": {
+        "tiempoRestanteMinAlSembrar": 2280,
+        "prioridad": "BAJA",
+        "verificacionCobertura": {
+          "VIGENCIA": "CUMPLE",
+          "AMPARO": "CUMPLE",
+          "CARENCIA": "CUMPLE",
+          "PLAZO_AVISO": "CUMPLE",
+          "PRIMAS": "CUMPLE",
+          "SOPORTES": "PARCIAL"
+        },
+        "coherencia": "COHERENTE",
+        "integridadEvidencias": [
+          "VERIFICADA",
+          "VERIFICADA",
+          "NO_DISPONIBLE",
+          "VERIFICADA",
+          "VERIFICADA"
+        ],
+        "soportesPendientes": [
+          "CERTIFICADO_REPARACION"
+        ]
+      }
+    },
+    {
+      "clave": "ALT-01",
+      "nota": "La primera foto se subió con contenido distinto al registrado: integridad ALTERADA.",
+      "id": "5e000000-0000-4000-8000-000007000000",
+      "codigo": "88-2026-0441",
+      "origen": "MOVIL",
+      "estado": "EN_EVALUACION",
+      "analistaId": "a0a0a0a0-0000-4000-8000-000000000001",
+      "reportadoHaceMin": 540,
+      "fechaEventoMinAntesDeReporte": 41,
+      "causa": "DANO_ACCIDENTAL",
+      "ubicacionDeclarada": {
+        "descripcion": "Bogotá D.C.",
+        "lat": 4.652,
+        "lon": -74.0555
+      },
+      "clienteId": "00000000-0000-4000-8000-000000000007",
+      "poliza": {
+        "polizaId": "a0000000-0000-4000-8000-000007000000",
+        "numero": "220-2026-011297",
+        "ramo": {
+          "codigo": "220",
+          "nombre": "Dispositivos"
+        },
+        "vigenciaDesdeHaceDias": 180,
+        "vigenciaHastaEnDias": 185,
+        "amparos": [
+          {
+            "codigo": "DANO_ACCIDENTAL",
+            "nombre": "Daño accidental",
+            "sumaAsegurada": "3000000.00"
+          }
+        ],
+        "moneda": "COP",
+        "carenciaDias": 30,
+        "plazoAvisoDias": 30,
+        "primasAlDia": true,
+        "beneficiario": {
+          "beneficiarioRef": "ben-sint-007",
+          "cuentaMascarada": "****1007"
+        }
+      },
+      "evidencias": [
+        {
+          "id": "e0000000-0000-4000-8000-000007000001",
+          "nombreArchivo": "evidencia_dano_01.jpg",
+          "tipo": "FOTOGRAFIA",
+          "soporteTipo": null,
+          "capturadaMinAntesDeReporte": 7,
+          "ubicacion": {
+            "descripcion": null,
+            "lat": 4.6512,
+            "lon": -74.056
+          },
+          "objetoRegistrado": "png-dano-1",
+          "objetoSubido": "png-alterado"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000007000002",
+          "nombreArchivo": "evidencia_dano_02.jpg",
+          "tipo": "FOTOGRAFIA",
+          "soporteTipo": null,
+          "capturadaMinAntesDeReporte": 6,
+          "ubicacion": {
+            "descripcion": null,
+            "lat": 4.6512,
+            "lon": -74.056
+          },
+          "objetoRegistrado": "png-dano-2",
+          "objetoSubido": "png-dano-2"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000007000003",
+          "nombreArchivo": "evidencia_video.mp4",
+          "tipo": "VIDEO",
+          "soporteTipo": null,
+          "capturadaMinAntesDeReporte": 5,
+          "ubicacion": {
+            "descripcion": null,
+            "lat": 4.6512,
+            "lon": -74.056
+          },
+          "objetoRegistrado": "mp4-dano",
+          "objetoSubido": "mp4-dano"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000007000004",
+          "nombreArchivo": "factura_celular.pdf",
+          "tipo": "SOPORTE",
+          "soporteTipo": "FACTURA_COMPRA",
+          "capturadaMinAntesDeReporte": 4,
+          "ubicacion": {
+            "descripcion": "Escaneado en el sitio",
+            "lat": null,
+            "lon": null
+          },
+          "objetoRegistrado": "pdf-factura",
+          "objetoSubido": "pdf-factura"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000007000005",
+          "nombreArchivo": "cedula.pdf",
+          "tipo": "SOPORTE",
+          "soporteTipo": "DOCUMENTO_IDENTIDAD",
+          "capturadaMinAntesDeReporte": 3,
+          "ubicacion": {
+            "descripcion": "Escaneado en el sitio",
+            "lat": null,
+            "lon": null
+          },
+          "objetoRegistrado": "pdf-cedula",
+          "objetoSubido": "pdf-cedula"
+        }
+      ],
+      "historial": [
+        {
+          "accion": "REPORTADO",
+          "estadoAnterior": null,
+          "estadoNuevo": "REPORTADO",
+          "actorId": "00000000-0000-4000-8000-000000000007",
+          "actorRol": "CLIENTE",
+          "actorNombre": null,
+          "minDespuesDeReporte": 0
+        },
+        {
+          "accion": "EVIDENCIAS_VALIDADAS",
+          "estadoAnterior": null,
+          "estadoNuevo": null,
+          "actorId": null,
+          "actorRol": "SISTEMA",
+          "actorNombre": null,
+          "minDespuesDeReporte": 16
+        },
+        {
+          "accion": "ASIGNADO",
+          "estadoAnterior": "REPORTADO",
+          "estadoNuevo": "EN_EVALUACION",
+          "actorId": "a0a0a0a0-0000-4000-8000-000000000001",
+          "actorRol": "ANALISTA_SINIESTROS",
+          "actorNombre": "Luis Mora",
+          "minDespuesDeReporte": 120
+        }
+      ],
+      "esperado": {
+        "tiempoRestanteMinAlSembrar": 2340,
+        "prioridad": "BAJA",
+        "verificacionCobertura": {
+          "VIGENCIA": "CUMPLE",
+          "AMPARO": "CUMPLE",
+          "CARENCIA": "CUMPLE",
+          "PLAZO_AVISO": "CUMPLE",
+          "PRIMAS": "CUMPLE",
+          "SOPORTES": "PARCIAL"
+        },
+        "coherencia": "INCONSISTENTE",
+        "integridadEvidencias": [
+          "ALTERADA",
+          "VERIFICADA",
+          "VERIFICADA",
+          "VERIFICADA",
+          "VERIFICADA"
+        ],
+        "soportesPendientes": [
+          "CERTIFICADO_REPARACION"
+        ]
+      }
+    },
+    {
+      "clave": "VEN-01",
+      "nota": "La póliza venció antes del evento (para el rechazo POLIZA_NO_VIGENTE de H07, HU-W20).",
+      "id": "5e000000-0000-4000-8000-000008000000",
+      "codigo": "88-2026-0437",
+      "origen": "PORTAL",
+      "estado": "EN_EVALUACION",
+      "analistaId": "a0a0a0a0-0000-4000-8000-000000000001",
+      "reportadoHaceMin": 2460,
+      "fechaEventoMinAntesDeReporte": 20160,
+      "causa": "INCAPACIDAD_TOTAL",
+      "ubicacionDeclarada": {
+        "descripcion": "Bogotá D.C.",
+        "lat": 4.652,
+        "lon": -74.0555
+      },
+      "clienteId": "00000000-0000-4000-8000-000000000008",
+      "poliza": {
+        "polizaId": "a0000000-0000-4000-8000-000008000000",
+        "numero": "240-2026-011298",
+        "ramo": {
+          "codigo": "240",
+          "nombre": "Vida"
+        },
+        "vigenciaDesdeHaceDias": 400,
+        "vigenciaHastaEnDias": -25,
+        "amparos": [
+          {
+            "codigo": "INCAPACIDAD_TOTAL",
+            "nombre": "Incapacidad total",
+            "sumaAsegurada": "80000000.00"
+          }
+        ],
+        "moneda": "COP",
+        "carenciaDias": 90,
+        "plazoAvisoDias": 60,
+        "primasAlDia": true,
+        "beneficiario": {
+          "beneficiarioRef": "ben-sint-008",
+          "cuentaMascarada": "****1008"
+        }
+      },
+      "evidencias": [
+        {
+          "id": "e0000000-0000-4000-8000-000008000001",
+          "nombreArchivo": "cedula.pdf",
+          "tipo": "SOPORTE",
+          "soporteTipo": "DOCUMENTO_IDENTIDAD",
+          "capturadaMinAntesDeReporte": 4,
+          "ubicacion": {
+            "descripcion": "Escaneado en el sitio",
+            "lat": null,
+            "lon": null
+          },
+          "objetoRegistrado": "pdf-cedula",
+          "objetoSubido": "pdf-cedula"
+        },
+        {
+          "id": "e0000000-0000-4000-8000-000008000002",
+          "nombreArchivo": "peritaje.pdf",
+          "tipo": "SOPORTE",
+          "soporteTipo": "PERITAJE",
+          "capturadaMinAntesDeReporte": 3,
+          "ubicacion": {
+            "descripcion": "Escaneado en el sitio",
+            "lat": null,
+            "lon": null
+          },
+          "objetoRegistrado": "pdf-peritaje",
+          "objetoSubido": "pdf-peritaje"
+        }
+      ],
+      "historial": [
+        {
+          "accion": "REPORTADO",
+          "estadoAnterior": null,
+          "estadoNuevo": "REPORTADO",
+          "actorId": "00000000-0000-4000-8000-000000000008",
+          "actorRol": "CLIENTE",
+          "actorNombre": null,
+          "minDespuesDeReporte": 0
+        },
+        {
+          "accion": "EVIDENCIAS_VALIDADAS",
+          "estadoAnterior": null,
+          "estadoNuevo": null,
+          "actorId": null,
+          "actorRol": "SISTEMA",
+          "actorNombre": null,
+          "minDespuesDeReporte": 16
+        },
+        {
+          "accion": "ASIGNADO",
+          "estadoAnterior": "REPORTADO",
+          "estadoNuevo": "EN_EVALUACION",
+          "actorId": "a0a0a0a0-0000-4000-8000-000000000001",
+          "actorRol": "ANALISTA_SINIESTROS",
+          "actorNombre": "Luis Mora",
+          "minDespuesDeReporte": 120
+        }
+      ],
+      "esperado": {
+        "tiempoRestanteMinAlSembrar": 420,
+        "prioridad": "ALTA",
+        "verificacionCobertura": {
+          "VIGENCIA": "NO_CUMPLE",
+          "AMPARO": "CUMPLE",
+          "CARENCIA": "CUMPLE",
+          "PLAZO_AVISO": "CUMPLE",
+          "PRIMAS": "CUMPLE",
+          "SOPORTES": "CUMPLE"
+        },
+        "coherencia": "COHERENTE",
+        "integridadEvidencias": [
+          "VERIFICADA",
+          "VERIFICADA"
+        ],
+        "soportesPendientes": []
+      }
+    }
+  ],
+  "esperadoResumen": {
+    "nota": "Con la semilla recién sembrada y el analista QA como actor (vencenHoy depende de la hora).",
+    "pendientes": 5,
+    "fueraDeCompromiso": 1,
+    "asignadosAlActor": 5,
+    "sinAsignar": 3,
+    "resueltosSemana": 0,
+    "resueltosSemanaPrevia": 0,
+    "tiempoMedioDecisionHoras": null,
+    "compromisoHoras": 48
+  }
+}

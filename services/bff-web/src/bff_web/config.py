@@ -32,7 +32,7 @@ class Settings(ServiceSettings):
     grupo_asesores: str = "asesores"
     # HU-W13 (DS2-12): bandeja de suscripción (E01) y revisión asistida (E04).
     grupo_suscriptores: str = "suscriptores"
-    # HU-W24: cola de descarte de los eventos paramétricos (H10 y H11).
+    # HU-W19 (bandeja, detalle y evidencias) y HU-W24 (cola de descarte, H10 y H11).
     grupo_analistas_siniestros: str = "analistas-siniestros"
     api_socios_url: str = Field(
         "http://localhost:8082",
@@ -71,6 +71,15 @@ class Settings(ServiceSettings):
         validation_alias=AliasChoices("CONSULTA_URL", "SOLVENTA_CONSULTA_URL"),
     )
     consulta_timeout_ms: int = 700
+    # HU-W19: siniestros del analista (DS3-09 y DS3-10). El aviso de un acceso denegado no espera
+    # respuesta: corte de 300 ms y sin reintento. El nombre del cliente y la póliza del encabezado
+    # se componen con `nombre_cliente_timeout_ms` y `consulta_timeout_ms`.
+    siniestros_url: str = Field(
+        "http://localhost:8091",
+        validation_alias=AliasChoices("SINIESTROS_URL", "SOLVENTA_SINIESTROS_URL"),
+    )
+    siniestros_timeout_ms: int = 1500
+    acceso_denegado_timeout_ms: int = 300
     # HU-W24: cola de descarte en pagos-parametricos (decisión B1). Listar lee hasta 100 mensajes
     # de la DLQ en lotes de 10; las acciones, uno o varios reenvíos.
     pagos_parametricos_url: str = Field(

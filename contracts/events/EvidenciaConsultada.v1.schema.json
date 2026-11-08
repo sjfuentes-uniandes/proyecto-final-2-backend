@@ -1,0 +1,82 @@
+{
+  "$defs": {
+    "EvidenciaConsultadaV1": {
+      "description": "Se emiti\u00f3 una URL prefirmada para una evidencia. Sin la URL ni la clave del objeto.\n`aggregateId` = `siniestroId`.",
+      "properties": {
+        "actorId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Actorid",
+          "type": "string"
+        },
+        "evidenciaId": {
+          "format": "uuid",
+          "title": "Evidenciaid",
+          "type": "string"
+        },
+        "expiraEn": {
+          "format": "date-time",
+          "title": "Expiraen",
+          "type": "string"
+        },
+        "siniestroId": {
+          "format": "uuid",
+          "title": "Siniestroid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "siniestroId",
+        "evidenciaId",
+        "actorId",
+        "expiraEn"
+      ],
+      "title": "EvidenciaConsultadaV1",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/EvidenciaConsultadaV1"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreEvento[EvidenciaConsultadaV1]",
+  "type": "object"
+}

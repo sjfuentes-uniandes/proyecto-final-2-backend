@@ -59,3 +59,13 @@ class ConsultaCliente:
 
     async def listado(self, parametros: dict[str, Any], actor: str) -> Any:
         return await self._llamar("GET", "", actor, ROL_ASESOR, params=parametros)
+
+    async def poliza_de_cliente(self, cliente_id: UUID, poliza_id: UUID, actor: str) -> Any:
+        """La póliza de un cliente (HU-W19: encabezado del caso). 404 si no existe."""
+        return await self._llamar(
+            "GET",
+            f"/{cliente_id}/polizas/{poliza_id}",
+            actor,
+            ROL_ASESOR,
+            prefijo="/v1/clientes",
+        )
