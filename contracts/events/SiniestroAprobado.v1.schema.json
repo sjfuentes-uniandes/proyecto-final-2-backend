@@ -1,0 +1,135 @@
+{
+  "$defs": {
+    "SiniestroAprobadoV1": {
+      "description": "El analista aprob\u00f3 el caso (o naci\u00f3 APROBADO por un evento param\u00e9trico) y se ordena el pago\n\u00fanico. `aggregateId` = `siniestroId`. La cuenta del beneficiario no viaja: solo su referencia.",
+      "properties": {
+        "aprobadoEn": {
+          "format": "date-time",
+          "title": "Aprobadoen",
+          "type": "string"
+        },
+        "beneficiarioRef": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Beneficiarioref",
+          "type": "string"
+        },
+        "clienteId": {
+          "format": "uuid",
+          "title": "Clienteid",
+          "type": "string"
+        },
+        "codigo": {
+          "pattern": "^88-[0-9]{4}-[0-9]{4,}$",
+          "title": "Codigo",
+          "type": "string"
+        },
+        "decididoPor": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Decididopor"
+        },
+        "moneda": {
+          "pattern": "^[A-Z]{3}$",
+          "title": "Moneda",
+          "type": "string"
+        },
+        "origen": {
+          "enum": [
+            "MOVIL",
+            "PORTAL",
+            "PARAMETRICO"
+          ],
+          "title": "Origen",
+          "type": "string"
+        },
+        "polizaId": {
+          "format": "uuid",
+          "title": "Polizaid",
+          "type": "string"
+        },
+        "referenciaPago": {
+          "pattern": "^IND-88-[0-9]{4}-[0-9]{4,}-01$",
+          "title": "Referenciapago",
+          "type": "string"
+        },
+        "siniestroId": {
+          "format": "uuid",
+          "title": "Siniestroid",
+          "type": "string"
+        },
+        "valorIndemnizar": {
+          "pattern": "^\\d+(\\.\\d+)?$",
+          "title": "Valorindemnizar",
+          "type": "string"
+        }
+      },
+      "required": [
+        "siniestroId",
+        "codigo",
+        "origen",
+        "polizaId",
+        "clienteId",
+        "valorIndemnizar",
+        "moneda",
+        "referenciaPago",
+        "beneficiarioRef",
+        "aprobadoEn",
+        "decididoPor"
+      ],
+      "title": "SiniestroAprobadoV1",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/SiniestroAprobadoV1"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreEvento[SiniestroAprobadoV1]",
+  "type": "object"
+}

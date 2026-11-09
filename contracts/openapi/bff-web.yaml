@@ -3491,6 +3491,166 @@ paths:
                   type: string
                 type: object
                 title: Response Health Health Get
+  /v1/siniestros/catalogos-decision:
+    get:
+      tags:
+      - siniestros
+      summary: Catalogos Decision
+      description: 'Causales de rechazo, documentos solicitables, canales y plazos,
+        como códigos que el portal
+
+        traduce (DS3-12).'
+      operationId: catalogos_decision_v1_siniestros_catalogos_decision_get
+      parameters:
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogosDecision'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo analistas-siniestros o no
+            es del back-office (se notifica a siniestros, DS3-09)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: siniestros no respondió o respondió
+            fuera de su contrato'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/{siniestroId}/decision:
+    post:
+      tags:
+      - siniestros
+      summary: Decidir
+      description: 'Registra la decisión del analista asignado sobre un caso EN_EVALUACION:
+        aprobar (con
+
+        liquidación), rechazar (con causal y explicación) o solicitar soporte (FALTA_SOPORTE,
+        reloj en
+
+        pausa). La misma Idempotency-Key con el mismo cuerpo devuelve el resultado
+        original; con otro
+
+        cuerpo, 422 IDEMPOTENCIA_CONFLICTO.'
+      operationId: decidir_v1_siniestros__siniestroId__decision_post
+      parameters:
+      - name: siniestroId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Siniestroid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Idempotency-Key
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudDecision'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoDecisionSiniestro'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo analistas-siniestros o no
+            es del back-office (se notifica a siniestros, DS3-09)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: JUSTIFICACION_REQUERIDA, VALOR_FUERA_DE_RANGO (detalles.campos),
+            CAUSAL_INVALIDA, SOLICITUD_INVALIDA (detalles.campos) o IDEMPOTENCIA_CONFLICTO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: siniestros no respondió o respondió
+            fuera de su contrato'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SINIESTRO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: TRANSICION_NO_PERMITIDA (detalles.estadoActual; también si
+            otra decisión ganó la carrera) o CASO_ASIGNADO_A_OTRO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
 components:
   schemas:
     Accion:
@@ -3790,6 +3950,14 @@ components:
       enum:
       - PORTAL_ASESOR
       title: CanalAceptacion
+    CanalSoporte:
+      type: string
+      enum:
+      - PUSH_Y_CORREO
+      - PUSH
+      - CORREO
+      title: CanalSoporte
+      description: Canal por el que se le pide el soporte al cliente (H05).
     CanalVenta:
       type: string
       enum:
@@ -3869,6 +4037,37 @@ components:
       - antiguedadMinutos
       - clienteNombre
       title: CasoBandejaVista
+    CatalogosDecision:
+      properties:
+        causales:
+          items:
+            $ref: '#/components/schemas/CausalRechazo'
+          type: array
+          title: Causales
+        documentos:
+          items:
+            $ref: '#/components/schemas/SoporteSolicitable'
+          type: array
+          title: Documentos
+        canales:
+          items:
+            $ref: '#/components/schemas/CanalSoporte'
+          type: array
+          title: Canales
+        plazosDiasHabiles:
+          items:
+            type: integer
+          type: array
+          title: Plazosdiashabiles
+      type: object
+      required:
+      - causales
+      - documentos
+      - canales
+      - plazosDiasHabiles
+      title: CatalogosDecision
+      description: Listas cerradas de la decisión, como códigos que el portal traduce
+        (DS3-12).
     Causa:
       type: string
       enum:
@@ -3877,6 +4076,18 @@ components:
       - ERROR_PROCESAMIENTO
       - DESCONOCIDA
       title: Causa
+    CausalRechazo:
+      type: string
+      enum:
+      - POLIZA_NO_VIGENTE
+      - EVENTO_NO_CUBIERTO
+      - PERIODO_DE_CARENCIA
+      - AVISO_EXTEMPORANEO
+      - PRIMAS_EN_MORA
+      - EVIDENCIA_INCONSISTENTE
+      - EXCLUSION_CONTRACTUAL
+      title: CausalRechazo
+      description: Causales contractuales del rechazo (H07), lista cerrada.
     ClienteDto:
       properties:
         clienteId:
@@ -5042,6 +5253,28 @@ components:
           anyOf:
           - $ref: '#/components/schemas/PagoDto'
           - type: 'null'
+        valorReclamado:
+          anyOf:
+          - type: string
+            pattern: ^-?\d+(\.\d+)?$
+          - type: 'null'
+          title: Valorreclamado
+          description: Lo que reclamó el cliente (lo llena M01); null si aún no consta.
+            Si consta, la liquidación aprobada debe coincidir
+        referenciaPagoPrevista:
+          type: string
+          pattern: ^IND-88-[0-9]{4}-[0-9]{4,}-01$
+          title: Referenciapagoprevista
+          description: 'IND-<codigo>-01: la referencia única que llevaría la orden
+            de pago (H06)'
+        plazoSoporteVenceEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Plazosoportevenceen
+          description: 'Solo en FALTA_SOPORTE: fin del plazo que tiene el cliente
+            para responder'
         clienteNombre:
           anyOf:
           - type: string
@@ -5079,6 +5312,9 @@ components:
       - liquidacion
       - evento
       - pago
+      - valorReclamado
+      - referenciaPagoPrevista
+      - plazoSoporteVenceEn
       - clienteNombre
       - polizaVista
       title: DetalleSiniestroVista
@@ -5227,7 +5463,10 @@ components:
       description: 'Historial inmutable. `accion` es un código en mayúsculas (REPORTADO,
         EVIDENCIAS_VALIDADAS,
 
-        ASIGNADO; W20 y W22 agregan los suyos).'
+        ASIGNADO, APROBADO, RECHAZADO, SOPORTE_SOLICITADO, PLAZO_SOPORTE_VENCIDO;
+        W22 y W23 agregan
+
+        los suyos).'
     EntradasPrimaDto:
       properties:
         sumaAsegurada:
@@ -5894,14 +6133,66 @@ components:
             pattern: ^-?\d+(\.\d+)?$
           - type: 'null'
           title: Valorindemnizar
+        referenciaPago:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Referenciapago
+          description: IND-<codigo>-01, la clave idempotente del pago único (DS3-11)
+        aprobadaEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Aprobadaen
       type: object
       required:
       - moneda
       - valorReclamado
       - deducible
       - valorIndemnizar
+      - referenciaPago
+      - aprobadaEn
       title: LiquidacionDto
-      description: Null hasta HU-W20.
+      description: 'La liquidación aprobada (HU-W20). Null mientras el caso no esté
+        APROBADO. En un paramétrico
+
+        (W22) solo trae `valorIndemnizar`.'
+    LiquidacionSolicitada:
+      properties:
+        valorReclamado:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Valorreclamado
+        deducible:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Deducible
+        valorIndemnizar:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Valorindemnizar
+        moneda:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Moneda
+      type: object
+      required:
+      - valorReclamado
+      - deducible
+      - valorIndemnizar
+      - moneda
+      title: LiquidacionSolicitada
+      description: 'Liquidación que el analista aprueba (H03). Montos como texto decimal
+        (DS2-16). Se exige
+
+        `0 < valorIndemnizar ≤ valorReclamado`, `0 ≤ deducible ≤ valorReclamado`,
+        `valorIndemnizar` ≤ suma
+
+        asegurada del amparo reclamado, `moneda` igual a la de la póliza y, si el
+        siniestro ya trae
+
+        `valorReclamado`, que coincida. Si no, 422 VALOR_FUERA_DE_RANGO (`detalles.campos`).'
     ListaDecisiones:
       properties:
         items:
@@ -6814,6 +7105,49 @@ components:
       - RECHAZADA
       - REVISION_REQUERIDA
       title: ResultadoDecision
+    ResultadoDecisionSiniestro:
+      properties:
+        siniestroId:
+          type: string
+          format: uuid
+          title: Siniestroid
+        estadoNuevo:
+          $ref: '#/components/schemas/EstadoSiniestro'
+        decisionId:
+          type: string
+          format: uuid
+          title: Decisionid
+        referenciaPago:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Referenciapago
+          description: IND-<codigo>-01, la clave idempotente del pago (HU-W23); solo
+            al aprobar
+        plazoSoporteVenceEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Plazosoportevenceen
+          description: Fin del plazo en días hábiles; solo al solicitar soporte
+        registradaEn:
+          type: string
+          format: date-time
+          title: Registradaen
+      type: object
+      required:
+      - siniestroId
+      - estadoNuevo
+      - decisionId
+      - referenciaPago
+      - plazoSoporteVenceEn
+      - registradaEn
+      title: ResultadoDecisionSiniestro
+      description: 'Resultado de una decisión. La misma Idempotency-Key con el mismo
+        cuerpo devuelve este mismo
+
+        resultado, sin escribir nada nuevo.'
     ResultadoRegla:
       type: string
       enum:
@@ -7426,6 +7760,37 @@ components:
       - nombreCompleto
       - fechaNacimiento
       title: SolicitudAltaCliente
+    SolicitudAprobacion:
+      properties:
+        justificacion:
+          type: string
+          maxLength: 2000
+          title: Justificacion
+          description: 'Obligatoria en toda decisión: vacía o solo espacios → 422
+            JUSTIFICACION_REQUERIDA'
+        evidenciasConsideradas:
+          items:
+            type: string
+            format: uuid
+          type: array
+          maxItems: 50
+          title: Evidenciasconsideradas
+          description: Evidencias del caso que el analista tuvo en cuenta; una que
+            no sea del siniestro → 422 SOLICITUD_INVALIDA
+        tipo:
+          type: string
+          const: APROBAR
+          title: Tipo
+        liquidacion:
+          $ref: '#/components/schemas/LiquidacionSolicitada'
+      additionalProperties: false
+      type: object
+      required:
+      - justificacion
+      - tipo
+      - liquidacion
+      title: SolicitudAprobacion
+      description: 'APROBAR: el caso pasa a APROBADO y se ordena el pago único (`referenciaPago`).'
     SolicitudCorreccion:
       properties:
         cambios:
@@ -7493,6 +7858,19 @@ components:
       - productoId
       - datosAsegurado
       title: SolicitudCotizacion
+    SolicitudDecision:
+      oneOf:
+      - $ref: '#/components/schemas/SolicitudAprobacion'
+      - $ref: '#/components/schemas/SolicitudRechazo'
+      - $ref: '#/components/schemas/SolicitudSoporte'
+      title: SolicitudDecision
+      description: Cuerpo de la decisión, discriminado por `tipo` (DS3-12).
+      discriminator:
+        propertyName: tipo
+        mapping:
+          APROBAR: '#/components/schemas/SolicitudAprobacion'
+          RECHAZAR: '#/components/schemas/SolicitudRechazo'
+          SOLICITAR_SOPORTE: '#/components/schemas/SolicitudSoporte'
     SolicitudDescarte:
       properties:
         motivo:
@@ -7522,6 +7900,49 @@ components:
       - productoId
       - datosDeclarados
       title: SolicitudPerfil
+    SolicitudRechazo:
+      properties:
+        justificacion:
+          type: string
+          maxLength: 2000
+          title: Justificacion
+          description: 'Obligatoria en toda decisión: vacía o solo espacios → 422
+            JUSTIFICACION_REQUERIDA'
+        evidenciasConsideradas:
+          items:
+            type: string
+            format: uuid
+          type: array
+          maxItems: 50
+          title: Evidenciasconsideradas
+          description: Evidencias del caso que el analista tuvo en cuenta; una que
+            no sea del siniestro → 422 SOLICITUD_INVALIDA
+        tipo:
+          type: string
+          const: RECHAZAR
+          title: Tipo
+        causal:
+          type: string
+          maxLength: 40
+          title: Causal
+          description: Código de CausalRechazo (GET /v1/siniestros/catalogos-decision);
+            otro valor → 422 CAUSAL_INVALIDA
+        explicacionCliente:
+          type: string
+          maxLength: 2000
+          title: Explicacioncliente
+          description: 'Texto que recibirá el cliente. Obligatoria: vacía → 422 SOLICITUD_INVALIDA.
+            Se guarda con la decisión (dato sensible) y nunca viaja en un evento'
+      additionalProperties: false
+      type: object
+      required:
+      - justificacion
+      - tipo
+      - causal
+      - explicacionCliente
+      title: SolicitudRechazo
+      description: 'RECHAZAR: el caso pasa a RECHAZADO, no habilita pago y conserva
+        la causal y la razón.'
     SolicitudReproceso:
       properties:
         messageIds:
@@ -7536,6 +7957,63 @@ components:
       required:
       - messageIds
       title: SolicitudReproceso
+    SolicitudSoporte:
+      properties:
+        justificacion:
+          type: string
+          maxLength: 2000
+          title: Justificacion
+          description: 'Obligatoria en toda decisión: vacía o solo espacios → 422
+            JUSTIFICACION_REQUERIDA'
+        evidenciasConsideradas:
+          items:
+            type: string
+            format: uuid
+          type: array
+          maxItems: 50
+          title: Evidenciasconsideradas
+          description: Evidencias del caso que el analista tuvo en cuenta; una que
+            no sea del siniestro → 422 SOLICITUD_INVALIDA
+        tipo:
+          type: string
+          const: SOLICITAR_SOPORTE
+          title: Tipo
+        documentos:
+          items:
+            $ref: '#/components/schemas/SoporteSolicitable'
+          type: array
+          maxItems: 4
+          minItems: 1
+          title: Documentos
+        mensajeCliente:
+          type: string
+          maxLength: 1000
+          title: Mensajecliente
+          description: 'Texto que recibirá el cliente. Obligatorio: vacío → 422 SOLICITUD_INVALIDA.
+            Se guarda con la decisión (dato sensible) y nunca viaja en un evento'
+        canal:
+          $ref: '#/components/schemas/CanalSoporte'
+        plazoDiasHabiles:
+          type: integer
+          enum:
+          - 5
+          - 10
+          - 15
+          title: Plazodiashabiles
+          description: Días hábiles (lunes a viernes, sin festivos) que tiene el cliente
+            para responder
+      additionalProperties: false
+      type: object
+      required:
+      - justificacion
+      - tipo
+      - documentos
+      - mensajeCliente
+      - canal
+      - plazoDiasHabiles
+      title: SolicitudSoporte
+      description: 'SOLICITAR_SOPORTE: el caso pasa a FALTA_SOPORTE y el reloj del
+        compromiso se pausa.'
     SolicitudSuscripcion:
       properties:
         cotizacionId:
@@ -7557,6 +8035,16 @@ components:
       - tipo
       - estado
       title: SoportePendienteDto
+    SoporteSolicitable:
+      type: string
+      enum:
+      - CERTIFICADO_REPARACION
+      - COTIZACION_REPUESTOS
+      - DENUNCIA_AUTORIDAD
+      - PERITAJE
+      title: SoporteSolicitable
+      description: 'Documentos que el analista puede pedirle al cliente (H05): un
+        subconjunto de `TipoSoporte`.'
     TipoBandeja:
       type: string
       enum:
