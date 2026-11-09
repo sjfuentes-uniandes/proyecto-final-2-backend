@@ -45,6 +45,10 @@ service_environment = {
     SOLVENTA_FUENTE_TIMEOUT_MS      = "600"
     SOLVENTA_DEPENDENCIA_TIMEOUT_MS = "300"
   }
+  siniestros = {
+    SEMILLA_SINIESTROS_QA          = "true"
+    SEMILLA_SINIESTROS_ANALISTA_ID = "34b87488-90f1-70a0-a7e7-0a3c2da8ed33"
+  }
 }
 
 ally_timeouts_ms = {
