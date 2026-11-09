@@ -53,7 +53,7 @@ def test_solo_existe_la_version_1(ahora: datetime) -> None:
         )
 
 
-def test_el_generador_escribe_los_cuatro_esquemas(
+def test_el_generador_escribe_los_siete_esquemas(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "contracts" / "events").mkdir(parents=True)
@@ -64,4 +64,4 @@ def test_el_generador_escribe_los_cuatro_esquemas(
     for nombre, modelo in ESQUEMAS.items():
         generado = json.loads((tmp_path / "contracts" / "events" / nombre).read_text("utf-8"))
         assert generado == modelo.model_json_schema(by_alias=True)
-    assert capsys.readouterr().out.count("schema.json") == 4
+    assert capsys.readouterr().out.count("schema.json") == 7

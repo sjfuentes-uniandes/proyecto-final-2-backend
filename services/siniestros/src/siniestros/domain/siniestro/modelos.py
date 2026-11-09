@@ -11,6 +11,7 @@
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
@@ -19,6 +20,7 @@ from siniestros.domain.siniestro.errores import SiniestroInvalido
 # El mismo patrón que el contrato (`CodigoSiniestro`) y que el CHECK de la migración 001.
 CODIGO_SINIESTRO = re.compile(r"^88-[0-9]{4}-[0-9]{4,}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+MONEDA = re.compile(r"^[A-Z]{3}$")
 
 
 class EstadoSiniestro(StrEnum):
@@ -33,6 +35,45 @@ class EstadoSiniestro(StrEnum):
 ESTADOS_CON_ANALISTA = frozenset({EstadoSiniestro.EN_EVALUACION, EstadoSiniestro.FALTA_SOPORTE})
 # La decisión detiene el reloj en `decidido_en`.
 ESTADOS_DECIDIDOS = frozenset({EstadoSiniestro.APROBADO, EstadoSiniestro.RECHAZADO})
+
+
+class AccionSiniestro(StrEnum):
+    """Lo que se le puede hacer a un siniestro; la tabla de `transiciones` dice desde qué estado."""
+
+    ASIGNAR = "ASIGNAR"
+    APROBAR = "APROBAR"
+    RECHAZAR = "RECHAZAR"
+    SOLICITAR_SOPORTE = "SOLICITAR_SOPORTE"
+    VENCER_PLAZO_SOPORTE = "VENCER_PLAZO_SOPORTE"
+
+
+class CausalRechazo(StrEnum):
+    """Causales contractuales del rechazo (H07), lista cerrada."""
+
+    POLIZA_NO_VIGENTE = "POLIZA_NO_VIGENTE"
+    EVENTO_NO_CUBIERTO = "EVENTO_NO_CUBIERTO"
+    PERIODO_DE_CARENCIA = "PERIODO_DE_CARENCIA"
+    AVISO_EXTEMPORANEO = "AVISO_EXTEMPORANEO"
+    PRIMAS_EN_MORA = "PRIMAS_EN_MORA"
+    EVIDENCIA_INCONSISTENTE = "EVIDENCIA_INCONSISTENTE"
+    EXCLUSION_CONTRACTUAL = "EXCLUSION_CONTRACTUAL"
+
+
+class SoporteSolicitable(StrEnum):
+    """Documentos que el analista puede pedirle al cliente (H05): un subconjunto de `TipoSoporte`."""
+
+    CERTIFICADO_REPARACION = "CERTIFICADO_REPARACION"
+    COTIZACION_REPUESTOS = "COTIZACION_REPUESTOS"
+    DENUNCIA_AUTORIDAD = "DENUNCIA_AUTORIDAD"
+    PERITAJE = "PERITAJE"
+
+
+class CanalSoporte(StrEnum):
+    """Canal por el que se le pide el soporte al cliente (H05)."""
+
+    PUSH_Y_CORREO = "PUSH_Y_CORREO"
+    PUSH = "PUSH"
+    CORREO = "CORREO"
 
 
 class OrigenSiniestro(StrEnum):
@@ -234,6 +275,11 @@ class Siniestro:
     plazo_soporte_vence_en: datetime | None = None
     decidido_en: datetime | None = None
     version: int = 1
+    # Lo que reclamó el cliente (lo llena M01) y la liquidación que aprueba el analista (W20).
+    valor_reclamado: Decimal | None = None
+    moneda: str | None = None
+    deducible: Decimal | None = None
+    valor_indemnizar: Decimal | None = None
 
     def __post_init__(self) -> None:
         if CODIGO_SINIESTRO.fullmatch(self.codigo) is None:
@@ -260,6 +306,24 @@ class Siniestro:
             raise SiniestroInvalido("pausado_desde: el reloj solo se pausa en FALTA_SOPORTE")
         if (self.estado in ESTADOS_DECIDIDOS) != (self.decidido_en is not None):
             raise SiniestroInvalido("decidido_en: solo un caso APROBADO o RECHAZADO")
+        # Un trámite nunca queda en el limbo: el caso que espera un soporte tiene plazo (W20).
+        if (self.estado is EstadoSiniestro.FALTA_SOPORTE) != (
+            self.plazo_soporte_vence_en is not None
+        ):
+            raise SiniestroInvalido("plazo_soporte_vence_en: solo y siempre en FALTA_SOPORTE")
+        # La liquidación existe si y solo si el caso está aprobado (W20, y W22 en los paramétricos).
+        if (self.estado is EstadoSiniestro.APROBADO) != (self.valor_indemnizar is not None):
+            raise SiniestroInvalido("valor_indemnizar: solo y siempre en un caso APROBADO")
+        if self.deducible is not None and self.valor_indemnizar is None:
+            raise SiniestroInvalido("deducible: solo con valor_indemnizar")
+        if self.valor_indemnizar is not None and self.valor_indemnizar <= 0:
+            raise SiniestroInvalido("valor_indemnizar: debe ser mayor que cero")
+        for nombre in ("valor_reclamado", "deducible"):
+            valor = getattr(self, nombre)
+            if valor is not None and valor < 0:
+                raise SiniestroInvalido(f"{nombre}: no puede ser negativo")
+        if self.moneda is not None and MONEDA.fullmatch(self.moneda) is None:
+            raise SiniestroInvalido("moneda: debe ser un código ISO 4217 en mayúsculas")
 
     @property
     def reloj_pausado(self) -> bool:

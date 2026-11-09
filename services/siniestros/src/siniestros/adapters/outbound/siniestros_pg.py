@@ -58,7 +58,8 @@ from siniestros.domain.siniestro.modelos import (
 COLUMNAS = (
     "id, codigo, origen, estado, poliza_id, cliente_id, copia_poliza, causa, fecha_evento, "
     "ubicacion_declarada, reportado_en, analista_id, asignado_en, pausado_desde, "
-    "pausa_acumulada_s, plazo_soporte_vence_en, decidido_en, version, correlation_id"
+    "pausa_acumulada_s, plazo_soporte_vence_en, decidido_en, version, correlation_id, "
+    "valor_reclamado, moneda, deducible, valor_indemnizar"
 )
 _COLUMNAS_EVIDENCIA = (
     "id, siniestro_id, nombre_archivo, tipo, soporte_tipo, clave_objeto, sha256, capturada_en, "
@@ -112,6 +113,10 @@ def siniestro_de(fila: Mapping[str, Any]) -> Siniestro:
         plazo_soporte_vence_en=fila["plazo_soporte_vence_en"],
         decidido_en=fila["decidido_en"],
         version=fila["version"],
+        valor_reclamado=fila["valor_reclamado"],
+        moneda=fila["moneda"].strip() if fila["moneda"] else None,
+        deducible=fila["deducible"],
+        valor_indemnizar=fila["valor_indemnizar"],
     )
 
 

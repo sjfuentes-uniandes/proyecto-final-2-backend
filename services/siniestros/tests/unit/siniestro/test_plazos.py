@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -54,6 +55,7 @@ def test_un_caso_pausado_congela_el_reloj(
         analista_id=ANALISTA,
         asignado_en=ahora - 13 * HORA,
         pausado_desde=ahora - 4 * HORA,
+        plazo_soporte_vence_en=ahora + 7 * 24 * HORA,
     )
     # 14 h reportado, 4 h en pausa: corrieron 10 h, quedan 38 h.
     assert tiempo_restante(pausado, ahora) == 38 * 60
@@ -69,6 +71,7 @@ def test_un_caso_decidido_detiene_el_reloj_en_la_decision(
         analista_id=ANALISTA,
         asignado_en=ahora - 13 * HORA,
         decidido_en=ahora - 4 * HORA,
+        valor_indemnizar=Decimal("1000000.00"),
     )
     assert tiempo_restante(decidido, ahora) == 38 * 60
     assert tiempo_restante(decidido, ahora + 100 * HORA) == 38 * 60

@@ -2,7 +2,7 @@
 
 Documento de la historia [HU-W20](https://github.com/sjfuentes-uniandes/proyecto-final/issues/62) (Sprint 3, recorrido R7). Es la evidencia de contrato que pide el issue: la tabla de transiciones, el reloj en pausa, el plazo del soporte, el esquema que se agrega y los eventos. Amplía [HU-W19](hu-w19-detalle-siniestro.md); no recrea nada. Decisiones de diseño: DS3-02, DS3-04, DS3-10 a DS3-14 y DS3-24 del plan maestro del Sprint 3 (v1.3). Hallazgos y desviaciones: R-60 a R-70 de la bitácora.
 
-Estado por fase: **B1 (contratos y documentación)** ✅ · B2 (dominio y migración) · B3 (aplicación, HTTP, tarea de plazos y `bff-web`) · F1–F2 (portal) · C (cierre).
+Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (dominio y migración)** ✅ · B3 (aplicación, HTTP, tarea de plazos y `bff-web`) · F1–F2 (portal) · C (cierre).
 
 ## 1. Qué entrega la historia
 
@@ -163,7 +163,11 @@ Con las `CHECK` de 001 siguen cumpliéndose en cada transición (la prueba de mi
 - `siniestros_liquidacion_segun_estado`: `valor_indemnizar` existe si y solo si el estado es `APROBADO`.
 - `siniestros_plazo_soporte (plazo_soporte_vence_en) WHERE estado = 'FALTA_SOPORTE'`.
 
+La reversa `down/002_decisiones.sql` borra las decisiones y la liquidación guardada y se aplica **antes** que la de 001. Es para pruebas y retrocesos planificados: tras ella, volver a aplicar 002 con casos `APROBADO` (sin su liquidación) lo impide la `CHECK` a propósito.
+
 El historial no cambia de esquema (`accion` ya es un código abierto, R-10). Sigue sin admitir `UPDATE` ni `DELETE`.
+
+**Dominio (B2).** `Siniestro` gana `valor_reclamado`, `moneda`, `deducible` y `valor_indemnizar`, y dos invariantes: `plazo_soporte_vence_en` solo y siempre en `FALTA_SOPORTE`, y `valor_indemnizar` solo y siempre en `APROBADO` (`deducible` solo con él). `domain/siniestro/transiciones.py` expone la tabla `TRANSICIONES` y `estado_destino`, `verificar_decision` (comprobaciones 5 y 6 de §3), las validaciones (`validar_justificacion`, `validar_causal`, `validar_texto_cliente`, `validar_documentos`, `validar_plazo`, `validar_liquidacion`), `sumar_dias_habiles`, `referencia_pago` y las transiciones `aprobar`, `rechazar`, `solicitar_soporte` y `vencer_plazo_soporte`. Los errores de dominio (`JustificacionRequerida`, `CausalInvalida`, `ValorFueraDeRango`, `DecisionInvalida`, `CasoAsignadoAOtro` y `TransicionInvalida`) los traduce B3 a sus códigos.
 
 ## 8. Historial (DS3-14)
 

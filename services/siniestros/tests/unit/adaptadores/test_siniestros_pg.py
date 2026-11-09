@@ -4,6 +4,7 @@
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Any, Self
 from uuid import UUID, uuid4
 
@@ -118,6 +119,10 @@ def fila_siniestro(s: Siniestro, **extra: Any) -> dict[str, Any]:
         "decidido_en": s.decidido_en,
         "version": s.version,
         "correlation_id": s.correlation_id,
+        "valor_reclamado": s.valor_reclamado,
+        "moneda": s.moneda,
+        "deducible": s.deducible,
+        "valor_indemnizar": s.valor_indemnizar,
         **extra,
     }
 
@@ -568,4 +573,18 @@ async def test_los_cuatro_eventos_se_insertan_en_el_outbox_de_la_misma_conexion(
 
 def test_el_mapeo_de_filas_no_pierde_nada(siniestro: Callable[..., Siniestro]) -> None:
     caso = siniestro()
+    assert siniestros_pg.siniestro_de(fila_siniestro(caso)) == caso
+
+
+def test_el_mapeo_de_un_caso_aprobado_conserva_la_liquidacion(
+    siniestro: Callable[..., Siniestro], ahora: datetime
+) -> None:
+    caso = siniestro(
+        estado=EstadoSiniestro.APROBADO,
+        decidido_en=ahora,
+        valor_reclamado=Decimal("2850000.00"),
+        moneda="COP",
+        deducible=Decimal("350000.00"),
+        valor_indemnizar=Decimal("2500000.00"),
+    )
     assert siniestros_pg.siniestro_de(fila_siniestro(caso)) == caso
