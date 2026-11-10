@@ -251,6 +251,35 @@ services:
       # Credencial sintética solo para el ambiente local (en AWS viene de Secrets Manager).
       ALLY_PAGOS_CREDENTIALS: '{"client_id":"local-sintetico","client_secret":"local-sintetico"}'
 
+  # HU-W23 (EXT-S3-10): pago único de la indemnización. Consume `SiniestroAprobado` de
+  # `dinero-indemnizaciones` (scripts/dev/localstack-init.sh), paga por `adaptador-pagos` y publica
+  # `Indemnizacion*` por el Outbox. `ADAPTADOR_PAGOS_URL` se fija aquí: el valor por omisión
+  # (http://localhost:8091) es el puerto de `siniestros`. Sin cola de OfertaAceptada en local (R3 de
+  # HU-W16 corre solo en pruebas): el consumidor de recaudos queda apagado y lo avisa en el log.
+  dinero:
+    <<: *servicio
+    build: { context: ., dockerfile: services/dinero/Dockerfile }
+    ports: ["8094:8080"]
+    depends_on:
+      postgres: { condition: service_started }
+      localstack: { condition: service_started }
+      otel-collector: { condition: service_started }
+      adaptador-pagos: { condition: service_started }
+    # El ancla define environment: se repiten sus variables junto con las propias.
+    environment:
+      SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_PROPAGATORS: tracecontext,baggage,xray
+      OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
+      DB_HOST: postgres
+      ADAPTADOR_PAGOS_URL: http://adaptador-pagos:8080
+      SQS_DINERO_INDEMNIZACIONES_URL: http://localstack:4566/000000000000/solventa-local-dinero-indemnizaciones
+      OUTBOX_ENABLED: "true"
+      EVENTS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:solventa-local-eventos-negocio
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+
   # HU-S03: esqueletos del Sprint 3 (HU-W19 a HU-W23 completan su lógica). Sin las colas SQS_* los
   # consumidores no arrancan (en local se alimentan desde las pruebas).
   siniestros:

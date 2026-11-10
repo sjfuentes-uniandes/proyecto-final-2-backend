@@ -228,10 +228,13 @@ def test_migrar_aplica_en_orden_con_candado_y_lo_suelta(
     candado, *migraciones, liberar = conexion.sql
     assert "pg_advisory_lock(hashtext('dinero.migraciones'))" in candado
     assert "pg_advisory_unlock(hashtext('dinero.migraciones'))" in liberar
-    # Solo las de adelante (las de down/ no), y la 001 primero.
-    assert len(migraciones) == 1
+    # Solo las de adelante (las de down/ no), en orden: 001 (recaudos) y 002 (indemnizaciones, W23).
+    # Si la 001 falla, la 002 no se intenta; el candado se suelta igual.
+    assert len(migraciones) == (1 if falla else 2)
     assert "CREATE TABLE IF NOT EXISTS recaudos" in migraciones[0]
-    assert "DROP TABLE" not in migraciones[0]
+    if not falla:
+        assert "CREATE TABLE IF NOT EXISTS indemnizaciones" in migraciones[1]
+    assert all("DROP TABLE" not in migracion for migracion in migraciones)
 
 
 def test_recaudo_de_convierte_estado_y_moneda(pendiente: Fabrica) -> None:

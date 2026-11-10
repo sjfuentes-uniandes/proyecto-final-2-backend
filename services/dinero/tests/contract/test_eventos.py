@@ -8,6 +8,7 @@ import json
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -40,8 +41,10 @@ def _validador(tipo: str) -> Draft202012Validator:
     return Draft202012Validator(esquema, format_checker=Draft202012Validator.FORMAT_CHECKER)
 
 
-def test_los_dos_eventos_se_publican() -> None:
+def test_los_eventos_se_publican() -> None:
     assert sorted(ESQUEMAS) == [
+        "IndemnizacionConfirmada.v1.schema.json",
+        "IndemnizacionRechazada.v1.schema.json",
         "RecaudoConfirmado.v1.schema.json",
         "RecaudoRechazado.v1.schema.json",
     ]
@@ -89,5 +92,72 @@ def test_el_esquema_rechaza_montos_numericos_y_textos_libres(
         else recaudo.rechazar("FONDOS_INSUFICIENTES", AHORA)
     )
     sobre = evento_de(resuelto).model_dump(mode="json", by_alias=True)
+    sobre["payload"].update(cambio)
+    assert list(_validador(tipo).iter_errors(sobre)) != []
+
+
+# --- HU-W23: Indemnizacion* ------------------------------------------------------------------------
+def _indemnizacion() -> Any:
+    from dinero.domain.indemnizacion.modelos import Indemnizacion
+
+    return Indemnizacion.pendiente(
+        siniestro_id=uuid4(),
+        referencia="IND-88-2026-0442-01",
+        monto=Decimal("2850000.50"),
+        moneda="COP",
+        beneficiario_ref="ben-sint-centinela",
+        correlation_id="corr-contrato-w23",
+        ahora=AHORA,
+    )
+
+
+@pytest.mark.parametrize(
+    ("tipo", "resolver"),
+    [
+        ("IndemnizacionConfirmada", lambda i: i.confirmar("TRX-1", AHORA)),
+        ("IndemnizacionConfirmada", lambda i: i.registrar_duplicado().confirmar("TRX-1", AHORA)),
+        ("IndemnizacionRechazada", lambda i: i.rechazar("BENEFICIARIO_NO_HABILITADO", AHORA)),
+        ("IndemnizacionRechazada", lambda i: i.rechazar("MOTIVO_NO_INFORMADO", AHORA, "TRX-R")),
+    ],
+)
+def test_cada_evento_de_indemnizacion_cumple_su_esquema_sin_datos_de_cuenta(
+    tipo: str, resolver: Any
+) -> None:
+    from dinero.adapters.outbound.outbox_pg import evento_de_indemnizacion
+
+    sobre = evento_de_indemnizacion(resolver(_indemnizacion())).model_dump(
+        mode="json", by_alias=True
+    )
+    assert list(_validador(tipo).iter_errors(sobre)) == []
+    assert sobre["type"] == tipo
+    assert "ben-sint-centinela" not in json.dumps(sobre)
+    assert not {"beneficiarioRef", "beneficiario", "cuenta", "pagadorRef"} & set(sobre["payload"])
+
+
+@pytest.mark.parametrize(
+    ("tipo", "cambio"),
+    [
+        ("IndemnizacionConfirmada", {"monto": 2500000.0}),
+        ("IndemnizacionConfirmada", {"monto": "2500000.001"}),
+        ("IndemnizacionConfirmada", {"transaccionId": ""}),
+        ("IndemnizacionConfirmada", {"intentos": 0}),
+        ("IndemnizacionConfirmada", {"duplicadosDescartados": -1}),
+        ("IndemnizacionConfirmada", {"referencia": "IND-0442-01"}),
+        ("IndemnizacionRechazada", {"motivo": "texto libre"}),
+        ("IndemnizacionRechazada", {"intentos": 0}),
+    ],
+)
+def test_el_esquema_de_indemnizacion_rechaza_montos_numericos_y_textos_libres(
+    tipo: str, cambio: dict[str, object]
+) -> None:
+    from dinero.adapters.outbound.outbox_pg import evento_de_indemnizacion
+
+    indemnizacion = _indemnizacion()
+    resuelta = (
+        indemnizacion.confirmar("TRX-1", AHORA)
+        if tipo == "IndemnizacionConfirmada"
+        else indemnizacion.rechazar("MOTIVO", AHORA)
+    )
+    sobre = evento_de_indemnizacion(resuelta).model_dump(mode="json", by_alias=True)
     sobre["payload"].update(cambio)
     assert list(_validador(tipo).iter_errors(sobre)) != []

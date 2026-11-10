@@ -7,6 +7,8 @@ from solventa_common.settings import ServiceSettings
 TIMEOUT_ADAPTADOR_PAGOS_MS = 5000
 # visibility_timeout de dinero-aceptaciones (infra/platform/catalog.tf:145).
 VISIBILIDAD_ACEPTACIONES_S = 60
+# visibility_timeout de dinero-indemnizaciones (infra/platform/catalog.tf, HU-W23): la misma.
+VISIBILIDAD_INDEMNIZACIONES_S = 60
 
 
 def _env(nombre: str) -> AliasChoices:
@@ -52,6 +54,30 @@ class Settings(ServiceSettings):
     # Un incierto con más de 1 h desde creado_en se mide como error: suma en OperationErrors, que
     # vigila la alarma de tasa de error de dinero (infra/apps/alarms.tf:163). Sin tope.
     conciliacion_alerta_tras_s: int = Field(3600, gt=0)
+    # HU-W23 (ADR 0015): consumidor de SiniestroAprobado (`consumes`; en local la crea
+    # scripts/dev/localstack-init.sh). Comparte el lote y la espera larga con el de OfertaAceptada:
+    # con un pago de hasta 6,5 s por mensaje, 2 mensajes y 10 s de espera caben de sobra en los
+    # 60 s de visibilidad de `dinero-indemnizaciones` y en la parada de ECS.
+    sqs_dinero_indemnizaciones_url: str | None = Field(
+        None, validation_alias=_env("SQS_DINERO_INDEMNIZACIONES_URL")
+    )
+    # HU-W23 (DS3-18): conciliación de las indemnizaciones PENDIENTE, propia (con SKIP LOCKED).
+    # Encendida por defecto, por las mismas razones que la de recaudos. Mismos criterios:
+    # - Intervalo de 2 min y antigüedad de 5 min (piso: dos visibilidades de la cola), para no
+    #   competir con un pago en curso.
+    # - Lote de 10: acota las consultas a la pasarela por ciclo y réplica.
+    # - Reclamo de 60 s: lo que una réplica tarda como máximo en consultar y aplicar un lote
+    #   pequeño; mientras no venza, ninguna otra toma el movimiento. Debe superar al peor caso de un
+    #   movimiento (consulta más reintento: 2 × 6,5 s).
+    indemnizacion_conciliacion_habilitada: bool = True
+    indemnizacion_conciliacion_intervalo_s: float = Field(120, gt=0)
+    indemnizacion_conciliacion_antiguedad_min_s: int = Field(
+        300, ge=2 * VISIBILIDAD_INDEMNIZACIONES_S
+    )
+    indemnizacion_conciliacion_lote: int = Field(10, ge=1, le=50)
+    indemnizacion_conciliacion_reclamo_s: float = Field(60, ge=15)
+    # Un incierto con más de 1 h desde creado_en se mide como error (alarma de tasa de error).
+    indemnizacion_conciliacion_alerta_tras_s: int = Field(3600, gt=0)
     # Outbox, como polizas (16.6): la infraestructura pone OUTBOX_ENABLED="true" y el tópico a todo
     # servicio que publica (`publishes`); sin la variable (local y pruebas) el relay no arranca.
     outbox_enabled: bool = Field(False, validation_alias=_env("OUTBOX_ENABLED"))

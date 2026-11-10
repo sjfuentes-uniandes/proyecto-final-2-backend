@@ -49,3 +49,8 @@ echo "bucket ${PREFIJO}-evidencias listo"
 # AccesoSiniestroDenegado) y resultado de la indemnización (W23) ---
 cola "auditoria" 60
 cola "siniestros-indemnizaciones" 30 '{"eventType":[{"prefix":"Indemnizacion"}]}'
+
+# --- HU-W23: el siniestro aprobado inicia la indemnización (solo `dinero` la consume; el filtro es
+# exacto, como en catalog.tf). La visibilidad de 60 s es la de `dinero-aceptaciones`: un pago de
+# hasta 6,5 s por mensaje cabe de sobra. ---
+cola "dinero-indemnizaciones" 60 '{"eventType":["SiniestroAprobado"]}'

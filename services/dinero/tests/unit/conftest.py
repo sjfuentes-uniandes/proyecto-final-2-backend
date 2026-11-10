@@ -11,7 +11,12 @@ from uuid import UUID, uuid4
 
 import pytest
 from dinero.domain.recaudo.modelos import Recaudo
+from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+from opentelemetry.sdk.trace import ReadableSpan
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from solventa_common import telemetry
 from solventa_common.logging import FormateadorJson
+from solventa_common.settings import ServiceSettings
 
 AHORA = datetime(2026, 10, 28, 15, 0, tzinfo=UTC)
 # Pagador sintético C01 del simulador de pagos (16.7): un clienteId de OfertaAceptada.
@@ -81,3 +86,41 @@ def capturar_logs() -> Iterator[Callable[[], Logs]]:
 @pytest.fixture
 def logs(capturar_logs: Callable[[], Logs]) -> Logs:
     return capturar_logs()
+
+
+class Telemetria:
+    """Spans y métricas en memoria (HU-W23: las mediciones de `indemnizacion.*`)."""
+
+    def __init__(self, spans: InMemorySpanExporter, lector: InMemoryMetricReader) -> None:
+        self.spans = spans
+        self.lector = lector
+
+    def lista_spans(self) -> list[ReadableSpan]:
+        return list(self.spans.get_finished_spans())
+
+    def puntos(self, nombre: str) -> list[Any]:
+        datos = self.lector.get_metrics_data()
+        if datos is None:
+            return []
+        return [
+            punto
+            for recurso in datos.resource_metrics
+            for alcance in recurso.scope_metrics
+            for metrica in alcance.metrics
+            if metrica.name == nombre
+            for punto in metrica.data.data_points
+        ]
+
+
+@pytest.fixture
+def telemetria(monkeypatch: pytest.MonkeyPatch, logs: Logs) -> Telemetria:
+    monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    spans = InMemorySpanExporter()
+    lector = InMemoryMetricReader()
+    telemetry.configurar(
+        ServiceSettings(service_name="dinero", environment="pruebas"),
+        span_exporter=spans,
+        metric_readers=[lector],
+    )
+    return Telemetria(spans, lector)

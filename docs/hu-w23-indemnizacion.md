@@ -2,7 +2,7 @@
 
 Documento de la historia [HU-W23](https://github.com/sjfuentes-uniandes/proyecto-final/issues/65) (Sprint 3, recorridos R5 y R7). Es la evidencia de contrato que pide el issue: el flujo del pago, el modelo del movimiento, los eventos, los escenarios del aliado simulado y cómo se refleja el resultado en el siniestro. Amplía [HU-W16](adr/0013-recaudo-asincrono-por-oferta-aceptada.md) (el patrón del recaudo) y [HU-W20](hu-w20-decision-siniestro.md) (quien publica `SiniestroAprobado`); no recrea nada. Decisiones de diseño: [ADR 0015](adr/0015-indemnizacion-por-evento.md) (DS3-17, DS3-18, DS3-24, DS3-25, DS3-26 y CF-S3-02 del plan maestro del Sprint 3, v1.4). Hallazgos y desviaciones: R-103 en adelante de la bitácora.
 
-Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (`adaptador-pagos` y simulador)** ✅ · **B3 (`dinero`)** ☐ · **B4 (`siniestros`, `bff-web` y recorrido local)** ☐ · **F1 (portal)** ☐ · **C (cierre y pacto)** ☐.
+Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (`adaptador-pagos` y simulador)** ✅ · **B3 (`dinero`)** ✅ · **B4 (`siniestros`, `bff-web` y recorrido local)** ☐ · **F1 (portal)** ☐ · **C (cierre y pacto)** ☐.
 
 ## 1. Qué entrega la historia
 
@@ -104,7 +104,7 @@ Los tiempos son coherentes con la visibilidad de 60 s de la cola: el timeout hac
 3. **Aplica** el resultado en otra transacción, con la guarda de `PENDIENTE`: `CONFIRMADA` o `RECHAZADA` en **la misma fila**, con su evento. Si el proveedor no conoce la referencia (`404 DESEMBOLSO_NO_ENCONTRADO`), reintenta `POST /v1/desembolsos` con la misma `referencia` (idempotente). Un incierto la deja `PENDIENTE`.
 4. Mientras `reclamado_hasta` no venza, ninguna otra réplica toma el movimiento: dos réplicas no consultan dos veces el mismo.
 
-Operación `indemnizacion.conciliar`; la métrica de antigüedad de pendientes se publica con la dimensión `tipo`, para que HU-S03 extienda `pending_collection_age_seconds`.
+Operación `indemnizacion.conciliar`. El span y el log de cada movimiento llevan `tipo` (`INDEMNIZACION`) y `antiguedad_s`, para que HU-S03 extienda con esa dimensión la alarma de pendientes por antigüedad (hoy mide la cola en SQS; no hay métrica de aplicación). Un incierto con más de 1 h desde su creación se mide como `error` (y suma en `OperationErrors`), sigue `PENDIENTE` y no tiene tope.
 
 ## 6. `adaptador-pagos` y el aliado simulado
 
