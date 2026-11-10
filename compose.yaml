@@ -230,6 +230,27 @@ services:
       ALLY_OPEN_FINANCE_CREDENTIALS: '{"client_id":"local-sintetico","client_secret":"local-sintetico"}'
       ALLY_DATOS_ABIERTOS_CREDENTIALS: '{"client_id":"local-sintetico","client_secret":"local-sintetico"}'
 
+  # HU-W23 (EXT-S3-10): pagos de la indemnización (desembolsos) y, desde HU-W16, cobros. Solo lo llama
+  # `dinero`; el aliado `pagos` es siempre el simulador.
+  adaptador-pagos:
+    <<: *servicio
+    build: { context: ., dockerfile: services/adaptador-pagos/Dockerfile }
+    ports: ["8095:8080"]
+    depends_on:
+      localstack: { condition: service_started }
+      otel-collector: { condition: service_started }
+      simulador-aliados: { condition: service_healthy }
+    # El ancla define environment: se repiten sus variables junto con las propias.
+    environment:
+      SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_PROPAGATORS: tracecontext,baggage,xray
+      OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
+      ALLY_PAGOS_URL: http://simulador-aliados:8080/pagos
+      ALLY_PAGOS_TIMEOUT_MS: "5000"
+      # Credencial sintética solo para el ambiente local (en AWS viene de Secrets Manager).
+      ALLY_PAGOS_CREDENTIALS: '{"client_id":"local-sintetico","client_secret":"local-sintetico"}'
+
   # HU-S03: esqueletos del Sprint 3 (HU-W19 a HU-W23 completan su lógica). Sin las colas SQS_* los
   # consumidores no arrancan (en local se alimentan desde las pruebas).
   siniestros:

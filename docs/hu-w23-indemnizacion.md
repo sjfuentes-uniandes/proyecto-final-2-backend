@@ -2,7 +2,7 @@
 
 Documento de la historia [HU-W23](https://github.com/sjfuentes-uniandes/proyecto-final/issues/65) (Sprint 3, recorridos R5 y R7). Es la evidencia de contrato que pide el issue: el flujo del pago, el modelo del movimiento, los eventos, los escenarios del aliado simulado y cómo se refleja el resultado en el siniestro. Amplía [HU-W16](adr/0013-recaudo-asincrono-por-oferta-aceptada.md) (el patrón del recaudo) y [HU-W20](hu-w20-decision-siniestro.md) (quien publica `SiniestroAprobado`); no recrea nada. Decisiones de diseño: [ADR 0015](adr/0015-indemnizacion-por-evento.md) (DS3-17, DS3-18, DS3-24, DS3-25, DS3-26 y CF-S3-02 del plan maestro del Sprint 3, v1.4). Hallazgos y desviaciones: R-103 en adelante de la bitácora.
 
-Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (`adaptador-pagos` y simulador)** ☐ · **B3 (`dinero`)** ☐ · **B4 (`siniestros`, `bff-web` y recorrido local)** ☐ · **F1 (portal)** ☐ · **C (cierre y pacto)** ☐.
+Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (`adaptador-pagos` y simulador)** ✅ · **B3 (`dinero`)** ☐ · **B4 (`siniestros`, `bff-web` y recorrido local)** ☐ · **F1 (portal)** ☐ · **C (cierre y pacto)** ☐.
 
 ## 1. Qué entrega la historia
 
@@ -115,7 +115,7 @@ El escenario lo elige el `beneficiarioRef` sintético de `SiniestroAprobado` (el
 | `beneficiarioRef` | Desembolso | Consulta de estado |
 | --- | --- | --- |
 | `ben-sint-001` a `ben-sint-007` (los de la semilla de R7, salvo el último) | 200 `CONFIRMADO` con `transaccionId`, 50 ms | 200 `CONFIRMADO`, el mismo cuerpo |
-| `ben-sint-008` (VEN-01 de la semilla) y `ben-sint-rechaza` | 200 `RECHAZADO` con `motivo` (`CUENTA_DESTINO_INVALIDA`), 50 ms | 200 `RECHAZADO`, el mismo cuerpo |
+| `ben-sint-008` (VEN-01 de la semilla) y `ben-sint-rechaza` | 200 `RECHAZADO` con `motivo` (`BENEFICIARIO_NO_HABILITADO`), 50 ms | 200 `RECHAZADO`, el mismo cuerpo |
 | `ben-sint-lento` | 200 `CONFIRMADO` tras más de 700 ms (supera el timeout del adaptador; el desembolso sí ocurre) | 200 `CONFIRMADO` |
 | `ben-sint-caido` | 503 | 404 `desembolso_no_encontrado` (la orden nunca llegó) |
 | `ben-sint-duplicado` | 200 `CONFIRMADO` con un `transaccionId` fijo: la misma `referencia` devuelve siempre el mismo | 200 `CONFIRMADO`, el mismo `transaccionId` |
