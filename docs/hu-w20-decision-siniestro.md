@@ -2,7 +2,7 @@
 
 Documento de la historia [HU-W20](https://github.com/sjfuentes-uniandes/proyecto-final/issues/62) (Sprint 3, recorrido R7). Es la evidencia de contrato que pide el issue: la tabla de transiciones, el reloj en pausa, el plazo del soporte, el esquema que se agrega y los eventos. Amplía [HU-W19](hu-w19-detalle-siniestro.md); no recrea nada. Decisiones de diseño: DS3-02, DS3-04, DS3-10 a DS3-14 y DS3-24 del plan maestro del Sprint 3 (v1.3). Hallazgos y desviaciones: R-60 a R-70 de la bitácora.
 
-Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (dominio y migración)** ✅ · **B3 (aplicación, HTTP, tarea de plazos y `bff-web`)** ✅ · F1–F2 (portal) · C (cierre).
+Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (dominio y migración)** ✅ · **B3 (aplicación, HTTP, tarea de plazos y `bff-web`)** ✅ · **F1–F2 (portal)** ✅ · **C (cierre y pacto)** ✅.
 
 ## 1. Qué entrega la historia
 
@@ -182,7 +182,7 @@ Toda transición escribe, en la **misma transacción**, el cambio del agregado, 
 
 `evidencias_consideradas` guarda los ids de la solicitud. La explicación y el mensaje al cliente **no** entran al historial: viven en `decisiones_siniestro.detalle`.
 
-**Trámite de H03** (se deriva del estado y del historial, como en W19): al aprobar o rechazar, `DECISION` queda `COMPLETADO` con la fecha y el nombre del analista. Un caso `APROBADO` espera su pago: `PAGO_INDEMNIZACION` es el paso `ACTUAL` hasta W23 (el portal lo muestra como «Pendiente»). Uno `RECHAZADO` no habilita pago (AC2): no tiene paso actual y `PAGO_INDEMNIZACION` queda `PENDIENTE` (R-74). En `FALTA_SOPORTE` el paso actual sigue siendo `EN_EVALUACION`.
+**Trámite de H03** (se deriva del estado y del historial, como en W19): al aprobar o rechazar, `DECISION` queda `COMPLETADO` con la fecha y el nombre del analista. Un caso `APROBADO` espera su pago: `PAGO_INDEMNIZACION` es el paso `ACTUAL` hasta W23 (el portal lo rotula «En curso»: el pago está ordenado y espera a W23, R-91). Uno `RECHAZADO` no habilita pago (AC2): no tiene paso actual y `PAGO_INDEMNIZACION` queda `PENDIENTE` (R-74). En `FALTA_SOPORTE` el paso actual sigue siendo `EN_EVALUACION`.
 
 **Soportes pendientes** (`soportesPendientes`): mientras el caso está en `FALTA_SOPORTE`, los documentos pedidos que no estén presentes salen con estado `SOLICITADO`, aunque no sean de los requeridos por el amparo. Al volver a `EN_EVALUACION` por el plazo, se muestran otra vez como `FALTA` los que sigan sin estar presentes.
 
@@ -215,10 +215,10 @@ El criterio técnico del plan («sin analista») quedó superado por esta redacc
 | Pantalla | Qué usa | Qué envía |
 | --- | --- | --- |
 | **H03** · panel y liquidación | `estado`, `analistaId` (visible solo si `EN_EVALUACION` y es del usuario), `valorReclamado`, `poliza.amparos`, `soportesPendientes` | `APROBAR` desde el diálogo H06 |
-| **H06** · confirmar aprobación | `liquidacion` del formulario, `clienteNombre`, `poliza.beneficiario.cuentaMascarada`, `referenciaPagoPrevista`, `soportesPendientes` (aviso «Apruebas con un soporte pendiente»; queda en la justificación) | `Idempotency-Key` generada **una vez por apertura** del diálogo: el doble clic no duplica |
-| **H05** · solicitar soporte | `catalogos-decision` (documentos, canales y plazos), `soportesPendientes`, `codigo` | `SOLICITAR_SOPORTE`. «Aprobar sin este soporte» y «Volver a la evaluación» solo navegan |
-| **H07** · rechazo motivado | `catalogos-decision` (causales), `fechaEvento`, `poliza.vigencia`, `verificacionCobertura` | `RECHAZAR`; «Confirmar el rechazo» deshabilitado sin causal ni explicación (AC5) |
-| Transición no permitida | 409 `TRANSICION_NO_PERMITIDA` | El portal muestra el error y recarga el detalle (sin mockup) |
+| **H06** · confirmar aprobación | `liquidacion` del formulario, `clienteNombre`, `poliza.beneficiario.cuentaMascarada`, `referenciaPagoPrevista`, `soportesPendientes` (aviso «Apruebas con un soporte pendiente»; el portal no agrega nada a la justificación, R-86) | `Idempotency-Key` generada **una vez por apertura** del diálogo: el doble clic no duplica |
+| **H05** · solicitar soporte | `catalogos-decision` (documentos, canales y plazos), `soportesPendientes`, `codigo` | `SOLICITAR_SOPORTE`, con una justificación propia (los mockups no la traen y el contrato la exige, R-88). «Aprobar sin este soporte» y «Volver a la evaluación» solo navegan |
+| **H07** · rechazo motivado | `catalogos-decision` (causales), `fechaEvento`, `poliza.vigencia`, `verificacionCobertura` | `RECHAZAR`; «Confirmar el rechazo» deshabilitado sin causal, explicación ni justificación (AC5, R-88) |
+| Transición no permitida | 409 `TRANSICION_NO_PERMITIDA` o `CASO_ASIGNADO_A_OTRO` | El portal muestra el error por código y recarga el detalle vigente (sin mockup) |
 
 ## 12. Recorrido local
 
@@ -254,6 +254,10 @@ curl -s -X POST "${H[@]}" -H "Idempotency-Key: $K" $B/v1/siniestros/$EVA01/decis
 **Vencer el plazo en local.** La tarea corre cada 60 s con el reloj del sistema; para no esperar 10 días hábiles el recorrido de B3 arrancó `siniestros` con un lanzador que suma un desfase al reloj (`evidencias/hu-w20/b3_recorrido_local/lanzar_siniestros.py`; **solo para la demo**: no existe en el repositorio ni en producción) y `SOLVENTA_PLAZOS_INTERVALO_S=2`. Las pruebas de módulo hacen lo mismo con el reloj inyectado (MT-W20-02).
 
 **En la base** (`psql`), tras el recorrido: una fila de `outbox` por transición (`SiniestroAprobado`, `SiniestroRechazado`, `SiniestroSoporteSolicitado` y `SiniestroEnEvaluacion` con `PLAZO_SOPORTE_VENCIDO`), todas con `published_at`; una entrada de historial por transición; `UPDATE` y `DELETE` sobre `historial_siniestro` y `decisiones_siniestro` fallan con «es de solo inserción»; una segunda decisión final falla con `decisiones_una_final`. En la cola `auditoria` llegan los mismos eventos y **ninguno** lleva el texto al cliente ni la cuenta. La salida completa del recorrido y de la base está en `docs/sprint_3/evidencias/hu-w20/b3_recorrido_local/`.
+
+## 12.1 Pacto del portal (CT-W20-01)
+
+`contracts/pact/web-bff-web.json` es la copia del pacto que genera el portal (33 interacciones, 5 de W20: catálogos, aprobar, rechazar, solicitar soporte y el 409). `services/bff-web/tests/contract/test_pact_web.py` lo verifica con tres estados del proveedor: **«el analista puede decidir siniestros»** (catálogos), **«el analista tiene un siniestro EN_EVALUACION asignado»** (las tres decisiones, cada una con el resultado de su tipo) y **«el siniestro ya fue aprobado»** (409 con `estadoActual`). Además comprueba que `siniestros` recibe cada decisión con la `Idempotency-Key` del portal. Cada decisión es su propia interacción: el campo que no aplica (`referenciaPago` o `plazoSoporteVenceEn`) se pacta en `null` (R-53).
 
 ## 13. Pendientes con otras personas
 
