@@ -4,7 +4,9 @@ el adaptador HTTP los convierte en DTO. Nunca llevan la clave del objeto ni una 
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 from uuid import UUID
 
 from siniestros.domain.siniestro.cobertura import SoportePendiente, Verificacion
@@ -124,12 +126,26 @@ class Indicadores:
 
 
 @dataclass(frozen=True)
+class LiquidacionAprobada:
+    """La liquidación de un caso aprobado (HU-W20). En un paramétrico (W22) solo trae el valor a
+    indemnizar."""
+
+    moneda: str
+    valor_reclamado: Decimal | None
+    deducible: Decimal | None
+    valor_indemnizar: Decimal
+    referencia_pago: str
+    aprobada_en: datetime
+
+
+@dataclass(frozen=True)
 class DetalleLeido:
     """Lo que lee el repositorio para armar el detalle, en una sola transacción corta."""
 
     siniestro: Siniestro
     evidencias: tuple[Evidencia, ...]
     historial: tuple[EntradaHistorial, ...]
+    liquidacion: LiquidacionAprobada | None = None
 
 
 @dataclass(frozen=True)
@@ -147,6 +163,7 @@ class DetalleCaso:
     soportes_pendientes: tuple[SoportePendiente, ...]
     tramite: tuple[PasoDeTramite, ...]
     historial: tuple[EntradaHistorial, ...]
+    liquidacion: LiquidacionAprobada | None = None
 
 
 @dataclass(frozen=True)
@@ -164,3 +181,18 @@ class AccesoDenegado:
     recurso_id: str | None
     motivo: MotivoDenegacion
     origen: OrigenDenegacion
+
+
+@dataclass(frozen=True)
+class DecisionRegistrada:
+    """La fila inmutable de `decisiones_siniestro`. `detalle` lleva el texto al cliente (sensible):
+    no sale de aquí hacia logs, eventos ni historial."""
+
+    id: UUID
+    siniestro_id: UUID
+    tipo: str
+    idempotency_key: UUID
+    huella: str
+    detalle: dict[str, Any]
+    actor_id: str
+    registrada_en: datetime

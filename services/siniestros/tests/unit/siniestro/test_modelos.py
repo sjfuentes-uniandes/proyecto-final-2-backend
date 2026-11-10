@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -58,7 +59,11 @@ def test_la_pausa_acumulada_no_es_negativa(siniestro: Callable[..., Siniestro]) 
 def test_un_caso_asignado_exige_analista(
     siniestro: Callable[..., Siniestro], ahora: datetime, estado: EstadoSiniestro
 ) -> None:
-    extra = {"pausado_desde": ahora} if estado is EstadoSiniestro.FALTA_SOPORTE else {}
+    extra = (
+        {"pausado_desde": ahora, "plazo_soporte_vence_en": ahora + timedelta(days=7)}
+        if estado is EstadoSiniestro.FALTA_SOPORTE
+        else {}
+    )
     with pytest.raises(SiniestroInvalido, match="analista_id"):
         siniestro(estado=estado, **extra)
 
@@ -72,7 +77,9 @@ def test_un_caso_decidido_puede_no_tener_analista(
     siniestro: Callable[..., Siniestro], ahora: datetime
 ) -> None:
     # Lo aprueba un paramétrico (W22).
-    caso = siniestro(estado=EstadoSiniestro.APROBADO, decidido_en=ahora)
+    caso = siniestro(
+        estado=EstadoSiniestro.APROBADO, decidido_en=ahora, valor_indemnizar=Decimal("100.00")
+    )
     assert caso.analista_id is None
 
 
@@ -80,13 +87,20 @@ def test_el_reloj_solo_se_pausa_en_falta_de_soporte(
     siniestro: Callable[..., Siniestro], ahora: datetime
 ) -> None:
     pausado = siniestro(
-        estado=EstadoSiniestro.FALTA_SOPORTE, analista_id=ANALISTA, pausado_desde=ahora
+        estado=EstadoSiniestro.FALTA_SOPORTE,
+        analista_id=ANALISTA,
+        pausado_desde=ahora,
+        plazo_soporte_vence_en=ahora + timedelta(days=7),
     )
     assert pausado.reloj_pausado
     with pytest.raises(SiniestroInvalido, match="pausado_desde"):
         siniestro(estado=EstadoSiniestro.EN_EVALUACION, analista_id=ANALISTA, pausado_desde=ahora)
     with pytest.raises(SiniestroInvalido, match="pausado_desde"):
-        siniestro(estado=EstadoSiniestro.FALTA_SOPORTE, analista_id=ANALISTA)
+        siniestro(
+            estado=EstadoSiniestro.FALTA_SOPORTE,
+            analista_id=ANALISTA,
+            plazo_soporte_vence_en=ahora + timedelta(days=7),
+        )
 
 
 def test_solo_un_caso_decidido_tiene_fecha_de_decision(
@@ -139,3 +153,76 @@ def test_la_representacion_no_filtra_la_clave_ni_el_hash(
     texto = repr(archivo)
     assert archivo.clave_objeto not in texto
     assert archivo.sha256 not in texto
+
+
+def test_el_plazo_del_soporte_existe_si_y_solo_si_el_caso_espera_soporte(
+    siniestro: Callable[..., Siniestro], ahora: datetime
+) -> None:
+    with pytest.raises(SiniestroInvalido, match="plazo_soporte_vence_en"):
+        siniestro(plazo_soporte_vence_en=ahora)
+    with pytest.raises(SiniestroInvalido, match="plazo_soporte_vence_en"):
+        siniestro(estado=EstadoSiniestro.FALTA_SOPORTE, analista_id=ANALISTA, pausado_desde=ahora)
+    with pytest.raises(SiniestroInvalido, match="plazo_soporte_vence_en"):
+        siniestro(
+            estado=EstadoSiniestro.FALTA_SOPORTE,
+            analista_id=ANALISTA,
+            pausado_desde=ahora,
+            plazo_soporte_vence_en=ahora.replace(tzinfo=None),
+        )
+
+
+def test_la_liquidacion_existe_si_y_solo_si_el_caso_esta_aprobado(
+    siniestro: Callable[..., Siniestro], ahora: datetime
+) -> None:
+    with pytest.raises(SiniestroInvalido, match="valor_indemnizar"):
+        siniestro(estado=EstadoSiniestro.APROBADO, decidido_en=ahora)
+    with pytest.raises(SiniestroInvalido, match="valor_indemnizar"):
+        siniestro(valor_indemnizar=Decimal("1.00"))
+    with pytest.raises(SiniestroInvalido, match="valor_indemnizar"):
+        siniestro(
+            estado=EstadoSiniestro.RECHAZADO, decidido_en=ahora, valor_indemnizar=Decimal("1.00")
+        )
+
+
+def test_el_deducible_no_existe_sin_liquidacion(
+    siniestro: Callable[..., Siniestro], ahora: datetime
+) -> None:
+    with pytest.raises(SiniestroInvalido, match="deducible"):
+        siniestro(deducible=Decimal("10.00"))
+    caso = siniestro(
+        estado=EstadoSiniestro.APROBADO,
+        decidido_en=ahora,
+        deducible=Decimal(0),
+        valor_indemnizar=Decimal("1.00"),
+    )
+    assert caso.deducible == 0
+
+
+@pytest.mark.parametrize(
+    ("campo", "valor"),
+    [
+        ("valor_reclamado", Decimal(-1)),
+        ("moneda", "cop"),
+        ("moneda", "COPP"),
+    ],
+)
+def test_los_datos_del_reclamo_son_validos(
+    siniestro: Callable[..., Siniestro], campo: str, valor: object
+) -> None:
+    with pytest.raises(SiniestroInvalido, match=campo):
+        siniestro(**{campo: valor})
+
+
+def test_un_valor_a_indemnizar_y_un_deducible_validos(
+    siniestro: Callable[..., Siniestro], ahora: datetime
+) -> None:
+    with pytest.raises(SiniestroInvalido, match="valor_indemnizar"):
+        siniestro(estado=EstadoSiniestro.APROBADO, decidido_en=ahora, valor_indemnizar=Decimal(0))
+    with pytest.raises(SiniestroInvalido, match="deducible"):
+        siniestro(
+            estado=EstadoSiniestro.APROBADO,
+            decidido_en=ahora,
+            valor_indemnizar=Decimal(1),
+            deducible=Decimal(-1),
+        )
+    assert siniestro(valor_reclamado=Decimal(0), moneda="COP").moneda == "COP"

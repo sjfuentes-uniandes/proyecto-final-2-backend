@@ -52,7 +52,7 @@ def insertar_evidencia(conexion: psycopg.Connection[Any], siniestro_id: str, **c
     return identificador
 
 
-def test_crea_las_siete_tablas_con_sus_indices(conexion: psycopg.Connection[Any]) -> None:
+def test_crea_las_ocho_tablas_con_sus_indices(conexion: psycopg.Connection[Any]) -> None:
     tablas = {
         fila[0]
         for fila in conexion.execute(
@@ -63,6 +63,7 @@ def test_crea_las_siete_tablas_con_sus_indices(conexion: psycopg.Connection[Any]
         "siniestros",
         "evidencias",
         "historial_siniestro",
+        "decisiones_siniestro",
         "outbox",
         "inbox",
         "idempotencia",
@@ -80,6 +81,9 @@ def test_crea_las_siete_tablas_con_sus_indices(conexion: psycopg.Connection[Any]
         "evidencias_por_siniestro",
         "historial_por_siniestro",
         "outbox_pendientes",
+        "decisiones_por_siniestro",
+        "decisiones_una_final",
+        "siniestros_plazo_soporte",
     } <= indices
 
 
@@ -108,6 +112,14 @@ def test_el_codigo_es_unico_y_tiene_su_forma(conexion: psycopg.Connection[Any]) 
         {"analista_id": ANALISTA, "asignado_en": "2026-11-05T01:00:00Z"},
         # El analista y su fecha de asignación van juntos.
         {"estado": "APROBADO", "decidido_en": "2026-11-05T02:00:00Z", "analista_id": ANALISTA},
+        # Con W20: plazo y liquidación según el estado.
+        {"plazo_soporte_vence_en": "2026-11-19T02:00:00Z"},
+        {"estado": "APROBADO", "decidido_en": "2026-11-05T02:00:00Z"},
+        {"valor_indemnizar": 100},
+        {"deducible": 10},
+        {"estado": "RECHAZADO", "decidido_en": "2026-11-05T02:00:00Z", "valor_indemnizar": 100},
+        {"deducible": -1},
+        {"valor_indemnizar": 0},
         # La pausa solo en FALTA_SOPORTE; la decisión solo en un caso decidido.
         {"pausado_desde": "2026-11-05T01:00:00Z"},
         {"estado": "APROBADO"},
@@ -142,9 +154,14 @@ def test_un_caso_asignado_y_uno_decidido_por_paramétrico_son_validos(
         analista_id=ANALISTA,
         asignado_en="2026-11-05T01:00:00Z",
         pausado_desde="2026-11-05T02:00:00Z",
+        plazo_soporte_vence_en="2026-11-19T02:00:00Z",
     )
     insertar_siniestro(
-        conexion, origen="PARAMETRICO", estado="APROBADO", decidido_en="2026-11-05T03:00:00Z"
+        conexion,
+        origen="PARAMETRICO",
+        estado="APROBADO",
+        decidido_en="2026-11-05T03:00:00Z",
+        valor_indemnizar=1500000,
     )
     assert conexion.execute("SELECT count(*) FROM siniestros").fetchone() == (3,)
 
@@ -153,11 +170,11 @@ def test_las_columnas_de_otras_historias_nacen_vacias(conexion: psycopg.Connecti
     identificador = insertar_siniestro(conexion)
     fila = conexion.execute(
         "SELECT analista_id, valor_reclamado, moneda, evento_id, regla, pago_estado, pago_intentos, "
-        "pago_duplicados_descartados, decidido_en, plazo_soporte_vence_en, pausa_acumulada_s, version "
-        "FROM siniestros WHERE id = %s",
+        "pago_duplicados_descartados, decidido_en, plazo_soporte_vence_en, pausa_acumulada_s, version, "
+        "deducible, valor_indemnizar FROM siniestros WHERE id = %s",
         (identificador,),
     ).fetchone()
-    assert fila == (None, None, None, None, None, None, 0, 0, None, None, 0, 1)
+    assert fila == (None, None, None, None, None, None, 0, 0, None, None, 0, 1, None, None)
 
 
 def test_una_evidencia_pertenece_a_un_siniestro_y_su_clave_es_unica(
@@ -289,12 +306,17 @@ def test_el_consecutivo_del_codigo_arranca_en_1000_y_sube_de_uno_en_uno(
         conexion.execute(avanzar, (1999,))
 
 
-def test_la_reversa_borra_todo_y_se_puede_volver_a_migrar(base: str) -> None:
-    reversa = (
+def _reversa(nombre: str) -> str:
+    return (
         resources.files("siniestros.adapters.outbound")
-        .joinpath("migraciones", "down", "001_siniestros.sql")
+        .joinpath("migraciones", "down", nombre)
         .read_text(encoding="utf-8")
     )
+
+
+def test_la_reversa_borra_todo_y_se_puede_volver_a_migrar(base: str) -> None:
+    # La reversa de 002 va antes que la de 001 (decisiones_siniestro referencia a siniestros).
+    reversa = _reversa("002_decisiones.sql") + _reversa("001_siniestros.sql")
     with psycopg.connect(base, autocommit=True) as conexion:
         conexion.execute(reversa)
         assert conexion.execute(
@@ -309,4 +331,189 @@ def test_la_reversa_borra_todo_y_se_puede_volver_a_migrar(base: str) -> None:
     with psycopg.connect(base, autocommit=True) as conexion:
         assert conexion.execute(
             "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'"
-        ).fetchone() == (7,)
+        ).fetchone() == (8,)
+
+
+# --- Migración 002: decisiones (HU-W20, W20-B05) ---------------------------------------------------
+
+
+def insertar_decision(
+    conexion: psycopg.Connection[Any], siniestro_id: str, tipo: str = "APROBAR", **cambios: Any
+) -> str:
+    datos: dict[str, Any] = {
+        "id": str(uuid4()),
+        "siniestro_id": siniestro_id,
+        "tipo": tipo,
+        "idempotency_key": str(uuid4()),
+        "huella_solicitud": "h" * 64,
+        "detalle": Jsonb({"justificacion": "ok"}),
+        "actor_id": ANALISTA,
+        "registrada_en": "2026-11-09T15:00:00Z",
+    }
+    datos.update(cambios)
+    columnas = ", ".join(datos)
+    marcas = ", ".join(["%s"] * len(datos))
+    conexion.execute(
+        f"INSERT INTO decisiones_siniestro ({columnas}) VALUES ({marcas})", list(datos.values())
+    )
+    return str(datos["id"])
+
+
+def test_migrar_dos_veces_con_decisiones_no_falla(
+    base: str, conexion: psycopg.Connection[Any]
+) -> None:
+    siniestro = insertar_siniestro(conexion)
+    insertar_decision(conexion, siniestro)
+    migrar(base)
+    assert conexion.execute("SELECT count(*) FROM decisiones_siniestro").fetchone() == (1,)
+
+
+def test_una_sola_decision_final_por_siniestro(conexion: psycopg.Connection[Any]) -> None:
+    siniestro = insertar_siniestro(conexion)
+    insertar_decision(conexion, siniestro, "APROBAR")
+    for otro in ("APROBAR", "RECHAZAR"):
+        with pytest.raises(psycopg.errors.UniqueViolation):
+            insertar_decision(conexion, siniestro, otro)
+    # Otro siniestro sí puede tener la suya.
+    insertar_decision(conexion, insertar_siniestro(conexion), "RECHAZAR")
+
+
+def test_pueden_existir_varios_pedidos_de_soporte_y_despues_una_decision_final(
+    conexion: psycopg.Connection[Any],
+) -> None:
+    siniestro = insertar_siniestro(conexion)
+    for _ in range(3):
+        insertar_decision(conexion, siniestro, "SOLICITAR_SOPORTE")
+    insertar_decision(conexion, siniestro, "RECHAZAR")
+    assert conexion.execute(
+        "SELECT count(*) FROM decisiones_siniestro WHERE siniestro_id = %s", (siniestro,)
+    ).fetchone() == (4,)
+
+
+def test_la_clave_de_idempotencia_de_la_decision_es_unica(
+    conexion: psycopg.Connection[Any],
+) -> None:
+    clave = str(uuid4())
+    insertar_decision(conexion, insertar_siniestro(conexion), idempotency_key=clave)
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        insertar_decision(
+            conexion, insertar_siniestro(conexion), "SOLICITAR_SOPORTE", idempotency_key=clave
+        )
+
+
+@pytest.mark.parametrize(
+    "cambios",
+    [
+        {"tipo": "ANULAR"},
+        {"huella_solicitud": " "},
+        {"actor_id": " "},
+        {"detalle": None},
+    ],
+)
+def test_las_invariantes_de_la_decision_las_exige_la_base(
+    conexion: psycopg.Connection[Any], cambios: dict[str, Any]
+) -> None:
+    siniestro = insertar_siniestro(conexion)
+    with pytest.raises((psycopg.errors.CheckViolation, psycopg.errors.NotNullViolation)):
+        insertar_decision(conexion, siniestro, **cambios)
+
+
+def test_una_decision_pertenece_a_un_siniestro(conexion: psycopg.Connection[Any]) -> None:
+    with pytest.raises(psycopg.errors.ForeignKeyViolation):
+        insertar_decision(conexion, str(uuid4()))
+
+
+def test_las_decisiones_son_de_solo_insercion(conexion: psycopg.Connection[Any]) -> None:
+    decision = insertar_decision(conexion, insertar_siniestro(conexion))
+    with pytest.raises(psycopg.errors.RaiseException, match="solo inserción"):
+        conexion.execute(
+            "UPDATE decisiones_siniestro SET tipo = 'RECHAZAR' WHERE id = %s", (decision,)
+        )
+    with pytest.raises(psycopg.errors.RaiseException, match="solo inserción"):
+        conexion.execute("DELETE FROM decisiones_siniestro WHERE id = %s", (decision,))
+    assert conexion.execute("SELECT count(*) FROM decisiones_siniestro").fetchone() == (1,)
+
+
+def test_el_detalle_de_la_decision_esta_marcado_como_sensible(
+    conexion: psycopg.Connection[Any],
+) -> None:
+    comentario = conexion.execute(
+        "SELECT col_description('decisiones_siniestro'::regclass, "
+        "(SELECT ordinal_position FROM information_schema.columns "
+        "WHERE table_name = 'decisiones_siniestro' AND column_name = 'detalle'))"
+    ).fetchone()
+    assert comentario is not None and comentario[0].startswith("sensible")
+
+
+def test_cada_transicion_cumple_las_invariantes_de_la_base(
+    conexion: psycopg.Connection[Any],
+) -> None:
+    """Las CHECK de 001 y 002 aceptan el estado que deja cada transición de la tabla (DS3-02)."""
+    sellos = {"asignado_en": "2026-11-05T01:00:00Z", "analista_id": ANALISTA}
+    siniestro = insertar_siniestro(conexion)
+    # ASIGNAR
+    conexion.execute(
+        "UPDATE siniestros SET estado='EN_EVALUACION', analista_id=%s, asignado_en=%s WHERE id=%s",
+        (sellos["analista_id"], sellos["asignado_en"], siniestro),
+    )
+    # SOLICITAR_SOPORTE
+    conexion.execute(
+        "UPDATE siniestros SET estado='FALTA_SOPORTE', pausado_desde='2026-11-05T02:00:00Z', "
+        "plazo_soporte_vence_en='2026-11-19T02:00:00Z' WHERE id=%s",
+        (siniestro,),
+    )
+    # VENCER_PLAZO_SOPORTE
+    conexion.execute(
+        "UPDATE siniestros SET estado='EN_EVALUACION', pausado_desde=NULL, "
+        "plazo_soporte_vence_en=NULL, pausa_acumulada_s=1209600 WHERE id=%s",
+        (siniestro,),
+    )
+    # APROBAR
+    conexion.execute(
+        "UPDATE siniestros SET estado='APROBADO', decidido_en='2026-11-20T02:00:00Z', "
+        "deducible=350000, valor_indemnizar=2500000 WHERE id=%s",
+        (siniestro,),
+    )
+    otro = insertar_siniestro(conexion, estado="EN_EVALUACION", **sellos)
+    # RECHAZAR
+    conexion.execute(
+        "UPDATE siniestros SET estado='RECHAZADO', decidido_en='2026-11-20T02:00:00Z' WHERE id=%s",
+        (otro,),
+    )
+    # Y lo que ninguna transición deja: aprobado sin liquidación o pausado sin plazo.
+    for cambio in (
+        "estado='APROBADO', decidido_en=now()",
+        "estado='FALTA_SOPORTE', pausado_desde=now()",
+    ):
+        libre = insertar_siniestro(conexion, estado="EN_EVALUACION", **sellos)
+        with pytest.raises(psycopg.errors.CheckViolation):
+            conexion.execute(f"UPDATE siniestros SET {cambio} WHERE id=%s", (libre,))
+
+
+def test_la_reversa_de_002_deja_la_base_de_001(limpia: str) -> None:
+    # `limpia`: reaplicar 002 con un caso APROBADO cuya liquidación se perdió en la reversa lo impide
+    # la CHECK a propósito (la reversa es para pruebas y retrocesos planificados).
+    base = limpia
+    with psycopg.connect(base, autocommit=True) as conexion:
+        conexion.execute(_reversa("002_decisiones.sql"))
+        tablas = {
+            f[0]
+            for f in conexion.execute(
+                "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+            ).fetchall()
+        }
+        assert "decisiones_siniestro" not in tablas and "siniestros" in tablas
+        columnas = {
+            f[0]
+            for f in conexion.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='siniestros'"
+            ).fetchall()
+        }
+        assert not {"deducible", "valor_indemnizar"} & columnas
+        # Con 001 solamente, la reversa se repite sin fallar y 002 se vuelve a aplicar.
+        conexion.execute(_reversa("002_decisiones.sql"))
+    migrar(base)
+    with psycopg.connect(base, autocommit=True) as conexion:
+        assert conexion.execute(
+            "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'"
+        ).fetchone() == (8,)

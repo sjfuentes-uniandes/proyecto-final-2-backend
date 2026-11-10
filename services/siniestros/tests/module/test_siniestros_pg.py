@@ -4,6 +4,7 @@ import asyncio
 import json
 from collections.abc import Callable
 from datetime import timedelta
+from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -46,7 +47,8 @@ def guardar(conexion: psycopg.Connection[Any], s: Siniestro, *evidencias: Eviden
         "INSERT INTO siniestros (id, codigo, origen, estado, poliza_id, cliente_id, copia_poliza, "
         "causa, fecha_evento, ubicacion_declarada, reportado_en, analista_id, asignado_en, "
         "pausado_desde, pausa_acumulada_s, plazo_soporte_vence_en, decidido_en, version, "
-        "correlation_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        "correlation_id, deducible, valor_indemnizar) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
         (
             s.id,
             s.codigo,
@@ -67,6 +69,8 @@ def guardar(conexion: psycopg.Connection[Any], s: Siniestro, *evidencias: Eviden
             s.decidido_en,
             s.version,
             s.correlation_id,
+            s.deducible,
+            s.valor_indemnizar,
         ),
     )
     for e in evidencias:
@@ -276,6 +280,7 @@ async def test_el_tiempo_restante_de_sql_coincide_con_el_del_dominio(
             fecha_evento=reportado - timedelta(hours=1),
             estado=EstadoSiniestro.FALTA_SOPORTE,
             pausado_desde=ahora - timedelta(hours=10),
+            plazo_soporte_vence_en=ahora + timedelta(days=5),
             **base,
         ),
         siniestro(
@@ -284,6 +289,7 @@ async def test_el_tiempo_restante_de_sql_coincide_con_el_del_dominio(
             fecha_evento=reportado - timedelta(hours=1),
             estado=EstadoSiniestro.APROBADO,
             decidido_en=ahora - timedelta(hours=2),
+            valor_indemnizar=Decimal("1000000.00"),
             **base,
         ),
         siniestro(
@@ -352,6 +358,7 @@ async def test_resueltos_de_la_semana_y_tiempo_medio(
             reportado_en=reportado,
             fecha_evento=reportado - timedelta(hours=1),
             decidido_en=decidido,
+            valor_indemnizar=Decimal("1000000.00") if estado is EstadoSiniestro.APROBADO else None,
         )
 
     for caso in (
@@ -411,6 +418,38 @@ async def test_detalle_devuelve_el_caso_sus_evidencias_y_su_historial_en_orden(
     assert leido.evidencias[2] == sin_fecha
     assert [h.accion for h in leido.historial] == ["REPORTADO", "EVIDENCIAS_VALIDADAS"]
     assert await SiniestrosPg(pool).detalle(uuid4()) is None
+
+
+async def test_un_caso_aprobado_conserva_su_liquidacion_y_uno_en_soporte_su_plazo(
+    pool: Any,
+    conexion: psycopg.Connection[Any],
+    siniestro: Callable[..., Siniestro],
+    ahora: Any,
+) -> None:
+    aprobado = siniestro(
+        codigo="88-2026-0701",
+        estado=EstadoSiniestro.APROBADO,
+        analista_id=ANALISTA,
+        asignado_en=ahora - timedelta(hours=13),
+        decidido_en=ahora,
+        deducible=Decimal("350000.00"),
+        valor_indemnizar=Decimal("2500000.00"),
+    )
+    en_soporte = siniestro(
+        codigo="88-2026-0702",
+        estado=EstadoSiniestro.FALTA_SOPORTE,
+        analista_id=ANALISTA,
+        asignado_en=ahora - timedelta(hours=13),
+        pausado_desde=ahora,
+        plazo_soporte_vence_en=ahora + timedelta(days=7),
+    )
+    guardar(conexion, aprobado)
+    guardar(conexion, en_soporte)
+    leido = await SiniestrosPg(pool).detalle(aprobado.id)
+    assert leido is not None and leido.siniestro == aprobado
+    assert leido.siniestro.valor_indemnizar == Decimal("2500000.00")
+    leido = await SiniestrosPg(pool).detalle(en_soporte.id)
+    assert leido is not None and leido.siniestro == en_soporte
 
 
 async def test_evidencia_solo_dentro_de_su_siniestro(

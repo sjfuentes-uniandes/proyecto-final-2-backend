@@ -1,4 +1,4 @@
-"""Cliente HTTP de la API interna de siniestros (/v1/siniestros, HU-W19). Sin reintentos.
+"""Cliente HTTP de la API interna de siniestros (/v1/siniestros, HU-W19 y HU-W20). Sin reintentos.
 
 Cada llamada lleva al analista (DS3-10): `X-Actor-Id` (el `sub` de Cognito), `X-Actor-Rol =
 ANALISTA_SINIESTROS` y `X-Actor-Nombre`. El nombre viaja en UTF-8 (httpx solo admite ASCII en un
@@ -98,6 +98,24 @@ class SiniestrosCliente:
     async def enlace(self, siniestro_id: UUID, evidencia_id: UUID, actor: str, nombre: str) -> Any:
         return await self._json(
             "POST", f"/{siniestro_id}/evidencias/{evidencia_id}/enlace", actor, nombre
+        )
+
+    async def catalogos_decision(self, actor: str, nombre: str) -> Any:
+        return await self._json("GET", "/catalogos-decision", actor, nombre)
+
+    async def decidir(
+        self, siniestro_id: UUID, clave: UUID, cuerpo: dict[str, Any], actor: str, nombre: str
+    ) -> Any:
+        """La decisión del analista (HU-W20). La `Idempotency-Key` viaja tal cual: la repetición la
+        resuelve siniestros, no el BFF. Sin reintentos: reintentar lo decide el portal, con la misma
+        clave."""
+        return await self._json(
+            "POST",
+            f"/{siniestro_id}/decision",
+            actor,
+            nombre,
+            extra={"Idempotency-Key": str(clave)},
+            json=cuerpo,
         )
 
     async def acceso_denegado(

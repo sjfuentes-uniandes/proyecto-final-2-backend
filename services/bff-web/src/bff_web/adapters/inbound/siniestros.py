@@ -1,4 +1,4 @@
-"""HU-W19: siniestros en el portal (grupo `analistas-siniestros`).
+"""HU-W19 y HU-W20: siniestros en el portal (grupo `analistas-siniestros`).
 
 Rutas espejo de `siniestros` (bandeja, resumen, siguiente, detalle y enlace) con los mismos DTO
 (`siniestros_dto.py`) más dos vistas: `clienteNombre`, desde `clientes`, y `polizaVista`, desde
@@ -9,24 +9,30 @@ de siniestros se valida contra el DTO antes de devolverlo: si no lo cumple, 503 
 URL prefirmada del enlace no se registra.
 """
 
+import json
+from collections.abc import Callable, Coroutine
 from functools import lru_cache
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request, Response
+from fastapi.responses import JSONResponse
 from pydantic import AwareDatetime, Field, TypeAdapter, ValidationError
 from solventa_common.errors import ErrorNegocio, RutaB2
 
 from bff_web.adapters.inbound.autorizacion import requerir_grupo
 from bff_web.adapters.inbound.polizas import PatronNumero, VigenciaPolizaDto
 from bff_web.adapters.inbound.siniestros_dto import (
+    CatalogosDecision,
     DetalleSiniestro,
     EnlaceEvidencia,
     EstadoSiniestro,
     OrigenSiniestro,
     PrioridadSiniestro,
+    ResultadoDecisionSiniestro,
     ResumenBandejaSiniestros,
     ResumenSiniestro,
+    SolicitudDecision,
     TextoDecimal,
     TipoBandeja,
     _Dto,
@@ -135,22 +141,63 @@ def analista(
     return Analista(x_authenticated_sub, nombre_de_analista(x_authenticated_sub, authorization))
 
 
+# El `tipo` que Pydantic antepone a la ruta de un campo inválido (unión discriminada): no es parte
+# del campo y el portal necesita el nombre limpio para marcarlo (R-64). Es la misma regla de
+# `siniestros`; se repite aquí a propósito (el BFF no importa de otro servicio).
+_ETIQUETAS_TIPO = frozenset({"APROBAR", "RECHAZAR", "SOLICITAR_SOPORTE"})
+
+
+def _limpiar_campo(campo: str) -> str:
+    partes = campo.split(".")
+    if partes[0] in _ETIQUETAS_TIPO and len(partes) > 1:
+        return ".".join(partes[1:])
+    return "tipo" if campo == "body" else campo
+
+
+class RutaDecision(RutaB2):
+    """`RutaB2` que además devuelve los campos inválidos sin la etiqueta del `tipo`."""
+
+    def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+        original = super().get_route_handler()
+
+        async def manejar(request: Request) -> Response:
+            respuesta = await original(request)
+            if respuesta.status_code != 422:
+                return respuesta
+            cuerpo = json.loads(bytes(respuesta.body))
+            campos = cuerpo.get("detalles", {}).get("campos")
+            if cuerpo.get("codigo") != "SOLICITUD_INVALIDA" or not isinstance(campos, list):
+                return respuesta
+            cuerpo["detalles"]["campos"] = list(dict.fromkeys(_limpiar_campo(c) for c in campos))
+            return JSONResponse(cuerpo, status_code=422)
+
+        return manejar
+
+
+_RESPUESTAS: dict[int | str, dict[str, Any]] = {
+    401: _error("ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado"),
+    403: _error(
+        "ROL_NO_AUTORIZADO: falta el grupo analistas-siniestros o no es del back-office "
+        "(se notifica a siniestros, DS3-09)"
+    ),
+    422: _error("SOLICITUD_INVALIDA (detalles.campos)"),
+    503: _error("SERVICIO_NO_DISPONIBLE: siniestros no respondió o respondió fuera de su contrato"),
+}
 router = APIRouter(
     prefix="/v1/siniestros",
     tags=["siniestros"],
     route_class=RutaB2,
     dependencies=[Depends(exigir_grupo_analistas)],
-    responses={
-        401: _error("ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado"),
-        403: _error(
-            "ROL_NO_AUTORIZADO: falta el grupo analistas-siniestros o no es del back-office "
-            "(se notifica a siniestros, DS3-09)"
-        ),
-        422: _error("SOLICITUD_INVALIDA (detalles.campos)"),
-        503: _error(
-            "SERVICIO_NO_DISPONIBLE: siniestros no respondió o respondió fuera de su contrato"
-        ),
-    },
+    responses=_RESPUESTAS,
+)
+# La decisión (HU-W20): mismas reglas y respuestas, pero sus 422 salen con los campos sin la etiqueta
+# del `tipo`. Se incluye antes que `router`: `/catalogos-decision` va antes de `/{siniestroId}`.
+router_decision = APIRouter(
+    prefix="/v1/siniestros",
+    tags=["siniestros"],
+    route_class=RutaDecision,
+    dependencies=[Depends(exigir_grupo_analistas)],
+    responses=_RESPUESTAS,
 )
 Actor = Annotated[Analista, Depends(analista)]
 IdSiniestro = Annotated[UUID, Path(alias="siniestroId")]
@@ -161,6 +208,8 @@ _RESUMEN = TypeAdapter(ResumenBandejaSiniestros)
 _CASO = TypeAdapter(ResumenSiniestroVista)
 _DETALLE = TypeAdapter(DetalleSiniestroVista)
 _ENLACE = TypeAdapter(EnlaceEvidencia)
+_CATALOGOS = TypeAdapter(CatalogosDecision)
+_RESULTADO = TypeAdapter(ResultadoDecisionSiniestro)
 _POLIZA = TypeAdapter(PolizaVistaDto)
 
 
@@ -264,3 +313,42 @@ async def emitir_enlace(
 ) -> Any:
     """URL prefirmada de lectura (≤ 300 s): el portal la pide al abrir el visor y no la guarda."""
     return _validar(_ENLACE, await servicio.enlace(siniestro_id, evidencia_id, analista))
+
+
+@router_decision.get("/catalogos-decision", response_model=CatalogosDecision)
+async def catalogos_decision(servicio: Servicio, analista: Actor) -> Any:
+    """Causales de rechazo, documentos solicitables, canales y plazos, como códigos que el portal
+    traduce (DS3-12)."""
+    return _validar(_CATALOGOS, await servicio.catalogos(analista))
+
+
+@router_decision.post(
+    "/{siniestroId}/decision",
+    response_model=ResultadoDecisionSiniestro,
+    responses={
+        404: _error("SINIESTRO_NO_ENCONTRADO"),
+        409: _error(
+            "TRANSICION_NO_PERMITIDA (detalles.estadoActual; también si otra decisión ganó la "
+            "carrera) o CASO_ASIGNADO_A_OTRO"
+        ),
+        422: _error(
+            "JUSTIFICACION_REQUERIDA, VALOR_FUERA_DE_RANGO (detalles.campos), CAUSAL_INVALIDA, "
+            "SOLICITUD_INVALIDA (detalles.campos) o IDEMPOTENCIA_CONFLICTO"
+        ),
+    },
+)
+async def decidir(
+    servicio: Servicio,
+    analista: Actor,
+    siniestro_id: IdSiniestro,
+    idempotency_key: Annotated[UUID, Header(alias="Idempotency-Key")],
+    solicitud: SolicitudDecision,
+) -> Any:
+    """Registra la decisión del analista asignado sobre un caso EN_EVALUACION: aprobar (con
+    liquidación), rechazar (con causal y explicación) o solicitar soporte (FALTA_SOPORTE, reloj en
+    pausa). La misma Idempotency-Key con el mismo cuerpo devuelve el resultado original; con otro
+    cuerpo, 422 IDEMPOTENCIA_CONFLICTO."""
+    cuerpo = solicitud.model_dump(mode="json", by_alias=True)
+    return _validar(
+        _RESULTADO, await servicio.decidir(siniestro_id, idempotency_key, cuerpo, analista)
+    )

@@ -122,6 +122,10 @@ NO_EXISTE_SINIESTRO = "no existe el siniestro"
 SIN_GRUPO_ANALISTAS = "el usuario no pertenece al grupo analistas-siniestros"
 EVIDENCIA_CON_ARCHIVO = "existe la evidencia del siniestro con su archivo"
 EVIDENCIA_SIN_ARCHIVO = "la evidencia existe pero su archivo no está disponible"
+# HU-W20 (CT-W20-01): la decisión del analista (web/pact/siniestros.pact.spec.ts).
+PUEDE_DECIDIR = "el analista puede decidir siniestros"
+EN_EVALUACION_ASIGNADO = "el analista tiene un siniestro EN_EVALUACION asignado"
+YA_APROBADO = "el siniestro ya fue aprobado"
 ESTADOS_SINIESTROS = {
     ANALISTA_CON_CASOS,
     EXISTE_SINIESTRO,
@@ -129,6 +133,9 @@ ESTADOS_SINIESTROS = {
     SIN_GRUPO_ANALISTAS,
     EVIDENCIA_CON_ARCHIVO,
     EVIDENCIA_SIN_ARCHIVO,
+    PUEDE_DECIDIR,
+    EN_EVALUACION_ASIGNADO,
+    YA_APROBADO,
 }
 GRUPO_SIN_MIEMBROS = "grupo-sin-miembros"
 SINIESTRO_ID = "5e000000-0000-4000-8000-000004000000"
@@ -221,6 +228,48 @@ DETALLE_SINIESTRO: dict[str, Any] = {
     "liquidacion": None,
     "evento": None,
     "pago": None,
+    # HU-W20 (R-63): campos aditivos del detalle.
+    "valorReclamado": None,
+    "referenciaPagoPrevista": "IND-88-2026-0442-01",
+    "plazoSoporteVenceEn": None,
+}
+CATALOGOS_DECISION: dict[str, Any] = {
+    "causales": [
+        "POLIZA_NO_VIGENTE",
+        "EVENTO_NO_CUBIERTO",
+        "PERIODO_DE_CARENCIA",
+        "AVISO_EXTEMPORANEO",
+        "PRIMAS_EN_MORA",
+        "EVIDENCIA_INCONSISTENTE",
+        "EXCLUSION_CONTRACTUAL",
+    ],
+    "documentos": [
+        "CERTIFICADO_REPARACION",
+        "COTIZACION_REPUESTOS",
+        "DENUNCIA_AUTORIDAD",
+        "PERITAJE",
+    ],
+    "canales": ["PUSH_Y_CORREO", "PUSH", "CORREO"],
+    "plazosDiasHabiles": [5, 10, 15],
+}
+# Lo que responde siniestros a cada decisión (el cuerpo de ResultadoDecisionSiniestro).
+RESULTADO_DECISION: dict[str, Any] = {
+    "siniestroId": SINIESTRO_ID,
+    "decisionId": "d0000000-0000-4000-8000-000000000001",
+    "registradaEn": "2026-11-05T15:00:00Z",
+}
+RESULTADOS_POR_TIPO: dict[str, dict[str, Any]] = {
+    "APROBAR": {
+        "estadoNuevo": "APROBADO",
+        "referenciaPago": "IND-88-2026-0442-01",
+        "plazoSoporteVenceEn": None,
+    },
+    "RECHAZAR": {"estadoNuevo": "RECHAZADO", "referenciaPago": None, "plazoSoporteVenceEn": None},
+    "SOLICITAR_SOPORTE": {
+        "estadoNuevo": "FALTA_SOPORTE",
+        "referenciaPago": None,
+        "plazoSoporteVenceEn": "2026-11-19T15:00:00Z",
+    },
 }
 ENLACE_SINIESTRO = {
     "url": "https://evidencias.s3.amazonaws.com/o?X-Amz-Expires=300&X-Amz-Signature=sintetica",
@@ -578,6 +627,20 @@ class SiniestrosSimulado:
         self.estado: str | None = None
         self.actores: list[tuple[str, str]] = []
         self.avisos = 0
+        # HU-W20: cada decisión que llega (tipo y Idempotency-Key) y los GET de catálogos.
+        self.decisiones: list[tuple[str, str]] = []
+        self.catalogos = 0
+
+    def _decidir(self, pedido: httpx.Request) -> httpx.Response:
+        cuerpo = json.loads(pedido.content)
+        self.decisiones.append((cuerpo["tipo"], pedido.headers.get("Idempotency-Key", "")))
+        if self.estado == YA_APROBADO:
+            return _error("TRANSICION_NO_PERMITIDA", 409, {"estadoActual": "APROBADO"})
+        if self.estado == EN_EVALUACION_ASIGNADO:
+            return httpx.Response(
+                200, json={**RESULTADO_DECISION, **RESULTADOS_POR_TIPO[cuerpo["tipo"]]}
+            )
+        return _error("SINIESTRO_NO_ENCONTRADO", 404)
 
     def responder(self, pedido: httpx.Request) -> httpx.Response:
         ruta_ = pedido.url.path
@@ -593,6 +656,13 @@ class SiniestrosSimulado:
             if self.estado == EVIDENCIA_SIN_ARCHIVO:
                 return _error("EVIDENCIA_NO_DISPONIBLE", 404)
             return _error("SINIESTRO_NO_ENCONTRADO", 404)
+        if ruta_ == "/v1/siniestros/catalogos-decision":
+            self.catalogos += 1
+            if self.estado == PUEDE_DECIDIR:
+                return httpx.Response(200, json=CATALOGOS_DECISION)
+            return _error("SOLICITUD_INVALIDA", 422)
+        if ruta_.endswith("/decision") and pedido.method == "POST":
+            return self._decidir(pedido)
         if ruta_ == "/v1/siniestros":
             cuerpo = {"items": [RESUMEN_SINIESTRO], "siguienteCursor": None, "total": 1}
             return httpx.Response(200, json=cuerpo)
@@ -819,6 +889,12 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
             (SIN_GRUPO_ANALISTAS, None),
             (EVIDENCIA_CON_ARCHIVO, None),
             (EVIDENCIA_SIN_ARCHIVO, None),
+            # HU-W20: los catálogos, las tres decisiones y el 409 de un caso ya decidido.
+            (PUEDE_DECIDIR, None),
+            (EN_EVALUACION_ASIGNADO, None),
+            (EN_EVALUACION_ASIGNADO, None),
+            (EN_EVALUACION_ASIGNADO, None),
+            (YA_APROBADO, None),
         ],
         key=str,
     )
@@ -827,6 +903,16 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
     # El 403 por grupo no llega a siniestros, pero el BFF le avisa del acceso denegado (DS3-09).
     assert siniestros.avisos == 1
     assert {actor for actor, _ in siniestros.actores} <= {"sub-asesor-pact"}
+    # HU-W20: siniestros recibió las tres decisiones y el intento sobre el caso ya aprobado, cada una con
+    # la Idempotency-Key del portal, y los catálogos una sola vez.
+    assert sorted(tipo for tipo, _ in siniestros.decisiones) == [
+        "APROBAR",
+        "APROBAR",
+        "RECHAZAR",
+        "SOLICITAR_SOPORTE",
+    ]
+    assert {clave for _, clave in siniestros.decisiones} == {"c0c0c0c0-0000-4000-8000-000000000001"}
+    assert siniestros.catalogos == 1
     # El asesor pide como ASESOR: polizas filtra las reglas reservadas (DS2-07, R-08).
     assert set(polizas.roles) == {"ASESOR"}
 

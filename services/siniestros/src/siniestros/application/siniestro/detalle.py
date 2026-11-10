@@ -12,6 +12,7 @@ from uuid import UUID
 
 from solventa_common.telemetry import RESULTADO_RECHAZADO, operacion
 
+from siniestros.application.siniestro.decidir import ACCION_SOPORTE_SOLICITADO
 from siniestros.application.siniestro.errores import SiniestroNoEncontrado
 from siniestros.application.siniestro.puertos import (
     AlmacenEvidencias,
@@ -28,8 +29,29 @@ from siniestros.application.siniestro.vistas import (
 )
 from siniestros.domain.siniestro.cobertura import soportes_pendientes, verificar_cobertura
 from siniestros.domain.siniestro.coherencia import DISTANCIA_MAX_M, Declarado, evaluar_coherencia
-from siniestros.domain.siniestro.modelos import EventoReclamado
+from siniestros.domain.siniestro.modelos import (
+    EntradaHistorial,
+    EstadoSiniestro,
+    EventoReclamado,
+    Siniestro,
+    TipoSoporte,
+)
 from siniestros.domain.siniestro.tramite import pasos_tramite
+
+
+def soportes_solicitados(
+    caso: Siniestro, historial: tuple[EntradaHistorial, ...]
+) -> tuple[TipoSoporte, ...]:
+    """Los documentos que el analista pidió en el último pedido de soporte, mientras el caso espera
+    a que el cliente responda. Pasado el plazo (o sin pedido) no hay ninguno."""
+    if caso.estado is not EstadoSiniestro.FALTA_SOPORTE:
+        return ()
+    pedidos = [h for h in historial if h.accion == ACCION_SOPORTE_SOLICITADO and h.detalles]
+    if not pedidos:
+        return ()
+    ultimo = max(pedidos, key=lambda h: h.ocurrido_en)
+    assert ultimo.detalles is not None
+    return tuple(TipoSoporte(d) for d in ultimo.detalles.get("documentos", ()))
 
 
 class ConsultarDetalle:
@@ -77,9 +99,12 @@ class ConsultarDetalle:
                     distancia_max_m=self._distancia_max_m,
                 ),
                 evidencias=tuple(EvidenciaVerificada(e, integridades[e.id]) for e in evidencias),
-                soportes_pendientes=soportes_pendientes(requeridos, evidencias),
+                soportes_pendientes=soportes_pendientes(
+                    requeridos, evidencias, soportes_solicitados(caso, leido.historial)
+                ),
                 tramite=pasos_tramite(caso.estado, leido.historial),
                 historial=leido.historial,
+                liquidacion=leido.liquidacion,
             )
 
             async with self._repo.transaccion() as tx:

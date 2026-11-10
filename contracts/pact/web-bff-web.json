@@ -124,6 +124,167 @@
       "type": "Synchronous/HTTP"
     },
     {
+      "description": "el rechazo de un siniestro",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el analista tiene un siniestro EN_EVALUACION asignado",
+          "params": {
+            "siniestroId": "5e000000-0000-4000-8000-000004000000"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "causal": "POLIZA_NO_VIGENTE",
+            "explicacionCliente": "Tu póliza venció antes del evento.",
+            "justificacion": "La póliza estaba vencida al evento",
+            "tipo": "RECHAZAR"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Accept": [
+            "application/json"
+          ],
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotency-Key": [
+            "c0c0c0c0-0000-4000-8000-000000000001"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.causal": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(POLIZA_NO_VIGENTE|EVENTO_NO_CUBIERTO|PERIODO_DE_CARENCIA|AVISO_EXTEMPORANEO|PRIMAS_EN_MORA|EVIDENCIA_INCONSISTENTE|EXCLUSION_CONTRACTUAL)$"
+                }
+              ]
+            },
+            "$.explicacionCliente": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.justificacion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.tipo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/v1/siniestros/5e000000-0000-4000-8000-000004000000/decision"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "decisionId": "d0000000-0000-4000-8000-000000000001",
+            "estadoNuevo": "RECHAZADO",
+            "plazoSoporteVenceEn": null,
+            "referenciaPago": null,
+            "registradaEn": "2026-11-05T15:00:00Z",
+            "siniestroId": "5e000000-0000-4000-8000-000004000000"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.decisionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.estadoNuevo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.plazoSoporteVenceEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.referenciaPago": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.registradaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.siniestroId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
       "description": "la aceptación de la oferta · 200: la misma clave devuelve la aceptación existente",
       "pending": false,
       "providerStates": [
@@ -973,6 +1134,191 @@
       "type": "Synchronous/HTTP"
     },
     {
+      "description": "la aprobación de un siniestro",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el analista tiene un siniestro EN_EVALUACION asignado",
+          "params": {
+            "siniestroId": "5e000000-0000-4000-8000-000004000000"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "justificacion": "Daño accidental verificado con evidencia",
+            "liquidacion": {
+              "deducible": "350000",
+              "moneda": "COP",
+              "valorIndemnizar": "2500000",
+              "valorReclamado": "2850000"
+            },
+            "tipo": "APROBAR"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Accept": [
+            "application/json"
+          ],
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotency-Key": [
+            "c0c0c0c0-0000-4000-8000-000000000001"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.justificacion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.liquidacion.deducible": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.liquidacion.moneda": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z]{3}$"
+                }
+              ]
+            },
+            "$.liquidacion.valorIndemnizar": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.liquidacion.valorReclamado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.tipo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/v1/siniestros/5e000000-0000-4000-8000-000004000000/decision"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "decisionId": "d0000000-0000-4000-8000-000000000001",
+            "estadoNuevo": "APROBADO",
+            "plazoSoporteVenceEn": null,
+            "referenciaPago": "IND-88-2026-0442-01",
+            "registradaEn": "2026-11-05T15:00:00Z",
+            "siniestroId": "5e000000-0000-4000-8000-000004000000"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.decisionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.estadoNuevo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.plazoSoporteVenceEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.referenciaPago": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^IND-88-\\d{4}-\\d{4,}-01$"
+                }
+              ]
+            },
+            "$.registradaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.siniestroId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
       "description": "la consulta de la póliza de una cotización sin póliza",
       "pending": false,
       "providerStates": [
@@ -1550,6 +1896,126 @@
                 {
                   "match": "regex",
                   "regex": "^\\d{4}-\\d{2}-\\d{2}$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la consulta de los catálogos de la decisión",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el analista puede decidir siniestros"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": [
+            "application/json"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/siniestros/catalogos-decision"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "canales": [
+              "PUSH_Y_CORREO"
+            ],
+            "causales": [
+              "POLIZA_NO_VIGENTE"
+            ],
+            "documentos": [
+              "CERTIFICADO_REPARACION"
+            ],
+            "plazosDiasHabiles": [
+              5
+            ]
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.canales": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.canales[*]": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(PUSH_Y_CORREO|PUSH|CORREO)$"
+                }
+              ]
+            },
+            "$.causales": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.causales[*]": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(POLIZA_NO_VIGENTE|EVENTO_NO_CUBIERTO|PERIODO_DE_CARENCIA|AVISO_EXTEMPORANEO|PRIMAS_EN_MORA|EVIDENCIA_INCONSISTENTE|EXCLUSION_CONTRACTUAL)$"
+                }
+              ]
+            },
+            "$.documentos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.documentos[*]": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(CERTIFICADO_REPARACION|COTIZACION_REPUESTOS|DENUNCIA_AUTORIDAD|PERITAJE)$"
+                }
+              ]
+            },
+            "$.plazosDiasHabiles": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.plazosDiasHabiles[*]": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
                 }
               ]
             }
@@ -3368,6 +3834,7 @@
             "liquidacion": null,
             "origen": "MOVIL",
             "pago": null,
+            "plazoSoporteVenceEn": null,
             "poliza": {
               "amparos": [
                 {
@@ -3409,6 +3876,7 @@
             },
             "prioridad": "BAJA",
             "ramo": "Dispositivos",
+            "referenciaPagoPrevista": "IND-88-2026-0442-01",
             "relojPausado": false,
             "reportadoEn": "2026-11-05T01:00:00Z",
             "soportesPendientes": [
@@ -3431,6 +3899,7 @@
               "lat": 4.652,
               "lon": -74.0555
             },
+            "valorReclamado": null,
             "verificacionCobertura": [
               {
                 "codigo": "VIGENCIA",
@@ -3768,6 +4237,14 @@
                 }
               ]
             },
+            "$.plazoSoporteVenceEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
             "$.poliza.amparos": {
               "combine": "AND",
               "matchers": [
@@ -4007,6 +4484,15 @@
                 }
               ]
             },
+            "$.referenciaPagoPrevista": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^IND-88-\\d{4}-\\d{4,}-01$"
+                }
+              ]
+            },
             "$.relojPausado": {
               "combine": "AND",
               "matchers": [
@@ -4124,6 +4610,14 @@
               "matchers": [
                 {
                   "match": "decimal"
+                }
+              ]
+            },
+            "$.valorReclamado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
                 }
               ]
             },
@@ -5113,6 +5607,198 @@
       "type": "Synchronous/HTTP"
     },
     {
+      "description": "la solicitud de soporte de un siniestro",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el analista tiene un siniestro EN_EVALUACION asignado",
+          "params": {
+            "siniestroId": "5e000000-0000-4000-8000-000004000000"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "canal": "PUSH_Y_CORREO",
+            "documentos": [
+              "CERTIFICADO_REPARACION"
+            ],
+            "justificacion": "Falta el certificado del taller",
+            "mensajeCliente": "Necesitamos el certificado de reparación.",
+            "plazoDiasHabiles": 10,
+            "tipo": "SOLICITAR_SOPORTE"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Accept": [
+            "application/json"
+          ],
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotency-Key": [
+            "c0c0c0c0-0000-4000-8000-000000000001"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.canal": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(PUSH_Y_CORREO|PUSH|CORREO)$"
+                }
+              ]
+            },
+            "$.documentos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.documentos[*]": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(CERTIFICADO_REPARACION|COTIZACION_REPUESTOS|DENUNCIA_AUTORIDAD|PERITAJE)$"
+                }
+              ]
+            },
+            "$.justificacion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensajeCliente": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.plazoDiasHabiles": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.tipo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/v1/siniestros/5e000000-0000-4000-8000-000004000000/decision"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "decisionId": "d0000000-0000-4000-8000-000000000001",
+            "estadoNuevo": "FALTA_SOPORTE",
+            "plazoSoporteVenceEn": "2026-11-19T15:00:00Z",
+            "referenciaPago": null,
+            "registradaEn": "2026-11-05T15:00:00Z",
+            "siniestroId": "5e000000-0000-4000-8000-000004000000"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.decisionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.estadoNuevo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.plazoSoporteVenceEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.referenciaPago": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.registradaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.siniestroId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
       "description": "la solicitud del enlace de una evidencia",
       "pending": false,
       "providerStates": [
@@ -5247,6 +5933,172 @@
           }
         },
         "status": 404
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una decisión sobre un siniestro ya decidido",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el siniestro ya fue aprobado",
+          "params": {
+            "siniestroId": "5e000000-0000-4000-8000-000004000000"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "justificacion": "Daño accidental verificado con evidencia",
+            "liquidacion": {
+              "deducible": "350000",
+              "moneda": "COP",
+              "valorIndemnizar": "2500000",
+              "valorReclamado": "2850000"
+            },
+            "tipo": "APROBAR"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Accept": [
+            "application/json"
+          ],
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotency-Key": [
+            "c0c0c0c0-0000-4000-8000-000000000001"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.justificacion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.liquidacion.deducible": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.liquidacion.moneda": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z]{3}$"
+                }
+              ]
+            },
+            "$.liquidacion.valorIndemnizar": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.liquidacion.valorReclamado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.tipo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/v1/siniestros/5e000000-0000-4000-8000-000004000000/decision"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "TRANSICION_NO_PERMITIDA",
+            "correlationId": "corr-pact",
+            "detalles": {
+              "estadoActual": "APROBADO"
+            },
+            "mensaje": "Mensaje"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.detalles.estadoActual": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(APROBADO|RECHAZADO|FALTA_SOPORTE|REPORTADO|EN_EVALUACION)$"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 409
       },
       "type": "Synchronous/HTTP"
     }

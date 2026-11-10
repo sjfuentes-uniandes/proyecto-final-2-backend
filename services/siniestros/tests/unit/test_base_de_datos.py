@@ -45,8 +45,9 @@ def test_aplica_las_migraciones_entre_el_bloqueo_y_su_liberacion(conectar: Conex
     assert conectar.sentencias[0] == base_de_datos._LOCK
     assert conectar.sentencias[-1] == base_de_datos._UNLOCK
     migraciones = conectar.sentencias[1:-1]
-    assert len(migraciones) == 1
+    assert len(migraciones) == 2
     assert "CREATE TABLE IF NOT EXISTS siniestros" in migraciones[0]
+    assert "CREATE TABLE IF NOT EXISTS decisiones_siniestro" in migraciones[1]
 
 
 def test_libera_el_bloqueo_aunque_una_migracion_falle(

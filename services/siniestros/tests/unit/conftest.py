@@ -13,9 +13,10 @@ from uuid import UUID
 
 import pytest
 from siniestros.application.siniestro.errores import SolicitudInvalida
-from siniestros.application.siniestro.puertos import RegistroIdempotencia
+from siniestros.application.siniestro.puertos import DecisionFinalDuplicada, RegistroIdempotencia
 from siniestros.application.siniestro.vistas import (
     AccesoDenegado,
+    DecisionRegistrada,
     DetalleLeido,
     FiltroBandeja,
     Indicadores,
@@ -68,11 +69,83 @@ class TxFalsa:
     async def guardar_asignacion(self, siniestro: Siniestro, version_anterior: int) -> None:
         self._repo.siniestros[siniestro.id] = siniestro
 
+    async def bloquear_siniestro(self, siniestro_id: UUID) -> Siniestro | None:
+        self._repo.bloqueados.append(siniestro_id)
+        return self._repo.siniestros.get(siniestro_id)
+
+    async def ids_evidencias(self, siniestro_id: UUID) -> frozenset[UUID]:
+        return frozenset(
+            e.id for e in self._repo.evidencias.values() if e.siniestro_id == siniestro_id
+        )
+
+    async def reservar_plazos_vencidos(self, ahora: datetime, lote: int) -> list[Siniestro]:
+        vencidos = sorted(
+            (
+                s
+                for s in self._repo.siniestros.values()
+                if s.estado is EstadoSiniestro.FALTA_SOPORTE
+                and s.plazo_soporte_vence_en is not None
+                and s.plazo_soporte_vence_en < ahora
+            ),
+            key=lambda s: (s.plazo_soporte_vence_en, s.id),
+        )
+        return vencidos[:lote]
+
+    async def guardar_transicion(self, siniestro: Siniestro, version_anterior: int) -> None:
+        if self._repo.siniestros[siniestro.id].version != version_anterior:
+            raise RuntimeError("guardar_transicion: el siniestro cambió de versión")
+        self._repo.siniestros[siniestro.id] = siniestro
+
+    async def registrar_decision(self, decision: DecisionRegistrada) -> None:
+        finales = [
+            d
+            for d in self._repo.decisiones
+            if d.siniestro_id == decision.siniestro_id and d.tipo in ("APROBAR", "RECHAZAR")
+        ]
+        if self._repo.decision_perdida_en_carrera or (
+            decision.tipo in ("APROBAR", "RECHAZAR") and finales
+        ):
+            raise DecisionFinalDuplicada
+        self._repo.decisiones.append(decision)
+
     async def agregar_historial(self, entrada: EntradaHistorial) -> None:
         self._repo.historial.append(entrada)
 
-    async def evento_en_evaluacion(self, siniestro: Siniestro, ocurrido_en: datetime) -> None:
-        self._repo.eventos.append(("SiniestroEnEvaluacion", siniestro.id, ocurrido_en))
+    async def evento_en_evaluacion(
+        self, siniestro: Siniestro, ocurrido_en: datetime, motivo: str = "ASIGNACION"
+    ) -> None:
+        self._repo.eventos.append(("SiniestroEnEvaluacion", siniestro.id, ocurrido_en, motivo))
+
+    async def evento_aprobado(
+        self, siniestro: Siniestro, referencia_pago: str, decidido_por: UUID, aprobado_en: datetime
+    ) -> None:
+        self._repo.eventos.append(
+            ("SiniestroAprobado", siniestro.id, referencia_pago, decidido_por, aprobado_en)
+        )
+
+    async def evento_rechazado(
+        self, siniestro: Siniestro, causal: Any, decidido_por: UUID, decidido_en: datetime
+    ) -> None:
+        self._repo.eventos.append(("SiniestroRechazado", siniestro.id, causal, decidido_por))
+
+    async def evento_soporte_solicitado(
+        self,
+        siniestro: Siniestro,
+        documentos: Any,
+        canal: Any,
+        decidido_por: UUID,
+        ocurrido_en: datetime,
+    ) -> None:
+        self._repo.eventos.append(
+            (
+                "SiniestroSoporteSolicitado",
+                siniestro.id,
+                documentos,
+                canal,
+                decidido_por,
+                siniestro.plazo_soporte_vence_en,
+            )
+        )
 
     async def evento_consultado(
         self, siniestro: Siniestro, actor_id: str, ocurrido_en: datetime
@@ -99,6 +172,10 @@ class RepoFalso:
         self.eventos: list[tuple[Any, ...]] = []
         self.tx_abierta = False
         self.transacciones = 0
+        self.bloqueados: list[UUID] = []
+        self.decisiones: list[DecisionRegistrada] = []
+        self.decision_perdida_en_carrera = False
+        self.liquidaciones: dict[UUID, Any] = {}
         self.filtros: list[FiltroBandeja] = []
         self.pagina = PaginaSiniestros((), 0, None)
         self.indicadores_: Indicadores | None = None
@@ -111,10 +188,27 @@ class RepoFalso:
 
     @asynccontextmanager
     async def transaccion(self) -> AsyncIterator[TxFalsa]:
+        """Como una transacción real: si algo falla, no queda nada escrito."""
+        copia = (
+            dict(self.siniestros),
+            list(self.historial),
+            list(self.eventos),
+            list(self.decisiones),
+            dict(self.idempotencia),
+        )
         self.tx_abierta = True
         self.transacciones += 1
         try:
             yield TxFalsa(self)
+        except BaseException:
+            self.siniestros, self.historial, self.eventos, self.decisiones, self.idempotencia = (
+                copia[0],
+                copia[1],
+                copia[2],
+                copia[3],
+                copia[4],
+            )
+            raise
         finally:
             self.tx_abierta = False
 
@@ -144,6 +238,7 @@ class RepoFalso:
             caso,
             tuple(e for e in self.evidencias.values() if e.siniestro_id == siniestro_id),
             tuple(h for h in self.historial if h.siniestro_id == siniestro_id),
+            self.liquidaciones.get(siniestro_id),
         )
 
     async def evidencia(

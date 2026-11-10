@@ -63,3 +63,36 @@ class DependenciaNoDisponible(ErrorNegocio):
             503,
             {"dependencia": dependencia},
         )
+
+
+class TransicionNoPermitida(ErrorNegocio):
+    """El estado vigente no admite la decisión (DS3-02); `estadoActual` lo informa."""
+
+    def __init__(self, estado_actual: str) -> None:
+        super().__init__(
+            "TRANSICION_NO_PERMITIDA",
+            "El estado del siniestro no admite esta decisión",
+            409,
+            {"estadoActual": estado_actual},
+        )
+
+
+class CasoAsignadoAOtro(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("CASO_ASIGNADO_A_OTRO", "El caso está asignado a otro analista", 409)
+
+
+class JustificacionRequerida(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("JUSTIFICACION_REQUERIDA", "La justificación es obligatoria", 422)
+
+
+class CausalInvalida(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("CAUSAL_INVALIDA", "La causal no es válida", 422)
+
+
+class ValorFueraDeRango(ErrorNegocio):
+    def __init__(self, campos: Sequence[str]) -> None:
+        detalles: dict[str, Any] = {"campos": list(campos)}
+        super().__init__("VALOR_FUERA_DE_RANGO", "El valor está fuera de rango", 422, detalles)

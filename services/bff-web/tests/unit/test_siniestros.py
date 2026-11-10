@@ -118,6 +118,9 @@ DETALLE: dict[str, Any] = {
     "liquidacion": None,
     "evento": None,
     "pago": None,
+    "valorReclamado": None,
+    "referenciaPagoPrevista": "IND-88-2026-0442-01",
+    "plazoSoporteVenceEn": None,
 }
 BANDEJA: dict[str, Any] = {"items": [RESUMEN], "siguienteCursor": None, "total": 1}
 INDICADORES: dict[str, Any] = {
@@ -154,6 +157,60 @@ ENLACE = {
     "url": "https://s3.local/o?X-Amz-Signature=secreta",
     "expiraEn": "2026-11-05T15:05:00Z",
     "tipoContenido": "image/jpeg",
+}
+CATALOGOS = {
+    "causales": [
+        "POLIZA_NO_VIGENTE",
+        "EVENTO_NO_CUBIERTO",
+        "PERIODO_DE_CARENCIA",
+        "AVISO_EXTEMPORANEO",
+        "PRIMAS_EN_MORA",
+        "EVIDENCIA_INCONSISTENTE",
+        "EXCLUSION_CONTRACTUAL",
+    ],
+    "documentos": [
+        "CERTIFICADO_REPARACION",
+        "COTIZACION_REPUESTOS",
+        "DENUNCIA_AUTORIDAD",
+        "PERITAJE",
+    ],
+    "canales": ["PUSH_Y_CORREO", "PUSH", "CORREO"],
+    "plazosDiasHabiles": [5, 10, 15],
+}
+RESULTADO_APROBADO = {
+    "siniestroId": SINIESTRO_ID,
+    "estadoNuevo": "APROBADO",
+    "decisionId": "d0000000-0000-4000-8000-000000000001",
+    "referenciaPago": "IND-88-2026-0442-01",
+    "plazoSoporteVenceEn": None,
+    "registradaEn": "2026-11-05T15:00:00Z",
+}
+EXPLICACION = "EXPLICACION-PRIVADA-AL-CLIENTE"
+MENSAJE = "MENSAJE-PRIVADO-AL-CLIENTE"
+APROBAR = {
+    "tipo": "APROBAR",
+    "justificacion": "Daño verificado.",
+    "evidenciasConsideradas": [EVIDENCIA_ID],
+    "liquidacion": {
+        "valorReclamado": "2850000",
+        "deducible": "350000",
+        "valorIndemnizar": "2500000",
+        "moneda": "COP",
+    },
+}
+RECHAZAR = {
+    "tipo": "RECHAZAR",
+    "justificacion": "La póliza había vencido.",
+    "causal": "POLIZA_NO_VIGENTE",
+    "explicacionCliente": EXPLICACION,
+}
+SOPORTE = {
+    "tipo": "SOLICITAR_SOPORTE",
+    "justificacion": "Falta el certificado.",
+    "documentos": ["CERTIFICADO_REPARACION"],
+    "mensajeCliente": MENSAJE,
+    "canal": "PUSH_Y_CORREO",
+    "plazoDiasHabiles": 10,
 }
 NO_ENCONTRADO = {
     "codigo": "SINIESTRO_NO_ENCONTRADO",
@@ -205,6 +262,10 @@ class Simulado:
             return httpx.Response(202)
         if ruta_.endswith("/enlace"):
             return httpx.Response(200, json=ENLACE)
+        if ruta_.endswith("/catalogos-decision"):
+            return httpx.Response(200, json=CATALOGOS)
+        if ruta_.endswith("/decision"):
+            return httpx.Response(200, json=RESULTADO_APROBADO)
         if ruta_.endswith("/resumen"):
             return httpx.Response(200, json=INDICADORES)
         if ruta_.endswith("/siguiente"):
@@ -521,6 +582,8 @@ FALLAS = [
     _json(403, {"codigo": "ROL_NO_AUTORIZADO"}),
     _json(404, {"codigo": "OTRO_CODIGO"}),
     _json(409, {"codigo": "SINIESTRO_NO_ENCONTRADO"}),
+    _json(422, {"codigo": "TRANSICION_NO_PERMITIDA"}),
+    _json(404, {"codigo": "CAUSAL_INVALIDA"}),
     _json(404, {}),
     lambda _: httpx.Response(200, text="no es json"),
     _lanza(httpx.ReadTimeout),
@@ -734,3 +797,197 @@ async def test_sin_usuario_no_hay_a_quien_atribuir_el_aviso_y_solo_queda_el_log(
     assert respuesta.status_code == 403
     assert simulado.avisos == []
     assert any(r.getMessage() == "acceso.denegado" for r in caplog.records)
+
+
+# --- HU-W20: la decisión ----------------------------------------------------------------------------
+RUTA_DECISION = f"/v1/siniestros/{SINIESTRO_ID}/decision"
+
+
+def _decidir(cuerpo: Any, clave: str = IDEM["Idempotency-Key"]) -> httpx.Response:
+    return TestClient(app).post(
+        RUTA_DECISION, json=cuerpo, headers={**ANALISTA, "Idempotency-Key": clave}
+    )
+
+
+@pytest.mark.parametrize("cuerpo", [APROBAR, RECHAZAR, SOPORTE])
+def test_la_decision_se_reenvia_con_la_clave_el_actor_y_el_cuerpo(
+    simulado: Simulado, cuerpo: dict[str, Any]
+) -> None:
+    respuesta = _decidir(cuerpo)
+    assert respuesta.status_code == 200
+    assert respuesta.json() == RESULTADO_APROBADO
+    (pedido,) = [p for p in simulado.pedidos if p.url.path.endswith("/decision")]
+    assert (pedido.method, pedido.url.path) == ("POST", RUTA_DECISION)
+    assert pedido.headers["Idempotency-Key"] == IDEM["Idempotency-Key"]
+    assert pedido.headers["X-Actor-Id"] == SUB
+    assert pedido.headers["X-Actor-Rol"] == "ANALISTA_SINIESTROS"
+    enviado = json.loads(pedido.content)
+    assert enviado["tipo"] == cuerpo["tipo"] and enviado["justificacion"] == cuerpo["justificacion"]
+    # Lo que no se envió (la lista de evidencias vacía) llega con su valor por omisión.
+    assert enviado["evidenciasConsideradas"] == cuerpo.get("evidenciasConsideradas", [])
+
+
+def test_el_nombre_del_analista_viaja_con_tildes_en_la_decision(simulado: Simulado) -> None:
+    respuesta = TestClient(app).post(
+        RUTA_DECISION,
+        json=APROBAR,
+        headers={
+            **ANALISTA,
+            **IDEM,
+            "Authorization": _token({"name": "José Muñoz Peña"}),
+        },
+    )
+    assert respuesta.status_code == 200
+    (pedido,) = [p for p in simulado.pedidos if p.url.path.endswith("/decision")]
+    assert pedido.headers["X-Actor-Nombre"] == "José Muñoz Peña"
+
+
+@pytest.mark.parametrize(
+    ("estado", "codigo", "detalles"),
+    [
+        (409, "TRANSICION_NO_PERMITIDA", {"estadoActual": "APROBADO"}),
+        (409, "CASO_ASIGNADO_A_OTRO", {}),
+        (404, "SINIESTRO_NO_ENCONTRADO", {}),
+        (422, "JUSTIFICACION_REQUERIDA", {}),
+        (422, "CAUSAL_INVALIDA", {}),
+        (422, "VALOR_FUERA_DE_RANGO", {"campos": ["liquidacion.valorIndemnizar"]}),
+        (422, "SOLICITUD_INVALIDA", {"campos": ["documentos"]}),
+        (422, "IDEMPOTENCIA_CONFLICTO", {}),
+    ],
+)
+def test_los_errores_de_la_decision_pasan_con_su_codigo_y_su_estado(
+    simulado: Simulado, estado: int, codigo: str, detalles: dict[str, Any]
+) -> None:
+    simulado.responder = _json(
+        estado, {"codigo": codigo, "mensaje": "m", "correlationId": "c", "detalles": detalles}
+    )
+    respuesta = _decidir(APROBAR)
+    assert respuesta.status_code == estado
+    assert set(respuesta.json()) == {"codigo", "mensaje", "correlationId", "detalles"}
+    assert (respuesta.json()["codigo"], respuesta.json()["detalles"]) == (codigo, detalles)
+
+
+@pytest.mark.parametrize(
+    "responder",
+    [
+        _json(500, {"codigo": "ERROR_INTERNO"}),
+        _json(401, {"codigo": "ACTOR_REQUERIDO"}),
+        _json(403, {"codigo": "ROL_NO_AUTORIZADO"}),
+        # Un 409 o un 422 con un código que el contrato no promete es falla cerrada.
+        _json(409, {"codigo": "OTRO_CONFLICTO"}),
+        _json(422, {"codigo": "OTRO"}),
+        _json(200, {"estadoNuevo": "APROBADO"}),
+        _json(200, {"siniestroId": "x"}),
+        _lanza(httpx.ConnectError),
+        _lanza(httpx.ReadTimeout),
+    ],
+)
+def test_la_decision_falla_cerrada_con_cualquier_otra_respuesta(
+    simulado: Simulado, responder: Callable[[httpx.Request], httpx.Response]
+) -> None:
+    simulado.responder = responder
+    respuesta = _decidir(APROBAR)
+    assert respuesta.status_code == 503
+    assert respuesta.json()["codigo"] == "SERVICIO_NO_DISPONIBLE"
+    assert respuesta.json()["detalles"] == {}
+
+
+@pytest.mark.parametrize("grupos", ["[asesores]", "[suscriptores]", "[]", ""])
+def test_solo_el_grupo_de_analistas_decide_y_se_avisa_a_siniestros(
+    simulado: Simulado, grupos: str
+) -> None:
+    respuesta = TestClient(app).post(
+        RUTA_DECISION, json=APROBAR, headers={**_usuario(grupos), **IDEM}
+    )
+    assert respuesta.status_code == 403
+    assert [p for p in simulado.pedidos if p.url.path.endswith("/decision")] == []
+    asyncio.run(esperar_avisos())
+    (aviso,) = simulado.avisos
+    cuerpo = json.loads(aviso.content)
+    assert (cuerpo["recurso"], cuerpo["recursoId"], cuerpo["motivo"]) == (
+        "SINIESTRO",
+        SINIESTRO_ID,
+        "SIN_GRUPO",
+    )
+
+
+@pytest.mark.parametrize("clave", [None, "no-es-uuid"])
+def test_la_decision_exige_una_clave_uuid(simulado: Simulado, clave: str | None) -> None:
+    encabezados = dict(ANALISTA)
+    if clave:
+        encabezados["Idempotency-Key"] = clave
+    respuesta = TestClient(app).post(RUTA_DECISION, json=APROBAR, headers=encabezados)
+    assert (respuesta.status_code, respuesta.json()["codigo"]) == (422, "SOLICITUD_INVALIDA")
+    assert respuesta.json()["detalles"]["campos"] == ["Idempotency-Key"]
+    assert [p for p in simulado.pedidos if p.url.path.endswith("/decision")] == []
+
+
+@pytest.mark.parametrize(
+    ("cuerpo", "campos"),
+    [
+        ({**SOPORTE, "documentos": []}, ["documentos"]),
+        ({**SOPORTE, "canal": "SMS"}, ["canal"]),
+        ({**SOPORTE, "plazoDiasHabiles": 7}, ["plazoDiasHabiles"]),
+        ({**RECHAZAR, "liquidacion": {}}, ["liquidacion"]),
+        ({"justificacion": "x"}, ["tipo"]),
+        ({"tipo": "ANULAR", "justificacion": "x"}, ["tipo"]),
+        ([1], ["tipo"]),
+        (
+            {**APROBAR, "liquidacion": {"valorReclamado": "1"}},
+            [
+                "liquidacion.deducible",
+                "liquidacion.valorIndemnizar",
+                "liquidacion.moneda",
+            ],
+        ),
+    ],
+)
+def test_un_cuerpo_invalido_es_422_sin_llamar_a_siniestros_y_con_los_campos_limpios(
+    simulado: Simulado, cuerpo: Any, campos: list[str]
+) -> None:
+    respuesta = _decidir(cuerpo)
+    assert (respuesta.status_code, respuesta.json()["codigo"]) == (422, "SOLICITUD_INVALIDA")
+    assert respuesta.json()["detalles"]["campos"] == campos
+    assert [p for p in simulado.pedidos if p.url.path.endswith("/decision")] == []
+
+
+def test_el_catalogo_se_reenvia_y_se_valida(simulado: Simulado) -> None:
+    respuesta = _pedir("GET", "/v1/siniestros/catalogos-decision")
+    assert respuesta.status_code == 200 and respuesta.json() == CATALOGOS
+    (pedido,) = [p for p in simulado.pedidos if p.url.path.endswith("/catalogos-decision")]
+    assert pedido.headers["X-Actor-Rol"] == "ANALISTA_SINIESTROS"
+    simulado.responder = _json(200, {"causales": []})
+    assert _pedir("GET", "/v1/siniestros/catalogos-decision").status_code == 503
+
+
+def test_el_catalogo_solo_lo_ve_el_grupo_de_analistas(simulado: Simulado) -> None:
+    respuesta = _pedir("GET", "/v1/siniestros/catalogos-decision", _usuario("[asesores]"))
+    assert respuesta.status_code == 403
+    asyncio.run(esperar_avisos())
+    assert json.loads(simulado.avisos[0].content)["recurso"] == "SINIESTRO"
+
+
+def test_ni_los_registros_ni_la_respuesta_llevan_los_textos_al_cliente(
+    simulado: Simulado, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.DEBUG):
+        respuestas = [_decidir(RECHAZAR), _decidir(SOPORTE)]
+    registros = "\n".join(
+        f"{r.getMessage()} {json.dumps({k: str(v) for k, v in r.__dict__.items()})}"
+        for r in caplog.records
+    )
+    for texto in (EXPLICACION, MENSAJE, "Daño verificado", "La póliza había vencido"):
+        assert texto not in registros
+        assert all(texto not in r.text for r in respuestas)
+
+
+def test_la_decision_se_mide_con_su_operacion(
+    simulado: Simulado, caplog: pytest.LogCaptureFixture
+) -> None:
+    simulado.responder = _json(
+        409, {"codigo": "TRANSICION_NO_PERMITIDA", "mensaje": "m", "detalles": {}}
+    )
+    with caplog.at_level(logging.INFO):
+        _decidir(APROBAR)
+    medida = next(r for r in caplog.records if getattr(r, "operation", None) == "siniestro.decidir")
+    assert medida.result == "rechazado"  # type: ignore[attr-defined]

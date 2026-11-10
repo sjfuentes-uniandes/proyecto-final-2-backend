@@ -1,12 +1,12 @@
-"""HU-W19: siniestros para el analista (grupo `analistas-siniestros`). Reenvía a `siniestros` y le
+"""HU-W19 y HU-W20: siniestros para el analista (grupo `analistas-siniestros`). Reenvía a `siniestros` y le
 agrega lo que no guarda: el nombre del cliente (de `clientes`) y la póliza del encabezado (de
 `consulta`).
 
 - **Composición con degradación (CF-S3-09).** El nombre y la póliza se piden en paralelo, con su
   propio timeout y después de que siniestros respondió. Si fallan, la respuesta sale igual con
   `clienteNombre` o `polizaVista` en `null`. El `clienteId` ya viene en el contrato de siniestros.
-- **Falla cerrada.** Solo pasan, con su estado, los 404 y 422 del contrato de siniestros (por su
-  código). Cualquier otra respuesta (401, 403, 5xx, un timeout, un error de conexión o un cuerpo que
+- **Falla cerrada.** Solo pasan, con su estado, los 404, 409 y 422 del contrato de siniestros (por
+  su código). Cualquier otra respuesta (401, 403, 5xx, un timeout, un error de conexión o un cuerpo que
   no es JSON) es 503 `SERVICIO_NO_DISPONIBLE` sin detalles.
 - **Acceso denegado (DS3-09).** Cuando la ruta rechaza a un usuario sin el grupo, avisa a siniestros
   sin esperar la respuesta (300 ms, sin reintento). Si falla, deja el log `acceso.denegado` sin
@@ -37,16 +37,22 @@ from bff_web.application.nombres import nombres_de_clientes
 logger = logging.getLogger("bff_web.siniestros")
 
 SERVICIO_NO_DISPONIBLE = "SERVICIO_NO_DISPONIBLE"
-CODIGOS_SINIESTROS = frozenset(
-    {
-        "SINIESTRO_NO_ENCONTRADO",
-        "EVIDENCIA_NO_ENCONTRADA",
-        "EVIDENCIA_NO_DISPONIBLE",
-        "COLA_SIN_CASOS",
-        "SOLICITUD_INVALIDA",
-        "IDEMPOTENCIA_CONFLICTO",
-    }
-)
+# Los errores de siniestros que pasan, cada uno con **su** estado: un código con otro estado es un
+# cuerpo fuera del contrato y falla cerrado.
+CODIGOS_SINIESTROS: dict[str, int] = {
+    "SINIESTRO_NO_ENCONTRADO": 404,
+    "EVIDENCIA_NO_ENCONTRADA": 404,
+    "EVIDENCIA_NO_DISPONIBLE": 404,
+    "COLA_SIN_CASOS": 404,
+    "SOLICITUD_INVALIDA": 422,
+    "IDEMPOTENCIA_CONFLICTO": 422,
+    # HU-W20: la decisión del analista.
+    "TRANSICION_NO_PERMITIDA": 409,
+    "CASO_ASIGNADO_A_OTRO": 409,
+    "JUSTIFICACION_REQUERIDA": 422,
+    "VALOR_FUERA_DE_RANGO": 422,
+    "CAUSAL_INVALIDA": 422,
+}
 CAMPOS_POLIZA_VISTA = (
     "polizaId",
     "numero",
@@ -66,6 +72,8 @@ RECURSOS = {
     "tomar_siguiente": "SIGUIENTE",
     "detalle": "SINIESTRO",
     "emitir_enlace": "EVIDENCIA",
+    "decidir": "SINIESTRO",
+    "catalogos_decision": "SINIESTRO",
 }
 
 # Las tareas de aviso en curso: el bucle solo guarda referencias débiles.
@@ -113,7 +121,7 @@ async def _proteger(llamada: Awaitable[Any]) -> Any:
         return await llamada
     except ErrorSiniestros as error:
         codigo = error.cuerpo.get("codigo")
-        if error.status not in (404, 422) or codigo not in CODIGOS_SINIESTROS:
+        if CODIGOS_SINIESTROS.get(str(codigo)) != error.status:
             raise servicio_no_disponible() from error
         detalles = error.cuerpo.get("detalles")
         raise ErrorNegocio(
@@ -226,6 +234,21 @@ class Siniestros:
         return await self._con_operacion(
             "evidencia.enlace",
             self.siniestros.enlace(siniestro_id, evidencia_id, analista.id, analista.nombre),
+        )
+
+    async def catalogos(self, analista: Analista) -> Any:
+        """Las listas cerradas de la decisión (HU-W20), tal como las entrega siniestros."""
+        return await _proteger(self.siniestros.catalogos_decision(analista.id, analista.nombre))
+
+    async def decidir(
+        self, siniestro_id: UUID, clave: UUID, cuerpo: dict[str, Any], analista: Analista
+    ) -> Any:
+        """Reenvía la decisión a siniestros con la misma `Idempotency-Key` y el actor (HU-W20). Los
+        errores de contenido y de estado de siniestros pasan con su código y su estado. El cuerpo no
+        se registra: lleva la explicación y el mensaje al cliente."""
+        return await self._con_operacion(
+            "siniestro.decidir",
+            self.siniestros.decidir(siniestro_id, clave, cuerpo, analista.id, analista.nombre),
         )
 
     async def _poliza_vista(

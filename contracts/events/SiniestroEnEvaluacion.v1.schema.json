@@ -14,7 +14,10 @@
           "type": "string"
         },
         "motivo": {
-          "const": "ASIGNACION",
+          "enum": [
+            "ASIGNACION",
+            "PLAZO_SOPORTE_VENCIDO"
+          ],
           "title": "Motivo",
           "type": "string"
         },

@@ -97,6 +97,23 @@ def test_un_caso_decidido_completa_la_decision(
     assert pasos[4].ocurrido_en is None
 
 
+def test_un_rechazo_completa_la_decision_y_no_deja_paso_actual(
+    entrada: Callable[..., EntradaHistorial], ahora: datetime
+) -> None:
+    historial = historial_eva01(entrada, ahora) + [
+        entrada(
+            "RECHAZADO",
+            ahora - timedelta(hours=1),
+            estado_anterior=EstadoSiniestro.EN_EVALUACION,
+            estado_nuevo=EstadoSiniestro.RECHAZADO,
+            actor_nombre="Luis Mora",
+        )
+    ]
+    pasos = pasos_tramite(EstadoSiniestro.RECHAZADO, historial)
+    # AC2: no se habilita pago, así que el paso del pago ni siquiera queda «actual».
+    assert resumen(pasos) == "CCCCP"
+
+
 def test_la_primera_vez_que_ocurre_un_paso_fija_su_fecha(
     entrada: Callable[..., EntradaHistorial], ahora: datetime
 ) -> None:
@@ -125,5 +142,5 @@ def test_todos_los_pasos_cumplidos_no_dejan_paso_actual(
             estado_nuevo=EstadoSiniestro.RECHAZADO,
         )
     )
-    # PAGO_INDEMNIZACION no tiene acción propia hasta W23: es el primero sin ocurrir.
-    assert resumen(pasos_tramite(EstadoSiniestro.RECHAZADO, historial)) == "CCCCA"
+    # W20, AC2: un rechazo no habilita pago; el trámite terminó y ningún paso queda «actual».
+    assert resumen(pasos_tramite(EstadoSiniestro.RECHAZADO, historial)) == "CCCCP"
