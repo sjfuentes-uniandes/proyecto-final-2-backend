@@ -15,7 +15,9 @@ estados de la póliza hacen que polizas responda la Poliza EMITIENDO o ACTIVA, e
 POLIZA_NO_ENCONTRADA, el EnlaceDocumento o el 409 POLIZA_NO_ACTIVA; las interacciones las agrega el
 portal en la 17.12. HU-W18: el pacto trae también el listado y el estado de las pólizas (consulta
 simulada) y HU-W19 (CT-W19-02): la bandeja, el detalle con su 404 y su 403, y el enlace de una evidencia
-con su 404 EVIDENCIA_NO_DISPONIBLE (siniestros, clientes y consulta simulados). El verificador envía
+con su 404 EVIDENCIA_NO_DISPONIBLE (siniestros, clientes y consulta simulados). HU-W23 (CT-W23-01):
+el pago de la indemnización (H08) confirmado, rechazado y pendiente, su 404 INDEMNIZACION_NO_ENCONTRADA
+y su 403 (el detalle de siniestros se simula con el caso APROBADO y su `pago`). El verificador envía
 los encabezados que pone API Gateway para un usuario de los grupos `asesores` y
 `analistas-siniestros`; el estado del 403 hace que la ruta exija otro grupo mientras dura.
 """
@@ -126,6 +128,12 @@ EVIDENCIA_SIN_ARCHIVO = "la evidencia existe pero su archivo no está disponible
 PUEDE_DECIDIR = "el analista puede decidir siniestros"
 EN_EVALUACION_ASIGNADO = "el analista tiene un siniestro EN_EVALUACION asignado"
 YA_APROBADO = "el siniestro ya fue aprobado"
+# HU-W23 (CT-W23-01): el pago de la indemnización, H08 (web/pact/siniestros.pact.spec.ts).
+PAGO_CONFIRMADO = "el siniestro está aprobado y su pago fue confirmado"
+PAGO_RECHAZADO = "el siniestro está aprobado y su pago fue rechazado por la pasarela"
+PAGO_PENDIENTE = "el siniestro está aprobado y su pago aún no tiene resultado"
+NO_APROBADO = "el siniestro existe pero no está aprobado"
+ESTADOS_PAGO = {PAGO_CONFIRMADO, PAGO_RECHAZADO, PAGO_PENDIENTE, NO_APROBADO}
 ESTADOS_SINIESTROS = {
     ANALISTA_CON_CASOS,
     EXISTE_SINIESTRO,
@@ -136,6 +144,7 @@ ESTADOS_SINIESTROS = {
     PUEDE_DECIDIR,
     EN_EVALUACION_ASIGNADO,
     YA_APROBADO,
+    *ESTADOS_PAGO,
 }
 GRUPO_SIN_MIEMBROS = "grupo-sin-miembros"
 SINIESTRO_ID = "5e000000-0000-4000-8000-000004000000"
@@ -252,6 +261,71 @@ CATALOGOS_DECISION: dict[str, Any] = {
     "canales": ["PUSH_Y_CORREO", "PUSH", "CORREO"],
     "plazosDiasHabiles": [5, 10, 15],
 }
+
+
+def _detalle_aprobado(estado: str) -> dict[str, Any]:
+    """El detalle de un caso APROBADO como lo entrega siniestros (HU-W23): la liquidación, la entrada
+    `APROBADO` del historial y el `pago` derivado o guardado desde los eventos `Indemnizacion*`."""
+    referencia = "IND-88-2026-0442-01"
+    aprobado = {
+        "id": "00000000-0000-4000-8000-0000000000a4",
+        "accion": "APROBADO",
+        "estadoAnterior": "EN_EVALUACION",
+        "estadoNuevo": "APROBADO",
+        "actorId": ANALISTA_ID,
+        "actorRol": "ANALISTA_SINIESTROS",
+        "actorNombre": "Luis Mora",
+        "justificacion": "Daño verificado",
+        "ocurridoEn": "2026-11-05T18:10:00Z",
+    }
+    resultado = {
+        "id": "00000000-0000-4000-8000-0000000000a5",
+        "accion": "PAGO_CONFIRMADO" if estado == PAGO_CONFIRMADO else "PAGO_RECHAZADO",
+        "estadoAnterior": None,
+        "estadoNuevo": None,
+        "actorId": None,
+        "actorRol": "SISTEMA_PAGOS",
+        "actorNombre": None,
+        "justificacion": None,
+        "ocurridoEn": "2026-11-05T18:12:00Z",
+    }
+    pago: dict[str, Any] = {
+        "estado": "PENDIENTE",
+        "referencia": referencia,
+        "transaccionId": None,
+        "motivo": None,
+        "intentos": 0,
+        "duplicadosDescartados": 0,
+    }
+    historial = [*DETALLE_SINIESTRO["historial"], aprobado]
+    if estado == PAGO_CONFIRMADO:
+        pago = {**pago, "estado": "CONFIRMADO", "transaccionId": "TRX-SINT-0442", "intentos": 1}
+        historial.append(resultado)
+    elif estado == PAGO_RECHAZADO:
+        pago = {
+            **pago,
+            "estado": "RECHAZADO",
+            "motivo": "BENEFICIARIO_NO_HABILITADO",
+            "intentos": 1,
+        }
+        historial.append(resultado)
+    return {
+        **DETALLE_SINIESTRO,
+        "estado": "APROBADO",
+        "valorReclamado": "2850000.00",
+        "liquidacion": {
+            "moneda": "COP",
+            "valorReclamado": "2850000.00",
+            "deducible": "350000.00",
+            "valorIndemnizar": "2500000.00",
+            "referenciaPago": referencia,
+            "aprobadaEn": "2026-11-05T18:10:00Z",
+        },
+        "historial": historial,
+        "pago": pago,
+    }
+
+
 # Lo que responde siniestros a cada decisión (el cuerpo de ResultadoDecisionSiniestro).
 RESULTADO_DECISION: dict[str, Any] = {
     "siniestroId": SINIESTRO_ID,
@@ -666,7 +740,12 @@ class SiniestrosSimulado:
         if ruta_ == "/v1/siniestros":
             cuerpo = {"items": [RESUMEN_SINIESTRO], "siguienteCursor": None, "total": 1}
             return httpx.Response(200, json=cuerpo)
-        if self.estado == EXISTE_SINIESTRO and ruta_.endswith(SINIESTRO_ID):
+        if self.estado in (PAGO_CONFIRMADO, PAGO_RECHAZADO, PAGO_PENDIENTE) and ruta_.endswith(
+            SINIESTRO_ID
+        ):
+            return httpx.Response(200, json=_detalle_aprobado(self.estado))
+        # Un caso que existe pero no está aprobado no tiene pago ordenado (H08: 404 del BFF).
+        if self.estado in (EXISTE_SINIESTRO, NO_APROBADO) and ruta_.endswith(SINIESTRO_ID):
             return httpx.Response(200, json=DETALLE_SINIESTRO)
         return _error("SINIESTRO_NO_ENCONTRADO", 404)
 
@@ -895,13 +974,20 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
             (EN_EVALUACION_ASIGNADO, None),
             (EN_EVALUACION_ASIGNADO, None),
             (YA_APROBADO, None),
+            # HU-W23: el pago confirmado, rechazado y pendiente, el 404 de un caso sin aprobar y el 403.
+            (PAGO_CONFIRMADO, None),
+            (PAGO_RECHAZADO, None),
+            (PAGO_PENDIENTE, None),
+            (NO_APROBADO, None),
+            (SIN_GRUPO_ANALISTAS, None),
         ],
         key=str,
     )
     # siniestros recibe siempre al analista autenticado con el rol del servicio (DS3-10).
     assert {rol for _, rol in siniestros.actores} == {"ANALISTA_SINIESTROS"}
-    # El 403 por grupo no llega a siniestros, pero el BFF le avisa del acceso denegado (DS3-09).
-    assert siniestros.avisos == 1
+    # Los dos 403 por grupo (el detalle y el pago) no llegan a siniestros, pero el BFF le avisa de cada
+    # acceso denegado (DS3-09).
+    assert siniestros.avisos == 2
     assert {actor for actor, _ in siniestros.actores} <= {"sub-asesor-pact"}
     # HU-W20: siniestros recibió las tres decisiones y el intento sobre el caso ya aprobado, cada una con
     # la Idempotency-Key del portal, y los catálogos una sola vez.

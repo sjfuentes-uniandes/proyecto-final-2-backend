@@ -5257,6 +5257,985 @@
       "type": "Synchronous/HTTP"
     },
     {
+      "description": "la consulta del pago de un siniestro con el pago confirmado",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el siniestro está aprobado y su pago fue confirmado",
+          "params": {
+            "siniestroId": "5e000000-0000-4000-8000-000004000000"
+          }
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": [
+            "application/json"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/siniestros/5e000000-0000-4000-8000-000004000000/pago"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "autorizadoPor": "Luis Mora",
+            "clienteNombre": "Natalia González Ruiz",
+            "codigo": "88-2026-0442",
+            "compromisoHoras": 48,
+            "cuentaMascarada": "****4417",
+            "estado": "APROBADO",
+            "historial": [
+              {
+                "accion": "REPORTADO",
+                "id": "00000000-0000-4000-8000-0000000000a1",
+                "ocurridoEn": "2026-11-05T01:00:00Z"
+              }
+            ],
+            "indemnizacion": {
+              "confirmadaEn": "2026-11-05T18:12:00Z",
+              "duplicadosDescartados": 0,
+              "estado": "CONFIRMADO",
+              "intentos": 1,
+              "moneda": "COP",
+              "monto": "2500000.00",
+              "motivo": null,
+              "referencia": "IND-88-2026-0442-01",
+              "transaccionId": "TRX-889214477"
+            },
+            "liquidacion": {
+              "aprobadaEn": "2026-11-05T18:10:00Z",
+              "deducible": "350000.00",
+              "moneda": "COP",
+              "referenciaPago": "IND-88-2026-0442-01",
+              "valorIndemnizar": "2500000.00",
+              "valorReclamado": "2850000.00"
+            },
+            "reportadoEn": "2026-11-05T01:00:00Z",
+            "siniestroId": "5e000000-0000-4000-8000-000004000000"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.autorizadoPor": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.clienteNombre": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^88-\\d{4}-\\d{4,}$"
+                }
+              ]
+            },
+            "$.compromisoHoras": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.cuentaMascarada": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\*{4}[0-9A-Za-z]{2,6}$"
+                }
+              ]
+            },
+            "$.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.historial": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.historial[*].accion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z_]{3,40}$"
+                }
+              ]
+            },
+            "$.historial[*].id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.historial[*].ocurridoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.indemnizacion.confirmadaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.indemnizacion.duplicadosDescartados": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.indemnizacion.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.indemnizacion.intentos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.indemnizacion.moneda": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z]{3}$"
+                }
+              ]
+            },
+            "$.indemnizacion.monto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.indemnizacion.motivo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.indemnizacion.referencia": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^IND-88-\\d{4}-\\d{4,}-\\d{2}$"
+                }
+              ]
+            },
+            "$.indemnizacion.transaccionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.liquidacion.aprobadaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.liquidacion.deducible": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.liquidacion.moneda": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z]{3}$"
+                }
+              ]
+            },
+            "$.liquidacion.referenciaPago": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^IND-88-\\d{4}-\\d{4,}-\\d{2}$"
+                }
+              ]
+            },
+            "$.liquidacion.valorIndemnizar": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.liquidacion.valorReclamado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.reportadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.siniestroId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la consulta del pago de un siniestro con el pago pendiente",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el siniestro está aprobado y su pago aún no tiene resultado",
+          "params": {
+            "siniestroId": "5e000000-0000-4000-8000-000004000000"
+          }
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": [
+            "application/json"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/siniestros/5e000000-0000-4000-8000-000004000000/pago"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "autorizadoPor": "Luis Mora",
+            "clienteNombre": "Natalia González Ruiz",
+            "codigo": "88-2026-0442",
+            "compromisoHoras": 48,
+            "cuentaMascarada": "****4417",
+            "estado": "APROBADO",
+            "historial": [
+              {
+                "accion": "REPORTADO",
+                "id": "00000000-0000-4000-8000-0000000000a1",
+                "ocurridoEn": "2026-11-05T01:00:00Z"
+              }
+            ],
+            "indemnizacion": null,
+            "liquidacion": {
+              "aprobadaEn": "2026-11-05T18:10:00Z",
+              "deducible": "350000.00",
+              "moneda": "COP",
+              "referenciaPago": "IND-88-2026-0442-01",
+              "valorIndemnizar": "2500000.00",
+              "valorReclamado": "2850000.00"
+            },
+            "reportadoEn": "2026-11-05T01:00:00Z",
+            "siniestroId": "5e000000-0000-4000-8000-000004000000"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.autorizadoPor": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.clienteNombre": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^88-\\d{4}-\\d{4,}$"
+                }
+              ]
+            },
+            "$.compromisoHoras": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.cuentaMascarada": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\*{4}[0-9A-Za-z]{2,6}$"
+                }
+              ]
+            },
+            "$.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.historial": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.historial[*].accion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z_]{3,40}$"
+                }
+              ]
+            },
+            "$.historial[*].id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.historial[*].ocurridoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.indemnizacion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.liquidacion.aprobadaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.liquidacion.deducible": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.liquidacion.moneda": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z]{3}$"
+                }
+              ]
+            },
+            "$.liquidacion.referenciaPago": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^IND-88-\\d{4}-\\d{4,}-\\d{2}$"
+                }
+              ]
+            },
+            "$.liquidacion.valorIndemnizar": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.liquidacion.valorReclamado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.reportadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.siniestroId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la consulta del pago de un siniestro con el pago rechazado",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el siniestro está aprobado y su pago fue rechazado por la pasarela",
+          "params": {
+            "siniestroId": "5e000000-0000-4000-8000-000004000000"
+          }
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": [
+            "application/json"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/siniestros/5e000000-0000-4000-8000-000004000000/pago"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "autorizadoPor": "Luis Mora",
+            "clienteNombre": "Natalia González Ruiz",
+            "codigo": "88-2026-0442",
+            "compromisoHoras": 48,
+            "cuentaMascarada": "****4417",
+            "estado": "APROBADO",
+            "historial": [
+              {
+                "accion": "REPORTADO",
+                "id": "00000000-0000-4000-8000-0000000000a1",
+                "ocurridoEn": "2026-11-05T01:00:00Z"
+              }
+            ],
+            "indemnizacion": {
+              "confirmadaEn": null,
+              "duplicadosDescartados": 0,
+              "estado": "RECHAZADO",
+              "intentos": 1,
+              "moneda": "COP",
+              "monto": "2500000.00",
+              "motivo": "BENEFICIARIO_NO_HABILITADO",
+              "referencia": "IND-88-2026-0442-01",
+              "transaccionId": null
+            },
+            "liquidacion": {
+              "aprobadaEn": "2026-11-05T18:10:00Z",
+              "deducible": "350000.00",
+              "moneda": "COP",
+              "referenciaPago": "IND-88-2026-0442-01",
+              "valorIndemnizar": "2500000.00",
+              "valorReclamado": "2850000.00"
+            },
+            "reportadoEn": "2026-11-05T01:00:00Z",
+            "siniestroId": "5e000000-0000-4000-8000-000004000000"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.autorizadoPor": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.clienteNombre": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^88-\\d{4}-\\d{4,}$"
+                }
+              ]
+            },
+            "$.compromisoHoras": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.cuentaMascarada": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\*{4}[0-9A-Za-z]{2,6}$"
+                }
+              ]
+            },
+            "$.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.historial": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.historial[*].accion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z_]{3,40}$"
+                }
+              ]
+            },
+            "$.historial[*].id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.historial[*].ocurridoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.indemnizacion.confirmadaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.indemnizacion.duplicadosDescartados": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.indemnizacion.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.indemnizacion.intentos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.indemnizacion.moneda": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z]{3}$"
+                }
+              ]
+            },
+            "$.indemnizacion.monto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.indemnizacion.motivo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z][A-Z_]{2,59}$"
+                }
+              ]
+            },
+            "$.indemnizacion.referencia": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^IND-88-\\d{4}-\\d{4,}-\\d{2}$"
+                }
+              ]
+            },
+            "$.indemnizacion.transaccionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.liquidacion.aprobadaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.liquidacion.deducible": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.liquidacion.moneda": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[A-Z]{3}$"
+                }
+              ]
+            },
+            "$.liquidacion.referenciaPago": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^IND-88-\\d{4}-\\d{4,}-\\d{2}$"
+                }
+              ]
+            },
+            "$.liquidacion.valorIndemnizar": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.liquidacion.valorReclamado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^-?\\d+(\\.\\d+)?$"
+                }
+              ]
+            },
+            "$.reportadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.siniestroId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la consulta del pago de un siniestro sin el grupo",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el usuario no pertenece al grupo analistas-siniestros"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": [
+            "application/json"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/siniestros/5e000000-0000-4000-8000-000004000000/pago"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "ROL_NO_AUTORIZADO",
+            "correlationId": "corr-pact",
+            "detalles": {},
+            "mensaje": "Mensaje"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 403
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la consulta del pago de un siniestro sin pago ordenado",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el siniestro existe pero no está aprobado",
+          "params": {
+            "siniestroId": "5e000000-0000-4000-8000-000004000000"
+          }
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": [
+            "application/json"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/siniestros/5e000000-0000-4000-8000-000004000000/pago"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "INDEMNIZACION_NO_ENCONTRADA",
+            "correlationId": "corr-pact",
+            "detalles": {},
+            "mensaje": "Mensaje"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
       "description": "la consulta del recaudo de la prima · CONFIRMADO",
       "pending": false,
       "providerStates": [
