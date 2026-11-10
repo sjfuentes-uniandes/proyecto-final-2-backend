@@ -1047,9 +1047,9 @@ components:
       - plazoSoporteVenceEn
       title: DetalleSiniestro
       description: 'Detalle (H03, H04, Cobertura e Historial). `liquidacion` la llena
-        W20 al aprobar; las secciones
+        W20 al aprobar y `pago`, W23;
 
-        de W22 y W23 vienen en null.'
+        `evento` (W22) viene en null.'
     EnlaceEvidencia:
       properties:
         url:
@@ -1127,10 +1127,10 @@ components:
       description: 'Historial inmutable. `accion` es un código en mayúsculas (REPORTADO,
         EVIDENCIAS_VALIDADAS,
 
-        ASIGNADO, APROBADO, RECHAZADO, SOPORTE_SOLICITADO, PLAZO_SOPORTE_VENCIDO;
-        W22 y W23 agregan
+        ASIGNADO, APROBADO, RECHAZADO, SOPORTE_SOLICITADO, PLAZO_SOPORTE_VENCIDO,
+        PAGO_CONFIRMADO,
 
-        los suyos).'
+        PAGO_RECHAZADO; W22 agrega los suyos).'
     ErrorDto:
       properties:
         codigo:
@@ -1418,7 +1418,16 @@ components:
       - intentos
       - duplicadosDescartados
       title: PagoDto
-      description: Null hasta HU-W23.
+      description: 'Pago único de la indemnización (HU-W23, DS3-25). Null mientras
+        el caso no esté APROBADO. En un
+
+        caso APROBADO sin resultado de `dinero` todavía, `estado` es PENDIENTE (la
+        orden de pago está en
+
+        camino o la pasarela no ha respondido; `referencia` es la prevista y los contadores
+        van en 0).
+
+        RECHAZADO se presenta como «Pago por gestionar» (AC4). SIN_PAGO no se emite.'
     PasoTramite:
       type: string
       enum:

@@ -307,8 +307,8 @@ class PasoTramiteDto(_Dto):
 
 class EntradaHistorial(_Dto):
     """Historial inmutable. `accion` es un código en mayúsculas (REPORTADO, EVIDENCIAS_VALIDADAS,
-    ASIGNADO, APROBADO, RECHAZADO, SOPORTE_SOLICITADO, PLAZO_SOPORTE_VENCIDO; W22 y W23 agregan
-    los suyos)."""
+    ASIGNADO, APROBADO, RECHAZADO, SOPORTE_SOLICITADO, PLAZO_SOPORTE_VENCIDO, PAGO_CONFIRMADO,
+    PAGO_RECHAZADO; W22 agrega los suyos)."""
 
     id: UUID
     accion: str = Field(pattern=r"^[A-Z_]{3,40}$")
@@ -351,7 +351,10 @@ class EventoParametricoDto(_Dto):
 
 
 class PagoDto(_Dto):
-    """Null hasta HU-W23."""
+    """Pago único de la indemnización (HU-W23, DS3-25). Null mientras el caso no esté APROBADO. En un
+    caso APROBADO sin resultado de `dinero` todavía, `estado` es PENDIENTE (la orden de pago está en
+    camino o la pasarela no ha respondido; `referencia` es la prevista y los contadores van en 0).
+    RECHAZADO se presenta como «Pago por gestionar» (AC4). SIN_PAGO no se emite."""
 
     estado: EstadoPago
     referencia: str | None
@@ -362,8 +365,8 @@ class PagoDto(_Dto):
 
 
 class DetalleSiniestro(ResumenSiniestro):
-    """Detalle (H03, H04, Cobertura e Historial). `liquidacion` la llena W20 al aprobar; las secciones
-    de W22 y W23 vienen en null."""
+    """Detalle (H03, H04, Cobertura e Historial). `liquidacion` la llena W20 al aprobar y `pago`, W23;
+    `evento` (W22) viene en null."""
 
     causa: str = Field(description="Código del amparo reclamado (uno de poliza.amparos)")
     fecha_evento: datetime

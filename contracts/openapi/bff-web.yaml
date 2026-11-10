@@ -3651,6 +3651,83 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/{siniestroId}/pago:
+    get:
+      tags:
+      - siniestros
+      summary: Pago
+      description: 'Pago del siniestro aprobado (H08): valor, intentos, pagos duplicados
+        descartados,
+
+        confirmación de la pasarela y trazabilidad del trámite. Plan B: se arma solo
+        con `siniestros`;
+
+        la `indemnizacion` es null mientras `dinero` no haya publicado un resultado.'
+      operationId: pago_v1_siniestros__siniestroId__pago_get
+      parameters:
+      - name: siniestroId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Siniestroid
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagoSiniestroVista'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo analistas-siniestros o no
+            es del back-office (se notifica a siniestros, DS3-09)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: siniestros no respondió o respondió
+            fuera de su contrato'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SINIESTRO_NO_ENCONTRADO, o INDEMNIZACION_NO_ENCONTRADA si el
+            caso existe pero no está APROBADO (no hay pago ordenado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
 components:
   schemas:
     Accion:
@@ -5463,10 +5540,10 @@ components:
       description: 'Historial inmutable. `accion` es un código en mayúsculas (REPORTADO,
         EVIDENCIAS_VALIDADAS,
 
-        ASIGNADO, APROBADO, RECHAZADO, SOPORTE_SOLICITADO, PLAZO_SOPORTE_VENCIDO;
-        W22 y W23 agregan
+        ASIGNADO, APROBADO, RECHAZADO, SOPORTE_SOLICITADO, PLAZO_SOPORTE_VENCIDO,
+        PAGO_CONFIRMADO,
 
-        los suyos).'
+        PAGO_RECHAZADO; W22 agrega los suyos).'
     EntradasPrimaDto:
       properties:
         sumaAsegurada:
@@ -6572,7 +6649,16 @@ components:
       - intentos
       - duplicadosDescartados
       title: PagoDto
-      description: Null hasta HU-W23.
+      description: 'Pago único de la indemnización (HU-W23, DS3-25). Null mientras
+        el caso no esté APROBADO. En un
+
+        caso APROBADO sin resultado de `dinero` todavía, `estado` es PENDIENTE (la
+        orden de pago está en
+
+        camino o la pasarela no ha respondido; `referencia` es la prevista y los contadores
+        van en 0).
+
+        RECHAZADO se presenta como «Pago por gestionar» (AC4). SIN_PAGO no se emite.'
     PasoCotizacionDto:
       properties:
         codigo:
@@ -8375,3 +8461,141 @@ components:
       - EXPLICABLE
       - RESERVADA
       title: Visibilidad
+    IndemnizacionVista:
+      properties:
+        referencia:
+          type: string
+          pattern: ^IND-88-[0-9]{4}-[0-9]{4,}-[0-9]{2}$
+          title: Referencia
+          description: 'IND-<codigo>-01: la clave única e idempotente hacia la pasarela
+            (CF-S3-07)'
+        estado:
+          $ref: '#/components/schemas/EstadoPago'
+          description: 'PENDIENTE, CONFIRMADO o RECHAZADO. Nunca SIN_PAGO. `dinero`
+            dice CONFIRMADA y RECHAZADA: el BFF los presenta como CONFIRMADO y RECHAZADO,
+            como `PagoDto`'
+        monto:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Monto
+        moneda:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Moneda
+        transaccionId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transaccionid
+          description: 'Solo en CONFIRMADO: la confirmación de la pasarela'
+        motivo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Motivo
+          description: 'Solo en RECHAZADO: el código normalizado de la pasarela (el
+            portal lo traduce)'
+        intentos:
+          type: integer
+          minimum: 0.0
+          title: Intentos
+          description: Llamadas efectivas de pago hechas a la pasarela
+        duplicadosDescartados:
+          type: integer
+          minimum: 0.0
+          title: Duplicadosdescartados
+          description: Órdenes o confirmaciones repetidas descartadas sin otro movimiento
+        confirmadaEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Confirmadaen
+          description: Solo en CONFIRMADO
+      type: object
+      required:
+      - referencia
+      - estado
+      - monto
+      - moneda
+      - transaccionId
+      - motivo
+      - intentos
+      - duplicadosDescartados
+      - confirmadaEn
+      title: IndemnizacionVista
+      description: La indemnización con su resultado en la pasarela. Sin datos de
+        la cuenta del beneficiario.
+    PagoSiniestroVista:
+      properties:
+        siniestroId:
+          type: string
+          format: uuid
+          title: Siniestroid
+        codigo:
+          type: string
+          pattern: ^88-[0-9]{4}-[0-9]{4,}$
+          title: Codigo
+        estado:
+          $ref: '#/components/schemas/EstadoSiniestro'
+          description: 'Siempre APROBADO: sin pago ordenado no hay vista'
+        clienteNombre:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Clientenombre
+          description: Null si `clientes` no responde a tiempo
+        reportadoEn:
+          type: string
+          format: date-time
+          title: Reportadoen
+        compromisoHoras:
+          type: integer
+          minimum: 1.0
+          title: Compromisohoras
+          description: Compromiso del trámite, para comparar con el tiempo total (DS3-04)
+        liquidacion:
+          $ref: '#/components/schemas/LiquidacionDto'
+          description: Valor a indemnizar, deducible y referencia del pago (HU-W20)
+        cuentaMascarada:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cuentamascarada
+          description: Cuenta destino enmascarada, p. ej. ****1004. Nunca la cuenta
+            completa
+        autorizadoPor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Autorizadopor
+          description: Nombre del analista que aprobó; null si lo aprobó un paramétrico
+            (HU-W22)
+        historial:
+          items:
+            $ref: '#/components/schemas/EntradaHistorial'
+          type: array
+          title: Historial
+          description: Trazabilidad del trámite, del más antiguo al más reciente;
+            incluye PAGO_CONFIRMADO o PAGO_RECHAZADO cuando `siniestros` ya reflejó
+            el resultado
+        indemnizacion:
+          anyOf:
+          - $ref: '#/components/schemas/IndemnizacionVista'
+          - type: 'null'
+          description: Null mientras `dinero` no haya publicado un resultado
+      type: object
+      required:
+      - siniestroId
+      - codigo
+      - estado
+      - clienteNombre
+      - reportadoEn
+      - compromisoHoras
+      - liquidacion
+      - cuentaMascarada
+      - autorizadoPor
+      - historial
+      - indemnizacion
+      title: PagoSiniestroVista
+      description: 'H08: el pago de un siniestro aprobado con su trazabilidad.'
