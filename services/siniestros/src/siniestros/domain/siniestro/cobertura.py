@@ -151,12 +151,18 @@ def verificar_cobertura(
 
 
 def soportes_pendientes(
-    soportes_requeridos: Collection[TipoSoporte], evidencias: Sequence[Evidencia]
+    soportes_requeridos: Collection[TipoSoporte],
+    evidencias: Sequence[Evidencia],
+    solicitados: Collection[TipoSoporte] = (),
 ) -> tuple[SoportePendiente, ...]:
-    """Los soportes requeridos que aún no tienen archivo, en el orden de la configuración. Salen
-    `FALTA`; `SOLICITADO` lo agrega W20 cuando el analista los pide."""
-    requeridos = _sin_repetir(soportes_requeridos)
+    """Los soportes que aún no tienen archivo: los requeridos, en el orden de la configuración, y los
+    que el analista pidió (W20, `solicitados`) aunque el amparo no los exija. Los pedidos salen
+    `SOLICITADO`; los demás, `FALTA`."""
+    pedidos = _sin_repetir(solicitados)
+    requeridos = _sin_repetir([*soportes_requeridos, *pedidos])
     presentes = _soportes_presentes(requeridos, evidencias)
     return tuple(
-        SoportePendiente(tipo, EstadoSoporte.FALTA) for tipo in requeridos if tipo not in presentes
+        SoportePendiente(tipo, EstadoSoporte.SOLICITADO if tipo in pedidos else EstadoSoporte.FALTA)
+        for tipo in requeridos
+        if tipo not in presentes
     )

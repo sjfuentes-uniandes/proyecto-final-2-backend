@@ -5,9 +5,11 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 from typing import Any, Self
 from uuid import UUID, uuid4
 
+import psycopg
 import pytest
 from siniestros.adapters.outbound import siniestros_pg
 from siniestros.adapters.outbound.mapeo import copia_a_json, ubicacion_a_json
@@ -17,9 +19,12 @@ from siniestros.adapters.outbound.siniestros_pg import (
     decodificar_cursor,
 )
 from siniestros.application.siniestro.errores import SolicitudInvalida
+from siniestros.application.siniestro.puertos import DecisionFinalDuplicada
 from siniestros.application.siniestro.vistas import (
     AccesoDenegado,
+    DecisionRegistrada,
     FiltroBandeja,
+    LiquidacionAprobada,
     MotivoDenegacion,
     OrigenDenegacion,
     Plazos,
@@ -27,12 +32,15 @@ from siniestros.application.siniestro.vistas import (
     TipoBandeja,
 )
 from siniestros.domain.siniestro.modelos import (
+    CanalSoporte,
+    CausalRechazo,
     EntradaHistorial,
     EstadoSiniestro,
     Evidencia,
     OrigenSiniestro,
     PrioridadSiniestro,
     Siniestro,
+    SoporteSolicitable,
     TipoEvidencia,
     TipoSoporte,
 )
@@ -57,6 +65,8 @@ class CursorFalso:
 
     async def execute(self, sql: str, parametros: Any = None) -> Self:
         self._conexion.sentencias.append((sql, parametros))
+        if self._conexion.falla is not None:
+            raise self._conexion.falla
         self.filas = self._conexion.resultados.pop(0) if self._conexion.resultados else []
         self.rowcount = self._conexion.rowcount
         return self
@@ -74,6 +84,7 @@ class ConexionFalsa:
         self.rowcount = rowcount
         self.sentencias: list[tuple[str, Any]] = []
         self.transacciones = 0
+        self.falla: Exception | None = None
 
     def cursor(self, row_factory: Any = None) -> CursorFalso:
         return CursorFalso(self, row_factory)
@@ -402,6 +413,7 @@ async def test_detalle_lee_caso_evidencias_e_historial_en_una_transaccion(
         "actor_rol": "ANALISTA_SINIESTROS",
         "actor_nombre": "Luis Mora",
         "justificacion": None,
+        "detalles": None,
         "ocurrido_en": ahora,
     }
     sin_estados = {
@@ -588,3 +600,318 @@ def test_el_mapeo_de_un_caso_aprobado_conserva_la_liquidacion(
         valor_indemnizar=Decimal("2500000.00"),
     )
     assert siniestros_pg.siniestro_de(fila_siniestro(caso)) == caso
+
+
+# --- HU-W20: decisión, plazos y liquidación ---------------------------------------------------------
+
+
+class UnicaFalsa(psycopg.errors.UniqueViolation):
+    """Una violación de unicidad que nombra su restricción, como la entrega PostgreSQL."""
+
+    def __init__(self, restriccion: str) -> None:
+        super().__init__("duplicada")
+        self._restriccion = restriccion
+
+    @property
+    def diag(self) -> Any:  # type: ignore[override]
+        return SimpleNamespace(constraint_name=self._restriccion)
+
+
+def en_evaluacion(siniestro: Callable[..., Siniestro], ahora: datetime) -> Siniestro:
+    return siniestro(estado=EstadoSiniestro.EN_EVALUACION, analista_id=ANALISTA, asignado_en=ahora)
+
+
+async def test_bloquear_el_siniestro_usa_for_update_y_distingue_el_inexistente(
+    siniestro: Callable[..., Siniestro], ahora: datetime
+) -> None:
+    caso = en_evaluacion(siniestro, ahora)
+    conexion = ConexionFalsa([], [fila_siniestro(caso)])
+    async with SiniestrosPg(PoolFalso(conexion)).transaccion() as tx:  # type: ignore[arg-type]
+        assert await tx.bloquear_siniestro(caso.id) is None  # type: ignore[attr-defined]
+        assert await tx.bloquear_siniestro(caso.id) == caso  # type: ignore[attr-defined]
+    assert conexion.sentencias[0][0].rstrip().endswith("WHERE id = %s FOR UPDATE")
+
+
+async def test_los_ids_de_las_evidencias_del_caso() -> None:
+    uno, dos = uuid4(), uuid4()
+    conexion = ConexionFalsa([{"id": uno}, {"id": dos}])
+    async with SiniestrosPg(PoolFalso(conexion)).transaccion() as tx:  # type: ignore[arg-type]
+        assert await tx.ids_evidencias(uuid4()) == frozenset({uno, dos})  # type: ignore[attr-defined]
+
+
+async def test_los_plazos_vencidos_se_reservan_con_skip_locked_en_orden(
+    siniestro: Callable[..., Siniestro], ahora: datetime
+) -> None:
+    vencido = siniestro(
+        estado=EstadoSiniestro.FALTA_SOPORTE,
+        analista_id=ANALISTA,
+        asignado_en=ahora,
+        pausado_desde=ahora,
+        plazo_soporte_vence_en=ahora - timedelta(hours=1),
+    )
+    conexion = ConexionFalsa([fila_siniestro(vencido)])
+    async with SiniestrosPg(PoolFalso(conexion)).transaccion() as tx:  # type: ignore[arg-type]
+        assert await tx.reservar_plazos_vencidos(ahora, 25) == [vencido]  # type: ignore[attr-defined]
+    consulta, parametros = conexion.sentencias[0]
+    assert "estado = 'FALTA_SOPORTE' AND plazo_soporte_vence_en < %s" in consulta
+    assert "ORDER BY plazo_soporte_vence_en, id FOR UPDATE SKIP LOCKED LIMIT %s" in consulta
+    assert parametros == (ahora, 25)
+
+
+async def test_guardar_la_transicion_escribe_el_reloj_el_plazo_y_la_liquidacion(
+    siniestro: Callable[..., Siniestro], ahora: datetime
+) -> None:
+    caso = en_evaluacion(siniestro, ahora)
+    aprobado = siniestro(
+        estado=EstadoSiniestro.APROBADO,
+        analista_id=ANALISTA,
+        asignado_en=ahora,
+        decidido_en=ahora,
+        deducible=Decimal("350000.00"),
+        valor_indemnizar=Decimal("2500000.00"),
+        version=2,
+    )
+    conexion = ConexionFalsa()
+    async with SiniestrosPg(PoolFalso(conexion)).transaccion() as tx:  # type: ignore[arg-type]
+        await tx.guardar_transicion(aprobado, caso.version)  # type: ignore[attr-defined]
+    consulta, parametros = conexion.sentencias[0]
+    assert consulta.startswith("UPDATE siniestros SET estado = %s, pausado_desde = %s")
+    assert "WHERE id = %s AND version = %s" in consulta
+    assert parametros == (
+        "APROBADO",
+        None,
+        0,
+        None,
+        ahora,
+        Decimal("350000.00"),
+        Decimal("2500000.00"),
+        2,
+        aprobado.id,
+        caso.version,
+    )
+
+
+async def test_una_transicion_sobre_una_version_vieja_falla(
+    siniestro: Callable[..., Siniestro], ahora: datetime
+) -> None:
+    caso = en_evaluacion(siniestro, ahora)
+    with pytest.raises(RuntimeError, match="versión"):
+        async with SiniestrosPg(PoolFalso(ConexionFalsa(rowcount=0))).transaccion() as tx:  # type: ignore[arg-type]
+            await tx.guardar_transicion(caso, caso.version)  # type: ignore[attr-defined]
+
+
+def decision(siniestro_id: UUID, ahora: datetime, tipo: str = "APROBAR") -> DecisionRegistrada:
+    return DecisionRegistrada(
+        id=uuid4(),
+        siniestro_id=siniestro_id,
+        tipo=tipo,
+        idempotency_key=uuid4(),
+        huella="h" * 64,
+        detalle={"explicacionCliente": "texto"},
+        actor_id=str(ANALISTA),
+        registrada_en=ahora,
+    )
+
+
+async def test_la_decision_se_inserta_con_su_detalle_sensible(ahora: datetime) -> None:
+    registrada = decision(uuid4(), ahora)
+    conexion = ConexionFalsa()
+    async with SiniestrosPg(PoolFalso(conexion)).transaccion() as tx:  # type: ignore[arg-type]
+        await tx.registrar_decision(registrada)  # type: ignore[attr-defined]
+    consulta, parametros = conexion.sentencias[0]
+    assert consulta.startswith("INSERT INTO decisiones_siniestro")
+    assert parametros[:5] == (
+        registrada.id,
+        registrada.siniestro_id,
+        "APROBAR",
+        registrada.idempotency_key,
+        "h" * 64,
+    )
+    assert parametros[5].obj == {"explicacionCliente": "texto"}
+
+
+async def test_una_segunda_decision_final_se_traduce_a_decision_duplicada(
+    ahora: datetime,
+) -> None:
+    conexion = ConexionFalsa()
+    conexion.falla = UnicaFalsa("decisiones_una_final")
+    with pytest.raises(DecisionFinalDuplicada):
+        async with SiniestrosPg(PoolFalso(conexion)).transaccion() as tx:  # type: ignore[arg-type]
+            await tx.registrar_decision(decision(uuid4(), ahora))  # type: ignore[attr-defined]
+
+
+async def test_otra_violacion_de_unicidad_no_se_disfraza(ahora: datetime) -> None:
+    conexion = ConexionFalsa()
+    conexion.falla = UnicaFalsa("decisiones_siniestro_idempotency_key_key")
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        async with SiniestrosPg(PoolFalso(conexion)).transaccion() as tx:  # type: ignore[arg-type]
+            await tx.registrar_decision(decision(uuid4(), ahora))  # type: ignore[attr-defined]
+
+
+async def test_el_historial_guarda_las_evidencias_y_los_detalles_y_solo_cuando_hay(
+    siniestro: Callable[..., Siniestro], ahora: datetime
+) -> None:
+    caso = en_evaluacion(siniestro, ahora)
+    evidencia_id = uuid4()
+    con = EntradaHistorial(
+        uuid4(),
+        caso.id,
+        "APROBADO",
+        ahora,
+        EstadoSiniestro.EN_EVALUACION,
+        EstadoSiniestro.APROBADO,
+        "a",
+        "ANALISTA_SINIESTROS",
+        "Luis Mora",
+        "Daño verificado",
+        (evidencia_id,),
+        {"referenciaPago": "IND-88-2026-0442-01"},
+    )
+    sin = EntradaHistorial(uuid4(), caso.id, "REPORTADO", ahora)
+    conexion = ConexionFalsa()
+    async with SiniestrosPg(PoolFalso(conexion)).transaccion() as tx:  # type: ignore[arg-type]
+        await tx.agregar_historial(con)  # type: ignore[attr-defined]
+        await tx.agregar_historial(sin)  # type: ignore[attr-defined]
+    escrito = conexion.sentencias[0][1]
+    assert escrito[9].obj == [str(evidencia_id)]
+    assert escrito[10].obj == {"referenciaPago": "IND-88-2026-0442-01"}
+    assert conexion.sentencias[1][1][9:11] == (None, None)
+
+
+async def test_los_eventos_de_la_decision_van_al_outbox_sin_los_textos_al_cliente(
+    siniestro: Callable[..., Siniestro], ahora: datetime
+) -> None:
+    caso = en_evaluacion(siniestro, ahora)
+    aprobado = siniestro(
+        estado=EstadoSiniestro.APROBADO,
+        analista_id=ANALISTA,
+        asignado_en=ahora,
+        decidido_en=ahora,
+        valor_indemnizar=Decimal("2500000.00"),
+    )
+    pedido = siniestro(
+        estado=EstadoSiniestro.FALTA_SOPORTE,
+        analista_id=ANALISTA,
+        asignado_en=ahora,
+        pausado_desde=ahora,
+        plazo_soporte_vence_en=ahora + timedelta(days=14),
+    )
+    conexion = ConexionFalsa()
+    async with SiniestrosPg(PoolFalso(conexion)).transaccion() as tx:  # type: ignore[arg-type]
+        await tx.evento_aprobado(aprobado, "IND-88-2026-0442-01", ANALISTA, ahora)  # type: ignore[attr-defined]
+        await tx.evento_rechazado(caso, CausalRechazo.PRIMAS_EN_MORA, ANALISTA, ahora)  # type: ignore[attr-defined]
+        await tx.evento_soporte_solicitado(  # type: ignore[attr-defined]
+            pedido,
+            (SoporteSolicitable.PERITAJE,),
+            CanalSoporte.CORREO,
+            ANALISTA,
+            ahora,
+        )
+        await tx.evento_en_evaluacion(caso, ahora, "PLAZO_SOPORTE_VENCIDO")  # type: ignore[attr-defined]
+    assert [p[2] for _, p in conexion.sentencias] == [
+        "SiniestroAprobado",
+        "SiniestroRechazado",
+        "SiniestroSoporteSolicitado",
+        "SiniestroEnEvaluacion",
+    ]
+    cargas = [p[6].obj for _, p in conexion.sentencias]
+    assert cargas[0]["valorIndemnizar"] == "2500000.00"
+    assert cargas[0]["beneficiarioRef"] == "ben-sint-004"
+    assert cargas[0]["decididoPor"] == str(ANALISTA)
+    assert cargas[1]["causal"] == "PRIMAS_EN_MORA"
+    assert cargas[2]["documentos"] == ["PERITAJE"] and cargas[2]["canal"] == "CORREO"
+    assert cargas[3]["motivo"] == "PLAZO_SOPORTE_VENCIDO"
+    assert "****1004" not in repr(cargas)  # nunca la cuenta, ni siquiera enmascarada
+
+
+async def test_el_detalle_de_un_caso_aprobado_lee_la_decision_para_la_liquidacion(
+    siniestro: Callable[..., Siniestro], ahora: datetime
+) -> None:
+    aprobado = siniestro(
+        estado=EstadoSiniestro.APROBADO,
+        analista_id=ANALISTA,
+        asignado_en=ahora,
+        decidido_en=ahora,
+        deducible=Decimal("350000.00"),
+        valor_indemnizar=Decimal("2500000.00"),
+    )
+    decision_fila = {
+        "detalle": {
+            "liquidacion": {
+                "valorReclamado": "2850000.00",
+                "deducible": "350000.00",
+                "valorIndemnizar": "2500000.00",
+                "moneda": "COP",
+            }
+        },
+        "registrada_en": ahora + timedelta(minutes=1),
+    }
+    conexion = ConexionFalsa([fila_siniestro(aprobado)], [], [], [decision_fila])
+    leido = await SiniestrosPg(PoolFalso(conexion)).detalle(aprobado.id)  # type: ignore[arg-type]
+    assert leido is not None
+    assert leido.liquidacion == LiquidacionAprobada(
+        "COP",
+        Decimal("2850000.00"),
+        Decimal("350000.00"),
+        Decimal("2500000.00"),
+        "IND-88-2026-0442-01",
+        ahora + timedelta(minutes=1),
+    )
+    assert "decisiones_siniestro" in conexion.sentencias[3][0]
+
+
+def test_la_liquidacion_de_un_paramétrico_no_tiene_decision(
+    siniestro: Callable[..., Siniestro], ahora: datetime
+) -> None:
+    parametrico = siniestro(
+        origen=OrigenSiniestro.PARAMETRICO,
+        estado=EstadoSiniestro.APROBADO,
+        decidido_en=ahora,
+        valor_indemnizar=Decimal("500000.00"),
+        valor_reclamado=Decimal("500000.00"),
+        moneda="COP",
+    )
+    liquidacion = siniestros_pg.liquidacion_de(parametrico, None)
+    assert liquidacion is not None
+    assert (liquidacion.valor_reclamado, liquidacion.deducible) == (Decimal("500000.00"), None)
+    assert (liquidacion.aprobada_en, liquidacion.moneda) == (ahora, "COP")
+
+
+def test_un_caso_no_aprobado_no_tiene_liquidacion(
+    siniestro: Callable[..., Siniestro], ahora: datetime
+) -> None:
+    assert siniestros_pg.liquidacion_de(en_evaluacion(siniestro, ahora), None) is None
+
+
+def test_el_mapeo_del_historial_lee_los_detalles(ahora: datetime) -> None:
+    fila = {
+        "id": uuid4(),
+        "siniestro_id": uuid4(),
+        "accion": "RECHAZADO",
+        "estado_anterior": "EN_EVALUACION",
+        "estado_nuevo": "RECHAZADO",
+        "actor_id": "a",
+        "actor_rol": "ANALISTA_SINIESTROS",
+        "actor_nombre": "Luis",
+        "justificacion": "x",
+        "detalles": {"causal": "PRIMAS_EN_MORA"},
+        "ocurrido_en": ahora,
+    }
+    assert siniestros_pg.entrada_de(fila).detalles == {"causal": "PRIMAS_EN_MORA"}
+
+
+def test_una_decision_sin_liquidacion_en_el_detalle_usa_las_columnas_del_caso(
+    siniestro: Callable[..., Siniestro], ahora: datetime
+) -> None:
+    aprobado = siniestro(
+        estado=EstadoSiniestro.APROBADO,
+        decidido_en=ahora,
+        valor_reclamado=Decimal("900000.00"),
+        valor_indemnizar=Decimal("800000.00"),
+    )
+    decision_fila = {"detalle": {}, "registrada_en": ahora + timedelta(minutes=2)}
+    liquidacion = siniestros_pg.liquidacion_de(aprobado, decision_fila)
+    assert liquidacion is not None
+    assert liquidacion.valor_reclamado == Decimal("900000.00")
+    assert liquidacion.moneda == "COP"
+    assert liquidacion.aprobada_en == ahora + timedelta(minutes=2)

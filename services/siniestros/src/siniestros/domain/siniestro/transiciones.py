@@ -174,6 +174,15 @@ def _monto(texto: str) -> Decimal | None:
     return valor.quantize(_CENTAVOS)
 
 
+def normalizar_monto(texto: str) -> str:
+    """El monto con dos decimales (`"2500000"` → `"2500000.00"`); lo que no es un monto válido se
+    devuelve sin espacios en los extremos, tal cual. Sirve para que la huella de la idempotencia no
+    dependa de cómo se escribió el mismo valor."""
+    limpio = texto.strip()
+    valor = _monto(limpio)
+    return f"{valor:f}" if valor is not None else limpio
+
+
 def validar_liquidacion(
     *,
     valor_reclamado: str,

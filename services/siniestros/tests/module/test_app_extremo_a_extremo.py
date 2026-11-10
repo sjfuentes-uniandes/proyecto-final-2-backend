@@ -374,3 +374,58 @@ def test_sec_w19_01_los_registros_no_contienen_url_ni_clave_ni_firma(
         assert prohibido not in registros
     for evidencia in ("integra", "alterada", "ausente", "factura"):
         assert caso[evidencia].clave_objeto not in registros
+
+
+def test_recorrido_de_la_decision_por_http_con_los_eventos_en_la_cola(
+    cliente: TestClient, caso: dict[str, Any], mensajeria: tuple[str, Cola]
+) -> None:
+    """HU-W20: tomar el caso, aprobarlo, repetir, decidir de nuevo (409) y ver los eventos publicados
+    (Outbox → SNS → SQS) sin el texto al cliente."""
+    libre: Siniestro = caso["caso"]
+    cliente.post("/v1/siniestros/siguiente", headers={**CABECERAS, "Idempotency-Key": str(uuid4())})
+    clave = str(uuid4())
+    cuerpo = {
+        "tipo": "APROBAR",
+        "justificacion": "Daño verificado con evidencia fotográfica.",
+        "evidenciasConsideradas": [str(caso["integra"].id)],
+        "liquidacion": {
+            "valorReclamado": "2850000",
+            "deducible": "350000",
+            "valorIndemnizar": "2500000",
+            "moneda": "COP",
+        },
+    }
+    ruta = f"/v1/siniestros/{libre.id}/decision"
+    aprobado = cliente.post(ruta, json=cuerpo, headers={**CABECERAS, "Idempotency-Key": clave})
+    assert aprobado.status_code == 200, aprobado.text
+    assert aprobado.json()["estadoNuevo"] == "APROBADO"
+    assert aprobado.json()["referenciaPago"] == f"IND-{libre.codigo}-01"
+    repetido = cliente.post(ruta, json=cuerpo, headers={**CABECERAS, "Idempotency-Key": clave})
+    assert repetido.json() == aprobado.json()
+
+    otra = cliente.post(
+        ruta,
+        json={
+            "tipo": "RECHAZAR",
+            "justificacion": "x",
+            "causal": "PRIMAS_EN_MORA",
+            "explicacionCliente": "EXPLICACION-PRIVADA",
+        },
+        headers={**CABECERAS, "Idempotency-Key": str(uuid4())},
+    )
+    assert (otra.status_code, otra.json()["codigo"]) == (409, "TRANSICION_NO_PERMITIDA")
+    assert otra.json()["detalles"] == {"estadoActual": "APROBADO"}
+
+    detalle = cliente.get(f"/v1/siniestros/{libre.id}", headers=CABECERAS).json()
+    assert detalle["estado"] == "APROBADO"
+    assert detalle["liquidacion"]["valorIndemnizar"] == "2500000.00"
+    assert detalle["liquidacion"]["referenciaPago"] == f"IND-{libre.codigo}-01"
+    assert [h["accion"] for h in detalle["historial"]][-1] == "APROBADO"
+    pasos = {p["paso"]: p["estado"] for p in detalle["tramite"]}
+    assert pasos["DECISION"] == "COMPLETADO"
+
+    _, cola = mensajeria
+    tipos = [m["tipo"] for m in cola.esperar(4)]
+    # Tomar el caso, abrir el detalle y la aprobación; una sola vez (la repetición no escribe).
+    assert tipos.count("SiniestroAprobado") == 1
+    assert tipos.count("SiniestroEnEvaluacion") == 1

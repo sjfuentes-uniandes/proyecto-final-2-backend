@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from solventa_common.outbox import OutboxPg, PublicadorSns, RelayOutbox, cliente_sns
 from solventa_common.telemetry import instrumentar
 
+from siniestros.adapters.inbound.http import decisiones
 from siniestros.adapters.inbound.http import siniestros as http
 from siniestros.adapters.outbound.base_de_datos import migrar
 from siniestros.adapters.outbound.evidencias_s3 import (
@@ -22,8 +23,10 @@ from siniestros.adapters.outbound.siniestros_pg import SiniestrosPg
 from siniestros.adapters.outbound.soportes_requeridos import SoportesRequeridosJson
 from siniestros.application.siniestro.acceso import RegistrarAccesoDenegado
 from siniestros.application.siniestro.bandeja import ConsultarResumen, ListarBandeja
+from siniestros.application.siniestro.decidir import Decidir
 from siniestros.application.siniestro.detalle import ConsultarDetalle
 from siniestros.application.siniestro.enlace import EmitirEnlace
+from siniestros.application.siniestro.plazos import VencerPlazosSoporte
 from siniestros.application.siniestro.puertos import AlmacenEvidencias, Reloj
 from siniestros.application.siniestro.tomar import TomarSiguiente
 from siniestros.application.siniestro.vistas import Plazos
@@ -44,6 +47,11 @@ MENSAJE_SEMILLA_EN_PRODUCCION = "semilla de QA: está encendida en producción; 
 MENSAJE_SEMILLA_DETENIDA = "semilla de QA: se detuvo"
 MENSAJE_SEMILLA_SIN_PARAR = "semilla de QA: no se detuvo a tiempo; se cancela"
 PARADA_SEMILLA_S = 5.0
+MENSAJE_PLAZOS_SIN_BASE = "plazos: sin base; no se vencen los plazos de soporte"
+MENSAJE_PLAZOS_DETENIDOS = "plazos: la tarea se detuvo"
+MENSAJE_PLAZOS_SIN_PARAR = "plazos: la tarea no se detuvo a tiempo; se cancela"
+# Una pasada termina con su lote en curso: cabe en el plazo de ECS (30 s) con holgura.
+PARADA_PLAZOS_S = 10.0
 # Cada PutObject de la semilla sube un archivo pequeño: más holgado que el corte de las lecturas.
 SEMILLA_TIMEOUT_S_MS = 5000
 AMBIENTES_SIN_SEMILLA = frozenset({"prod", "production", "produccion"})
@@ -75,6 +83,7 @@ def armar_servicios(
             settings.coherencia_distancia_max_m,
         ),
         enlace=EmitirEnlace(repo, almacen, reloj, settings.evidencia_url_ttl_s),
+        decidir=Decidir(repo, reloj),
         acceso=RegistrarAccesoDenegado(repo, reloj),
         reloj=reloj,
         plazos=plazos,
@@ -177,6 +186,30 @@ def _relay_outbox(app: FastAPI, settings: Settings, reloj: Reloj) -> _Fondo | No
     )
 
 
+def _plazos(app: FastAPI, settings: Settings, reloj: Reloj) -> _Fondo | None:
+    """HU-W20 (DS3-13): devuelve a evaluación los casos con el plazo de soporte vencido. Encendida por
+    omisión; sin base no arranca (lo registra) y la app arranca igual."""
+    if not settings.plazos_habilitados:
+        return None
+    pool = getattr(app.state, "pool", None)
+    if pool is None:
+        logger.warning(MENSAJE_PLAZOS_SIN_BASE, extra={"missing": "base"})
+        return None
+    tarea = VencerPlazosSoporte(SiniestrosPg(pool), reloj, settings.plazos_lote)
+
+    async def ejecutar(parada: asyncio.Event) -> None:
+        await tarea.ejecutar(parada, settings.plazos_intervalo_s)
+
+    return _lanzar(
+        app,
+        "plazos_soporte",
+        ejecutar,
+        limite_s=PARADA_PLAZOS_S,
+        detenido=MENSAJE_PLAZOS_DETENIDOS,
+        sin_parar=MENSAJE_PLAZOS_SIN_PARAR,
+    )
+
+
 def _semilla_qa(app: FastAPI, settings: Settings, reloj: Reloj) -> _Fondo | None:
     """DS3-07: siembra los casos sintéticos de QA. Apagada por omisión; en producción no se aplica
     aunque alguien la encienda."""
@@ -251,15 +284,22 @@ def crear_app(
                 )
             relay: _Fondo | None = None
             semilla: _Fondo | None = None
+            plazos: _Fondo | None = None
             try:
                 relay = _relay_outbox(app, settings, reloj_activo)
                 semilla = _semilla_qa(app, settings, reloj_activo)
+                plazos = _plazos(app, settings, reloj_activo)
                 yield
             finally:
+                # Primero lo que escribe en el Outbox; el relay se detiene al final para publicar
+                # lo último que quedó escrito.
+                await _detener(plazos)
                 await _detener(semilla)
                 await _detener(relay)
 
     app = instrumentar(FastAPI(title=settings.service_name, lifespan=ciclo), settings)
+    # Primero la decisión: `/catalogos-decision` va antes de `/{siniestroId}`.
+    app.include_router(decisiones.router)
     app.include_router(http.router)
     app.include_router(http.router_accesos)
 

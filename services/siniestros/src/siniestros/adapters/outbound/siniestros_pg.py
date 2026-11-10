@@ -19,9 +19,11 @@ import json
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+import psycopg
 from psycopg import AsyncConnection, AsyncCursor
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
@@ -34,26 +36,32 @@ from siniestros.adapters.outbound.mapeo import (
     ubicacion_de_json,
 )
 from siniestros.application.siniestro.errores import SolicitudInvalida
-from siniestros.application.siniestro.puertos import RegistroIdempotencia
+from siniestros.application.siniestro.puertos import DecisionFinalDuplicada, RegistroIdempotencia
 from siniestros.application.siniestro.vistas import (
     AccesoDenegado,
+    DecisionRegistrada,
     DetalleLeido,
     FiltroBandeja,
     Indicadores,
+    LiquidacionAprobada,
     PaginaSiniestros,
     TipoBandeja,
 )
 from siniestros.domain.siniestro.modelos import (
+    CanalSoporte,
+    CausalRechazo,
     EntradaHistorial,
     EstadoSiniestro,
     Evidencia,
     OrigenSiniestro,
     PrioridadSiniestro,
     Siniestro,
+    SoporteSolicitable,
     TipoEvidencia,
     TipoSoporte,
     Ubicacion,
 )
+from siniestros.domain.siniestro.transiciones import referencia_pago
 
 COLUMNAS = (
     "id, codigo, origen, estado, poliza_id, cliente_id, copia_poliza, causa, fecha_evento, "
@@ -67,7 +75,7 @@ _COLUMNAS_EVIDENCIA = (
 )
 _COLUMNAS_HISTORIAL = (
     "id, siniestro_id, accion, estado_anterior, estado_nuevo, actor_id, actor_rol, actor_nombre, "
-    "justificacion, ocurrido_en"
+    "justificacion, detalles, ocurrido_en"
 )
 
 # Tiempo restante en minutos (negativo si venció); ver el docstring del módulo.
@@ -149,6 +157,35 @@ def entrada_de(fila: Mapping[str, Any]) -> EntradaHistorial:
         actor_rol=fila["actor_rol"],
         actor_nombre=fila["actor_nombre"],
         justificacion=fila["justificacion"],
+        detalles=fila["detalles"],
+    )
+
+
+def liquidacion_de(
+    siniestro: Siniestro, decision: Mapping[str, Any] | None
+) -> LiquidacionAprobada | None:
+    """La liquidación de un caso aprobado. Sale de las columnas del siniestro y, si la decisión del
+    analista existe, de su detalle (de ahí el valor reclamado que usó). Un paramétrico (W22) no tiene
+    decisión: solo trae el valor a indemnizar."""
+    if siniestro.estado is not EstadoSiniestro.APROBADO or siniestro.valor_indemnizar is None:
+        return None
+    reclamado = siniestro.valor_reclamado
+    moneda = siniestro.moneda or siniestro.copia_poliza.moneda
+    aprobada_en = siniestro.decidido_en
+    if decision is not None:
+        liquidada = decision["detalle"].get("liquidacion", {})
+        if liquidada.get("valorReclamado") is not None:
+            reclamado = Decimal(liquidada["valorReclamado"])
+        moneda = liquidada.get("moneda", moneda)
+        aprobada_en = decision["registrada_en"]
+    assert aprobada_en is not None  # un caso aprobado tiene decidido_en
+    return LiquidacionAprobada(
+        moneda=moneda,
+        valor_reclamado=reclamado,
+        deducible=siniestro.deducible,
+        valor_indemnizar=siniestro.valor_indemnizar,
+        referencia_pago=referencia_pago(siniestro.codigo),
+        aprobada_en=aprobada_en,
     )
 
 
@@ -352,10 +389,21 @@ class SiniestrosPg:
                     (siniestro_id,),
                 )
             ).fetchall()
+            caso = siniestro_de(fila)
+            decision = None
+            if caso.estado is EstadoSiniestro.APROBADO:
+                decision = await (
+                    await conexion.execute(
+                        "SELECT detalle, registrada_en FROM decisiones_siniestro "
+                        "WHERE siniestro_id = %s AND tipo = 'APROBAR'",
+                        (siniestro_id,),
+                    )
+                ).fetchone()
         return DetalleLeido(
-            siniestro=siniestro_de(fila),
+            siniestro=caso,
             evidencias=tuple(evidencia_de(f) for f in evidencias),
             historial=tuple(entrada_de(f) for f in historial),
+            liquidacion=liquidacion_de(caso, decision),
         )
 
     async def evidencia(
@@ -444,8 +492,9 @@ class TxSiniestrosPg:
     async def agregar_historial(self, entrada: EntradaHistorial) -> None:
         await self._conexion.execute(
             "INSERT INTO historial_siniestro (id, siniestro_id, accion, estado_anterior, "
-            "estado_nuevo, actor_id, actor_rol, actor_nombre, justificacion, ocurrido_en) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            "estado_nuevo, actor_id, actor_rol, actor_nombre, justificacion, "
+            "evidencias_consideradas, detalles, ocurrido_en) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (
                 entrada.id,
                 entrada.siniestro_id,
@@ -456,12 +505,117 @@ class TxSiniestrosPg:
                 entrada.actor_rol,
                 entrada.actor_nombre,
                 entrada.justificacion,
+                Jsonb([str(e) for e in entrada.evidencias_consideradas])
+                if entrada.evidencias_consideradas
+                else None,
+                Jsonb(dict(entrada.detalles)) if entrada.detalles is not None else None,
                 entrada.ocurrido_en,
             ),
         )
 
-    async def evento_en_evaluacion(self, siniestro: Siniestro, ocurrido_en: datetime) -> None:
-        await outbox_pg.insertar(self._bruta, outbox_pg.en_evaluacion(siniestro, ocurrido_en))
+    async def bloquear_siniestro(self, siniestro_id: UUID) -> Siniestro | None:
+        fila = await (
+            await self._conexion.execute(
+                f"SELECT {COLUMNAS} FROM siniestros WHERE id = %s FOR UPDATE", (siniestro_id,)
+            )
+        ).fetchone()
+        return siniestro_de(fila) if fila else None
+
+    async def ids_evidencias(self, siniestro_id: UUID) -> frozenset[UUID]:
+        filas = await (
+            await self._conexion.execute(
+                "SELECT id FROM evidencias WHERE siniestro_id = %s", (siniestro_id,)
+            )
+        ).fetchall()
+        return frozenset(f["id"] for f in filas)
+
+    async def reservar_plazos_vencidos(self, ahora: datetime, lote: int) -> list[Siniestro]:
+        filas = await (
+            await self._conexion.execute(
+                f"SELECT {COLUMNAS} FROM siniestros "
+                "WHERE estado = 'FALTA_SOPORTE' AND plazo_soporte_vence_en < %s "
+                "ORDER BY plazo_soporte_vence_en, id FOR UPDATE SKIP LOCKED LIMIT %s",
+                (ahora, lote),
+            )
+        ).fetchall()
+        return [siniestro_de(f) for f in filas]
+
+    async def guardar_transicion(self, siniestro: Siniestro, version_anterior: int) -> None:
+        cursor = await self._conexion.execute(
+            "UPDATE siniestros SET estado = %s, pausado_desde = %s, pausa_acumulada_s = %s, "
+            "plazo_soporte_vence_en = %s, decidido_en = %s, deducible = %s, "
+            "valor_indemnizar = %s, version = %s WHERE id = %s AND version = %s",
+            (
+                siniestro.estado.value,
+                siniestro.pausado_desde,
+                siniestro.pausa_acumulada_s,
+                siniestro.plazo_soporte_vence_en,
+                siniestro.decidido_en,
+                siniestro.deducible,
+                siniestro.valor_indemnizar,
+                siniestro.version,
+                siniestro.id,
+                version_anterior,
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise RuntimeError("guardar_transicion: el siniestro cambió de versión")
+
+    async def registrar_decision(self, decision: DecisionRegistrada) -> None:
+        try:
+            await self._conexion.execute(
+                "INSERT INTO decisiones_siniestro (id, siniestro_id, tipo, idempotency_key, "
+                "huella_solicitud, detalle, actor_id, registrada_en) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                (
+                    decision.id,
+                    decision.siniestro_id,
+                    decision.tipo,
+                    decision.idempotency_key,
+                    decision.huella,
+                    Jsonb(decision.detalle),
+                    decision.actor_id,
+                    decision.registrada_en,
+                ),
+            )
+        except psycopg.errors.UniqueViolation as error:
+            if error.diag.constraint_name == "decisiones_una_final":
+                raise DecisionFinalDuplicada from error
+            raise
+
+    async def evento_en_evaluacion(
+        self, siniestro: Siniestro, ocurrido_en: datetime, motivo: str = "ASIGNACION"
+    ) -> None:
+        await outbox_pg.insertar(
+            self._bruta, outbox_pg.en_evaluacion(siniestro, ocurrido_en, motivo)
+        )
+
+    async def evento_aprobado(
+        self, siniestro: Siniestro, referencia_pago: str, decidido_por: UUID, aprobado_en: datetime
+    ) -> None:
+        await outbox_pg.insertar(
+            self._bruta, outbox_pg.aprobado(siniestro, referencia_pago, decidido_por, aprobado_en)
+        )
+
+    async def evento_rechazado(
+        self, siniestro: Siniestro, causal: CausalRechazo, decidido_por: UUID, decidido_en: datetime
+    ) -> None:
+        await outbox_pg.insertar(
+            self._bruta, outbox_pg.rechazado(siniestro, causal, decidido_por, decidido_en)
+        )
+
+    async def evento_soporte_solicitado(
+        self,
+        siniestro: Siniestro,
+        documentos: tuple[SoporteSolicitable, ...],
+        canal: CanalSoporte,
+        decidido_por: UUID,
+        ocurrido_en: datetime,
+    ) -> None:
+        await outbox_pg.insertar(
+            self._bruta,
+            outbox_pg.soporte_solicitado(siniestro, documentos, canal, decidido_por, ocurrido_en),
+        )
 
     async def evento_consultado(
         self, siniestro: Siniestro, actor_id: str, ocurrido_en: datetime

@@ -35,6 +35,7 @@ from siniestros.adapters.inbound.http.dto import (
 )
 from siniestros.application.siniestro.acceso import RegistrarAccesoDenegado
 from siniestros.application.siniestro.bandeja import ConsultarResumen, ListarBandeja
+from siniestros.application.siniestro.decidir import Decidir
 from siniestros.application.siniestro.detalle import ConsultarDetalle
 from siniestros.application.siniestro.enlace import EmitirEnlace
 from siniestros.application.siniestro.errores import (
@@ -73,6 +74,7 @@ class Servicios:
     tomar: TomarSiguiente
     detalle: ConsultarDetalle
     enlace: EmitirEnlace
+    decidir: Decidir
     acceso: RegistrarAccesoDenegado
     reloj: Reloj
     plazos: Plazos

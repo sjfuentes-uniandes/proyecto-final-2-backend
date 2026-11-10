@@ -1,6 +1,8 @@
 """De las vistas de la aplicación a los DTO del contrato (HU-W19). Ninguna incluye la clave del
 objeto ni una URL: `EvidenciaVista` solo lleva metadatos e integridad."""
 
+from decimal import Decimal
+
 from siniestros.adapters.inbound.http.dto import (
     AmparoCopiaDto,
     BandejaSiniestrosRespuesta,
@@ -11,6 +13,7 @@ from siniestros.adapters.inbound.http.dto import (
     EnlaceEvidencia,
     EntradaHistorial,
     EvidenciaVista,
+    LiquidacionDto,
     PasoTramiteDto,
     ResumenBandejaSiniestros,
     ResumenSiniestro,
@@ -23,10 +26,12 @@ from siniestros.application.siniestro.vistas import (
     DetalleCaso,
     EnlaceEmitido,
     Indicadores,
+    LiquidacionAprobada,
     PaginaBandeja,
     ResumenCaso,
 )
 from siniestros.domain.siniestro.modelos import CopiaPoliza, Ubicacion
+from siniestros.domain.siniestro.transiciones import referencia_pago
 
 
 def ubicacion_dto(ubicacion: Ubicacion) -> UbicacionSiniestroDto:
@@ -104,6 +109,22 @@ def indicadores_dto(i: Indicadores) -> ResumenBandejaSiniestros:
     )
 
 
+def monto(valor: Decimal | None) -> str | None:
+    """Texto decimal con dos decimales (DS2-16); null si no consta."""
+    return f"{valor:f}" if valor is not None else None
+
+
+def liquidacion_dto(liquidacion: LiquidacionAprobada) -> LiquidacionDto:
+    return LiquidacionDto(
+        moneda=liquidacion.moneda,
+        valor_reclamado=monto(liquidacion.valor_reclamado),
+        deducible=monto(liquidacion.deducible),
+        valor_indemnizar=monto(liquidacion.valor_indemnizar),
+        referencia_pago=liquidacion.referencia_pago,
+        aprobada_en=liquidacion.aprobada_en,
+    )
+
+
 def detalle_dto(detalle: DetalleCaso) -> DetalleSiniestro:
     s = detalle.resumen.siniestro
     base = resumen_dto(detalle.resumen).model_dump()
@@ -165,9 +186,12 @@ def detalle_dto(detalle: DetalleCaso) -> DetalleSiniestro:
             )
             for h in detalle.historial
         ],
-        liquidacion=None,
+        liquidacion=liquidacion_dto(detalle.liquidacion) if detalle.liquidacion else None,
         evento=None,
         pago=None,
+        valor_reclamado=monto(s.valor_reclamado),
+        referencia_pago_prevista=referencia_pago(s.codigo),
+        plazo_soporte_vence_en=s.plazo_soporte_vence_en,
     )
 
 

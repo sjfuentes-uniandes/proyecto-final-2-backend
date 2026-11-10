@@ -10,8 +10,9 @@ Cinco pasos, siempre en este orden: `RECIBIDO`, `EVIDENCIAS_VALIDADAS`, `EN_EVAL
 - `PENDIENTE`: los que faltan.
 
 W20 (decisión) y W23 (pago) completan los pasos `DECISION` y `PAGO_INDEMNIZACION` con sus propias
-acciones del historial; aquí `DECISION` se da por hecho cuando el estado es `APROBADO` o `RECHAZADO`
-y `PAGO_INDEMNIZACION` queda pendiente.
+acciones del historial; aquí `DECISION` se da por hecho cuando el estado es `APROBADO` o `RECHAZADO`.
+Un caso `APROBADO` espera su pago (`PAGO_INDEMNIZACION` es el paso actual hasta W23); uno `RECHAZADO`
+no lo habilita, así que no tiene paso actual.
 """
 
 from collections.abc import Sequence
@@ -63,6 +64,9 @@ def pasos_tramite(
     actual: PasoTramite | None
     if estado in ESTADOS_CON_ANALISTA:
         actual = PasoTramite.EN_EVALUACION
+    elif estado is EstadoSiniestro.RECHAZADO:
+        # Un rechazo no habilita pago (W20, AC2): el trámite terminó, ningún paso queda «actual».
+        actual = None
     else:
         actual = next((p for p in pasos if p not in ocurridos), None)
 

@@ -8,18 +8,27 @@ from uuid import UUID
 
 from siniestros.application.siniestro.vistas import (
     AccesoDenegado,
+    DecisionRegistrada,
     DetalleLeido,
     FiltroBandeja,
     Indicadores,
     PaginaSiniestros,
 )
 from siniestros.domain.siniestro.modelos import (
+    CanalSoporte,
+    CausalRechazo,
     EntradaHistorial,
     Evidencia,
     IntegridadEvidencia,
     Siniestro,
+    SoporteSolicitable,
     TipoSoporte,
 )
+
+
+class DecisionFinalDuplicada(Exception):
+    """La base rechazó una segunda decisión final del mismo siniestro (restricción única, AC4). Deshace
+    la transacción: no queda nada escrito."""
 
 
 class Reloj(Protocol):
@@ -66,12 +75,50 @@ class TxSiniestros(Protocol):
         """El REPORTADO sin analista más antiguo, bloqueado (`FOR UPDATE SKIP LOCKED`)."""
         ...
 
+    async def bloquear_siniestro(self, siniestro_id: UUID) -> Siniestro | None:
+        """El siniestro, bloqueado (`FOR UPDATE`): dos decisiones sobre el mismo caso se serializan."""
+        ...
+
+    async def ids_evidencias(self, siniestro_id: UUID) -> frozenset[UUID]: ...
+
+    async def reservar_plazos_vencidos(self, ahora: datetime, lote: int) -> list[Siniestro]:
+        """Hasta `lote` casos FALTA_SOPORTE con el plazo vencido, bloqueados con `FOR UPDATE SKIP
+        LOCKED` (varias réplicas nunca toman el mismo), el más antiguo primero."""
+        ...
+
+    async def guardar_transicion(self, siniestro: Siniestro, version_anterior: int) -> None:
+        """Escribe el estado, el reloj, el plazo y la liquidación; falla si la versión cambió."""
+        ...
+
+    async def registrar_decision(self, decision: DecisionRegistrada) -> None:
+        """Lanza `DecisionFinalDuplicada` si el siniestro ya tiene una decisión final."""
+        ...
+
     async def guardar_asignacion(self, siniestro: Siniestro, version_anterior: int) -> None: ...
 
     async def agregar_historial(self, entrada: EntradaHistorial) -> None: ...
 
     # Outbox: el evento se escribe en la misma transacción que el cambio o la consulta.
-    async def evento_en_evaluacion(self, siniestro: Siniestro, ocurrido_en: datetime) -> None: ...
+    async def evento_en_evaluacion(
+        self, siniestro: Siniestro, ocurrido_en: datetime, motivo: str = "ASIGNACION"
+    ) -> None: ...
+
+    async def evento_aprobado(
+        self, siniestro: Siniestro, referencia_pago: str, decidido_por: UUID, aprobado_en: datetime
+    ) -> None: ...
+
+    async def evento_rechazado(
+        self, siniestro: Siniestro, causal: CausalRechazo, decidido_por: UUID, decidido_en: datetime
+    ) -> None: ...
+
+    async def evento_soporte_solicitado(
+        self,
+        siniestro: Siniestro,
+        documentos: tuple[SoporteSolicitable, ...],
+        canal: CanalSoporte,
+        decidido_por: UUID,
+        ocurrido_en: datetime,
+    ) -> None: ...
 
     async def evento_consultado(
         self, siniestro: Siniestro, actor_id: str, ocurrido_en: datetime

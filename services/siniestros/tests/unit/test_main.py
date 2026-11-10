@@ -341,3 +341,118 @@ def test_un_error_de_la_semilla_no_tumba_la_app(
     ):  # type: ignore[arg-type]
         assert cliente.get("/health").status_code == 200
     assert any(r.getMessage() == main.MENSAJE_SEMILLA_DETENIDA for r in caplog.records)
+
+
+# --- Tarea de plazos (HU-W20, DS3-13) ----------------------------------------------------------------
+class PlazosFalsos:
+    instancias: ClassVar[list["PlazosFalsos"]] = []
+
+    def __init__(self, repo: Any, reloj: Any, lote: int) -> None:
+        self.lote = lote
+        self.intervalo_s: float | None = None
+        self.corrio = False
+        PlazosFalsos.instancias.append(self)
+
+    async def ejecutar(self, parada: asyncio.Event, intervalo_s: float) -> None:
+        self.corrio = True
+        self.intervalo_s = intervalo_s
+        await parada.wait()
+
+
+@pytest.fixture
+def plazos(monkeypatch: pytest.MonkeyPatch) -> type[PlazosFalsos]:
+    PlazosFalsos.instancias = []
+    monkeypatch.setattr(main, "VencerPlazosSoporte", PlazosFalsos)
+    return PlazosFalsos
+
+
+def test_la_tarea_de_plazos_corre_con_la_configuracion_y_se_detiene_al_cerrar(
+    plazos: type[PlazosFalsos], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SOLVENTA_PLAZOS_INTERVALO_S", "15")
+    monkeypatch.setenv("SOLVENTA_PLAZOS_LOTE", "7")
+    app = crear_app(pool=PoolInerte())  # type: ignore[arg-type]
+    with TestClient(app):
+        tarea = app.state.plazos_soporte
+        assert not tarea.done()
+    assert tarea.done()
+    (instancia,) = plazos.instancias
+    assert (instancia.lote, instancia.intervalo_s, instancia.corrio) == (7, 15.0, True)
+
+
+def test_por_omision_la_tarea_de_plazos_vence_cada_60_segundos_en_lotes_de_50(
+    plazos: type[PlazosFalsos],
+) -> None:
+    with TestClient(crear_app(pool=PoolInerte())):  # type: ignore[arg-type]
+        pass
+    assert (plazos.instancias[0].lote, plazos.instancias[0].intervalo_s) == (50, 60.0)
+
+
+def test_la_tarea_de_plazos_se_puede_apagar(
+    plazos: type[PlazosFalsos], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SOLVENTA_PLAZOS_HABILITADOS", "false")
+    app = crear_app(pool=PoolInerte())  # type: ignore[arg-type]
+    with TestClient(app):
+        assert not hasattr(app.state, "plazos_soporte")
+    assert plazos.instancias == []
+
+
+def test_sin_base_la_tarea_de_plazos_no_corre_y_la_app_arranca(
+    plazos: type[PlazosFalsos], caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.WARNING), TestClient(construir(caplog)) as cliente:
+        assert cliente.get("/health").status_code == 200
+    assert plazos.instancias == []
+    assert any(r.getMessage() == main.MENSAJE_PLAZOS_SIN_BASE for r in caplog.records)
+
+
+def test_si_la_tarea_de_plazos_no_se_detiene_a_tiempo_se_cancela(
+    plazos: type[PlazosFalsos], monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    async def sorda(self: PlazosFalsos, parada: asyncio.Event, intervalo_s: float) -> None:
+        await asyncio.sleep(30)
+
+    monkeypatch.setattr(PlazosFalsos, "ejecutar", sorda)
+    monkeypatch.setattr(main, "PARADA_PLAZOS_S", 0.05)
+    with caplog.at_level(logging.WARNING), TestClient(construir(caplog, pool=PoolInerte())):  # type: ignore[arg-type]
+        pass
+    assert any(r.getMessage() == main.MENSAJE_PLAZOS_SIN_PARAR for r in caplog.records)
+
+
+def test_un_error_de_la_tarea_de_plazos_se_registra_y_la_app_sigue(
+    plazos: type[PlazosFalsos], monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    async def rota(self: PlazosFalsos, parada: asyncio.Event, intervalo_s: float) -> None:
+        raise ValueError("DATO-PRIVADO")
+
+    monkeypatch.setattr(PlazosFalsos, "ejecutar", rota)
+    with (
+        caplog.at_level(logging.ERROR),
+        TestClient(construir(caplog, pool=PoolInerte())) as cliente,
+    ):  # type: ignore[arg-type]
+        assert cliente.get("/health").status_code == 200
+    registro = next(r for r in caplog.records if r.getMessage() == main.MENSAJE_PLAZOS_DETENIDOS)
+    assert registro.error_type == "ValueError"  # type: ignore[attr-defined]
+    assert "DATO-PRIVADO" not in caplog.text
+
+
+def test_la_tarea_de_plazos_se_detiene_antes_que_el_relay_para_que_este_publique_lo_ultimo(
+    plazos: type[PlazosFalsos], relay: type[RelayFalso], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    orden: list[str] = []
+
+    async def plazos_cierra(self: PlazosFalsos, parada: asyncio.Event, intervalo_s: float) -> None:
+        await parada.wait()
+        orden.append("plazos")
+
+    async def relay_cierra(self: RelayFalso, parada: asyncio.Event) -> None:
+        await parada.wait()
+        orden.append("relay")
+
+    monkeypatch.setattr(PlazosFalsos, "ejecutar", plazos_cierra)
+    monkeypatch.setattr(RelayFalso, "ejecutar", relay_cierra)
+    habilitar(monkeypatch)
+    with TestClient(crear_app(pool=PoolInerte())):  # type: ignore[arg-type]
+        pass
+    assert orden == ["plazos", "relay"]

@@ -64,6 +64,8 @@ app.include_router(polizas.router)
 # HU-W18: estado y listado de pólizas (consulta).
 app.include_router(estado_polizas.router)
 # HU-W19: siniestros del analista (siniestros).
+# La decisión primero: `/catalogos-decision` va antes de `/{siniestroId}`.
+app.include_router(siniestros.router_decision)
 app.include_router(siniestros.router)
 # HU-W24: cola de descarte de los eventos paramétricos (pagos-parametricos).
 app.include_router(descartes.router)

@@ -221,6 +221,10 @@ DETALLE_SINIESTRO: dict[str, Any] = {
     "liquidacion": None,
     "evento": None,
     "pago": None,
+    # HU-W20 (R-63): campos aditivos del detalle.
+    "valorReclamado": None,
+    "referenciaPagoPrevista": "IND-88-2026-0442-01",
+    "plazoSoporteVenceEn": None,
 }
 ENLACE_SINIESTRO = {
     "url": "https://evidencias.s3.amazonaws.com/o?X-Amz-Expires=300&X-Amz-Signature=sintetica",

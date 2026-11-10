@@ -1,14 +1,14 @@
-"""DTO de siniestros para el portal (HU-W19): copia de `contracts/openapi/siniestros.yaml` con los
+"""DTO de siniestros para el portal (HU-W19 y HU-W20): copia de `contracts/openapi/siniestros.yaml` con los
 mismos nombres, campos y descripciones. `bff-web` solo agrega las vistas (`clienteNombre` y
 `polizaVista`) en `siniestros.py`. `tests/contract/test_openapi.py` compara `bff-web.yaml` con la app.
 """
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, RootModel
 from pydantic.alias_generators import to_camel
 
 TextoDecimal = Annotated[str, Field(pattern=r"^-?\d+(\.\d+)?$")]
@@ -37,6 +37,35 @@ class PrioridadSiniestro(StrEnum):
     ALTA = "ALTA"
     MEDIA = "MEDIA"
     BAJA = "BAJA"
+
+
+class CausalRechazo(StrEnum):
+    """Causales contractuales del rechazo (H07), lista cerrada."""
+
+    POLIZA_NO_VIGENTE = "POLIZA_NO_VIGENTE"
+    EVENTO_NO_CUBIERTO = "EVENTO_NO_CUBIERTO"
+    PERIODO_DE_CARENCIA = "PERIODO_DE_CARENCIA"
+    AVISO_EXTEMPORANEO = "AVISO_EXTEMPORANEO"
+    PRIMAS_EN_MORA = "PRIMAS_EN_MORA"
+    EVIDENCIA_INCONSISTENTE = "EVIDENCIA_INCONSISTENTE"
+    EXCLUSION_CONTRACTUAL = "EXCLUSION_CONTRACTUAL"
+
+
+class SoporteSolicitable(StrEnum):
+    """Documentos que el analista puede pedirle al cliente (H05): un subconjunto de `TipoSoporte`."""
+
+    CERTIFICADO_REPARACION = "CERTIFICADO_REPARACION"
+    COTIZACION_REPUESTOS = "COTIZACION_REPUESTOS"
+    DENUNCIA_AUTORIDAD = "DENUNCIA_AUTORIDAD"
+    PERITAJE = "PERITAJE"
+
+
+class CanalSoporte(StrEnum):
+    """Canal por el que se le pide el soporte al cliente (H05)."""
+
+    PUSH_Y_CORREO = "PUSH_Y_CORREO"
+    PUSH = "PUSH"
+    CORREO = "CORREO"
 
 
 class TipoBandeja(StrEnum):
@@ -278,7 +307,8 @@ class PasoTramiteDto(_Dto):
 
 class EntradaHistorial(_Dto):
     """Historial inmutable. `accion` es un código en mayúsculas (REPORTADO, EVIDENCIAS_VALIDADAS,
-    ASIGNADO; W20 y W22 agregan los suyos)."""
+    ASIGNADO, APROBADO, RECHAZADO, SOPORTE_SOLICITADO, PLAZO_SOPORTE_VENCIDO; W22 y W23 agregan
+    los suyos)."""
 
     id: UUID
     accion: str = Field(pattern=r"^[A-Z_]{3,40}$")
@@ -292,12 +322,17 @@ class EntradaHistorial(_Dto):
 
 
 class LiquidacionDto(_Dto):
-    """Null hasta HU-W20."""
+    """La liquidación aprobada (HU-W20). Null mientras el caso no esté APROBADO. En un paramétrico
+    (W22) solo trae `valorIndemnizar`."""
 
     moneda: str = Field(pattern=r"^[A-Z]{3}$")
     valor_reclamado: TextoDecimal | None
     deducible: TextoDecimal | None
     valor_indemnizar: TextoDecimal | None
+    referencia_pago: str | None = Field(
+        description="IND-<codigo>-01, la clave idempotente del pago único (DS3-11)"
+    )
+    aprobada_en: datetime | None
 
 
 class EventoParametricoDto(_Dto):
@@ -327,7 +362,8 @@ class PagoDto(_Dto):
 
 
 class DetalleSiniestro(ResumenSiniestro):
-    """Detalle (H03, H04, Cobertura e Historial). Las secciones de W20, W22 y W23 vienen en null."""
+    """Detalle (H03, H04, Cobertura e Historial). `liquidacion` la llena W20 al aprobar; las secciones
+    de W22 y W23 vienen en null."""
 
     causa: str = Field(description="Código del amparo reclamado (uno de poliza.amparos)")
     fecha_evento: datetime
@@ -344,6 +380,17 @@ class DetalleSiniestro(ResumenSiniestro):
     liquidacion: LiquidacionDto | None
     evento: EventoParametricoDto | None
     pago: PagoDto | None
+    valor_reclamado: TextoDecimal | None = Field(
+        description="Lo que reclamó el cliente (lo llena M01); null si aún no consta. Si consta, la "
+        "liquidación aprobada debe coincidir"
+    )
+    referencia_pago_prevista: str = Field(
+        pattern=r"^IND-88-[0-9]{4}-[0-9]{4,}-01$",
+        description="IND-<codigo>-01: la referencia única que llevaría la orden de pago (H06)",
+    )
+    plazo_soporte_vence_en: datetime | None = Field(
+        description="Solo en FALTA_SOPORTE: fin del plazo que tiene el cliente para responder"
+    )
 
 
 class EnlaceEvidencia(_Dto):
@@ -359,3 +406,108 @@ class SolicitudAccesoDenegado(_Dto):
     recurso: RecursoSiniestro
     recurso_id: str | None = Field(max_length=64)
     motivo: MotivoDenegacion
+
+
+# --- Decisión del analista (HU-W20) -------------------------------------------------------------
+
+
+class LiquidacionSolicitada(_Dto):
+    """Liquidación que el analista aprueba (H03). Montos como texto decimal (DS2-16). Se exige
+    `0 < valorIndemnizar ≤ valorReclamado`, `0 ≤ deducible ≤ valorReclamado`, `valorIndemnizar` ≤ suma
+    asegurada del amparo reclamado, `moneda` igual a la de la póliza y, si el siniestro ya trae
+    `valorReclamado`, que coincida. Si no, 422 VALOR_FUERA_DE_RANGO (`detalles.campos`)."""
+
+    valor_reclamado: TextoDecimal
+    deducible: TextoDecimal
+    valor_indemnizar: TextoDecimal
+    moneda: str = Field(pattern=r"^[A-Z]{3}$")
+
+
+class _SolicitudBase(_Dto):
+    model_config = ConfigDict(extra="forbid")
+
+    justificacion: str = Field(
+        max_length=2000,
+        description="Obligatoria en toda decisión: vacía o solo espacios → 422 JUSTIFICACION_REQUERIDA",
+    )
+    evidencias_consideradas: list[UUID] = Field(
+        default_factory=list,
+        max_length=50,
+        description="Evidencias del caso que el analista tuvo en cuenta; una que no sea del "
+        "siniestro → 422 SOLICITUD_INVALIDA",
+    )
+
+
+class SolicitudAprobacion(_SolicitudBase):
+    """APROBAR: el caso pasa a APROBADO y se ordena el pago único (`referenciaPago`)."""
+
+    tipo: Literal["APROBAR"]
+    liquidacion: LiquidacionSolicitada
+
+
+class SolicitudRechazo(_SolicitudBase):
+    """RECHAZAR: el caso pasa a RECHAZADO, no habilita pago y conserva la causal y la razón."""
+
+    tipo: Literal["RECHAZAR"]
+    causal: str = Field(
+        max_length=40,
+        description="Código de CausalRechazo (GET /v1/siniestros/catalogos-decision); otro valor "
+        "→ 422 CAUSAL_INVALIDA",
+    )
+    explicacion_cliente: str = Field(
+        max_length=2000,
+        description="Texto que recibirá el cliente. Obligatoria: vacía → 422 SOLICITUD_INVALIDA. Se "
+        "guarda con la decisión (dato sensible) y nunca viaja en un evento",
+    )
+
+
+class SolicitudSoporte(_SolicitudBase):
+    """SOLICITAR_SOPORTE: el caso pasa a FALTA_SOPORTE y el reloj del compromiso se pausa."""
+
+    tipo: Literal["SOLICITAR_SOPORTE"]
+    documentos: list[SoporteSolicitable] = Field(min_length=1, max_length=4)
+    mensaje_cliente: str = Field(
+        max_length=1000,
+        description="Texto que recibirá el cliente. Obligatorio: vacío → 422 SOLICITUD_INVALIDA. Se "
+        "guarda con la decisión (dato sensible) y nunca viaja en un evento",
+    )
+    canal: CanalSoporte
+    plazo_dias_habiles: Literal[5, 10, 15] = Field(
+        description="Días hábiles (lunes a viernes, sin festivos) que tiene el cliente para responder"
+    )
+
+
+class SolicitudDecision(
+    RootModel[
+        Annotated[
+            SolicitudAprobacion | SolicitudRechazo | SolicitudSoporte,
+            Field(discriminator="tipo"),
+        ]
+    ]
+):
+    """Cuerpo de la decisión, discriminado por `tipo` (DS3-12)."""
+
+
+class ResultadoDecisionSiniestro(_Dto):
+    """Resultado de una decisión. La misma Idempotency-Key con el mismo cuerpo devuelve este mismo
+    resultado, sin escribir nada nuevo."""
+
+    siniestro_id: UUID
+    estado_nuevo: EstadoSiniestro
+    decision_id: UUID
+    referencia_pago: str | None = Field(
+        description="IND-<codigo>-01, la clave idempotente del pago (HU-W23); solo al aprobar"
+    )
+    plazo_soporte_vence_en: datetime | None = Field(
+        description="Fin del plazo en días hábiles; solo al solicitar soporte"
+    )
+    registrada_en: datetime
+
+
+class CatalogosDecision(_Dto):
+    """Listas cerradas de la decisión, como códigos que el portal traduce (DS3-12)."""
+
+    causales: list[CausalRechazo]
+    documentos: list[SoporteSolicitable]
+    canales: list[CanalSoporte]
+    plazos_dias_habiles: list[int]

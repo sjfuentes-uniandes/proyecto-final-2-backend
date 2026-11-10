@@ -55,7 +55,7 @@ async def test_deja_el_historial_el_evento_y_la_idempotencia_en_la_misma_transac
         "Luis Mora",
     )
     assert entrada.ocurrido_en == ahora
-    assert repo.eventos == [("SiniestroEnEvaluacion", libre.id, ahora)]
+    assert repo.eventos == [("SiniestroEnEvaluacion", libre.id, ahora, "ASIGNACION")]
     assert repo.idempotencia[f"siguiente:{clave}"].respuesta == {"siniestroId": str(libre.id)}
     assert repo.transacciones == 1
 

@@ -9,10 +9,12 @@
 """
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 from uuid import UUID
 
 from siniestros.domain.siniestro.errores import SiniestroInvalido
@@ -252,6 +254,10 @@ class EntradaHistorial:
     actor_rol: str | None = None
     actor_nombre: str | None = None
     justificacion: str | None = None
+    # W20: los ids que el analista consideró y los parámetros de la acción (sin PII ni texto al
+    # cliente). Solo los escribe la decisión; `detalles` se lee para marcar los soportes pedidos.
+    evidencias_consideradas: tuple[UUID, ...] = ()
+    detalles: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)

@@ -2,7 +2,7 @@
 
 Documento de la historia [HU-W20](https://github.com/sjfuentes-uniandes/proyecto-final/issues/62) (Sprint 3, recorrido R7). Es la evidencia de contrato que pide el issue: la tabla de transiciones, el reloj en pausa, el plazo del soporte, el esquema que se agrega y los eventos. Amplía [HU-W19](hu-w19-detalle-siniestro.md); no recrea nada. Decisiones de diseño: DS3-02, DS3-04, DS3-10 a DS3-14 y DS3-24 del plan maestro del Sprint 3 (v1.3). Hallazgos y desviaciones: R-60 a R-70 de la bitácora.
 
-Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (dominio y migración)** ✅ · B3 (aplicación, HTTP, tarea de plazos y `bff-web`) · F1–F2 (portal) · C (cierre).
+Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (dominio y migración)** ✅ · **B3 (aplicación, HTTP, tarea de plazos y `bff-web`)** ✅ · F1–F2 (portal) · C (cierre).
 
 ## 1. Qué entrega la historia
 
@@ -182,7 +182,7 @@ Toda transición escribe, en la **misma transacción**, el cambio del agregado, 
 
 `evidencias_consideradas` guarda los ids de la solicitud. La explicación y el mensaje al cliente **no** entran al historial: viven en `decisiones_siniestro.detalle`.
 
-**Trámite de H03** (se deriva del estado y del historial, como en W19): al aprobar o rechazar, `DECISION` queda `COMPLETADO` con la fecha y el nombre del analista; `PAGO_INDEMNIZACION` queda pendiente hasta W23. En `FALTA_SOPORTE` el paso actual sigue siendo `EN_EVALUACION`.
+**Trámite de H03** (se deriva del estado y del historial, como en W19): al aprobar o rechazar, `DECISION` queda `COMPLETADO` con la fecha y el nombre del analista. Un caso `APROBADO` espera su pago: `PAGO_INDEMNIZACION` es el paso `ACTUAL` hasta W23 (el portal lo muestra como «Pendiente»). Uno `RECHAZADO` no habilita pago (AC2): no tiene paso actual y `PAGO_INDEMNIZACION` queda `PENDIENTE` (R-74). En `FALTA_SOPORTE` el paso actual sigue siendo `EN_EVALUACION`.
 
 **Soportes pendientes** (`soportesPendientes`): mientras el caso está en `FALTA_SOPORTE`, los documentos pedidos que no estén presentes salen con estado `SOLICITADO`, aunque no sean de los requeridos por el amparo. Al volver a `EN_EVALUACION` por el plazo, se muestran otra vez como `FALTA` los que sigan sin estar presentes.
 
@@ -206,6 +206,8 @@ Una tarea periódica **en proceso** dentro de `siniestros` (patrón de `dinero/m
 3. Reanuda el reloj (§4), escribe el historial `PLAZO_SOPORTE_VENCIDO` y `SiniestroEnEvaluacion` con `motivo = PLAZO_SOPORTE_VENCIDO`, todo en la misma transacción.
 4. Repite hasta vaciar los vencidos; no retiene conexiones fuera de esas transacciones ni llama a otros servicios.
 
+**Configuración** (variables `SOLVENTA_*` o las del servicio, como el resto de `siniestros`): `PLAZOS_HABILITADOS` (por omisión `true`; sin base la tarea no arranca y la app sirve igual), `PLAZOS_INTERVALO_S` (60) y `PLAZOS_LOTE` (50). Al apagarse el servicio se detiene **antes** que el relay del Outbox, para que este publique lo último que escribió.
+
 El criterio técnico del plan («sin analista») quedó superado por esta redacción (R-60). Fuera de alcance (issue): los recordatorios de los días 3 y 8 (H05 solo muestra el texto) y que el cliente cargue el soporte desde la app.
 
 ## 11. Pantallas y la API
@@ -220,7 +222,38 @@ El criterio técnico del plan («sin analista») quedó superado por esta redacc
 
 ## 12. Recorrido local
 
-Se completa en la fase B3, con la guía de §9 de HU-W19 como base: aprobar EVA-01, repetir con la misma clave, rechazar VEN-01 con `POLIZA_NO_VIGENTE`, solicitar soporte en otro caso, vencer el plazo con un reloj adelantado, decidir un caso ya decidido (409) y revisar las filas de `outbox` y de `historial_siniestro` (un `UPDATE` debe fallar).
+Con la semilla de QA de W19 (§9.2 de [HU-W19](hu-w19-detalle-siniestro.md)) los casos `EN_EVALUACION` ya están asignados al analista QA, así que se decide sobre ellos sin tomar nada de la cola. Para el entorno y los encabezados, ver §9.1 de HU-W19 (`make dev-up`, o PostgreSQL y LocalStack desechables si no hay red para las imágenes de compose, R-37).
+
+```bash
+B=http://localhost:8080
+H=(-H "X-Authenticated-Groups: [analistas-siniestros]" -H "X-Authenticated-Issuer: https://local" \
+   -H "X-Authenticated-Sub: a0a0a0a0-0000-4000-8000-000000000001" -H "Content-Type: application/json")
+EVA01=5e000000-0000-4000-8000-000004000000
+
+curl -s "${H[@]}" $B/v1/siniestros/catalogos-decision
+
+# Aprobar (H03/H06). La misma Idempotency-Key repite el resultado; otro cuerpo es 422.
+K=$(uuidgen)
+curl -s -X POST "${H[@]}" -H "Idempotency-Key: $K" $B/v1/siniestros/$EVA01/decision -d '{
+  "tipo":"APROBAR","justificacion":"Daño verificado con evidencia fotográfica.",
+  "liquidacion":{"valorReclamado":"2850000","deducible":"350000","valorIndemnizar":"2500000","moneda":"COP"}}'
+```
+
+| Paso | Caso | Resultado esperado |
+| --- | --- | --- |
+| Aprobar | EVA-01 (`88-2026-0442`) | 200 `APROBADO`, `referenciaPago = IND-88-2026-0442-01`; el detalle trae `liquidacion` y `DECISION` completado |
+| Repetir con la misma clave | EVA-01 | 200 idéntico (mismo `decisionId`) y sin filas nuevas |
+| Otro cuerpo con la misma clave | EVA-01 | 422 `IDEMPOTENCIA_CONFLICTO` |
+| Decidir un caso ya decidido | EVA-01 | 409 `TRANSICION_NO_PERMITIDA` con `estadoActual = APROBADO`; nada cambia |
+| Rechazar con `POLIZA_NO_VIGENTE` | VEN-01 (`88-2026-0437`) | 200 `RECHAZADO` sin `referenciaPago`; el trámite no deja paso actual |
+| Solicitar soporte (10 días hábiles) | EVA-02 (`88-2026-0439`) | 200 `FALTA_SOPORTE`, `relojPausado = true`, `plazoSoporteVenceEn` y los documentos pedidos como `SOLICITADO` |
+| Vencer el plazo con el reloj adelantado | EVA-02 | A los pocos segundos: `EN_EVALUACION`, mismo analista, reloj reanudado, historial `PLAZO_SOPORTE_VENCIDO` (rol `SISTEMA`) |
+| Sin justificación, causal desconocida, valor sobre la suma asegurada, documentos vacíos | AUS-01 | 422 `JUSTIFICACION_REQUERIDA`, `CAUSAL_INVALIDA`, `VALOR_FUERA_DE_RANGO` y `SOLICITUD_INVALIDA` (`campos` sin la etiqueta del `tipo`) |
+| Otro analista, otro grupo, caso inexistente | ALT-01 | 409 `CASO_ASIGNADO_A_OTRO`, 403 `ROL_NO_AUTORIZADO` (y aviso a `siniestros`), 404 |
+
+**Vencer el plazo en local.** La tarea corre cada 60 s con el reloj del sistema; para no esperar 10 días hábiles el recorrido de B3 arrancó `siniestros` con un lanzador que suma un desfase al reloj (`evidencias/hu-w20/b3_recorrido_local/lanzar_siniestros.py`; **solo para la demo**: no existe en el repositorio ni en producción) y `SOLVENTA_PLAZOS_INTERVALO_S=2`. Las pruebas de módulo hacen lo mismo con el reloj inyectado (MT-W20-02).
+
+**En la base** (`psql`), tras el recorrido: una fila de `outbox` por transición (`SiniestroAprobado`, `SiniestroRechazado`, `SiniestroSoporteSolicitado` y `SiniestroEnEvaluacion` con `PLAZO_SOPORTE_VENCIDO`), todas con `published_at`; una entrada de historial por transición; `UPDATE` y `DELETE` sobre `historial_siniestro` y `decisiones_siniestro` fallan con «es de solo inserción»; una segunda decisión final falla con `decisiones_una_final`. En la cola `auditoria` llegan los mismos eventos y **ninguno** lleva el texto al cliente ni la cuenta. La salida completa del recorrido y de la base está en `docs/sprint_3/evidencias/hu-w20/b3_recorrido_local/`.
 
 ## 13. Pendientes con otras personas
 

@@ -74,6 +74,12 @@ class Settings(ServiceSettings):
         None, validation_alias=_env("SEMILLA_SINIESTROS_ANALISTA_ID")
     )
 
+    # HU-W20 (DS3-13): tarea que devuelve a evaluación los casos cuyo plazo de soporte venció. Se apaga
+    # con PLAZOS_HABILITADOS=false; sin base no arranca (se registra y la app sirve igual).
+    plazos_habilitados: bool = Field(True, validation_alias=_env("PLAZOS_HABILITADOS"))
+    plazos_intervalo_s: float = Field(60.0, gt=0, validation_alias=_env("PLAZOS_INTERVALO_S"))
+    plazos_lote: int = Field(50, ge=1, validation_alias=_env("PLAZOS_LOTE"))
+
     # Outbox (como dinero y polizas): la infraestructura pone OUTBOX_ENABLED="true" y el tópico a
     # todo servicio que publica (`publishes`); sin la variable el relay no arranca.
     outbox_enabled: bool = Field(False, validation_alias=_env("OUTBOX_ENABLED"))

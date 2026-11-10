@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from siniestros.adapters.inbound.http.siniestros import Servicios
 from siniestros.application.siniestro.acceso import RegistrarAccesoDenegado
 from siniestros.application.siniestro.bandeja import ConsultarResumen, ListarBandeja
+from siniestros.application.siniestro.decidir import Decidir
 from siniestros.application.siniestro.detalle import ConsultarDetalle
 from siniestros.application.siniestro.enlace import EmitirEnlace
 from siniestros.application.siniestro.tomar import TomarSiguiente
@@ -39,6 +40,7 @@ def cliente(repo, almacen, soportes, reloj, plazos: Plazos) -> Iterator[TestClie
         tomar=TomarSiguiente(repo, reloj, plazos),
         detalle=ConsultarDetalle(repo, almacen, soportes, reloj, plazos),
         enlace=EmitirEnlace(repo, almacen, reloj, 300),
+        decidir=Decidir(repo, reloj),
         acceso=RegistrarAccesoDenegado(repo, reloj),
         reloj=reloj,
         plazos=plazos,

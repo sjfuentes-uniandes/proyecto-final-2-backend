@@ -15,17 +15,29 @@ from solventa_common import correlation
 from siniestros.adapters.outbound.eventos import (
     ACCESO_SINIESTRO_DENEGADO,
     EVIDENCIA_CONSULTADA,
+    SINIESTRO_APROBADO,
     SINIESTRO_CONSULTADO,
     SINIESTRO_EN_EVALUACION,
+    SINIESTRO_RECHAZADO,
+    SINIESTRO_SOPORTE_SOLICITADO,
     AccesoSiniestroDenegadoV1,
     EvidenciaConsultadaV1,
     PayloadSiniestro,
+    SiniestroAprobadoV1,
     SiniestroConsultadoV1,
     SiniestroEnEvaluacionV1,
+    SiniestroRechazadoV1,
+    SiniestroSoporteSolicitadoV1,
     SobreEvento,
 )
 from siniestros.application.siniestro.vistas import AccesoDenegado
-from siniestros.domain.siniestro.modelos import Evidencia, Siniestro
+from siniestros.domain.siniestro.modelos import (
+    CanalSoporte,
+    CausalRechazo,
+    Evidencia,
+    Siniestro,
+    SoporteSolicitable,
+)
 
 _INSERTAR = (
     "INSERT INTO outbox (event_id, aggregate_id, event_type, event_version, occurred_at, "
@@ -52,8 +64,9 @@ def _sobre[P: PayloadSiniestro](
 
 
 def en_evaluacion(
-    siniestro: Siniestro, ocurrido_en: datetime
+    siniestro: Siniestro, ocurrido_en: datetime, motivo: str = "ASIGNACION"
 ) -> SobreEvento[SiniestroEnEvaluacionV1]:
+    """`motivo`: `ASIGNACION` (lo tomó un analista) o `PLAZO_SOPORTE_VENCIDO` (volvió a su bandeja)."""
     assert siniestro.analista_id is not None  # invariante de EN_EVALUACION
     return _sobre(
         SINIESTRO_EN_EVALUACION,
@@ -64,7 +77,77 @@ def en_evaluacion(
             codigo=siniestro.codigo,
             poliza_id=siniestro.poliza_id,
             analista_id=siniestro.analista_id,
-            motivo="ASIGNACION",
+            motivo=motivo,
+        ),
+    )
+
+
+def aprobado(
+    siniestro: Siniestro, referencia_pago: str, decidido_por: UUID, aprobado_en: datetime
+) -> SobreEvento[SiniestroAprobadoV1]:
+    """DS3-24. Solo el identificador opaco del beneficiario: nunca la cuenta."""
+    beneficiario = siniestro.copia_poliza.beneficiario
+    assert beneficiario is not None and siniestro.valor_indemnizar is not None
+    return _sobre(
+        SINIESTRO_APROBADO,
+        siniestro.id,
+        aprobado_en,
+        SiniestroAprobadoV1(
+            siniestro_id=siniestro.id,
+            codigo=siniestro.codigo,
+            origen=siniestro.origen.value,
+            poliza_id=siniestro.poliza_id,
+            cliente_id=siniestro.cliente_id,
+            valor_indemnizar=f"{siniestro.valor_indemnizar:f}",
+            moneda=siniestro.moneda or siniestro.copia_poliza.moneda,
+            referencia_pago=referencia_pago,
+            beneficiario_ref=beneficiario.beneficiario_ref,
+            aprobado_en=aprobado_en,
+            decidido_por=decidido_por,
+        ),
+    )
+
+
+def rechazado(
+    siniestro: Siniestro, causal: CausalRechazo, decidido_por: UUID, decidido_en: datetime
+) -> SobreEvento[SiniestroRechazadoV1]:
+    """Sin la explicación al cliente (texto libre)."""
+    return _sobre(
+        SINIESTRO_RECHAZADO,
+        siniestro.id,
+        decidido_en,
+        SiniestroRechazadoV1(
+            siniestro_id=siniestro.id,
+            codigo=siniestro.codigo,
+            poliza_id=siniestro.poliza_id,
+            causal=causal.value,
+            decidido_por=decidido_por,
+            decidido_en=decidido_en,
+        ),
+    )
+
+
+def soporte_solicitado(
+    siniestro: Siniestro,
+    documentos: tuple[SoporteSolicitable, ...],
+    canal: CanalSoporte,
+    decidido_por: UUID,
+    ocurrido_en: datetime,
+) -> SobreEvento[SiniestroSoporteSolicitadoV1]:
+    """Sin el mensaje al cliente (texto libre)."""
+    assert siniestro.plazo_soporte_vence_en is not None  # lo fija solicitar_soporte
+    return _sobre(
+        SINIESTRO_SOPORTE_SOLICITADO,
+        siniestro.id,
+        ocurrido_en,
+        SiniestroSoporteSolicitadoV1(
+            siniestro_id=siniestro.id,
+            codigo=siniestro.codigo,
+            poliza_id=siniestro.poliza_id,
+            documentos=[d.value for d in documentos],
+            canal=canal.value,
+            plazo_vence_en=siniestro.plazo_soporte_vence_en,
+            decidido_por=decidido_por,
         ),
     )
 
