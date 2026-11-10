@@ -61,6 +61,7 @@ from siniestros.domain.siniestro.modelos import (
     TipoSoporte,
     Ubicacion,
 )
+from siniestros.domain.siniestro.pago import EstadoPago, PagoSiniestro, ResultadoPago
 from siniestros.domain.siniestro.transiciones import referencia_pago
 
 COLUMNAS = (
@@ -72,6 +73,10 @@ COLUMNAS = (
 _COLUMNAS_EVIDENCIA = (
     "id, siniestro_id, nombre_archivo, tipo, soporte_tipo, clave_objeto, sha256, capturada_en, "
     "ubicacion, tamano_bytes, tipo_contenido"
+)
+_COLUMNAS_PAGO = (
+    "pago_estado, pago_referencia, pago_transaccion_id, pago_motivo, pago_intentos, "
+    "pago_duplicados_descartados"
 )
 _COLUMNAS_HISTORIAL = (
     "id, siniestro_id, accion, estado_anterior, estado_nuevo, actor_id, actor_rol, actor_nombre, "
@@ -158,6 +163,20 @@ def entrada_de(fila: Mapping[str, Any]) -> EntradaHistorial:
         actor_nombre=fila["actor_nombre"],
         justificacion=fila["justificacion"],
         detalles=fila["detalles"],
+    )
+
+
+def pago_de_fila(fila: Mapping[str, Any]) -> PagoSiniestro | None:
+    """El pago que informó `dinero` (HU-W23); null si `pago_estado` es nulo (SIN_PAGO)."""
+    if fila["pago_estado"] is None:
+        return None
+    return PagoSiniestro(
+        estado=EstadoPago(fila["pago_estado"]),
+        referencia=fila["pago_referencia"],
+        transaccion_id=fila["pago_transaccion_id"],
+        motivo=fila["pago_motivo"],
+        intentos=fila["pago_intentos"],
+        duplicados_descartados=fila["pago_duplicados_descartados"],
     )
 
 
@@ -391,6 +410,7 @@ class SiniestrosPg:
             ).fetchall()
             caso = siniestro_de(fila)
             decision = None
+            pago = None
             if caso.estado is EstadoSiniestro.APROBADO:
                 decision = await (
                     await conexion.execute(
@@ -399,11 +419,19 @@ class SiniestrosPg:
                         (siniestro_id,),
                     )
                 ).fetchone()
+                pago_fila = await (
+                    await conexion.execute(
+                        f"SELECT {_COLUMNAS_PAGO} FROM siniestros WHERE id = %s", (siniestro_id,)
+                    )
+                ).fetchone()
+                assert pago_fila is not None
+                pago = pago_de_fila(pago_fila)
         return DetalleLeido(
             siniestro=caso,
             evidencias=tuple(evidencia_de(f) for f in evidencias),
             historial=tuple(entrada_de(f) for f in historial),
             liquidacion=liquidacion_de(caso, decision),
+            pago=pago,
         )
 
     async def evidencia(
@@ -512,6 +540,32 @@ class TxSiniestrosPg:
                 entrada.ocurrido_en,
             ),
         )
+
+    async def estado_pago(self, siniestro_id: UUID) -> EstadoPago | None:
+        fila = await (
+            await self._conexion.execute(
+                "SELECT pago_estado FROM siniestros WHERE id = %s", (siniestro_id,)
+            )
+        ).fetchone()
+        return EstadoPago(fila["pago_estado"]) if fila and fila["pago_estado"] else None
+
+    async def guardar_pago(self, resultado: ResultadoPago) -> None:
+        cursor = await self._conexion.execute(
+            "UPDATE siniestros SET pago_estado = %s, pago_referencia = %s, "
+            "pago_transaccion_id = %s, pago_motivo = %s, pago_intentos = %s, "
+            "pago_duplicados_descartados = %s WHERE id = %s AND pago_estado IS NULL",
+            (
+                resultado.estado.value,
+                resultado.referencia,
+                resultado.transaccion_id,
+                resultado.motivo,
+                resultado.intentos,
+                resultado.duplicados_descartados,
+                resultado.siniestro_id,
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise RuntimeError("guardar_pago: el siniestro ya tenía un resultado de pago")
 
     async def bloquear_siniestro(self, siniestro_id: UUID) -> Siniestro | None:
         fila = await (

@@ -2,7 +2,7 @@
 
 Documento de la historia [HU-W23](https://github.com/sjfuentes-uniandes/proyecto-final/issues/65) (Sprint 3, recorridos R5 y R7). Es la evidencia de contrato que pide el issue: el flujo del pago, el modelo del movimiento, los eventos, los escenarios del aliado simulado y cómo se refleja el resultado en el siniestro. Amplía [HU-W16](adr/0013-recaudo-asincrono-por-oferta-aceptada.md) (el patrón del recaudo) y [HU-W20](hu-w20-decision-siniestro.md) (quien publica `SiniestroAprobado`); no recrea nada. Decisiones de diseño: [ADR 0015](adr/0015-indemnizacion-por-evento.md) (DS3-17, DS3-18, DS3-24, DS3-25, DS3-26 y CF-S3-02 del plan maestro del Sprint 3, v1.4). Hallazgos y desviaciones: R-103 en adelante de la bitácora.
 
-Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (`adaptador-pagos` y simulador)** ✅ · **B3 (`dinero`)** ✅ · **B4 (`siniestros`, `bff-web` y recorrido local)** ☐ · **F1 (portal)** ☐ · **C (cierre y pacto)** ☐.
+Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (`adaptador-pagos` y simulador)** ✅ · **B3 (`dinero`)** ✅ · **B4 (`siniestros`, `bff-web` y recorrido local)** ✅ · **F1 (portal)** ☐ · **C (cierre y pacto)** ☐.
 
 ## 1. Qué entrega la historia
 
@@ -170,4 +170,18 @@ Un caso que no está `APROBADO` no tiene pago ordenado: 404 `INDEMNIZACION_NO_EN
 
 ## 11. Recorrido local
 
-Se completa en la fase B4, con el recorrido de R7 completo (aprobar → relay → `dinero` paga → `siniestros` refleja `CONFIRMADO`; el mismo evento dos veces y dos consumidores a la vez → una fila y una llamada; pasarela lenta → `PENDIENTE` → conciliación; pasarela que rechaza → «Pago por gestionar»).
+Con Docker y `uv` (sin `make dev-up`, R-127), desde la raíz del backend:
+
+```bash
+uv run python ../docs/sprint_3/evidencias/hu-w23/b4_recorrido_local/recorrido_w23.py
+```
+
+Levanta PostgreSQL 16, LocalStack 4.14.0 (con `scripts/dev/localstack-init.sh`) y WireMock 3.9.2 (con los mappings del simulador) en contenedores desechables, y `adaptador-pagos`, `dinero` (dos réplicas), `siniestros` (con la semilla de QA) y `bff-web` con `uvicorn`. Al terminar los detiene. Recorre:
+
+1. **AC1:** aprobar EVA-01 (`88-2026-0442`, `ben-sint-004`) por `bff-web` → relay → `dinero` paga → `siniestros` refleja `CONFIRMADO` (`pago`, historial `PAGO_CONFIRMADO` y paso del trámite completado). `GET /v1/siniestros/{id}/pago` del BFF y `GET /v1/indemnizaciones` de `dinero` coinciden.
+2. **AC4:** aprobar VEN-01 (`ben-sint-008`) → la pasarela rechaza → `RECHAZADA` y «Pago por gestionar» (el paso del pago sigue en curso).
+3. **AC2:** el mismo `SiniestroAprobado` dos veces, otro `eventId` cuatro veces y dos réplicas de `dinero` a la vez → **una** fila y **una** llamada a `POST /v1/desembolsos` (journal de WireMock); lo mismo con seis eventos concurrentes de un siniestro nuevo.
+4. **AC3:** `ben-sint-lento` → el adaptador corta a los 5 s → `PENDIENTE` → la conciliación la confirma en **la misma fila** (un `POST` y un `GET`), con su línea de tiempo por `correlationId`.
+5. **Auditoría y privacidad:** `IndemnizacionConfirmada` e `IndemnizacionRechazada` llegan a la cola `auditoria`; ni los eventos ni los logs traen el beneficiario ni la cuenta.
+
+La salida completa y los registros están en `docs/sprint_3/evidencias/hu-w23/b4_recorrido_local/`. Con `make dev-up` (donde haya red) el equivalente es aprobar un caso de la semilla desde el portal y mirar `GET /v1/siniestros/{id}/pago`; si el volumen de PostgreSQL ya existía, hace falta `docker compose down -v` una vez para crear la base `dinero` (R-120).

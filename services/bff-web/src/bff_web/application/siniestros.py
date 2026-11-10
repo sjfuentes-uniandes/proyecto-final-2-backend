@@ -65,6 +65,10 @@ CAMPOS_POLIZA_VISTA = (
     "moneda",
 )
 MAX_NOMBRE = 80
+ESTADO_APROBADO = "APROBADO"
+ESTADOS_FINALES_DE_PAGO = ("CONFIRMADO", "RECHAZADO")
+ACCION_APROBADO = "APROBADO"
+ACCION_PAGO_CONFIRMADO = "PAGO_CONFIRMADO"
 MOTIVO_SIN_GRUPO = "SIN_GRUPO"
 RECURSOS = {
     "bandeja": "BANDEJA",
@@ -74,10 +78,70 @@ RECURSOS = {
     "emitir_enlace": "EVIDENCIA",
     "decidir": "SINIESTRO",
     "catalogos_decision": "SINIESTRO",
+    "pago": "SINIESTRO",
 }
 
 # Las tareas de aviso en curso: el bucle solo guarda referencias débiles.
 _AVISOS: set["asyncio.Task[None]"] = set()
+
+
+def _entrada(historial: Any, accion: str) -> dict[str, Any] | None:
+    """La última entrada del historial con esa acción."""
+    if not isinstance(historial, list):
+        return None
+    entradas = [h for h in historial if isinstance(h, dict) and h.get("accion") == accion]
+    return entradas[-1] if entradas else None
+
+
+def vista_de_pago(
+    caso: dict[str, Any], cliente_nombre: str | None, compromiso_horas: int
+) -> dict[str, Any]:
+    """`PagoSiniestroVista` a partir del detalle de siniestros (plan B de DS3-26). Pura.
+
+    `indemnizacion` solo sale cuando `dinero` ya informó un resultado (CONFIRMADO o RECHAZADO): el
+    `PENDIENTE` derivado del detalle no trae intentos ni transacción que mostrar y el portal lo
+    presenta como «esperando confirmación». Si el cuerpo de siniestros no cumple lo que esta vista
+    necesita, la ruta lo valida contra el DTO y responde 503 (falla cerrada)."""
+    liquidacion = caso.get("liquidacion")
+    poliza = caso.get("poliza")
+    beneficiario = poliza.get("beneficiario") if isinstance(poliza, dict) else None
+    aprobado = _entrada(caso.get("historial"), ACCION_APROBADO)
+    pago = caso.get("pago")
+    indemnizacion = None
+    if (
+        isinstance(pago, dict)
+        and pago.get("estado") in ESTADOS_FINALES_DE_PAGO
+        and isinstance(liquidacion, dict)
+    ):
+        confirmado = _entrada(caso.get("historial"), ACCION_PAGO_CONFIRMADO)
+        indemnizacion = {
+            "referencia": pago.get("referencia"),
+            "estado": pago.get("estado"),
+            "monto": liquidacion.get("valorIndemnizar"),
+            "moneda": liquidacion.get("moneda"),
+            "transaccionId": pago.get("transaccionId"),
+            "motivo": pago.get("motivo"),
+            "intentos": pago.get("intentos"),
+            "duplicadosDescartados": pago.get("duplicadosDescartados"),
+            "confirmadaEn": confirmado.get("ocurridoEn")
+            if confirmado and pago.get("estado") == "CONFIRMADO"
+            else None,
+        }
+    return {
+        "siniestroId": caso.get("id"),
+        "codigo": caso.get("codigo"),
+        "estado": caso.get("estado"),
+        "clienteNombre": cliente_nombre,
+        "reportadoEn": caso.get("reportadoEn"),
+        "compromisoHoras": compromiso_horas,
+        "liquidacion": liquidacion,
+        "cuentaMascarada": beneficiario.get("cuentaMascarada")
+        if isinstance(beneficiario, dict)
+        else None,
+        "autorizadoPor": aprobado.get("actorNombre") if aprobado else None,
+        "historial": caso.get("historial"),
+        "indemnizacion": indemnizacion,
+    }
 
 
 def servicio_no_disponible() -> ErrorNegocio:
@@ -143,6 +207,7 @@ class Siniestros:
         nombre_timeout_ms: int,
         poliza_timeout_ms: int,
         aviso_timeout_ms: int,
+        compromiso_horas: int = 48,
     ) -> None:
         self.siniestros = siniestros
         self.clientes = clientes
@@ -150,6 +215,7 @@ class Siniestros:
         self._nombre_timeout_s = nombre_timeout_ms / 1000
         self._poliza_timeout_s = poliza_timeout_ms / 1000
         self._aviso_timeout_s = aviso_timeout_ms / 1000
+        self._compromiso_horas = compromiso_horas
 
     async def _con_operacion(self, nombre: str, llamada: Awaitable[Any]) -> Any:
         with operacion(nombre) as op:
@@ -229,6 +295,35 @@ class Siniestros:
             caso["clienteNombre"] = nombres.get(str(caso.get("clienteId")))
             caso["polizaVista"] = poliza
             return caso
+
+    async def pago(self, siniestro_id: UUID, analista: Analista) -> Any:
+        """H08 (HU-W23, plan B de DS3-26): se arma **solo con siniestros** (el detalle ya trae la
+        liquidación, el historial, la cuenta enmascarada y el pago que `siniestros` guarda desde los
+        eventos `Indemnizacion*`) más el nombre del cliente, que es null si `clientes` no responde.
+        No llama a `dinero` (EXT-S3-02). Un caso que no está APROBADO no tiene pago ordenado: 404
+        `INDEMNIZACION_NO_ENCONTRADA`."""
+        with operacion("indemnizacion.consultar") as op:
+            try:
+                caso = await _proteger(
+                    self.siniestros.detalle(siniestro_id, analista.id, analista.nombre)
+                )
+            except ErrorNegocio as error:
+                if error.estado_http < 500:
+                    op.marcar(RESULTADO_RECHAZADO)
+                raise
+            if not isinstance(caso, dict):
+                raise servicio_no_disponible()
+            if caso.get("estado") != ESTADO_APROBADO:
+                op.marcar(RESULTADO_RECHAZADO)
+                raise ErrorNegocio(
+                    "INDEMNIZACION_NO_ENCONTRADA", "El siniestro no tiene un pago ordenado", 404
+                )
+            nombres = await nombres_de_clientes(
+                self.clientes, [caso.get("clienteId")], analista.id, self._nombre_timeout_s
+            )
+            return vista_de_pago(
+                caso, nombres.get(str(caso.get("clienteId"))), self._compromiso_horas
+            )
 
     async def enlace(self, siniestro_id: UUID, evidencia_id: UUID, analista: Analista) -> Any:
         return await self._con_operacion(

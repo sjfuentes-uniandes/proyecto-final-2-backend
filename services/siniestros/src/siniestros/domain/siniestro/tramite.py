@@ -11,8 +11,9 @@ Cinco pasos, siempre en este orden: `RECIBIDO`, `EVIDENCIAS_VALIDADAS`, `EN_EVAL
 
 W20 (decisión) y W23 (pago) completan los pasos `DECISION` y `PAGO_INDEMNIZACION` con sus propias
 acciones del historial; aquí `DECISION` se da por hecho cuando el estado es `APROBADO` o `RECHAZADO`.
-Un caso `APROBADO` espera su pago (`PAGO_INDEMNIZACION` es el paso actual hasta W23); uno `RECHAZADO`
-no lo habilita, así que no tiene paso actual.
+Un caso `APROBADO` espera su pago: `PAGO_INDEMNIZACION` es el paso actual hasta que `dinero` confirma
+(HU-W23, `PAGO_CONFIRMADO`); si la pasarela rechaza (`PAGO_RECHAZADO`) sigue siendo el paso actual:
+el pago queda por gestionar. Uno `RECHAZADO` no lo habilita, así que no tiene paso actual.
 """
 
 from collections.abc import Sequence
@@ -31,11 +32,14 @@ from siniestros.domain.siniestro.modelos import (
 ACCION_REPORTADO = "REPORTADO"
 ACCION_EVIDENCIAS_VALIDADAS = "EVIDENCIAS_VALIDADAS"
 ACCION_ASIGNADO = "ASIGNADO"
+ACCION_PAGO_CONFIRMADO = "PAGO_CONFIRMADO"
 
 _PASO_DE_ACCION = {
     ACCION_REPORTADO: PasoTramite.RECIBIDO,
     ACCION_EVIDENCIAS_VALIDADAS: PasoTramite.EVIDENCIAS_VALIDADAS,
     ACCION_ASIGNADO: PasoTramite.EN_EVALUACION,
+    # HU-W23: solo la confirmación completa el pago; un rechazo lo deja «por gestionar».
+    ACCION_PAGO_CONFIRMADO: PasoTramite.PAGO_INDEMNIZACION,
 }
 
 

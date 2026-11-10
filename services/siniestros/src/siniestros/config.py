@@ -33,6 +33,12 @@ class Settings(ServiceSettings):
         None, validation_alias=_env("SQS_SINIESTROS_INDEMNIZACIONES_URL")
     )
 
+    # HU-W23 (DS3-25): consumidor de `siniestros-indemnizaciones` (visibilidad de 30 s en infra). Cada
+    # mensaje es una transacción corta (sin llamadas a otros servicios): un lote de 5 y una espera
+    # larga de 10 s caben de sobra en la visibilidad y en la parada de ECS.
+    consumidor_max_mensajes: int = Field(5, ge=1, le=10)
+    consumidor_espera_larga_s: int = Field(10, ge=1, le=10)
+
     # Solo local (LocalStack): el *endpoint* con el que se firman las URL, alcanzable desde el
     # navegador del analista (http://localhost:4566); el de la red de compose no lo es. En AWS no se
     # define y se firma con el regional.

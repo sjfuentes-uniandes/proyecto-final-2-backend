@@ -20,6 +20,7 @@ from siniestros.domain.siniestro.modelos import (
     PrioridadSiniestro,
     Siniestro,
 )
+from siniestros.domain.siniestro.pago import PagoSiniestro
 from siniestros.domain.siniestro.plazos import prioridad, tiempo_restante
 from siniestros.domain.siniestro.tramite import PasoDeTramite
 
@@ -146,6 +147,8 @@ class DetalleLeido:
     evidencias: tuple[Evidencia, ...]
     historial: tuple[EntradaHistorial, ...]
     liquidacion: LiquidacionAprobada | None = None
+    # HU-W23: lo que `dinero` informó (null si aún no); el detalle lo completa con `pago_de`.
+    pago: PagoSiniestro | None = None
 
 
 @dataclass(frozen=True)
@@ -164,6 +167,8 @@ class DetalleCaso:
     tramite: tuple[PasoDeTramite, ...]
     historial: tuple[EntradaHistorial, ...]
     liquidacion: LiquidacionAprobada | None = None
+    # Null si el caso no está aprobado; PENDIENTE (derivado) si `dinero` aún no informó.
+    pago: PagoSiniestro | None = None
 
 
 @dataclass(frozen=True)

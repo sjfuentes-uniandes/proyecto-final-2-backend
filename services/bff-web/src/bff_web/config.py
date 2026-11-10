@@ -99,6 +99,12 @@ class Settings(ServiceSettings):
         ["http://localhost:4200"],
         validation_alias=AliasChoices("CORS_ORIGINS", "SOLVENTA_CORS_ORIGINS"),
     )
+    # HU-W23 (DS3-04, R-106): el compromiso del trámite que H08 compara con el tiempo total. El detalle
+    # de siniestros no lo trae; es el mismo valor (48 h) y el mismo nombre de variable que usa
+    # `siniestros`, así un ambiente que lo cambie lo cambia en los dos.
+    compromiso_siniestros_horas: int = Field(
+        48, ge=1, validation_alias=AliasChoices("COMPROMISO_HORAS", "SOLVENTA_COMPROMISO_HORAS")
+    )
     # HU-W27: límite del recorrido que usa la interpretación de la traza (mockup: 1,5 s).
     umbral_recorrido_ms: int = 1500
     # HU-W28: alarmas del ambiente, generadas por Terraform (infra/apps/alarms.tf).

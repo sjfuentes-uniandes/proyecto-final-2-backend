@@ -4,6 +4,8 @@ import json
 import logging
 from collections.abc import Callable, Iterator
 from datetime import datetime, timedelta
+from decimal import Decimal
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -588,3 +590,88 @@ def test_recuperar_el_nombre_en_utf8(recibido: str | None, esperado: str | None)
     from siniestros.adapters.inbound.http.siniestros import _nombre_utf8
 
     assert _nombre_utf8(recibido) == esperado
+
+
+# --- HU-W23: el pago en el detalle ---------------------------------------------------------------
+@pytest.fixture
+def caso_aprobado(repo, siniestro, ahora):  # type: ignore[no-untyped-def]
+    caso = siniestro(
+        estado=EstadoSiniestro.APROBADO,
+        analista_id=UUID(ANALISTA),
+        asignado_en=ahora - timedelta(hours=12),
+        decidido_en=ahora - timedelta(hours=1),
+        deducible=Decimal("350000.00"),
+        valor_indemnizar=Decimal("2500000.00"),
+    )
+    repo.agregar(caso)
+    return caso
+
+
+def _pago(cliente: TestClient, caso: Any) -> Any:
+    return cliente.get(f"/v1/siniestros/{caso.id}", headers=CABECERAS).json()["pago"]
+
+
+def test_un_caso_aprobado_sin_resultado_de_dinero_muestra_el_pago_pendiente(
+    cliente: TestClient, caso_aprobado
+) -> None:  # type: ignore[no-untyped-def]
+    assert _pago(cliente, caso_aprobado) == {
+        "estado": "PENDIENTE",
+        "referencia": "IND-88-2026-0442-01",
+        "transaccionId": None,
+        "motivo": None,
+        "intentos": 0,
+        "duplicadosDescartados": 0,
+    }
+
+
+def test_un_caso_aprobado_con_el_pago_confirmado_lo_muestra(
+    cliente: TestClient, caso_aprobado, repo, ahora
+) -> None:  # type: ignore[no-untyped-def]
+    from siniestros.domain.siniestro.pago import EstadoPago, ResultadoPago
+
+    repo.pagos[caso_aprobado.id] = ResultadoPago(
+        caso_aprobado.id,
+        EstadoPago.CONFIRMADO,
+        "IND-88-2026-0442-01",
+        "TRX-1",
+        None,
+        1,
+        3,
+        ahora,
+    )
+    assert _pago(cliente, caso_aprobado) == {
+        "estado": "CONFIRMADO",
+        "referencia": "IND-88-2026-0442-01",
+        "transaccionId": "TRX-1",
+        "motivo": None,
+        "intentos": 1,
+        "duplicadosDescartados": 3,
+    }
+
+
+def test_un_pago_rechazado_trae_su_motivo_y_el_caso_sigue_aprobado(
+    cliente: TestClient, caso_aprobado, repo, ahora
+) -> None:  # type: ignore[no-untyped-def]
+    from siniestros.domain.siniestro.pago import EstadoPago, ResultadoPago
+
+    repo.pagos[caso_aprobado.id] = ResultadoPago(
+        caso_aprobado.id,
+        EstadoPago.RECHAZADO,
+        "IND-88-2026-0442-01",
+        None,
+        "BENEFICIARIO_NO_HABILITADO",
+        2,
+        0,
+        ahora,
+    )
+    cuerpo = cliente.get(f"/v1/siniestros/{caso_aprobado.id}", headers=CABECERAS).json()
+    assert cuerpo["estado"] == "APROBADO"
+    assert (cuerpo["pago"]["estado"], cuerpo["pago"]["motivo"]) == (
+        "RECHAZADO",
+        "BENEFICIARIO_NO_HABILITADO",
+    )
+
+
+def test_un_caso_que_no_esta_aprobado_no_tiene_pago(cliente: TestClient, caso_con_archivos) -> None:  # type: ignore[no-untyped-def]
+    caso, _ = caso_con_archivos
+    assert _pago(cliente, caso) is None

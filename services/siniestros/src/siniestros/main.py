@@ -6,11 +6,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
+from solventa_common.inbox import ConsumidorInbox, InboxPg, Receptor, ReceptorSqs, cliente_sqs
 from solventa_common.outbox import OutboxPg, PublicadorSns, RelayOutbox, cliente_sns
 from solventa_common.telemetry import instrumentar
 
 from siniestros.adapters.inbound.http import decisiones
 from siniestros.adapters.inbound.http import siniestros as http
+from siniestros.adapters.inbound.sqs.indemnizaciones import manejador_indemnizaciones
 from siniestros.adapters.outbound.base_de_datos import migrar
 from siniestros.adapters.outbound.evidencias_s3 import (
     AlmacenSinConfigurar,
@@ -19,7 +21,7 @@ from siniestros.adapters.outbound.evidencias_s3 import (
 )
 from siniestros.adapters.outbound.reloj import RelojSistema
 from siniestros.adapters.outbound.semilla_qa import sembrar_con_reintentos
-from siniestros.adapters.outbound.siniestros_pg import SiniestrosPg
+from siniestros.adapters.outbound.siniestros_pg import SiniestrosPg, TxSiniestrosPg
 from siniestros.adapters.outbound.soportes_requeridos import SoportesRequeridosJson
 from siniestros.application.siniestro.acceso import RegistrarAccesoDenegado
 from siniestros.application.siniestro.bandeja import ConsultarResumen, ListarBandeja
@@ -28,6 +30,7 @@ from siniestros.application.siniestro.detalle import ConsultarDetalle
 from siniestros.application.siniestro.enlace import EmitirEnlace
 from siniestros.application.siniestro.plazos import VencerPlazosSoporte
 from siniestros.application.siniestro.puertos import AlmacenEvidencias, Reloj
+from siniestros.application.siniestro.resultado_pago import RegistrarResultadoPago
 from siniestros.application.siniestro.tomar import TomarSiguiente
 from siniestros.application.siniestro.vistas import Plazos
 from siniestros.config import Settings
@@ -52,6 +55,18 @@ MENSAJE_PLAZOS_DETENIDOS = "plazos: la tarea se detuvo"
 MENSAJE_PLAZOS_SIN_PARAR = "plazos: la tarea no se detuvo a tiempo; se cancela"
 # Una pasada termina con su lote en curso: cabe en el plazo de ECS (30 s) con holgura.
 PARADA_PLAZOS_S = 10.0
+# HU-W23: el consumidor de `siniestros-indemnizaciones` atiende la parada entre ciclos: una espera
+# larga (10 s) más un lote de transacciones cortas. No escribe en el Outbox: se detiene a la vez que
+# los demás, antes del relay (fase 1: max(15, 10, 5) s; fase 2, el relay: 5 s; en total 20 s de los 30
+# de ECS).
+PARADA_CONSUMIDOR_S = 15.0
+MENSAJE_CONSUMIDOR_SIN_COLA = "inbox: sin cola de Indemnizacion*; no se refleja el pago"
+MENSAJE_CONSUMIDOR_SIN_BASE = "inbox: consumidor de indemnizaciones sin base; no se refleja el pago"
+MENSAJE_CONSUMIDOR_NO_ARRANCO = "inbox: el consumidor de indemnizaciones no arrancó"
+MENSAJE_CONSUMIDOR_DETENIDO = "inbox: el consumidor de indemnizaciones se detuvo"
+MENSAJE_CONSUMIDOR_SIN_PARAR = (
+    "inbox: el consumidor de indemnizaciones no se detuvo a tiempo; se cancela"
+)
 # Cada PutObject de la semilla sube un archivo pequeño: más holgado que el corte de las lecturas.
 SEMILLA_TIMEOUT_S_MS = 5000
 AMBIENTES_SIN_SEMILLA = frozenset({"prod", "production", "produccion"})
@@ -88,6 +103,19 @@ def armar_servicios(
         reloj=reloj,
         plazos=plazos,
     )
+
+
+def armar_consumidor_indemnizaciones(
+    pool: "AsyncConnectionPool[Any]", receptor: Receptor, reloj: Reloj
+) -> ConsumidorInbox[Any]:
+    """El consumidor de `siniestros-indemnizaciones` (HU-W23, DS3-25): inbox y resultado del pago
+    en la misma transacción (modo a), sobre el mismo pool."""
+
+    def abrir(tx: Any) -> TxSiniestrosPg:
+        return TxSiniestrosPg(tx.conexion)
+
+    manejador = manejador_indemnizaciones(RegistrarResultadoPago(), abrir)
+    return ConsumidorInbox(receptor, InboxPg(pool), manejador, reloj=reloj.ahora)
 
 
 def armar_almacen(settings: Settings) -> AlmacenEvidencias:
@@ -141,15 +169,20 @@ def _lanzar(
     return _Fondo(tarea, parada, limite_s, sin_parar)
 
 
-async def _detener(fondo: _Fondo | None) -> None:
-    """Señaliza la parada y espera hasta el límite; si no termina a tiempo, la cancela."""
-    if fondo is None:
-        return
-    fondo.parada.set()
-    try:
-        await asyncio.wait_for(fondo.tarea, fondo.limite_s)
-    except TimeoutError:
-        logger.warning(fondo.sin_parar, extra={"limit_s": fondo.limite_s})
+async def _detener(*fondos: _Fondo | None) -> None:
+    """Señaliza la parada a todas a la vez y espera a todas en paralelo, cada una hasta su límite;
+    la que no termina a tiempo se cancela."""
+    activos = [fondo for fondo in fondos if fondo is not None]
+    for fondo in activos:
+        fondo.parada.set()
+
+    async def esperar(fondo: _Fondo) -> None:
+        try:
+            await asyncio.wait_for(fondo.tarea, fondo.limite_s)
+        except TimeoutError:
+            logger.warning(fondo.sin_parar, extra={"limit_s": fondo.limite_s})
+
+    await asyncio.gather(*(esperar(fondo) for fondo in activos))
 
 
 def _relay_outbox(app: FastAPI, settings: Settings, reloj: Reloj) -> _Fondo | None:
@@ -207,6 +240,43 @@ def _plazos(app: FastAPI, settings: Settings, reloj: Reloj) -> _Fondo | None:
         limite_s=PARADA_PLAZOS_S,
         detenido=MENSAJE_PLAZOS_DETENIDOS,
         sin_parar=MENSAJE_PLAZOS_SIN_PARAR,
+    )
+
+
+def _consumidor_indemnizaciones(app: FastAPI, settings: Settings, reloj: Reloj) -> _Fondo | None:
+    """HU-W23 (DS3-25): consume `siniestros-indemnizaciones` y refleja el resultado del pago. Activo
+    solo si llega la cola; sin base o sin cliente SQS, lo registra y la app arranca igual."""
+    cola = settings.sqs_siniestros_indemnizaciones_url
+    if not cola:
+        logger.warning(
+            MENSAJE_CONSUMIDOR_SIN_COLA, extra={"missing": "SQS_SINIESTROS_INDEMNIZACIONES_URL"}
+        )
+        return None
+    pool = getattr(app.state, "pool", None)
+    if pool is None:
+        logger.error(MENSAJE_CONSUMIDOR_SIN_BASE, extra={"missing": "base"})
+        return None
+    espera = settings.consumidor_espera_larga_s
+    try:
+        receptor = ReceptorSqs(
+            cliente_sqs(
+                settings.aws_region, endpoint_url=settings.aws_endpoint_url, espera_larga_s=espera
+            ),
+            cola,
+            espera_larga_s=espera,
+            max_mensajes=settings.consumidor_max_mensajes,
+        )
+    except Exception as error:  # noqa: BLE001 - el mensaje puede traer la configuración
+        logger.error(MENSAJE_CONSUMIDOR_NO_ARRANCO, extra={"error_type": type(error).__name__})
+        return None
+    consumidor = armar_consumidor_indemnizaciones(pool, receptor, reloj)
+    return _lanzar(
+        app,
+        "consumidor_indemnizaciones",
+        consumidor.ejecutar,
+        limite_s=PARADA_CONSUMIDOR_S,
+        detenido=MENSAJE_CONSUMIDOR_DETENIDO,
+        sin_parar=MENSAJE_CONSUMIDOR_SIN_PARAR,
     )
 
 
@@ -285,16 +355,17 @@ def crear_app(
             relay: _Fondo | None = None
             semilla: _Fondo | None = None
             plazos: _Fondo | None = None
+            consumidor: _Fondo | None = None
             try:
                 relay = _relay_outbox(app, settings, reloj_activo)
                 semilla = _semilla_qa(app, settings, reloj_activo)
                 plazos = _plazos(app, settings, reloj_activo)
+                consumidor = _consumidor_indemnizaciones(app, settings, reloj_activo)
                 yield
             finally:
-                # Primero lo que escribe en el Outbox; el relay se detiene al final para publicar
-                # lo último que quedó escrito.
-                await _detener(plazos)
-                await _detener(semilla)
+                # Primero lo que escribe en el Outbox (y el consumidor, que no lo usa), a la vez; el
+                # relay se detiene al final para publicar lo último que quedó escrito.
+                await _detener(plazos, semilla, consumidor)
                 await _detener(relay)
 
     app = instrumentar(FastAPI(title=settings.service_name, lifespan=ciclo), settings)

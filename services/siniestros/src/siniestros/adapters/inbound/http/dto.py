@@ -6,7 +6,6 @@ clases son el contrato: `tests/contract/test_openapi.py` compara el YAML con `ap
 """
 
 from datetime import datetime
-from enum import StrEnum
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -34,6 +33,7 @@ from siniestros.domain.siniestro.modelos import (
     TipoEvidencia,
     TipoSoporte,
 )
+from siniestros.domain.siniestro.pago import EstadoPago
 
 TextoDecimal = Annotated[str, Field(pattern=r"^-?\d+(\.\d+)?$")]
 CodigoSiniestro = Annotated[str, Field(pattern=r"^88-[0-9]{4}-[0-9]{4,}$")]
@@ -41,13 +41,6 @@ NumeroPoliza = Annotated[str, Field(pattern=r"^[0-9]{3}-[0-9]{4}-[0-9]{6}$")]
 
 
 # --- Enumeraciones ------------------------------------------------------------------------------
-
-
-class EstadoPago(StrEnum):
-    SIN_PAGO = "SIN_PAGO"
-    PENDIENTE = "PENDIENTE"
-    CONFIRMADO = "CONFIRMADO"
-    RECHAZADO = "RECHAZADO"
 
 
 # --- DTO ----------------------------------------------------------------------------------------

@@ -14,6 +14,7 @@ from siniestros.adapters.inbound.http.dto import (
     EntradaHistorial,
     EvidenciaVista,
     LiquidacionDto,
+    PagoDto,
     PasoTramiteDto,
     ResumenBandejaSiniestros,
     ResumenSiniestro,
@@ -31,6 +32,7 @@ from siniestros.application.siniestro.vistas import (
     ResumenCaso,
 )
 from siniestros.domain.siniestro.modelos import CopiaPoliza, Ubicacion
+from siniestros.domain.siniestro.pago import PagoSiniestro
 from siniestros.domain.siniestro.transiciones import referencia_pago
 
 
@@ -125,6 +127,19 @@ def liquidacion_dto(liquidacion: LiquidacionAprobada) -> LiquidacionDto:
     )
 
 
+def pago_dto(pago: PagoSiniestro | None) -> PagoDto | None:
+    if pago is None:
+        return None
+    return PagoDto(
+        estado=pago.estado,
+        referencia=pago.referencia,
+        transaccion_id=pago.transaccion_id,
+        motivo=pago.motivo,
+        intentos=pago.intentos,
+        duplicados_descartados=pago.duplicados_descartados,
+    )
+
+
 def detalle_dto(detalle: DetalleCaso) -> DetalleSiniestro:
     s = detalle.resumen.siniestro
     base = resumen_dto(detalle.resumen).model_dump()
@@ -188,7 +203,7 @@ def detalle_dto(detalle: DetalleCaso) -> DetalleSiniestro:
         ],
         liquidacion=liquidacion_dto(detalle.liquidacion) if detalle.liquidacion else None,
         evento=None,
-        pago=None,
+        pago=pago_dto(detalle.pago),
         valor_reclamado=monto(s.valor_reclamado),
         referencia_pago_prevista=referencia_pago(s.codigo),
         plazo_soporte_vence_en=s.plazo_soporte_vence_en,

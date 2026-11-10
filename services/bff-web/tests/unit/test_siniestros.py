@@ -336,6 +336,7 @@ RUTAS = [
     ("POST", "/v1/siniestros/siguiente"),
     ("GET", f"/v1/siniestros/{SINIESTRO_ID}"),
     ("POST", f"/v1/siniestros/{SINIESTRO_ID}/evidencias/{EVIDENCIA_ID}/enlace"),
+    ("GET", f"/v1/siniestros/{SINIESTRO_ID}/pago"),
 ]
 IDEM = {"Idempotency-Key": "2b3f7a3e-77a0-4b8b-9d77-0e6f3b6e0a11"}
 
@@ -991,3 +992,235 @@ def test_la_decision_se_mide_con_su_operacion(
         _decidir(APROBAR)
     medida = next(r for r in caplog.records if getattr(r, "operation", None) == "siniestro.decidir")
     assert medida.result == "rechazado"  # type: ignore[attr-defined]
+
+
+# --- HU-W23: el pago del siniestro aprobado (H08, plan B de DS3-26) ------------------------------------
+RUTA_PAGO = f"/v1/siniestros/{SINIESTRO_ID}/pago"
+LIQUIDACION: dict[str, Any] = {
+    "moneda": "COP",
+    "valorReclamado": "2850000.00",
+    "deducible": "350000.00",
+    "valorIndemnizar": "2500000.00",
+    "referenciaPago": "IND-88-2026-0442-01",
+    "aprobadaEn": "2026-11-05T09:41:00Z",
+}
+
+
+def _entrada(accion: str, ocurrido: str, **cambios: Any) -> dict[str, Any]:
+    datos: dict[str, Any] = {
+        "id": str(uuid4()),
+        "accion": accion,
+        "estadoAnterior": None,
+        "estadoNuevo": None,
+        "actorId": None,
+        "actorRol": None,
+        "actorNombre": None,
+        "justificacion": None,
+        "ocurridoEn": ocurrido,
+    }
+    datos.update(cambios)
+    return datos
+
+
+def _aprobado(pago: dict[str, Any] | None, *extra: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **DETALLE,
+        "estado": "APROBADO",
+        "liquidacion": LIQUIDACION,
+        "pago": pago,
+        "historial": [
+            _entrada("REPORTADO", "2026-11-05T01:00:00Z"),
+            _entrada(
+                "APROBADO",
+                "2026-11-05T09:41:00Z",
+                estadoAnterior="EN_EVALUACION",
+                estadoNuevo="APROBADO",
+                actorId=SUB,
+                actorRol="ANALISTA_SINIESTROS",
+                actorNombre="Luis Mora",
+            ),
+            *extra,
+        ],
+    }
+
+
+PAGO_PENDIENTE = {
+    "estado": "PENDIENTE",
+    "referencia": "IND-88-2026-0442-01",
+    "transaccionId": None,
+    "motivo": None,
+    "intentos": 0,
+    "duplicadosDescartados": 0,
+}
+PAGO_CONFIRMADO = {
+    "estado": "CONFIRMADO",
+    "referencia": "IND-88-2026-0442-01",
+    "transaccionId": "TRX-889214477",
+    "motivo": None,
+    "intentos": 1,
+    "duplicadosDescartados": 0,
+}
+PAGO_RECHAZADO = {
+    "estado": "RECHAZADO",
+    "referencia": "IND-88-2026-0442-01",
+    "transaccionId": None,
+    "motivo": "BENEFICIARIO_NO_HABILITADO",
+    "intentos": 1,
+    "duplicadosDescartados": 0,
+}
+ENTRADA_PAGO_CONFIRMADO = _entrada(
+    "PAGO_CONFIRMADO", "2026-11-05T09:43:28Z", actorRol="SISTEMA_PAGOS"
+)
+
+
+def test_el_pago_pendiente_se_arma_solo_con_siniestros_y_el_nombre_del_cliente(
+    simulado: Simulado,
+) -> None:
+    detalle = _aprobado(PAGO_PENDIENTE)
+    simulado.responder = _json(200, detalle)
+    respuesta = _pedir("GET", RUTA_PAGO)
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json() == {
+        "siniestroId": SINIESTRO_ID,
+        "codigo": "88-2026-0442",
+        "estado": "APROBADO",
+        "clienteNombre": "Natalia González Ruiz",
+        "reportadoEn": "2026-11-05T01:00:00Z",
+        "compromisoHoras": 48,
+        "liquidacion": LIQUIDACION,
+        "cuentaMascarada": "****1004",
+        "autorizadoPor": "Luis Mora",
+        "historial": detalle["historial"],
+        "indemnizacion": None,  # `dinero` aún no informó: el portal muestra «esperando»
+    }
+    # Plan B: una llamada al detalle de siniestros y una al nombre; ni póliza ni dinero.
+    [pedido] = simulado.pedidos
+    assert pedido.url.path == f"/v1/siniestros/{SINIESTRO_ID}"
+    assert pedido.headers["X-Actor-Rol"] == "ANALISTA_SINIESTROS"
+    assert len(simulado.pedidos_clientes) == 1 and simulado.pedidos_consulta == []
+
+
+def test_el_pago_confirmado_trae_la_indemnizacion_con_su_confirmacion(simulado: Simulado) -> None:
+    simulado.responder = _json(200, _aprobado(PAGO_CONFIRMADO, ENTRADA_PAGO_CONFIRMADO))
+    cuerpo = _pedir("GET", RUTA_PAGO).json()
+    assert cuerpo["indemnizacion"] == {
+        "referencia": "IND-88-2026-0442-01",
+        "estado": "CONFIRMADO",
+        "monto": "2500000.00",
+        "moneda": "COP",
+        "transaccionId": "TRX-889214477",
+        "motivo": None,
+        "intentos": 1,
+        "duplicadosDescartados": 0,
+        "confirmadaEn": "2026-11-05T09:43:28Z",
+    }
+    assert cuerpo["historial"][-1]["accion"] == "PAGO_CONFIRMADO"
+
+
+def test_el_pago_rechazado_trae_el_motivo_y_ninguna_confirmacion(simulado: Simulado) -> None:
+    simulado.responder = _json(
+        200,
+        _aprobado(PAGO_RECHAZADO, _entrada("PAGO_RECHAZADO", "2026-11-05T09:43:30Z")),
+    )
+    cuerpo = _pedir("GET", RUTA_PAGO).json()
+    assert (
+        cuerpo["estado"] == "APROBADO"
+    )  # el siniestro sigue aprobado: el pago queda por gestionar
+    assert cuerpo["indemnizacion"]["estado"] == "RECHAZADO"
+    assert cuerpo["indemnizacion"]["motivo"] == "BENEFICIARIO_NO_HABILITADO"
+    assert cuerpo["indemnizacion"]["confirmadaEn"] is None
+
+
+def test_un_caso_que_no_esta_aprobado_no_tiene_pago_ordenado(
+    simulado: Simulado, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.INFO):
+        respuesta = _pedir("GET", RUTA_PAGO)  # el detalle por omisión está EN_EVALUACION
+    assert respuesta.status_code == 404
+    assert respuesta.json()["codigo"] == "INDEMNIZACION_NO_ENCONTRADA"
+    assert simulado.pedidos_clientes == []  # no se pide el nombre de un caso sin pago
+    medida = next(
+        r for r in caplog.records if getattr(r, "operation", None) == "indemnizacion.consultar"
+    )
+    assert medida.result == "rechazado"  # type: ignore[attr-defined]
+
+
+def test_un_siniestro_inexistente_pasa_como_404_en_el_pago(simulado: Simulado) -> None:
+    simulado.responder = _json(404, NO_ENCONTRADO)
+    respuesta = _pedir("GET", RUTA_PAGO)
+    assert (respuesta.status_code, respuesta.json()["codigo"]) == (404, "SINIESTRO_NO_ENCONTRADO")
+    assert simulado.pedidos_clientes == []
+
+
+def test_si_clientes_falla_el_nombre_del_pago_es_null(simulado: Simulado) -> None:
+    simulado.responder = _json(200, _aprobado(PAGO_PENDIENTE))
+    simulado.responder_clientes = _json(503, {})
+    respuesta = _pedir("GET", RUTA_PAGO)
+    assert respuesta.status_code == 200 and respuesta.json()["clienteNombre"] is None
+
+
+@pytest.mark.parametrize(
+    "cuerpo",
+    [
+        {**_aprobado(PAGO_PENDIENTE), "liquidacion": None},  # un aprobado sin liquidación
+        {**_aprobado(PAGO_PENDIENTE), "codigo": "mal"},
+        {**_aprobado(PAGO_CONFIRMADO), "pago": {**PAGO_CONFIRMADO, "intentos": "uno"}},
+        [],
+    ],
+)
+def test_un_cuerpo_fuera_del_contrato_es_503_en_el_pago(simulado: Simulado, cuerpo: Any) -> None:
+    simulado.responder = _json(200, cuerpo)
+    respuesta = _pedir("GET", RUTA_PAGO)
+    assert respuesta.status_code == 503 and respuesta.json()["codigo"] == "SERVICIO_NO_DISPONIBLE"
+
+
+def test_un_usuario_sin_el_grupo_no_ve_el_pago_y_se_avisa_con_el_recurso_siniestro(
+    simulado: Simulado,
+) -> None:
+    respuesta = _pedir("GET", RUTA_PAGO, _usuario("[asesores]"))
+    assert respuesta.status_code == 403
+    asyncio.run(esperar_avisos())
+    [aviso] = simulado.avisos
+    assert json.loads(aviso.content)["recurso"] == "SINIESTRO"
+    assert [p for p in simulado.pedidos if not p.url.path.endswith("/accesos-denegados")] == []
+
+
+def test_la_respuesta_no_lleva_la_cuenta_completa_ni_el_beneficiario(simulado: Simulado) -> None:
+    simulado.responder = _json(200, _aprobado(PAGO_CONFIRMADO, ENTRADA_PAGO_CONFIRMADO))
+    texto = _pedir("GET", RUTA_PAGO).text
+    assert "ben-sint-004" not in texto and "beneficiarioRef" not in texto
+    assert "****1004" in texto  # solo la cuenta enmascarada
+
+
+def test_la_consulta_del_pago_se_mide_con_su_operacion(
+    simulado: Simulado, caplog: pytest.LogCaptureFixture
+) -> None:
+    simulado.responder = _json(200, _aprobado(PAGO_PENDIENTE))
+    with caplog.at_level(logging.INFO):
+        _pedir("GET", RUTA_PAGO)
+    medida = next(
+        r for r in caplog.records if getattr(r, "operation", None) == "indemnizacion.consultar"
+    )
+    assert medida.result == "ok"  # type: ignore[attr-defined]
+
+
+def test_el_compromiso_viene_de_la_configuracion(
+    simulado: Simulado, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from bff_web.application.siniestros import vista_de_pago
+
+    assert vista_de_pago(_aprobado(PAGO_PENDIENTE), None, 72)["compromisoHoras"] == 72
+    monkeypatch.setenv("COMPROMISO_HORAS", "24")
+    from bff_web.config import Settings
+
+    assert Settings().compromiso_siniestros_horas == 24
+    monkeypatch.delenv("COMPROMISO_HORAS")
+    assert Settings().compromiso_siniestros_horas == 48
+
+
+def test_la_vista_sin_poliza_ni_historial_no_rompe_y_queda_sin_datos() -> None:
+    from bff_web.application.siniestros import vista_de_pago
+
+    vista = vista_de_pago({"id": "x", "estado": "APROBADO", "historial": None}, None, 48)
+    assert vista["cuentaMascarada"] is None and vista["autorizadoPor"] is None
+    assert vista["indemnizacion"] is None and vista["historial"] is None
