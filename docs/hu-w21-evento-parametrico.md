@@ -209,6 +209,18 @@ Un evento ya evaluado conserva su decisión original: reprocesarlo (H10, H11) us
 - `pagos-parametricos` crea la cobertura **solo si el campo viene**; sin él, la póliza no genera cobertura (queda en el Inbox y se ignora).
 - La ventana es la `vigencia` de la póliza (§3.1).
 
+### 5.0 El producto de QA `clima-lluvia` (W21-B04)
+
+`catalogo` publica un producto paramétrico de prueba con la semilla de QA (`CATALOGO_PRODUCTOS_QA`, ya encendida en `int`): `clima-lluvia`, versión `2026.11.1`, ramo `PARAMETRICO`, una cobertura `LLUVIA_ACUMULADA` y el bloque **opcional** `parametrico` del producto:
+
+```json
+"parametrico": {"tipoEvento": "LLUVIA_ACUMULADA", "unidad": "mm", "umbral": "120", "valorPago": "1400000.00", "versionRegla": "1"}
+```
+
+- El bloque es aditivo: columna `productos.parametrico` (migración `005`), campo opcional de `ProductoRespuesta` que **no se serializa si es nulo** (la respuesta y la caché de los demás productos no cambian) y validación al sembrar (tipo de evento conocido, su unidad, umbral y valor de pago positivos con el formato de `coberturaParametrica`, y la cobertura que paga).
+- Con la opción A, **`polizas` no lee el producto**: la cobertura de una póliza viaja en `PolizaEmitida`. Hoy el producto solo documenta la regla y sirve de dato de QA; sus reglas de prima (tasa 0,025 sobre 1 400 000 = prima de 35 000) coinciden con las pólizas de `eventos-parametricos.json`.
+- La zona y la ventana no son del producto: son de cada póliza (`coberturaParametrica.zona` y su `vigencia`).
+
 ### 5.1 Orden de los eventos de póliza (DS3-22)
 
 `coberturas_activas` (PK `poliza_id`) solo avanza con un orden **mayor**, para que una cancelación atrasada no reactive la cobertura. Como `polizas` no publica `aggregateVersion` (CF-S3-11), el orden es:

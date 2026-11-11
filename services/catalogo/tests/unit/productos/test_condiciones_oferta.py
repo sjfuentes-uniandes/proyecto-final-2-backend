@@ -130,7 +130,8 @@ def test_los_limites_de_la_vigencia_son_validos() -> None:
 
 def test_la_semilla_qa_trae_una_oferta_de_un_minuto() -> None:
     (producto, reglas), *otros = semillas(PRODUCTOS_QA)
-    assert otros == []
+    # HU-W21 agrega el producto paramétrico `clima-lluvia` a la misma semilla de QA.
+    assert [p.id for p, _ in otros] == ["clima-lluvia"]
     assert producto.id == "vida-hipotecario-qa-oferta-corta"
     (version, _, definicion), *_ = reglas
     assert version == "2026.10.1"
@@ -168,7 +169,10 @@ def test_sembrar_qa_publica_solo_los_productos_de_qa(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(productos_pg.psycopg, "connect", conectar)
     sembrar_qa("postgresql://qa")
     productos = [p[0] for s, p in conexion.sentencias if "INSERT INTO productos" in s]
-    assert (urls, productos) == (["postgresql://qa"], ["vida-hipotecario-qa-oferta-corta"])
+    assert (urls, productos) == (
+        ["postgresql://qa"],
+        ["vida-hipotecario-qa-oferta-corta", "clima-lluvia"],
+    )
 
 
 def test_sembrar_publica_las_dos_versiones_de_vida_hipotecario() -> None:

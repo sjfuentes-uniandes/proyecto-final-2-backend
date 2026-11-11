@@ -4,12 +4,20 @@ La forma (tipos, campos, decimales como texto, modo y escala del redondeo) la ga
 del borde (`esquema_prima.DefinicionReglasPrima`); aquí se validan las reglas entre sus partes.
 """
 
+import re
 from collections.abc import Mapping
 from decimal import Decimal
 from itertools import pairwise
 from typing import Any
 
 from catalogo.domain.productos.producto import Producto
+
+# HU-W21: cada tipo de evento paramétrico se mide en una sola unidad (el contrato de telemetría).
+UNIDAD_POR_TIPO_EVENTO = {"LLUVIA_ACUMULADA": "mm", "RETRASO_VUELO": "min"}
+# Los mismos formatos que `coberturaParametrica` en `PolizaEmitida.v1`: [0-9] y no \d, que admite
+# dígitos Unicode.
+UMBRAL = re.compile(r"[0-9]{1,9}(\.[0-9]{1,3})?")
+VALOR_PAGO = re.compile(r"[0-9]+(\.[0-9]{1,2})?")
 
 # Variables declaradas con las que una regla puede elegir un tramo.
 VARIABLES_SOPORTADAS = frozenset({"edad", "plazo_credito_meses", "suma_asegurada"})
@@ -103,3 +111,35 @@ def _oferta(oferta: Mapping[str, Any], producto: Producto) -> list[str]:
         if not 0 < Decimal(suma["porcentaje"]) <= 1:
             errores.append(f"SUMA_FUERA_DE_RANGO:{cobertura}")
     return errores
+
+
+def validar_parametrico(producto: Producto) -> tuple[str, ...]:
+    """Códigos de las reglas incumplidas del bloque `parametrico`, sin valores (HU-W21).
+
+    Un producto sin el bloque es válido. Con él: un tipo de evento conocido, su unidad, un umbral y
+    un valor de pago positivos, una versión de regla y la cobertura que paga (la de código igual al
+    tipo de evento).
+    """
+    regla = producto.parametrico
+    if regla is None:
+        return ()
+    errores: list[str] = []
+    unidad = UNIDAD_POR_TIPO_EVENTO.get(regla.tipo_evento)
+    if unidad is None:
+        errores.append("PARAMETRICO_TIPO_EVENTO_DESCONOCIDO")
+    elif regla.unidad != unidad:
+        errores.append("PARAMETRICO_UNIDAD_INCOHERENTE")
+    if not _decimal_positivo(regla.umbral, UMBRAL):
+        errores.append("PARAMETRICO_UMBRAL_INVALIDO")
+    if not _decimal_positivo(regla.valor_pago, VALOR_PAGO):
+        errores.append("PARAMETRICO_VALOR_PAGO_INVALIDO")
+    if not regla.version_regla.strip():
+        errores.append("PARAMETRICO_VERSION_REGLA_VACIA")
+    if regla.tipo_evento not in {c.codigo for c in producto.coberturas}:
+        errores.append("PARAMETRICO_SIN_COBERTURA")
+    return tuple(errores)
+
+
+def _decimal_positivo(texto: str, patron: re.Pattern[str]) -> bool:
+    """Texto decimal con el formato del contrato (los de `PolizaEmitida.coberturaParametrica`) y > 0."""
+    return patron.fullmatch(texto) is not None and Decimal(texto) > 0

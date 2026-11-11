@@ -1136,6 +1136,33 @@ components:
       - entre
       - en
       title: OperadorRegla
+    ParametricoDto:
+      properties:
+        tipoEvento:
+          type: string
+          title: Tipoevento
+        unidad:
+          type: string
+          title: Unidad
+        umbral:
+          type: string
+          title: Umbral
+        valorPago:
+          type: string
+          title: Valorpago
+        versionRegla:
+          type: string
+          title: Versionregla
+      type: object
+      required:
+      - tipoEvento
+      - unidad
+      - umbral
+      - valorPago
+      - versionRegla
+      title: ParametricoDto
+      description: 'HU-W21: la regla de un producto paramétrico. La zona y la ventana
+        son de cada póliza.'
     ProductoRespuesta:
       properties:
         id:
@@ -1173,6 +1200,10 @@ components:
             $ref: '#/components/schemas/CoberturaDto'
           type: array
           title: Coberturas
+        parametrico:
+          anyOf:
+          - $ref: '#/components/schemas/ParametricoDto'
+          - type: 'null'
       type: object
       required:
       - id
