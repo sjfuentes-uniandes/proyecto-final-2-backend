@@ -40,7 +40,8 @@ cola() {
   echo "cola ${PREFIJO}-${nombre} lista"
 }
 
-# --- HU-W19: bucket de evidencias de siniestros (solo `siniestros` lo usa) ---
+# --- HU-W19: bucket de evidencias de siniestros (`siniestros`, y HU-W21: `adaptador-telemetria`
+# archiva los originales solo bajo telemetria/) ---
 awslocal s3api head-bucket --bucket "${PREFIJO}-evidencias" 2>/dev/null \
   || awslocal s3api create-bucket --bucket "${PREFIJO}-evidencias" --region "$REGION" >/dev/null
 echo "bucket ${PREFIJO}-evidencias listo"

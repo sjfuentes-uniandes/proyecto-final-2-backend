@@ -108,6 +108,18 @@ Para reprocesar un evento que ya salió de `parametricos-eventos` (4 días) y de
 
 Con el mismo `eventId`, el Inbox y la clave única `(evento_id, poliza_id)` descartan lo que ya se procesó: el reproceso es idempotente.
 
+### 1.5 Configuración de `adaptador-telemetria`
+
+| Variable | Por omisión | Qué es |
+| --- | --- | --- |
+| `ALLY_TELEMETRIA_CREDENTIALS` | — | JSON `{"hmac_secret": …}`; sin un secreto válido el servicio arranca, lo registra y rechaza todo envío con 401 (falla cerrada) |
+| `TELEMETRIA_FUENTES` | `IDEAM-SIM,AEROCIVIL-SIM` | Fuentes autorizadas, separadas por comas |
+| `SOLVENTA_DESFASE_MAX_S` | `300` | Desfase máximo de la marca de tiempo, en cualquier sentido |
+| `SOLVENTA_S3_TIMEOUT_MS` | `300` (máximo 700) | Corte del `PutObject` del original, sin reintentos |
+| `EVIDENCIAS_BUCKET`, `EVIDENCIAS_BUCKET_SSE`, `TELEMETRIA_ARCHIVO_PREFIJO` | —, `AES256`, `telemetria/` | Bucket de evidencias (HU-S03); sin bucket no se acepta ningún evento (503) |
+| `OUTBOX_ENABLED`, `EVENTS_TOPIC_ARN` | `false`, — | Relay del Outbox hacia el tópico de eventos de negocio |
+| `DB_*`, `SOLVENTA_DB_POOL_SIZE` | — , `5` | Base `adaptador_telemetria` (registro, Outbox e Inbox); `migrar()` aplica `001_telemetria.sql` al arrancar |
+
 ## 2. Contrato del evento externo (`EventoExterno` v1)
 
 | Campo | Regla |

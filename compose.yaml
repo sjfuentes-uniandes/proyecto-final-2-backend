@@ -341,6 +341,18 @@ services:
       DB_HOST: postgres
       # Secreto sintético solo para el ambiente local (en AWS viene de Secrets Manager).
       ALLY_TELEMETRIA_CREDENTIALS: '{"hmac_secret":"local-sintetico"}'
+      # HU-W21: el original de cada evento va al bucket de evidencias (LocalStack), bajo
+      # telemetria/, y el Outbox publica en el tópico local. Los recursos los crea
+      # scripts/dev/localstack-init.sh; las credenciales son las ficticias de LocalStack.
+      EVIDENCIAS_BUCKET: solventa-local-evidencias
+      EVIDENCIAS_BUCKET_SSE: AES256
+      TELEMETRIA_ARCHIVO_PREFIJO: telemetria/
+      TELEMETRIA_FUENTES: IDEAM-SIM,AEROCIVIL-SIM
+      OUTBOX_ENABLED: "true"
+      EVENTS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:solventa-local-eventos-negocio
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
 
 volumes:
   pgdata:
