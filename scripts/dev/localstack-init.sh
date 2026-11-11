@@ -55,3 +55,10 @@ cola "siniestros-indemnizaciones" 30 '{"eventType":[{"prefix":"Indemnizacion"}]}
 # exacto, como en catalog.tf). La visibilidad de 60 s es la de `dinero-aceptaciones`: un pago de
 # hasta 6,5 s por mensaje cabe de sobra. ---
 cola "dinero-indemnizaciones" 60 '{"eventType":["SiniestroAprobado"]}'
+
+# --- HU-W21: la telemetría válida y la copia local de coberturas de `pagos-parametricos`. Los
+# filtros y la visibilidad (30 s) son los de catalog.tf: `parametricos-eventos` recibe solo
+# EventoParametricoObservado (filtro exacto) y `parametricos-polizas`, los Poliza* (prefijo). Cada
+# una con su DLQ (<cola>-dlq): la de `parametricos-eventos` es la que lee la cola de descarte (H10) ---
+cola "parametricos-eventos" 30 '{"eventType":["EventoParametricoObservado"]}'
+cola "parametricos-polizas" 30 '{"eventType":[{"prefix":"Poliza"}]}'

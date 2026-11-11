@@ -326,6 +326,19 @@ services:
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
       DB_HOST: postgres
       SINIESTROS_URL: http://siniestros:8080
+      # HU-W21: las dos colas de entrada (con su DLQ, la de eventos la lee la cola de descarte H10),
+      # el Outbox hacia el tópico local y las credenciales ficticias de LocalStack. Los recursos los
+      # crea scripts/dev/localstack-init.sh. SQS_CONCURRENCIA dimensiona también el pool de
+      # conexiones (DB_POOL_SIZE solo puede subirlo).
+      SQS_PARAMETRICOS_EVENTOS_URL: http://localstack:4566/000000000000/solventa-local-parametricos-eventos
+      SQS_PARAMETRICOS_EVENTOS_DLQ_URL: http://localstack:4566/000000000000/solventa-local-parametricos-eventos-dlq
+      SQS_PARAMETRICOS_POLIZAS_URL: http://localstack:4566/000000000000/solventa-local-parametricos-polizas
+      SQS_CONCURRENCIA: "10"
+      OUTBOX_ENABLED: "true"
+      EVENTS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:solventa-local-eventos-negocio
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
 
   # Entrada de telemetría con firma HMAC (D5) y Outbox propio (ConexionTelemetria --> PublicadoresOutbox).
   adaptador-telemetria:

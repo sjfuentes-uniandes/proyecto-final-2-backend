@@ -196,13 +196,30 @@ Los casos de [`eventos-parametricos.json`](../contracts/datos-sinteticos/eventos
 
 Los envíos rechazados (firma, marca de tiempo, contrato) y el duplicado no producen evaluación; el duplicado tampoco una segunda fila de Outbox.
 
+### 3.4 Verificación de H11 (W21-B12)
+
+`VerificacionesPg` implementa el puerto `Verificaciones` de `application/descartes.py` con la copia local, sin llamadas a otros servicios. Para un mensaje de la DLQ lee su `tipoEvento`, `zona`, `observadoEn`, `eventoId` y, si trae una, la póliza (`polizaId` o `numeroPoliza`), y responde lo que el portal muestra:
+
+| Clave | Significa |
+| --- | --- |
+| `coberturaActiva` | Hay una cobertura `ACTIVA` del tipo y la zona (o la de la póliza nombrada) |
+| `polizaVigente` | Alguna de ellas tiene la ventana `[vigenteDesde, vigenteHasta)` sobre el instante observado |
+| `pagoPrevio` | El evento ya tiene un **siniestro** (W22 llena `activaciones.siniestro_id`). Una activación `PENDIENTE` no es un pago: reprocesar no la duplicaría (clave `(evento_id, poliza_id)`) |
+| `umbral`, `valorIndemnizar` | Los de la cobertura que aplica (la vigente, si hay), como texto: `120` y `1400000.00` |
+
+Si el mensaje no dice de qué evento es (ni tipo y zona, ni póliza), o la base falla, no hay verificación (`null`): verificar nunca bloquea el reproceso.
+
+### 3.5 Evaluación dirigida a una póliza (causas de H10)
+
+La fuente no sabe de pólizas, así que un `EventoParametricoObservado` no trae `polizaId`. Si un reproceso dirigido lo agrega, la evaluación se hace **solo contra esa póliza**, de cualquier estado y zona: salen `POLIZA_NO_ACTIVA` y `FUERA_DE_ZONA`, y si la póliza no está en la copia o no tiene regla el manejador lanza `PolizaInexistente` o `CoberturaInexistente` (el consumidor anota el nombre del tipo y H10 muestra `REFERENCIA_INEXISTENTE`, «La póliza referida no existe»). Sin `polizaId`, ninguna de las dos se lanza.
+
 ## 4. Idempotencia
 
 | Nivel | Mecanismo | Resultado |
 | --- | --- | --- |
 | `adaptador-telemetria` | `eventos_recibidos` con PK `evento_id`, `ON CONFLICT` | Reenvío → 200 con el mismo `eventoId`; una sola fila de Outbox |
 | `parametricos-eventos` | Inbox por `eventId` (= `eventoId`) | El mismo mensaje entregado dos veces → una sola evaluación (AC4) |
-| `pagos-parametricos` | `UNIQUE (evento_id, poliza_id)` en `evaluaciones` y `activaciones`; PK `evento_id` en `eventos_evaluados` | Aun si el Inbox fallara, no hay dos decisiones por póliza |
+| `pagos-parametricos` | `UNIQUE (evento_id, poliza_id)` en `evaluaciones` y `activaciones`; PK `evento_id` en `eventos_evaluados` (que además cuenta `duplicados` y conserva la decisión original) | Aun si el Inbox fallara o se purgara, no hay dos decisiones por póliza |
 
 Un evento ya evaluado conserva su decisión original: reprocesarlo (H10, H11) usa el mismo `eventId`, así que no la rehace.
 
@@ -259,6 +276,19 @@ Los cinco escenarios de `ordenCoberturas` en [`eventos-parametricos.json`](../co
 - El mismo envío con una marca vieja se rechaza por desfase (SEC-W21-01, repetición); la firma de un envío no sirve para otro cuerpo ni para otra marca.
 - La fuente y el `idExterno` quedan en la evaluación: la trazabilidad del origen de cada decisión.
 - Datos 100 % sintéticos. El secreto de desarrollo vive solo en `compose.yaml`; el de INT, en Secrets Manager (no se lee desde aquí).
+
+## 6.1 Probarlo en local
+
+`scripts/dev/firmar_evento.py` es la fuente de telemetría sintética: firma y envía los casos de `eventos-parametricos.json` y compara cada respuesta con lo esperado (nunca imprime el secreto ni la firma).
+
+```bash
+export ALLY_TELEMETRIA_CREDENTIALS='{"hmac_secret":"local-sintetico"}'   # el de compose.yaml
+uv run python scripts/dev/firmar_evento.py --todos                      # contra localhost:8093
+uv run python scripts/dev/firmar_evento.py --caso valido --caso duplicado
+uv run python scripts/dev/firmar_evento.py --todos --sufijo corrida-42 --url https://<api>/telemetria/v1/eventos
+```
+
+`--sufijo` se agrega al `idExterno`: sin él, repetir un caso es un reenvío (200) y no un evento nuevo (202). Para que haya con qué evaluar, las coberturas de `coberturas` se publican en el tópico como las emitiría `polizas` (la cola `parametricos-polizas`). El recorrido completo, con contenedores desechables, está en `docs/sprint_3/evidencias/hu-w21/b4_recorrido_local/recorrido_w21.py`.
 
 ## 7. Pruebas de la historia (plan §2.3, Fase 3)
 
