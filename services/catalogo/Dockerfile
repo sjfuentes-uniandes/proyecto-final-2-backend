@@ -5,7 +5,7 @@ WORKDIR /app
 COPY . .
 RUN uv sync --frozen --no-dev --no-editable --package catalogo
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 ENV PYTHONUNBUFFERED=1 PORT=8080 PATH="/app/.venv/bin:$PATH"
 WORKDIR /app
 COPY --from=build /app/.venv /app/.venv
