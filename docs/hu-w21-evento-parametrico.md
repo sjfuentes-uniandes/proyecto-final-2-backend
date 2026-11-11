@@ -300,7 +300,7 @@ uv run python scripts/dev/firmar_evento.py --todos --sufijo corrida-42 --url htt
 | MT-W21-01 | N2 | `adaptador-telemetria` con PostgreSQL y LocalStack S3: archivo, Outbox, duplicado y rechazos sin efectos |
 | MT-W21-02 | N2 | `pagos-parametricos` con PostgreSQL y LocalStack SNS/SQS, alimentado con `eventos-parametricos.json`, incluido el envenenado que termina en la DLQ |
 | CT-W21-01 | N2 | Esquemas de los dos eventos, `test_openapi` de `adaptador-telemetria` y `PolizaEmitida.v1` con `coberturaParametrica` |
-| E2E-W21-01 | N3 | Firma y envía a INT cada caso y verifica cada decisión (`tests/e2e/test_hu_w21_r5_evaluacion.py`; requiere el despliegue de INT y el secreto de prueba) |
+| E2E-W21-01 | N3 | Firma y envía a INT cada caso y verifica cada decisión (`tests/e2e/test_hu_w21_r5_evaluacion.py`; requiere el despliegue de INT y el secreto de prueba). C01 y C02 (respuestas HTTP) solo piden `E2E_TELEMETRIA_SECRETO`; C03 (la decisión de cada evento en los lotes de auditoría) pide además `E2E_PUBLICAR_COBERTURAS=1`, que **publica las coberturas sintéticas en el tópico de INT**, y credenciales de AWS. Cada ejecución usa un sufijo propio en el `idExterno` |
 | SEC-W21-01 | Seguridad | Repetición con firma vieja; secreto, firma y cuerpo fuera de los logs; trazabilidad del origen |
 
 ## 8. Lo que queda para otras historias
