@@ -14,6 +14,9 @@
   HU-W17 (17.8b), aditivo y obligatorio: `ramo` y `coberturas`, las de la oferta aceptada
   (instantánea de la decisión, DS2-10), no las del catálogo vigente: `consulta` no llama a
   `catalogo`.
+  HU-W21 (DS3-20, opción A), aditivo y opcional: `coberturaParametrica`, la regla de una póliza
+  paramétrica para `pagos-parametricos`. **`polizas` todavía no la llena** (siempre `null`): la
+  emisión de la cobertura paramétrica queda para la sincronización final del Sprint 3.
 
 Los esquemas publicados se regeneran con:
     uv run python -m polizas.adapters.outbound.eventos
@@ -21,6 +24,7 @@ Los esquemas publicados se regeneran con:
 
 import json
 from datetime import date, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
@@ -38,6 +42,9 @@ POLIZA_EMITIDA = "PolizaEmitida"
 # Como `RecaudoConfirmado` (dinero) y la huella de la evidencia (aceptaciones).
 _TEXTO_DECIMAL = r"^[0-9]+(\.[0-9]{1,2})?$"
 _HUELLA = r"^sha256:[0-9a-f]{64}$"
+# HU-W21: el umbral es un valor observado (texto decimal, hasta 3 decimales), no un monto.
+_UMBRAL = r"^[0-9]{1,9}(\.[0-9]{1,3})?$"
+_ZONA = r"^[A-Z0-9]{2,16}$"
 
 
 class _Evento(BaseModel):
@@ -138,6 +145,30 @@ class FirmaV1(_Evento):
     sello_tiempo: AwareDatetime
 
 
+class TipoEventoParametrico(StrEnum):
+    LLUVIA_ACUMULADA = "LLUVIA_ACUMULADA"
+    RETRASO_VUELO = "RETRASO_VUELO"
+
+
+class UnidadParametrica(StrEnum):
+    MM = "mm"
+    MIN = "min"
+
+
+class CoberturaParametricaV1(_Evento):
+    """HU-W21 (DS3-20, opción A): la regla que `pagos-parametricos` evalúa contra cada evento
+    externo. La ventana es la `vigencia` de la póliza; `valorPago` es lo que se indemniza si el
+    evento activa la cobertura."""
+
+    tipo_evento: TipoEventoParametrico
+    zona: Annotated[str, Field(pattern=_ZONA, description="Municipio DANE o código de vuelo")]
+    umbral: Annotated[str, Field(pattern=_UMBRAL)]
+    unidad: UnidadParametrica
+    valor_pago: Annotated[str, Field(pattern=_TEXTO_DECIMAL)]
+    moneda: Annotated[str, Field(pattern=r"^[A-Z]{3}$")]
+    version_regla: Annotated[str, Field(min_length=1, max_length=32)]
+
+
 class PolizaEmitidaV1(_Evento):
     """Póliza ACTIVA, una por aceptación; si se reentrega, apunta al mismo documento. Sin nombres,
     documentos de identidad ni datos de contacto."""
@@ -160,6 +191,8 @@ class PolizaEmitidaV1(_Evento):
     documento: DocumentoV1
     firma: FirmaV1
     emitida_en: AwareDatetime
+    # HU-W21 (DS3-20, opción A): aditivo y opcional. `polizas` no lo llena todavía (siempre null).
+    cobertura_parametrica: CoberturaParametricaV1 | None = None
 
 
 class SobreEvento[P: DecisionSuscripcionRegistradaV1 | OfertaAceptadaV1 | PolizaEmitidaV1](_Evento):
