@@ -1,5 +1,6 @@
-"""Pacto consumidor `dinero` → proveedor `adaptador-pagos` para el cobro (HU-W16, 16.10) y la
-consulta de la conciliación (16.11).
+"""Pacto consumidor `dinero` → proveedor `adaptador-pagos` para el cobro (HU-W16, 16.10), la
+consulta de la conciliación (16.11) y, desde HU-W23, el desembolso de la indemnización y su
+consulta.
 
 Lo genera `make test-contract SERVICE=dinero` en `contracts/pact/dinero-adaptador-pagos.json`. Cada
 interacción ejercita el adaptador real (`AdaptadorPagosHttp.cobrar` o `.consultar`) contra el mock
@@ -10,6 +11,12 @@ Solo lo que el proveedor promete: en el cobro, `200 APROBADO` y `200 RECHAZADO`;
 (`GET /v1/cobros/{claveRecaudo}?pagadorRef`), además, `404 COBRO_NO_ENCONTRADO`. Los timeouts, los
 5xx y los cuerpos fuera de contrato van en `tests/unit/recaudo/test_pagos_http.py` y en las de
 módulo.
+
+Desembolsos (HU-W23): `POST /v1/desembolsos` con `referencia` (`IND-<codigo>-01`), el monto como
+texto decimal, `COP` y el `beneficiarioRef` sintético: `200 CONFIRMADO` (con `transaccionId`) y
+`200 RECHAZADO` (con `motivo`); y `GET /v1/desembolsos/{referencia}?beneficiarioRef` con `200
+CONFIRMADO`, `200 RECHAZADO` y `404 DESEMBOLSO_NO_ENCONTRADO`. Cada interacción ejercita el
+cliente real (`AdaptadorPagosHttp.desembolsar` y `.consultar_desembolso`, R-113).
 """
 
 from collections.abc import Iterator
@@ -20,6 +27,13 @@ from uuid import UUID
 
 import pytest
 from dinero.adapters.outbound.pagos_http import AdaptadorPagosHttp
+from dinero.application.indemnizacion.puertos import (
+    ConsultaDesembolso,
+    DesembolsoConfirmado,
+    DesembolsoNoEncontrado,
+    DesembolsoRechazado,
+    SolicitudDesembolso,
+)
 from dinero.application.recaudo.puertos import (
     CobroAprobado,
     CobroNoEncontrado,
@@ -230,3 +244,195 @@ async def test_consulta_de_un_cobro_que_no_existe(pacto: Pact) -> None:
     with pacto.serve() as servidor:
         resultado = await _consultar(str(servidor.url), CLAVE_NO_ENCONTRADA, C07)
     assert resultado == CobroNoEncontrado()
+
+
+# --- HU-W23: desembolso de la indemnización y su consulta -------------------------------------------
+# Beneficiarios sintéticos del simulador (ADR 0015): `ben-sint-001` confirma, `ben-sint-rechaza`
+# rechaza y `ben-sint-caido` nunca recibió la orden.
+BEN_CONFIRMA = "ben-sint-001"
+BEN_RECHAZA = "ben-sint-rechaza"
+BEN_CAIDO = "ben-sint-caido"
+REF_CONFIRMADA = "IND-88-2026-0442-01"
+REF_RECHAZADA = "IND-88-2026-0443-01"
+REF_CONSULTA_CONFIRMADA = "IND-88-2026-0444-01"
+REF_CONSULTA_RECHAZADA = "IND-88-2026-0445-01"
+REF_NO_ENCONTRADA = "IND-88-2026-0446-01"
+
+
+def _orden(pacto: Pact, descripcion: str, estado: str, referencia: str, beneficiario: str) -> Any:
+    return (
+        pacto.upon_receiving(descripcion)
+        .given(estado)
+        .with_request("POST", "/v1/desembolsos")
+        .with_header("X-Correlation-Id", CORRELACION)
+        .with_body(
+            {
+                "referencia": referencia,
+                "monto": "2500000.00",
+                "moneda": "COP",
+                "beneficiarioRef": beneficiario,
+            },
+            content_type="application/json",
+        )
+    )
+
+
+async def _ordenar(url: str, referencia: str, beneficiario: str) -> Any:
+    async with correlation.cliente_async() as cliente:
+        return await AdaptadorPagosHttp(cliente, url, 6500).desembolsar(
+            SolicitudDesembolso(
+                referencia=referencia,
+                monto=Decimal("2500000.00"),
+                moneda="COP",
+                beneficiario_ref=beneficiario,
+                correlation_id=CORRELACION,
+            )
+        )
+
+
+def _consulta_desembolso(
+    pacto: Pact, descripcion: str, estado: str, referencia: str, beneficiario: str
+) -> Any:
+    return (
+        pacto.upon_receiving(descripcion)
+        .given(estado)
+        .with_request("GET", f"/v1/desembolsos/{referencia}")
+        .with_query_parameter("beneficiarioRef", beneficiario)
+        .with_header("X-Correlation-Id", CORRELACION)
+    )
+
+
+async def _consultar_desembolso(url: str, referencia: str, beneficiario: str) -> Any:
+    async with correlation.cliente_async() as cliente:
+        return await AdaptadorPagosHttp(cliente, url, 6500).consultar_desembolso(
+            ConsultaDesembolso(
+                referencia=referencia, beneficiario_ref=beneficiario, correlation_id=CORRELACION
+            )
+        )
+
+
+async def test_desembolso_confirmado(pacto: Pact) -> None:
+    (
+        _orden(
+            pacto,
+            "una orden de desembolso que el proveedor confirma",
+            "el proveedor de pagos confirma el desembolso",
+            REF_CONFIRMADA,
+            BEN_CONFIRMA,
+        )
+        .will_respond_with(200)
+        .with_body(
+            {
+                # La misma referencia que se envió: dinero no acepta la orden de otra.
+                "referencia": REF_CONFIRMADA,
+                "estado": "CONFIRMADO",
+                "transaccionId": match.like("TRX-SINT-1"),
+                "motivo": None,
+            },
+            content_type="application/json",
+        )
+    )
+    with pacto.serve() as servidor:
+        resultado = await _ordenar(str(servidor.url), REF_CONFIRMADA, BEN_CONFIRMA)
+    assert resultado == DesembolsoConfirmado("TRX-SINT-1")
+
+
+async def test_desembolso_rechazado(pacto: Pact) -> None:
+    (
+        _orden(
+            pacto,
+            "una orden de desembolso que el proveedor rechaza",
+            "el proveedor de pagos rechaza el desembolso",
+            REF_RECHAZADA,
+            BEN_RECHAZA,
+        )
+        .will_respond_with(200)
+        .with_body(
+            {
+                "referencia": REF_RECHAZADA,
+                "estado": "RECHAZADO",
+                "transaccionId": None,
+                "motivo": match.like("BENEFICIARIO_NO_HABILITADO"),
+            },
+            content_type="application/json",
+        )
+    )
+    with pacto.serve() as servidor:
+        resultado = await _ordenar(str(servidor.url), REF_RECHAZADA, BEN_RECHAZA)
+    assert resultado == DesembolsoRechazado(
+        motivo="BENEFICIARIO_NO_HABILITADO", transaccion_id=None
+    )
+
+
+async def test_consulta_de_un_desembolso_confirmado(pacto: Pact) -> None:
+    (
+        _consulta_desembolso(
+            pacto,
+            "una consulta de un desembolso que el proveedor confirmó",
+            "el proveedor de pagos tiene el desembolso confirmado",
+            REF_CONSULTA_CONFIRMADA,
+            BEN_CONFIRMA,
+        )
+        .will_respond_with(200)
+        .with_body(
+            {
+                "referencia": REF_CONSULTA_CONFIRMADA,
+                "estado": "CONFIRMADO",
+                "transaccionId": match.like("TRX-SINT-1"),
+                "motivo": None,
+            },
+            content_type="application/json",
+        )
+    )
+    with pacto.serve() as servidor:
+        resultado = await _consultar_desembolso(
+            str(servidor.url), REF_CONSULTA_CONFIRMADA, BEN_CONFIRMA
+        )
+    assert resultado == DesembolsoConfirmado("TRX-SINT-1")
+
+
+async def test_consulta_de_un_desembolso_rechazado(pacto: Pact) -> None:
+    (
+        _consulta_desembolso(
+            pacto,
+            "una consulta de un desembolso que el proveedor rechazó",
+            "el proveedor de pagos tiene el desembolso rechazado",
+            REF_CONSULTA_RECHAZADA,
+            BEN_RECHAZA,
+        )
+        .will_respond_with(200)
+        .with_body(
+            {
+                "referencia": REF_CONSULTA_RECHAZADA,
+                "estado": "RECHAZADO",
+                "transaccionId": None,
+                "motivo": match.like("BENEFICIARIO_NO_HABILITADO"),
+            },
+            content_type="application/json",
+        )
+    )
+    with pacto.serve() as servidor:
+        resultado = await _consultar_desembolso(
+            str(servidor.url), REF_CONSULTA_RECHAZADA, BEN_RECHAZA
+        )
+    assert resultado == DesembolsoRechazado(
+        motivo="BENEFICIARIO_NO_HABILITADO", transaccion_id=None
+    )
+
+
+async def test_consulta_de_un_desembolso_que_no_existe(pacto: Pact) -> None:
+    """dinero solo lee `codigo`: el resto del cuerpo de error no es parte de lo que necesita."""
+    (
+        _consulta_desembolso(
+            pacto,
+            "una consulta de un desembolso que nunca llegó al proveedor",
+            "el proveedor de pagos no tiene el desembolso",
+            REF_NO_ENCONTRADA,
+            BEN_CAIDO,
+        )
+        .will_respond_with(404)
+        .with_body({"codigo": "DESEMBOLSO_NO_ENCONTRADO"}, content_type="application/json")
+    )
+    with pacto.serve() as servidor:
+        resultado = await _consultar_desembolso(str(servidor.url), REF_NO_ENCONTRADA, BEN_CAIDO)
+    assert resultado == DesembolsoNoEncontrado()

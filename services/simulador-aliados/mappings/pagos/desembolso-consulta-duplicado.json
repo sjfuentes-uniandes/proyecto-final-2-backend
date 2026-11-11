@@ -1,0 +1,36 @@
+{
+  "name": "pagos consulta de desembolso, duplicado: el mismo transaccionId",
+  "request": {
+    "method": "GET",
+    "urlPath": "/pagos/v1/desembolsos",
+    "queryParameters": {
+      "beneficiario": {
+        "matches": "^ben-sint-duplicado$"
+      },
+      "referencia": {
+        "matches": "IND-88-[0-9]{4}-[0-9]{4,}-[0-9]{2}"
+      }
+    },
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "referencia": "{{request.query.referencia}}",
+      "estado": "CONFIRMADO",
+      "transaccionId": "TRX-SINT-DUPLICADO",
+      "motivo": null
+    },
+    "transformers": [
+      "response-template"
+    ],
+    "fixedDelayMilliseconds": 50
+  }
+}

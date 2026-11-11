@@ -8,15 +8,22 @@ from typing import TYPE_CHECKING, Any
 import httpx
 from fastapi import FastAPI
 from solventa_common import correlation
+from solventa_common.errors import registrar_manejadores
 from solventa_common.inbox import ConsumidorInbox, InboxPg, Receptor, ReceptorSqs, cliente_sqs
 from solventa_common.outbox import OutboxPg, PublicadorSns, RelayOutbox, cliente_sns
 from solventa_common.telemetry import instrumentar
 
+from dinero.adapters.inbound.http import indemnizaciones
 from dinero.adapters.inbound.sqs.oferta_aceptada import manejador_oferta_aceptada
-from dinero.adapters.outbound.outbox_pg import OutboxRecaudosPg
+from dinero.adapters.inbound.sqs.siniestro_aprobado import manejador_siniestro_aprobado
+from dinero.adapters.outbound.indemnizaciones_pg import IndemnizacionesPg
+from dinero.adapters.outbound.outbox_pg import OutboxIndemnizacionesPg, OutboxRecaudosPg
 from dinero.adapters.outbound.pagos_http import AdaptadorPagosHttp
 from dinero.adapters.outbound.recaudos_pg import RecaudosPg
 from dinero.adapters.outbound.reloj import RelojSistema
+from dinero.application.indemnizacion.conciliar import ConciliarIndemnizaciones
+from dinero.application.indemnizacion.consultar import ConsultarIndemnizaciones
+from dinero.application.indemnizacion.pagar import PagarIndemnizacion
 from dinero.application.recaudo.conciliar import ConciliarRecaudos
 from dinero.application.recaudo.puertos import Reloj
 from dinero.application.recaudo.recaudar import RecaudarPrima
@@ -37,6 +44,11 @@ if TYPE_CHECKING:
 #     consulta y, si el cobro no existe, un reintento: 2 × 6,5 s.
 # - Fase 2: el relay, 5 s, para publicar los eventos del último cobro y de la última conciliación.
 #   Un ciclo normal tarda ms; uno cortado hace rollback y se republica (al menos una vez).
+# HU-W23 suma, a esas mismas dos fases, el consumidor de `SiniestroAprobado` (límite de 20 s, como el
+# de ofertas: mismo lote, misma espera larga y el mismo pago de hasta 6,5 s) y la conciliación de
+# indemnizaciones (límite de 15 s, como la de recaudos: una consulta más un reintento por
+# movimiento). Las cuatro tareas se señalizan a la vez y se esperan en paralelo: la fase 1 sigue
+# durando max(20, 15) s.
 # max(20, 15) + 5 = 25 s, con 5 s de margen para uvicorn y los cierres. En serie serían 40 s.
 PARADA_CONSUMIDOR_S = 20.0
 PARADA_CONCILIACION_S = 15.0
@@ -54,6 +66,23 @@ MENSAJE_CONSUMIDOR_SIN_PARAR = "inbox: el consumidor no se detuvo a tiempo; se c
 MENSAJE_CONCILIACION_SIN_BASE = "conciliacion: sin base; no se concilia"
 MENSAJE_CONCILIACION_DETENIDA = "conciliacion: la conciliación se detuvo"
 MENSAJE_CONCILIACION_SIN_PARAR = "conciliacion: la conciliación no se detuvo a tiempo; se cancela"
+MENSAJE_INDEMNIZACIONES_SIN_COLA = (
+    "inbox: sin cola de SiniestroAprobado; no se pagan indemnizaciones"
+)
+MENSAJE_INDEMNIZACIONES_SIN_CONFIGURACION = (
+    "inbox: consumidor de indemnizaciones sin configuración; no se pagan"
+)
+MENSAJE_INDEMNIZACIONES_NO_ARRANCO = "inbox: el consumidor de indemnizaciones no arrancó"
+MENSAJE_INDEMNIZACIONES_DETENIDO = "inbox: el consumidor de indemnizaciones se detuvo"
+MENSAJE_INDEMNIZACIONES_SIN_PARAR = (
+    "inbox: el consumidor de indemnizaciones no se detuvo a tiempo; se cancela"
+)
+MENSAJE_CONCILIACION_INDEMNIZACIONES_DETENIDA = (
+    "conciliacion: la conciliación de indemnizaciones se detuvo"
+)
+MENSAJE_CONCILIACION_INDEMNIZACIONES_SIN_PARAR = (
+    "conciliacion: la conciliación de indemnizaciones no se detuvo a tiempo; se cancela"
+)
 
 logger = logging.getLogger("dinero.ciclo")
 
@@ -98,6 +127,50 @@ def armar_conciliacion(
         antiguedad_min_s=settings.conciliacion_antiguedad_min_s,
         lote=settings.conciliacion_lote,
         alerta_tras_s=settings.conciliacion_alerta_tras_s,
+    )
+
+
+def armar_consumidor_indemnizaciones(
+    pool: "AsyncConnectionPool[Any]",
+    receptor: Receptor,
+    pagos: AdaptadorPagosHttp,
+    reloj: Reloj,
+) -> ConsumidorInbox[Any]:
+    """El consumidor de `dinero-indemnizaciones` (HU-W23): inbox, indemnización y outbox sobre el
+    mismo pool, en el modo (b): el pago va después del commit y sin conexión abierta."""
+    indemnizaciones = IndemnizacionesPg(pool)
+    caso = PagarIndemnizacion(
+        indemnizaciones=indemnizaciones,
+        transacciones=indemnizaciones,
+        eventos=OutboxIndemnizacionesPg(),
+        pagos=pagos,
+        reloj=reloj,
+    )
+    return ConsumidorInbox(
+        receptor, InboxPg(pool), manejador_siniestro_aprobado(caso), reloj=reloj.ahora
+    )
+
+
+def armar_conciliacion_indemnizaciones(
+    pool: "AsyncConnectionPool[Any]",
+    pagos: AdaptadorPagosHttp,
+    reloj: Reloj,
+    settings: Settings,
+) -> ConciliarIndemnizaciones[Any]:
+    """La conciliación de indemnizaciones (DS3-18): reclama con SKIP LOCKED y consulta sin
+    conexión abierta."""
+    indemnizaciones = IndemnizacionesPg(pool)
+    return ConciliarIndemnizaciones(
+        indemnizaciones=indemnizaciones,
+        transacciones=indemnizaciones,
+        eventos=OutboxIndemnizacionesPg(),
+        pagos=pagos,
+        reloj=reloj,
+        intervalo_s=settings.indemnizacion_conciliacion_intervalo_s,
+        antiguedad_min_s=settings.indemnizacion_conciliacion_antiguedad_min_s,
+        lote=settings.indemnizacion_conciliacion_lote,
+        reclamo_s=settings.indemnizacion_conciliacion_reclamo_s,
+        alerta_tras_s=settings.indemnizacion_conciliacion_alerta_tras_s,
     )
 
 
@@ -237,6 +310,66 @@ def _consumidor_ofertas(
     )
 
 
+def _consumidor_indemnizaciones(
+    app: FastAPI, settings: Settings, reloj: Reloj, pagos: AdaptadorPagosHttp
+) -> _Fondo | None:
+    """HU-W23: consume `dinero-indemnizaciones` (SiniestroAprobado) y paga. Activo solo si llega la
+    cola; sin base o sin cliente SQS, lo registra y la app arranca igual."""
+    cola = settings.sqs_dinero_indemnizaciones_url
+    if not cola:
+        logger.warning(
+            MENSAJE_INDEMNIZACIONES_SIN_COLA, extra={"missing": "SQS_DINERO_INDEMNIZACIONES_URL"}
+        )
+        return None
+    pool = getattr(app.state, "pool", None)
+    if pool is None:
+        logger.error(MENSAJE_INDEMNIZACIONES_SIN_CONFIGURACION, extra={"missing": "base"})
+        return None
+    espera = settings.consumidor_espera_larga_s
+    try:
+        receptor = ReceptorSqs(
+            cliente_sqs(
+                settings.aws_region, endpoint_url=settings.aws_endpoint_url, espera_larga_s=espera
+            ),
+            cola,
+            espera_larga_s=espera,
+            max_mensajes=settings.consumidor_max_mensajes,
+        )
+    except Exception as error:  # noqa: BLE001 - el mensaje puede traer la configuración
+        logger.error(MENSAJE_INDEMNIZACIONES_NO_ARRANCO, extra={"error_type": type(error).__name__})
+        return None
+    consumidor = armar_consumidor_indemnizaciones(pool, receptor, pagos, reloj)
+    return _lanzar(
+        app,
+        "consumidor_indemnizaciones",
+        consumidor.ejecutar,
+        limite_s=PARADA_CONSUMIDOR_S,
+        detenido=MENSAJE_INDEMNIZACIONES_DETENIDO,
+        sin_parar=MENSAJE_INDEMNIZACIONES_SIN_PARAR,
+    )
+
+
+def _conciliacion_indemnizaciones(
+    app: FastAPI, settings: Settings, reloj: Reloj, pagos: AdaptadorPagosHttp
+) -> _Fondo | None:
+    """HU-W23 (DS3-18): concilia las indemnizaciones PENDIENTE antiguas. Encendida por defecto;
+    sin base no arranca y la app arranca igual. No depende de la cola."""
+    if not settings.indemnizacion_conciliacion_habilitada:
+        return None
+    pool = getattr(app.state, "pool", None)
+    if pool is None:
+        return None
+    conciliacion = armar_conciliacion_indemnizaciones(pool, pagos, reloj, settings)
+    return _lanzar(
+        app,
+        "conciliacion_indemnizaciones",
+        conciliacion.ejecutar,
+        limite_s=PARADA_CONCILIACION_S,
+        detenido=MENSAJE_CONCILIACION_INDEMNIZACIONES_DETENIDA,
+        sin_parar=MENSAJE_CONCILIACION_INDEMNIZACIONES_SIN_PARAR,
+    )
+
+
 def _conciliacion(
     app: FastAPI, settings: Settings, reloj: Reloj, pagos: AdaptadorPagosHttp
 ) -> _Fondo | None:
@@ -289,6 +422,9 @@ def crear_app(
                 app.state.pool = pool_base
             # HU-W16: al cerrar, el consumidor y la conciliación a la vez, luego el relay; la pila
             # cierra después el cliente del adaptador y el pool.
+            if getattr(app.state, "pool", None) is not None:
+                # HU-W23: la lectura GET /v1/indemnizaciones; sin base, la ruta responde 503.
+                app.state.consultar = ConsultarIndemnizaciones(IndemnizacionesPg(app.state.pool))
             pagos = await pila.enter_async_context(_adaptador_pagos(app, settings))
             relay: _Fondo | None = None
             productores: list[_Fondo | None] = []
@@ -296,12 +432,16 @@ def crear_app(
                 relay = _relay_outbox(app, settings, reloj)
                 productores.append(_consumidor_ofertas(app, settings, reloj, pagos))
                 productores.append(_conciliacion(app, settings, reloj, pagos))
+                productores.append(_consumidor_indemnizaciones(app, settings, reloj, pagos))
+                productores.append(_conciliacion_indemnizaciones(app, settings, reloj, pagos))
                 yield
             finally:
                 await _detener(*productores)
                 await _detener(relay)
 
     app = instrumentar(FastAPI(title=settings.service_name, lifespan=ciclo), settings)
+    registrar_manejadores(app)
+    app.include_router(indemnizaciones.router)
 
     @app.get("/health")
     async def health() -> dict[str, str]:

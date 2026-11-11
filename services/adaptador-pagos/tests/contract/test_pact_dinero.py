@@ -1,5 +1,6 @@
-"""HU-W16: `adaptador-pagos` verifica como proveedor el pacto de `dinero`: el cobro (16.10) y la
-consulta de la conciliación (16.11).
+"""HU-W16 y HU-W23: `adaptador-pagos` verifica como proveedor el pacto de `dinero`: el cobro (16.10),
+la consulta de la conciliación (16.11) y, desde HU-W23, el desembolso de la indemnización y su
+consulta.
 
 La app real (rutas, caso de uso, validación y traducción de la respuesta del proveedor) se sirve con
 uvicorn en un hilo; el proveedor de pagos externo se simula con `httpx.MockTransport`, como en el
@@ -46,6 +47,29 @@ def _rechazado(referencia: str) -> dict[str, object]:
     }
 
 
+def _confirmado(referencia: str) -> dict[str, object]:
+    return {
+        "referencia": referencia,
+        "estado": "CONFIRMADO",
+        "transaccionId": "TRX-SINT-1",
+        "motivo": None,
+    }
+
+
+def _desembolso_rechazado(referencia: str) -> dict[str, object]:
+    return {
+        "referencia": referencia,
+        "estado": "RECHAZADO",
+        "transaccionId": None,
+        "motivo": "BENEFICIARIO_NO_HABILITADO",
+    }
+
+
+def _desembolso_no_encontrado(referencia: str) -> httpx.Response:
+    # El proveedor (simulador, consulta de `ben-sint-caido`): la orden nunca llegó.
+    return httpx.Response(404, json={"error": "desembolso_no_encontrado"})
+
+
 def _no_encontrado(referencia: str) -> httpx.Response:
     # El proveedor (simulador, consulta de C07): el cobro nunca llegó.
     return httpx.Response(404, json={"error": "cobro_no_encontrado"})
@@ -58,6 +82,12 @@ ESTADOS: dict[str, Respuesta] = {
     "el proveedor de pagos tiene el cobro aprobado": _aprobado,
     "el proveedor de pagos tiene el cobro rechazado por fondos insuficientes": _rechazado,
     "el proveedor de pagos no tiene el cobro": _no_encontrado,
+    # HU-W23: el desembolso (POST /pagos/v1/desembolsos) y su consulta (GET con `beneficiario`).
+    "el proveedor de pagos confirma el desembolso": _confirmado,
+    "el proveedor de pagos rechaza el desembolso": _desembolso_rechazado,
+    "el proveedor de pagos tiene el desembolso confirmado": _confirmado,
+    "el proveedor de pagos tiene el desembolso rechazado": _desembolso_rechazado,
+    "el proveedor de pagos no tiene el desembolso": _desembolso_no_encontrado,
 }
 
 
@@ -118,11 +148,12 @@ def test_adaptador_pagos_cumple_el_pacto_de_dinero() -> None:
             url=url
         ).state_handler(estado, teardown=True).verify()
     assert sorted(vistos) == sorted(ESTADOS)
-    # El adaptador llamó al proveedor una vez por interacción; el cobro, con la clave como
-    # idempotencia, y la consulta, sin ella.
+    # El adaptador llamó al proveedor una vez por interacción; el cobro y el desembolso, con la
+    # clave como idempotencia, y las consultas, sin ella.
     assert len(recibidas) == len(ESTADOS)
     cobros = [r for r in recibidas if r.method == "POST"]
     consultas = [r for r in recibidas if r.method == "GET"]
-    assert (len(cobros), len(consultas)) == (2, 3)
+    assert (len(cobros), len(consultas)) == (4, 6)
+    assert [r.url.path for r in cobros].count("/pagos/v1/desembolsos") == 2
     assert all(r.headers["Idempotency-Key"] == json.loads(r.content)["referencia"] for r in cobros)
     assert all("Idempotency-Key" not in r.headers for r in consultas)

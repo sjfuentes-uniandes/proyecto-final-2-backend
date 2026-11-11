@@ -846,9 +846,19 @@ async def test_el_detalle_de_un_caso_aprobado_lee_la_decision_para_la_liquidacio
         },
         "registrada_en": ahora + timedelta(minutes=1),
     }
-    conexion = ConexionFalsa([fila_siniestro(aprobado)], [], [], [decision_fila])
+    sin_pago = {
+        "pago_estado": None,
+        "pago_referencia": None,
+        "pago_transaccion_id": None,
+        "pago_motivo": None,
+        "pago_intentos": 0,
+        "pago_duplicados_descartados": 0,
+    }
+    conexion = ConexionFalsa([fila_siniestro(aprobado)], [], [], [decision_fila], [sin_pago])
     leido = await SiniestrosPg(PoolFalso(conexion)).detalle(aprobado.id)  # type: ignore[arg-type]
     assert leido is not None
+    assert leido.pago is None  # `dinero` aún no informó: el detalle deriva PENDIENTE
+    assert "pago_estado" in conexion.sentencias[4][0]
     assert leido.liquidacion == LiquidacionAprobada(
         "COP",
         Decimal("2850000.00"),
@@ -915,3 +925,112 @@ def test_una_decision_sin_liquidacion_en_el_detalle_usa_las_columnas_del_caso(
     assert liquidacion.valor_reclamado == Decimal("900000.00")
     assert liquidacion.moneda == "COP"
     assert liquidacion.aprobada_en == ahora + timedelta(minutes=2)
+
+
+# --- HU-W23: el pago que informa `dinero` ---------------------------------------------------------
+def _fila_pago(**cambios: Any) -> dict[str, Any]:
+    fila: dict[str, Any] = {
+        "pago_estado": "CONFIRMADO",
+        "pago_referencia": "IND-88-2026-0442-01",
+        "pago_transaccion_id": "TRX-1",
+        "pago_motivo": None,
+        "pago_intentos": 1,
+        "pago_duplicados_descartados": 2,
+    }
+    fila.update(cambios)
+    return fila
+
+
+def test_la_fila_de_pago_se_lee_o_es_nula() -> None:
+    from siniestros.adapters.outbound.siniestros_pg import pago_de_fila
+    from siniestros.domain.siniestro.pago import EstadoPago, PagoSiniestro
+
+    assert pago_de_fila(_fila_pago()) == PagoSiniestro(
+        EstadoPago.CONFIRMADO, "IND-88-2026-0442-01", "TRX-1", None, 1, 2
+    )
+    rechazado = pago_de_fila(
+        _fila_pago(pago_estado="RECHAZADO", pago_transaccion_id=None, pago_motivo="MOTIVO")
+    )
+    assert rechazado is not None and (rechazado.estado, rechazado.motivo) == (
+        EstadoPago.RECHAZADO,
+        "MOTIVO",
+    )
+    assert pago_de_fila(_fila_pago(pago_estado=None)) is None
+
+
+async def test_el_detalle_de_un_caso_aprobado_lee_el_pago_que_informo_dinero(
+    siniestro: Callable[..., Siniestro], ahora: datetime
+) -> None:
+    aprobado = siniestro(
+        estado=EstadoSiniestro.APROBADO,
+        analista_id=ANALISTA,
+        asignado_en=ahora,
+        decidido_en=ahora,
+        valor_indemnizar=Decimal("2500000.00"),
+    )
+    conexion = ConexionFalsa([fila_siniestro(aprobado)], [], [], [], [_fila_pago()])
+    leido = await SiniestrosPg(PoolFalso(conexion)).detalle(aprobado.id)  # type: ignore[arg-type]
+    assert leido is not None and leido.pago is not None
+    assert (leido.pago.estado.value, leido.pago.transaccion_id) == ("CONFIRMADO", "TRX-1")
+    assert (
+        "pago_estado" in conexion.sentencias[4][0]
+        and "FROM siniestros" in conexion.sentencias[4][0]
+    )
+
+
+async def test_un_caso_no_aprobado_no_lee_el_pago(siniestro: Callable[..., Siniestro]) -> None:
+    caso = siniestro()
+    conexion = ConexionFalsa([fila_siniestro(caso)], [], [])
+    leido = await SiniestrosPg(PoolFalso(conexion)).detalle(caso.id)  # type: ignore[arg-type]
+    assert leido is not None and leido.pago is None
+    assert len(conexion.sentencias) == 3  # siniestro, evidencias e historial: nada del pago
+
+
+async def test_estado_pago_lee_la_columna_o_none() -> None:
+    from siniestros.domain.siniestro.pago import EstadoPago
+
+    for fila, esperado in (
+        ({"pago_estado": "RECHAZADO"}, EstadoPago.RECHAZADO),
+        ({"pago_estado": None}, None),
+    ):
+        conexion = ConexionFalsa([fila])
+        async with SiniestrosPg(PoolFalso(conexion)).transaccion() as tx:  # type: ignore[arg-type]
+            assert await tx.estado_pago(uuid4()) == esperado
+    conexion = ConexionFalsa([])
+    async with SiniestrosPg(PoolFalso(conexion)).transaccion() as tx:  # type: ignore[arg-type]
+        assert await tx.estado_pago(uuid4()) is None
+
+
+@pytest.mark.parametrize("filas", [1, 0])
+async def test_guardar_pago_solo_escribe_si_no_habia_resultado(filas: int) -> None:
+    from siniestros.domain.siniestro.pago import EstadoPago, ResultadoPago
+
+    resultado = ResultadoPago(
+        uuid4(),
+        EstadoPago.CONFIRMADO,
+        "IND-88-2026-0442-01",
+        "TRX-1",
+        None,
+        1,
+        2,
+        datetime.now(UTC),
+    )
+    conexion = ConexionFalsa(rowcount=filas)
+    async with SiniestrosPg(PoolFalso(conexion)).transaccion() as tx:  # type: ignore[arg-type]
+        if filas:
+            await tx.guardar_pago(resultado)
+        else:
+            with pytest.raises(RuntimeError, match="guardar_pago"):
+                await tx.guardar_pago(resultado)
+    [(sql, parametros)] = conexion.sentencias
+    assert sql.startswith("UPDATE siniestros SET pago_estado = %s")
+    assert sql.endswith("WHERE id = %s AND pago_estado IS NULL")
+    assert parametros == (
+        "CONFIRMADO",
+        "IND-88-2026-0442-01",
+        "TRX-1",
+        None,
+        1,
+        2,
+        resultado.siniestro_id,
+    )

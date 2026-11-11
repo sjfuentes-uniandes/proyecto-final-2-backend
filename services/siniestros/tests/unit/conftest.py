@@ -31,6 +31,7 @@ from siniestros.domain.siniestro.modelos import (
     Siniestro,
     TipoSoporte,
 )
+from siniestros.domain.siniestro.pago import EstadoPago, PagoSiniestro, ResultadoPago
 
 CURSOR_INVALIDO = "cursor-invalido"
 
@@ -111,6 +112,15 @@ class TxFalsa:
     async def agregar_historial(self, entrada: EntradaHistorial) -> None:
         self._repo.historial.append(entrada)
 
+    async def estado_pago(self, siniestro_id: UUID) -> EstadoPago | None:
+        resultado = self._repo.pagos.get(siniestro_id)
+        return resultado.estado if resultado else None
+
+    async def guardar_pago(self, resultado: ResultadoPago) -> None:
+        if resultado.siniestro_id in self._repo.pagos:
+            raise RuntimeError("guardar_pago: el siniestro ya tenía un resultado de pago")
+        self._repo.pagos[resultado.siniestro_id] = resultado
+
     async def evento_en_evaluacion(
         self, siniestro: Siniestro, ocurrido_en: datetime, motivo: str = "ASIGNACION"
     ) -> None:
@@ -176,6 +186,7 @@ class RepoFalso:
         self.decisiones: list[DecisionRegistrada] = []
         self.decision_perdida_en_carrera = False
         self.liquidaciones: dict[UUID, Any] = {}
+        self.pagos: dict[UUID, ResultadoPago] = {}
         self.filtros: list[FiltroBandeja] = []
         self.pagina = PaginaSiniestros((), 0, None)
         self.indicadores_: Indicadores | None = None
@@ -195,6 +206,7 @@ class RepoFalso:
             list(self.eventos),
             list(self.decisiones),
             dict(self.idempotencia),
+            dict(self.pagos),
         )
         self.tx_abierta = True
         self.transacciones += 1
@@ -208,6 +220,7 @@ class RepoFalso:
                 copia[3],
                 copia[4],
             )
+            self.pagos = copia[5]
             raise
         finally:
             self.tx_abierta = False
@@ -239,6 +252,15 @@ class RepoFalso:
             tuple(e for e in self.evidencias.values() if e.siniestro_id == siniestro_id),
             tuple(h for h in self.historial if h.siniestro_id == siniestro_id),
             self.liquidaciones.get(siniestro_id),
+            self._pago_guardado(siniestro_id),
+        )
+
+    def _pago_guardado(self, siniestro_id: UUID) -> PagoSiniestro | None:
+        r = self.pagos.get(siniestro_id)
+        if r is None:
+            return None
+        return PagoSiniestro(
+            r.estado, r.referencia, r.transaccion_id, r.motivo, r.intentos, r.duplicados_descartados
         )
 
     async def evidencia(

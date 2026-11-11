@@ -456,3 +456,243 @@ def test_la_tarea_de_plazos_se_detiene_antes_que_el_relay_para_que_este_publique
     with TestClient(crear_app(pool=PoolInerte())):  # type: ignore[arg-type]
         pass
     assert orden == ["plazos", "relay"]
+
+
+# --- Consumidor de siniestros-indemnizaciones (HU-W23, DS3-25) -----------------------------------------
+COLA = "https://sqs.us-east-1.amazonaws.com/000000000000/solventa-int-siniestros-indemnizaciones"
+
+
+class ConsumidorFalso:
+    instancias: ClassVar[list["ConsumidorFalso"]] = []
+
+    def __init__(self, receptor: Any, repositorio: Any, manejador: Any, **opciones: Any) -> None:
+        self.argumentos = (receptor, repositorio, manejador)
+        self.opciones = opciones
+        self.corrio = False
+        ConsumidorFalso.instancias.append(self)
+
+    async def ejecutar(self, parada: asyncio.Event) -> None:
+        self.corrio = True
+        await parada.wait()
+
+
+@pytest.fixture
+def consumidor(monkeypatch: pytest.MonkeyPatch) -> type[ConsumidorFalso]:
+    ConsumidorFalso.instancias = []
+    llamadas: list[Any] = []
+
+    def sqs(region: str, *, endpoint_url: str | None = None, espera_larga_s: int) -> Any:
+        llamadas.append((region, endpoint_url, espera_larga_s))
+        from types import SimpleNamespace
+
+        from solventa_common import inbox
+
+        return SimpleNamespace(
+            meta=SimpleNamespace(
+                config=SimpleNamespace(read_timeout=espera_larga_s + inbox.MARGEN_LECTURA_S)
+            )
+        )
+
+    monkeypatch.setattr(main, "ConsumidorInbox", ConsumidorFalso)
+    monkeypatch.setattr(main, "cliente_sqs", sqs)
+    ConsumidorFalso.llamadas_sqs = llamadas  # type: ignore[attr-defined]
+    return ConsumidorFalso
+
+
+def test_sin_cola_no_hay_consumidor_y_se_avisa(
+    consumidor: type[ConsumidorFalso], caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.WARNING), TestClient(construir(caplog, pool=PoolInerte())) as c:  # type: ignore[arg-type]
+        assert c.get("/health").status_code == 200
+    assert consumidor.instancias == []
+    aviso = next(r for r in caplog.records if r.getMessage() == main.MENSAJE_CONSUMIDOR_SIN_COLA)
+    assert aviso.missing == "SQS_SINIESTROS_INDEMNIZACIONES_URL"  # type: ignore[attr-defined]
+
+
+def test_con_cola_el_consumidor_corre_con_lote_5_y_espera_10_y_se_detiene_al_cerrar(
+    consumidor: type[ConsumidorFalso], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from solventa_common import inbox
+
+    monkeypatch.setenv("SQS_SINIESTROS_INDEMNIZACIONES_URL", COLA)
+    monkeypatch.setenv("AWS_ENDPOINT_URL", "http://localstack:4566")
+    pool = PoolInerte()
+    app = crear_app(pool=pool)  # type: ignore[arg-type]
+    with TestClient(app):
+        tarea = app.state.consumidor_indemnizaciones
+        assert not tarea.done()
+    assert tarea.done() and not tarea.cancelled()
+    [instancia] = consumidor.instancias
+    receptor, repositorio, manejador = instancia.argumentos
+    assert isinstance(receptor, inbox.ReceptorSqs)
+    assert (receptor.max_mensajes, receptor.espera_larga_s) == (5, 10)
+    assert isinstance(repositorio, inbox.InboxPg) and repositorio._pool is pool
+    assert callable(manejador) and instancia.corrio
+    assert instancia.opciones["reloj"]().utcoffset() is not None
+    assert consumidor.llamadas_sqs == [("us-east-1", "http://localstack:4566", 10)]  # type: ignore[attr-defined]
+
+
+def test_el_manejador_abre_la_vista_de_siniestros_sobre_la_transaccion_del_inbox(
+    consumidor: type[ConsumidorFalso], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Modo (a): el resultado del pago y la fila del inbox comparten la conexión de la transacción."""
+    from types import SimpleNamespace
+
+    from siniestros.adapters.outbound.siniestros_pg import TxSiniestrosPg
+
+    capturado: list[Any] = []
+
+    class CasoFalso:
+        async def registrar(self, resultado: Any, tx: Any) -> None:
+            capturado.append(tx)
+
+    monkeypatch.setattr(main, "RegistrarResultadoPago", CasoFalso)
+    monkeypatch.setenv("SQS_SINIESTROS_INDEMNIZACIONES_URL", COLA)
+    with TestClient(crear_app(pool=PoolInerte())):  # type: ignore[arg-type]
+        pass
+    [instancia] = consumidor.instancias
+    manejador = instancia.argumentos[2]
+    conexion = object()
+    import json
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    from solventa_common.inbox import EventoRecibido
+
+    cuerpo = json.dumps(
+        {
+            "eventId": str(uuid4()),
+            "aggregateId": str(uuid4()),
+            "type": "IndemnizacionConfirmada",
+            "version": 1,
+            "occurredAt": datetime.now(UTC).isoformat(),
+            "correlationId": "c",
+            "payload": {
+                "siniestroId": str(uuid4()),
+                "referencia": "IND-88-2026-0442-01",
+                "transaccionId": "T",
+                "intentos": 1,
+                "duplicadosDescartados": 0,
+                "confirmadaEn": datetime.now(UTC).isoformat(),
+            },
+        }
+    )
+    evento = EventoRecibido(
+        event_id=uuid4(),
+        event_type="IndemnizacionConfirmada",
+        correlation_id="c",
+        sobre={},
+        cuerpo=cuerpo,
+        message_id="m",
+        recepciones=1,
+    )
+    asyncio.run(manejador(evento, SimpleNamespace(conexion=conexion)))
+    [tx] = capturado
+    assert isinstance(tx, TxSiniestrosPg) and tx._bruta is conexion
+
+
+def test_con_cola_y_sin_base_arranca_y_lo_registra(
+    consumidor: type[ConsumidorFalso],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setenv("SQS_SINIESTROS_INDEMNIZACIONES_URL", COLA)
+    with caplog.at_level(logging.ERROR), TestClient(construir(caplog)) as cliente:
+        assert cliente.get("/health").status_code == 200
+    assert consumidor.instancias == []
+    assert any(r.getMessage() == main.MENSAJE_CONSUMIDOR_SIN_BASE for r in caplog.records)
+
+
+def test_si_no_se_puede_crear_el_cliente_sqs_arranca_y_lo_registra(
+    consumidor: type[ConsumidorFalso],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def sqs(region: str, *, endpoint_url: str | None = None, espera_larga_s: int) -> Any:
+        raise ValueError(f"Invalid endpoint: {endpoint_url}")
+
+    monkeypatch.setattr(main, "cliente_sqs", sqs)
+    monkeypatch.setenv("SQS_SINIESTROS_INDEMNIZACIONES_URL", COLA)
+    monkeypatch.setenv("AWS_ENDPOINT_URL", "no-url")
+    with caplog.at_level(logging.ERROR), TestClient(construir(caplog, pool=PoolInerte())) as c:  # type: ignore[arg-type]
+        assert c.get("/health").status_code == 200
+    registro = next(
+        r for r in caplog.records if r.getMessage() == main.MENSAJE_CONSUMIDOR_NO_ARRANCO
+    )
+    assert registro.error_type == "ValueError"  # type: ignore[attr-defined]
+    assert "no-url" not in caplog.text
+
+
+def test_un_consumidor_que_falla_no_tumba_la_app(
+    consumidor: type[ConsumidorFalso],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def rota(self: ConsumidorFalso, parada: asyncio.Event) -> None:
+        raise ValueError("DATO-PRIVADO")
+
+    monkeypatch.setattr(ConsumidorFalso, "ejecutar", rota)
+    monkeypatch.setenv("SQS_SINIESTROS_INDEMNIZACIONES_URL", COLA)
+    with caplog.at_level(logging.ERROR), TestClient(construir(caplog, pool=PoolInerte())) as c:  # type: ignore[arg-type]
+        assert c.get("/health").status_code == 200
+    registro = next(r for r in caplog.records if r.getMessage() == main.MENSAJE_CONSUMIDOR_DETENIDO)
+    assert registro.error_type == "ValueError"  # type: ignore[attr-defined]
+    assert "DATO-PRIVADO" not in caplog.text
+
+
+def test_si_el_consumidor_no_se_detiene_a_tiempo_se_cancela(
+    consumidor: type[ConsumidorFalso],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def sorda(self: ConsumidorFalso, parada: asyncio.Event) -> None:
+        await asyncio.sleep(30)
+
+    monkeypatch.setattr(ConsumidorFalso, "ejecutar", sorda)
+    monkeypatch.setattr(main, "PARADA_CONSUMIDOR_S", 0.05)
+    monkeypatch.setenv("SQS_SINIESTROS_INDEMNIZACIONES_URL", COLA)
+    with caplog.at_level(logging.WARNING), TestClient(construir(caplog, pool=PoolInerte())):  # type: ignore[arg-type]
+        pass
+    assert any(r.getMessage() == main.MENSAJE_CONSUMIDOR_SIN_PARAR for r in caplog.records)
+
+
+def test_el_consumidor_y_las_tareas_paran_a_la_vez_y_antes_que_el_relay(
+    consumidor: type[ConsumidorFalso],
+    plazos: type[PlazosFalsos],
+    relay: type[RelayFalso],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    orden: list[str] = []
+
+    async def consumidor_cierra(self: ConsumidorFalso, parada: asyncio.Event) -> None:
+        await parada.wait()
+        orden.append("consumidor")
+
+    async def plazos_cierra(self: PlazosFalsos, parada: asyncio.Event, intervalo_s: float) -> None:
+        await parada.wait()
+        orden.append("plazos")
+
+    async def relay_cierra(self: RelayFalso, parada: asyncio.Event) -> None:
+        await parada.wait()
+        orden.append("relay")
+
+    monkeypatch.setattr(ConsumidorFalso, "ejecutar", consumidor_cierra)
+    monkeypatch.setattr(PlazosFalsos, "ejecutar", plazos_cierra)
+    monkeypatch.setattr(RelayFalso, "ejecutar", relay_cierra)
+    monkeypatch.setenv("SQS_SINIESTROS_INDEMNIZACIONES_URL", COLA)
+    habilitar(monkeypatch)
+    with TestClient(crear_app(pool=PoolInerte())):  # type: ignore[arg-type]
+        pass
+    assert orden[-1] == "relay" and sorted(orden[:2]) == ["consumidor", "plazos"]
+
+
+def test_por_omision_el_consumidor_usa_lote_5_y_espera_10() -> None:
+    settings = Settings()
+    assert (settings.consumidor_max_mensajes, settings.consumidor_espera_larga_s) == (5, 10)
+    for campo in (
+        {"consumidor_max_mensajes": 0},
+        {"consumidor_max_mensajes": 11},
+        {"consumidor_espera_larga_s": 11},
+    ):
+        with pytest.raises(ValueError):
+            Settings(**campo)

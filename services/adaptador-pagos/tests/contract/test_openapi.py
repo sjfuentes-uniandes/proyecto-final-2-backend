@@ -1,8 +1,7 @@
 """El contrato publicado (contracts/openapi/adaptador-pagos.yaml) es el que sirve la app.
 
-El Pact `dinero` → `adaptador-pagos` (solo 200 aprobado y rechazado) llega en la 16.10: su
-verificación de proveedor irá en este directorio (`test_pact_dinero.py`), con la app real y el
-proveedor de pagos simulado.
+El Pact `dinero` → `adaptador-pagos` (cobros desde la 16.10; desembolsos desde HU-W23) se verifica
+en este directorio (`test_pact_dinero.py`), con la app real y el proveedor de pagos simulado.
 """
 
 from pathlib import Path
@@ -56,3 +55,48 @@ def test_la_respuesta_es_la_misma_en_las_dos_rutas() -> None:
         "motivo",
     }
     assert esquemas["EstadoCobro"]["enum"] == ["APROBADO", "RECHAZADO"]
+
+
+def test_contrato_del_desembolso() -> None:
+    operacion = app.openapi()["paths"]["/v1/desembolsos"]["post"]
+    assert set(operacion["responses"]) == {"200", "400", "422", "502", "503", "504"}
+    # La clave idempotente va en el cuerpo (`referencia`), como `claveRecaudo` en los cobros.
+    assert "parameters" not in operacion
+    esquemas = app.openapi()["components"]["schemas"]
+    solicitud = esquemas["SolicitudDesembolso"]
+    assert set(solicitud["required"]) == {"referencia", "monto", "moneda", "beneficiarioRef"}
+    assert (
+        solicitud["properties"]["referencia"]["pattern"] == r"^IND-88-[0-9]{4}-[0-9]{4,}-[0-9]{2}$"
+    )
+    # Texto decimal, nunca número: mayor que 0 y con 2 decimales como máximo.
+    assert solicitud["properties"]["monto"]["type"] == "string"
+    assert solicitud["properties"]["monto"]["pattern"] == r"^[0-9]+(\.[0-9]{1,2})?$"
+    assert solicitud["properties"]["moneda"]["const"] == "COP"
+
+
+def test_contrato_de_la_consulta_del_desembolso() -> None:
+    operacion = app.openapi()["paths"]["/v1/desembolsos/{referencia}"]["get"]
+    assert set(operacion["responses"]) == {"200", "404", "422", "502", "503", "504"}
+    parametros = {p["name"]: p for p in operacion["parameters"]}
+    assert set(parametros) == {"referencia", "beneficiarioRef"}
+    assert parametros["referencia"]["in"] == "path"
+    assert parametros["beneficiarioRef"]["in"] == "query"
+    assert all(p["required"] for p in parametros.values())
+
+
+def test_la_respuesta_del_desembolso_es_la_misma_en_las_dos_rutas() -> None:
+    rutas = app.openapi()["paths"]
+    for operacion in (
+        rutas["/v1/desembolsos"]["post"],
+        rutas["/v1/desembolsos/{referencia}"]["get"],
+    ):
+        esquema = operacion["responses"]["200"]["content"]["application/json"]["schema"]
+        assert esquema == {"$ref": "#/components/schemas/DesembolsoDto"}
+    esquemas = app.openapi()["components"]["schemas"]
+    assert set(esquemas["DesembolsoDto"]["required"]) == {
+        "referencia",
+        "estado",
+        "transaccionId",
+        "motivo",
+    }
+    assert esquemas["EstadoDesembolso"]["enum"] == ["CONFIRMADO", "RECHAZADO"]

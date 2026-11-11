@@ -144,3 +144,32 @@ def entrada() -> Callable[..., EntradaHistorial]:
         return EntradaHistorial(**datos)
 
     return fabricar
+
+
+class Telemetria:
+    """Spans y métricas en memoria (HU-W23: la medición de `siniestro.resultado_pago`)."""
+
+    def __init__(self, spans: Any, lector: Any) -> None:
+        self.spans = spans
+        self.lector = lector
+
+    def lista_spans(self) -> list[Any]:
+        return list(self.spans.get_finished_spans())
+
+
+@pytest.fixture
+def telemetria(monkeypatch: pytest.MonkeyPatch) -> Telemetria:
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+    from solventa_common import telemetry
+    from solventa_common.settings import ServiceSettings
+
+    monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    spans, lector = InMemorySpanExporter(), InMemoryMetricReader()
+    telemetry.configurar(
+        ServiceSettings(service_name="siniestros", environment="pruebas"),
+        span_exporter=spans,
+        metric_readers=[lector],
+    )
+    return Telemetria(spans, lector)

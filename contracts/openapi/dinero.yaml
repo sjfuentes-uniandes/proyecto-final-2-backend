@@ -1,0 +1,223 @@
+openapi: 3.1.0
+info:
+  title: dinero
+  version: 0.1.0
+paths:
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Health Get
+  /v1/indemnizaciones:
+    get:
+      tags:
+      - indemnizaciones
+      summary: Listar
+      description: 'Indemnizaciones de un siniestro (H08): estado, intentos y pagos
+        duplicados descartados.'
+      operationId: listar_v1_indemnizaciones_get
+      parameters:
+      - name: siniestroId
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Siniestroid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaIndemnizacionesDto'
+        '401':
+          description: 'ACTOR_REQUERIDO: falta X-Actor-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol falta o no es ANALISTA_SINIESTROS'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: 'SOLICITUD_INVALIDA: siniestroId falta o no es un UUID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'DEPENDENCIA_NO_DISPONIBLE: la base de datos no está disponible'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+components:
+  schemas:
+    ErrorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        mensaje:
+          type: string
+          title: Mensaje
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          type: object
+          title: Detalles
+      type: object
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
+    EstadoIndemnizacion:
+      type: string
+      enum:
+      - PENDIENTE
+      - CONFIRMADA
+      - RECHAZADA
+      title: EstadoIndemnizacion
+      description: '`PENDIENTE` mientras no haya una respuesta definitiva de la pasarela
+        (un timeout o un 5xx
+
+        nunca es un rechazo, ADR 0013 decisión 5). De `CONFIRMADA` y `RECHAZADA` no
+        se sale.'
+    IndemnizacionDto:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        siniestroId:
+          type: string
+          format: uuid
+          title: Siniestroid
+        tipo:
+          type: string
+          const: INDEMNIZACION
+          title: Tipo
+        referencia:
+          type: string
+          pattern: ^IND-88-[0-9]{4}-[0-9]{4,}-[0-9]{2}$
+          title: Referencia
+          description: 'IND-<codigo>-01: la clave única e idempotente hacia la pasarela
+            (DS3-11)'
+        monto:
+          type: string
+          pattern: ^[0-9]+(\.[0-9]{1,2})?$
+          title: Monto
+          examples:
+          - '2500000.00'
+        moneda:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Moneda
+        estado:
+          $ref: '#/components/schemas/EstadoIndemnizacion'
+        transaccionId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transaccionid
+          description: 'Solo en CONFIRMADA: la confirmación de la pasarela'
+        motivo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Motivo
+          description: 'Solo en RECHAZADA: el código normalizado de la pasarela'
+        intentos:
+          type: integer
+          minimum: 0.0
+          title: Intentos
+          description: Llamadas efectivas de pago hechas a la pasarela por este movimiento
+        duplicadosDescartados:
+          type: integer
+          minimum: 0.0
+          title: Duplicadosdescartados
+          description: Veces que llegó la misma orden (evento repetido, o confirmación
+            repetida de la pasarela) y se descartó sin crear otro movimiento
+        creadaEn:
+          type: string
+          format: date-time
+          title: Creadaen
+        confirmadaEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Confirmadaen
+          description: Solo en CONFIRMADA
+        ultimoIntentoEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Ultimointentoen
+          description: Instante del último intento incierto (timeout, 5xx o respuesta
+            inválida) que dejó el movimiento PENDIENTE; null si nunca lo hubo
+      type: object
+      required:
+      - id
+      - siniestroId
+      - tipo
+      - referencia
+      - monto
+      - moneda
+      - estado
+      - transaccionId
+      - motivo
+      - intentos
+      - duplicadosDescartados
+      - creadaEn
+      - confirmadaEn
+      - ultimoIntentoEn
+      title: IndemnizacionDto
+    ListaIndemnizacionesDto:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/IndemnizacionDto'
+          type: array
+          title: Items
+          description: Vacía si el siniestro aún no tiene pago
+      type: object
+      required:
+      - items
+      title: ListaIndemnizacionesDto

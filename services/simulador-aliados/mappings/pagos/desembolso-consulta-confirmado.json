@@ -1,0 +1,36 @@
+{
+  "name": "pagos consulta de desembolso, confirmado (ben-sint-001 a 007 y ben-sint-lento: el desembolso sí ocurrió)",
+  "request": {
+    "method": "GET",
+    "urlPath": "/pagos/v1/desembolsos",
+    "queryParameters": {
+      "beneficiario": {
+        "matches": "^(ben-sint-00[1-7]|ben-sint-lento)$"
+      },
+      "referencia": {
+        "matches": "IND-88-[0-9]{4}-[0-9]{4,}-[0-9]{2}"
+      }
+    },
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "referencia": "{{request.query.referencia}}",
+      "estado": "CONFIRMADO",
+      "transaccionId": "TRX-SINT-{{request.query.referencia}}",
+      "motivo": null
+    },
+    "transformers": [
+      "response-template"
+    ],
+    "fixedDelayMilliseconds": 50
+  }
+}

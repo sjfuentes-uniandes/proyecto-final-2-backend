@@ -24,6 +24,7 @@ from siniestros.domain.siniestro.modelos import (
     SoporteSolicitable,
     TipoSoporte,
 )
+from siniestros.domain.siniestro.pago import EstadoPago, ResultadoPago
 
 
 class DecisionFinalDuplicada(Exception):
@@ -97,6 +98,16 @@ class TxSiniestros(Protocol):
     async def guardar_asignacion(self, siniestro: Siniestro, version_anterior: int) -> None: ...
 
     async def agregar_historial(self, entrada: EntradaHistorial) -> None: ...
+
+    # HU-W23 (DS3-25): el resultado del pago que informó `dinero`, en las columnas `pago_*` que
+    # existen desde W19 (sin migración).
+    async def estado_pago(self, siniestro_id: UUID) -> EstadoPago | None:
+        """`pago_estado` del siniestro; nulo si `dinero` aún no informó."""
+        ...
+
+    async def guardar_pago(self, resultado: ResultadoPago) -> None:
+        """Escribe `pago_*`. La transacción ya tiene el siniestro bloqueado (`FOR UPDATE`)."""
+        ...
 
     # Outbox: el evento se escribe en la misma transacción que el cambio o la consulta.
     async def evento_en_evaluacion(

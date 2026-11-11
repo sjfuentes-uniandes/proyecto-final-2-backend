@@ -36,6 +36,7 @@ from siniestros.domain.siniestro.modelos import (
     Siniestro,
     TipoSoporte,
 )
+from siniestros.domain.siniestro.pago import pago_de
 from siniestros.domain.siniestro.tramite import pasos_tramite
 
 
@@ -105,6 +106,7 @@ class ConsultarDetalle:
                 tramite=pasos_tramite(caso.estado, leido.historial),
                 historial=leido.historial,
                 liquidacion=leido.liquidacion,
+                pago=pago_de(caso.estado, caso.codigo, leido.pago),
             )
 
             async with self._repo.transaccion() as tx:

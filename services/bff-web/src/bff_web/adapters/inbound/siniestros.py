@@ -21,6 +21,7 @@ from pydantic import AwareDatetime, Field, TypeAdapter, ValidationError
 from solventa_common.errors import ErrorNegocio, RutaB2
 
 from bff_web.adapters.inbound.autorizacion import requerir_grupo
+from bff_web.adapters.inbound.pago_siniestro_dto import PagoSiniestroVista
 from bff_web.adapters.inbound.polizas import PatronNumero, VigenciaPolizaDto
 from bff_web.adapters.inbound.siniestros_dto import (
     CatalogosDecision,
@@ -98,6 +99,7 @@ def siniestros_servicio() -> Siniestros:
         settings.nombre_cliente_timeout_ms,
         settings.consulta_timeout_ms,
         settings.acceso_denegado_timeout_ms,
+        settings.compromiso_siniestros_horas,
     )
 
 
@@ -211,6 +213,7 @@ _ENLACE = TypeAdapter(EnlaceEvidencia)
 _CATALOGOS = TypeAdapter(CatalogosDecision)
 _RESULTADO = TypeAdapter(ResultadoDecisionSiniestro)
 _POLIZA = TypeAdapter(PolizaVistaDto)
+_PAGO = TypeAdapter(PagoSiniestroVista)
 
 
 def _validar(adaptador: TypeAdapter[Any], cuerpo: Any) -> Any:
@@ -296,6 +299,23 @@ async def detalle(servicio: Servicio, analista: Actor, siniestro_id: IdSiniestro
         except ValidationError:
             caso["polizaVista"] = None
     return _validar(_DETALLE, caso)
+
+
+@router.get(
+    "/{siniestroId}/pago",
+    response_model=PagoSiniestroVista,
+    responses={
+        404: _error(
+            "SINIESTRO_NO_ENCONTRADO, o INDEMNIZACION_NO_ENCONTRADA si el caso existe pero no "
+            "está APROBADO (no hay pago ordenado)"
+        ),
+    },
+)
+async def pago(servicio: Servicio, analista: Actor, siniestro_id: IdSiniestro) -> Any:
+    """Pago del siniestro aprobado (H08): valor, intentos, pagos duplicados descartados,
+    confirmación de la pasarela y trazabilidad del trámite. Plan B: se arma solo con `siniestros`;
+    la `indemnizacion` es null mientras `dinero` no haya publicado un resultado."""
+    return _validar(_PAGO, await servicio.pago(siniestro_id, analista))
 
 
 @router.post(
