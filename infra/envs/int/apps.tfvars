@@ -47,7 +47,7 @@ service_environment = {
   }
   siniestros = {
     SEMILLA_SINIESTROS_QA          = "true"
-    SEMILLA_SINIESTROS_ANALISTA_ID = "34b87488-90f1-70a0-a7e7-0a3c2da8ed33"
+    SEMILLA_SINIESTROS_ANALISTA_ID = "14d824a8-20e1-709e-a1d8-0dd77cf8efde"
   }
 }
 
