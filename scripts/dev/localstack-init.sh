@@ -40,7 +40,8 @@ cola() {
   echo "cola ${PREFIJO}-${nombre} lista"
 }
 
-# --- HU-W19: bucket de evidencias de siniestros (solo `siniestros` lo usa) ---
+# --- HU-W19: bucket de evidencias de siniestros (`siniestros`, y HU-W21: `adaptador-telemetria`
+# archiva los originales solo bajo telemetria/) ---
 awslocal s3api head-bucket --bucket "${PREFIJO}-evidencias" 2>/dev/null \
   || awslocal s3api create-bucket --bucket "${PREFIJO}-evidencias" --region "$REGION" >/dev/null
 echo "bucket ${PREFIJO}-evidencias listo"
@@ -54,3 +55,10 @@ cola "siniestros-indemnizaciones" 30 '{"eventType":[{"prefix":"Indemnizacion"}]}
 # exacto, como en catalog.tf). La visibilidad de 60 s es la de `dinero-aceptaciones`: un pago de
 # hasta 6,5 s por mensaje cabe de sobra. ---
 cola "dinero-indemnizaciones" 60 '{"eventType":["SiniestroAprobado"]}'
+
+# --- HU-W21: la telemetría válida y la copia local de coberturas de `pagos-parametricos`. Los
+# filtros y la visibilidad (30 s) son los de catalog.tf: `parametricos-eventos` recibe solo
+# EventoParametricoObservado (filtro exacto) y `parametricos-polizas`, los Poliza* (prefijo). Cada
+# una con su DLQ (<cola>-dlq): la de `parametricos-eventos` es la que lee la cola de descarte (H10) ---
+cola "parametricos-eventos" 30 '{"eventType":["EventoParametricoObservado"]}'
+cola "parametricos-polizas" 30 '{"eventType":[{"prefix":"Poliza"}]}'

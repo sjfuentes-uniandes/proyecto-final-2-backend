@@ -1,0 +1,1586 @@
+{
+  "descripcion": "Eventos paramétricos sintéticos de R5 (HU-W21 y HU-W22, plan §1.8): las coberturas (PolizaEmitida.v1 con coberturaParametrica), el orden de los eventos de póliza, los eventos externos que firma y envía la fuente de telemetría (válidos y rechazados) y los mensajes que llegan directo a la cola. Datos 100 % sintéticos, sin secretos: el HMAC se calcula al enviar. `desfaseSegundos` es relativo al envío; los instantes de `observadoEn` y las vigencias son absolutos.",
+  "version": "1",
+  "versionRegla": "1",
+  "fuentes": [
+    "IDEAM-SIM",
+    "AEROCIVIL-SIM"
+  ],
+  "eventoId": "uuid5(NAMESPACE_URL, 'telemetria/<fuente>/<idExterno>')",
+  "firma": {
+    "algoritmo": "HMAC-SHA256",
+    "cadenaFirmada": "<X-Telemetria-Marca-Tiempo>.<cuerpo crudo>",
+    "encabezado": "X-Telemetria-Firma: sha256=<hex>",
+    "valores": {
+      "VALIDA": "firma correcta con la fuente y la marca del envío",
+      "ALTERADA": "firma correcta con el último dígito hexadecimal cambiado",
+      "AUSENTE": "sin el encabezado X-Telemetria-Firma"
+    }
+  },
+  "coberturas": [
+    {
+      "clave": "COB-BOG-1",
+      "polizaRef": "b2100000-0000-4000-8000-000000000101",
+      "sobre": {
+        "eventId": "e2100000-0000-4000-8000-000000000101",
+        "aggregateId": "b2100000-0000-4000-8000-000000000101",
+        "type": "PolizaEmitida",
+        "version": 1,
+        "occurredAt": "2026-08-30T15:00:00Z",
+        "correlationId": "corr-sint-cob-bog-1",
+        "payload": {
+          "polizaId": "b2100000-0000-4000-8000-000000000101",
+          "numero": "250-2026-000101",
+          "cotizacionId": "c2100000-0000-4000-8000-000000000101",
+          "claveRecaudo": "d2100000-0000-4000-8000-000000000101",
+          "clienteId": "00000000-0000-4000-8000-000000000002",
+          "producto": {
+            "id": "clima-lluvia",
+            "version": "2026.11.1"
+          },
+          "ramo": {
+            "codigo": "250",
+            "nombre": "Paramétrico"
+          },
+          "coberturas": [
+            {
+              "codigo": "LLUVIA_ACUMULADA",
+              "nombre": "LLUVIA_ACUMULADA",
+              "obligatoria": true
+            }
+          ],
+          "vigencia": {
+            "desde": "2026-09-01",
+            "hasta": "2027-08-31"
+          },
+          "prima": "35000.00",
+          "sumaAsegurada": "1400000.00",
+          "moneda": "COP",
+          "periodicidad": "MENSUAL",
+          "documento": {
+            "clave": "polizas/b2100000-0000-4000-8000-000000000101/poliza.pdf",
+            "versionId": "v-sint-0101",
+            "huella": "sha256:6565656565656565656565656565656565656565656565656565656565656565",
+            "tamanoBytes": 48213
+          },
+          "firma": {
+            "firmaId": "FIR-SINT-0101",
+            "selloTiempo": "2026-08-30T15:00:00Z"
+          },
+          "emitidaEn": "2026-08-30T15:00:00Z",
+          "coberturaParametrica": {
+            "tipoEvento": "LLUVIA_ACUMULADA",
+            "zona": "11001",
+            "umbral": "120",
+            "unidad": "mm",
+            "valorPago": "1400000.00",
+            "moneda": "COP",
+            "versionRegla": "1"
+          }
+        }
+      }
+    },
+    {
+      "clave": "COB-BOG-2",
+      "polizaRef": "b2100000-0000-4000-8000-000000000102",
+      "sobre": {
+        "eventId": "e2100000-0000-4000-8000-000000000102",
+        "aggregateId": "b2100000-0000-4000-8000-000000000102",
+        "type": "PolizaEmitida",
+        "version": 1,
+        "occurredAt": "2025-08-30T15:00:00Z",
+        "correlationId": "corr-sint-cob-bog-2",
+        "payload": {
+          "polizaId": "b2100000-0000-4000-8000-000000000102",
+          "numero": "250-2026-000102",
+          "cotizacionId": "c2100000-0000-4000-8000-000000000102",
+          "claveRecaudo": "d2100000-0000-4000-8000-000000000102",
+          "clienteId": "00000000-0000-4000-8000-000000000002",
+          "producto": {
+            "id": "clima-lluvia",
+            "version": "2026.11.1"
+          },
+          "ramo": {
+            "codigo": "250",
+            "nombre": "Paramétrico"
+          },
+          "coberturas": [
+            {
+              "codigo": "LLUVIA_ACUMULADA",
+              "nombre": "LLUVIA_ACUMULADA",
+              "obligatoria": true
+            }
+          ],
+          "vigencia": {
+            "desde": "2025-09-01",
+            "hasta": "2026-08-31"
+          },
+          "prima": "35000.00",
+          "sumaAsegurada": "1400000.00",
+          "moneda": "COP",
+          "periodicidad": "MENSUAL",
+          "documento": {
+            "clave": "polizas/b2100000-0000-4000-8000-000000000102/poliza.pdf",
+            "versionId": "v-sint-0102",
+            "huella": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+            "tamanoBytes": 48213
+          },
+          "firma": {
+            "firmaId": "FIR-SINT-0102",
+            "selloTiempo": "2025-08-30T15:00:00Z"
+          },
+          "emitidaEn": "2025-08-30T15:00:00Z",
+          "coberturaParametrica": {
+            "tipoEvento": "LLUVIA_ACUMULADA",
+            "zona": "11001",
+            "umbral": "120",
+            "unidad": "mm",
+            "valorPago": "1400000.00",
+            "moneda": "COP",
+            "versionRegla": "1"
+          }
+        }
+      }
+    },
+    {
+      "clave": "COB-MED-1",
+      "polizaRef": "b2100000-0000-4000-8000-000000000103",
+      "sobre": {
+        "eventId": "e2100000-0000-4000-8000-000000000103",
+        "aggregateId": "b2100000-0000-4000-8000-000000000103",
+        "type": "PolizaEmitida",
+        "version": 1,
+        "occurredAt": "2025-10-30T15:00:00Z",
+        "correlationId": "corr-sint-cob-med-1",
+        "payload": {
+          "polizaId": "b2100000-0000-4000-8000-000000000103",
+          "numero": "250-2026-000103",
+          "cotizacionId": "c2100000-0000-4000-8000-000000000103",
+          "claveRecaudo": "d2100000-0000-4000-8000-000000000103",
+          "clienteId": "00000000-0000-4000-8000-000000000003",
+          "producto": {
+            "id": "clima-lluvia",
+            "version": "2026.11.1"
+          },
+          "ramo": {
+            "codigo": "250",
+            "nombre": "Paramétrico"
+          },
+          "coberturas": [
+            {
+              "codigo": "LLUVIA_ACUMULADA",
+              "nombre": "LLUVIA_ACUMULADA",
+              "obligatoria": true
+            }
+          ],
+          "vigencia": {
+            "desde": "2025-11-01",
+            "hasta": "2026-10-31"
+          },
+          "prima": "35000.00",
+          "sumaAsegurada": "1400000.00",
+          "moneda": "COP",
+          "periodicidad": "MENSUAL",
+          "documento": {
+            "clave": "polizas/b2100000-0000-4000-8000-000000000103/poliza.pdf",
+            "versionId": "v-sint-0103",
+            "huella": "sha256:6767676767676767676767676767676767676767676767676767676767676767",
+            "tamanoBytes": 48213
+          },
+          "firma": {
+            "firmaId": "FIR-SINT-0103",
+            "selloTiempo": "2025-10-30T15:00:00Z"
+          },
+          "emitidaEn": "2025-10-30T15:00:00Z",
+          "coberturaParametrica": {
+            "tipoEvento": "LLUVIA_ACUMULADA",
+            "zona": "05001",
+            "umbral": "120",
+            "unidad": "mm",
+            "valorPago": "1400000.00",
+            "moneda": "COP",
+            "versionRegla": "1"
+          }
+        }
+      }
+    },
+    {
+      "clave": "COB-BAQ-1",
+      "polizaRef": "b2100000-0000-4000-8000-000000000104",
+      "sobre": {
+        "eventId": "e2100000-0000-4000-8000-000000000104",
+        "aggregateId": "b2100000-0000-4000-8000-000000000104",
+        "type": "PolizaEmitida",
+        "version": 1,
+        "occurredAt": "2026-11-01T15:00:00Z",
+        "correlationId": "corr-sint-cob-baq-1",
+        "payload": {
+          "polizaId": "b2100000-0000-4000-8000-000000000104",
+          "numero": "250-2026-000104",
+          "cotizacionId": "c2100000-0000-4000-8000-000000000104",
+          "claveRecaudo": "d2100000-0000-4000-8000-000000000104",
+          "clienteId": "00000000-0000-4000-8000-000000000004",
+          "producto": {
+            "id": "clima-lluvia",
+            "version": "2026.11.1"
+          },
+          "ramo": {
+            "codigo": "250",
+            "nombre": "Paramétrico"
+          },
+          "coberturas": [
+            {
+              "codigo": "LLUVIA_ACUMULADA",
+              "nombre": "LLUVIA_ACUMULADA",
+              "obligatoria": true
+            }
+          ],
+          "vigencia": {
+            "desde": "2026-11-02",
+            "hasta": "2027-11-01"
+          },
+          "prima": "35000.00",
+          "sumaAsegurada": "1400000.00",
+          "moneda": "COP",
+          "periodicidad": "MENSUAL",
+          "documento": {
+            "clave": "polizas/b2100000-0000-4000-8000-000000000104/poliza.pdf",
+            "versionId": "v-sint-0104",
+            "huella": "sha256:6868686868686868686868686868686868686868686868686868686868686868",
+            "tamanoBytes": 48213
+          },
+          "firma": {
+            "firmaId": "FIR-SINT-0104",
+            "selloTiempo": "2026-11-01T15:00:00Z"
+          },
+          "emitidaEn": "2026-11-01T15:00:00Z",
+          "coberturaParametrica": {
+            "tipoEvento": "LLUVIA_ACUMULADA",
+            "zona": "08001",
+            "umbral": "120",
+            "unidad": "mm",
+            "valorPago": "1400000.00",
+            "moneda": "COP",
+            "versionRegla": "1"
+          }
+        }
+      }
+    },
+    {
+      "clave": "COB-VUELO-1",
+      "polizaRef": "b2100000-0000-4000-8000-000000000105",
+      "sobre": {
+        "eventId": "e2100000-0000-4000-8000-000000000105",
+        "aggregateId": "b2100000-0000-4000-8000-000000000105",
+        "type": "PolizaEmitida",
+        "version": 1,
+        "occurredAt": "2026-10-31T15:00:00Z",
+        "correlationId": "corr-sint-cob-vuelo-1",
+        "payload": {
+          "polizaId": "b2100000-0000-4000-8000-000000000105",
+          "numero": "250-2026-000105",
+          "cotizacionId": "c2100000-0000-4000-8000-000000000105",
+          "claveRecaudo": "d2100000-0000-4000-8000-000000000105",
+          "clienteId": "00000000-0000-4000-8000-000000000005",
+          "producto": {
+            "id": "retraso-vuelo",
+            "version": "2026.11.1"
+          },
+          "ramo": {
+            "codigo": "250",
+            "nombre": "Paramétrico"
+          },
+          "coberturas": [
+            {
+              "codigo": "RETRASO_VUELO",
+              "nombre": "RETRASO_VUELO",
+              "obligatoria": true
+            }
+          ],
+          "vigencia": {
+            "desde": "2026-11-01",
+            "hasta": "2026-11-30"
+          },
+          "prima": "35000.00",
+          "sumaAsegurada": "500000.00",
+          "moneda": "COP",
+          "periodicidad": "MENSUAL",
+          "documento": {
+            "clave": "polizas/b2100000-0000-4000-8000-000000000105/poliza.pdf",
+            "versionId": "v-sint-0105",
+            "huella": "sha256:6969696969696969696969696969696969696969696969696969696969696969",
+            "tamanoBytes": 48213
+          },
+          "firma": {
+            "firmaId": "FIR-SINT-0105",
+            "selloTiempo": "2026-10-31T15:00:00Z"
+          },
+          "emitidaEn": "2026-10-31T15:00:00Z",
+          "coberturaParametrica": {
+            "tipoEvento": "RETRASO_VUELO",
+            "zona": "AV204",
+            "umbral": "180",
+            "unidad": "min",
+            "valorPago": "500000.00",
+            "moneda": "COP",
+            "versionRegla": "1"
+          }
+        }
+      }
+    },
+    {
+      "clave": "COB-ORD-1",
+      "polizaRef": "b2100000-0000-4000-8000-000000000201",
+      "sobre": {
+        "eventId": "e2100000-0000-4000-8000-000000000201",
+        "aggregateId": "b2100000-0000-4000-8000-000000000201",
+        "type": "PolizaEmitida",
+        "version": 1,
+        "occurredAt": "2026-11-10T10:00:00Z",
+        "correlationId": "corr-sint-cob-ord-1",
+        "payload": {
+          "polizaId": "b2100000-0000-4000-8000-000000000201",
+          "numero": "250-2026-000201",
+          "cotizacionId": "c2100000-0000-4000-8000-000000000201",
+          "claveRecaudo": "d2100000-0000-4000-8000-000000000201",
+          "clienteId": "00000000-0000-4000-8000-000000000006",
+          "producto": {
+            "id": "clima-lluvia",
+            "version": "2026.11.1"
+          },
+          "ramo": {
+            "codigo": "250",
+            "nombre": "Paramétrico"
+          },
+          "coberturas": [
+            {
+              "codigo": "LLUVIA_ACUMULADA",
+              "nombre": "LLUVIA_ACUMULADA",
+              "obligatoria": true
+            }
+          ],
+          "vigencia": {
+            "desde": "2026-09-01",
+            "hasta": "2027-08-31"
+          },
+          "prima": "35000.00",
+          "sumaAsegurada": "1400000.00",
+          "moneda": "COP",
+          "periodicidad": "MENSUAL",
+          "documento": {
+            "clave": "polizas/b2100000-0000-4000-8000-000000000201/poliza.pdf",
+            "versionId": "v-sint-0201",
+            "huella": "sha256:c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9",
+            "tamanoBytes": 48213
+          },
+          "firma": {
+            "firmaId": "FIR-SINT-0201",
+            "selloTiempo": "2026-11-10T10:00:00Z"
+          },
+          "emitidaEn": "2026-11-10T10:00:00Z",
+          "coberturaParametrica": {
+            "tipoEvento": "LLUVIA_ACUMULADA",
+            "zona": "17001",
+            "umbral": "120",
+            "unidad": "mm",
+            "valorPago": "1400000.00",
+            "moneda": "COP",
+            "versionRegla": "1"
+          }
+        }
+      }
+    },
+    {
+      "clave": "COB-ORD-2",
+      "polizaRef": "b2100000-0000-4000-8000-000000000202",
+      "sobre": {
+        "eventId": "e2100000-0000-4000-8000-000000000202",
+        "aggregateId": "b2100000-0000-4000-8000-000000000202",
+        "type": "PolizaEmitida",
+        "version": 1,
+        "occurredAt": "2026-11-10T10:00:00Z",
+        "correlationId": "corr-sint-cob-ord-2",
+        "payload": {
+          "polizaId": "b2100000-0000-4000-8000-000000000202",
+          "numero": "250-2026-000202",
+          "cotizacionId": "c2100000-0000-4000-8000-000000000202",
+          "claveRecaudo": "d2100000-0000-4000-8000-000000000202",
+          "clienteId": "00000000-0000-4000-8000-000000000006",
+          "producto": {
+            "id": "clima-lluvia",
+            "version": "2026.11.1"
+          },
+          "ramo": {
+            "codigo": "250",
+            "nombre": "Paramétrico"
+          },
+          "coberturas": [
+            {
+              "codigo": "LLUVIA_ACUMULADA",
+              "nombre": "LLUVIA_ACUMULADA",
+              "obligatoria": true
+            }
+          ],
+          "vigencia": {
+            "desde": "2026-09-01",
+            "hasta": "2027-08-31"
+          },
+          "prima": "35000.00",
+          "sumaAsegurada": "1400000.00",
+          "moneda": "COP",
+          "periodicidad": "MENSUAL",
+          "documento": {
+            "clave": "polizas/b2100000-0000-4000-8000-000000000202/poliza.pdf",
+            "versionId": "v-sint-0202",
+            "huella": "sha256:cacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacaca",
+            "tamanoBytes": 48213
+          },
+          "firma": {
+            "firmaId": "FIR-SINT-0202",
+            "selloTiempo": "2026-11-10T10:00:00Z"
+          },
+          "emitidaEn": "2026-11-10T10:00:00Z",
+          "coberturaParametrica": {
+            "tipoEvento": "LLUVIA_ACUMULADA",
+            "zona": "54001",
+            "umbral": "120",
+            "unidad": "mm",
+            "valorPago": "1400000.00",
+            "moneda": "COP",
+            "versionRegla": "1"
+          }
+        }
+      }
+    },
+    {
+      "clave": "COB-ORD-3",
+      "polizaRef": "b2100000-0000-4000-8000-000000000203",
+      "sobre": {
+        "eventId": "e2100000-0000-4000-8000-000000000203",
+        "aggregateId": "b2100000-0000-4000-8000-000000000203",
+        "type": "PolizaEmitida",
+        "version": 1,
+        "occurredAt": "2026-11-10T10:00:00Z",
+        "correlationId": "corr-sint-cob-ord-3",
+        "payload": {
+          "polizaId": "b2100000-0000-4000-8000-000000000203",
+          "numero": "250-2026-000203",
+          "cotizacionId": "c2100000-0000-4000-8000-000000000203",
+          "claveRecaudo": "d2100000-0000-4000-8000-000000000203",
+          "clienteId": "00000000-0000-4000-8000-000000000006",
+          "producto": {
+            "id": "clima-lluvia",
+            "version": "2026.11.1"
+          },
+          "ramo": {
+            "codigo": "250",
+            "nombre": "Paramétrico"
+          },
+          "coberturas": [
+            {
+              "codigo": "LLUVIA_ACUMULADA",
+              "nombre": "LLUVIA_ACUMULADA",
+              "obligatoria": true
+            }
+          ],
+          "vigencia": {
+            "desde": "2026-09-01",
+            "hasta": "2027-08-31"
+          },
+          "prima": "35000.00",
+          "sumaAsegurada": "1400000.00",
+          "moneda": "COP",
+          "periodicidad": "MENSUAL",
+          "documento": {
+            "clave": "polizas/b2100000-0000-4000-8000-000000000203/poliza.pdf",
+            "versionId": "v-sint-0203",
+            "huella": "sha256:cbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcb",
+            "tamanoBytes": 48213
+          },
+          "firma": {
+            "firmaId": "FIR-SINT-0203",
+            "selloTiempo": "2026-11-10T10:00:00Z"
+          },
+          "emitidaEn": "2026-11-10T10:00:00Z",
+          "coberturaParametrica": {
+            "tipoEvento": "LLUVIA_ACUMULADA",
+            "zona": "63001",
+            "umbral": "120",
+            "unidad": "mm",
+            "valorPago": "1400000.00",
+            "moneda": "COP",
+            "versionRegla": "1"
+          }
+        },
+        "aggregateVersion": 1
+      }
+    },
+    {
+      "clave": "COB-ORD-4",
+      "polizaRef": "b2100000-0000-4000-8000-000000000204",
+      "sobre": {
+        "eventId": "e2100000-0000-4000-8000-000000000204",
+        "aggregateId": "b2100000-0000-4000-8000-000000000204",
+        "type": "PolizaEmitida",
+        "version": 1,
+        "occurredAt": "2026-11-10T10:00:00Z",
+        "correlationId": "corr-sint-cob-ord-4",
+        "payload": {
+          "polizaId": "b2100000-0000-4000-8000-000000000204",
+          "numero": "250-2026-000204",
+          "cotizacionId": "c2100000-0000-4000-8000-000000000204",
+          "claveRecaudo": "d2100000-0000-4000-8000-000000000204",
+          "clienteId": "00000000-0000-4000-8000-000000000006",
+          "producto": {
+            "id": "clima-lluvia",
+            "version": "2026.11.1"
+          },
+          "ramo": {
+            "codigo": "250",
+            "nombre": "Paramétrico"
+          },
+          "coberturas": [
+            {
+              "codigo": "LLUVIA_ACUMULADA",
+              "nombre": "LLUVIA_ACUMULADA",
+              "obligatoria": true
+            }
+          ],
+          "vigencia": {
+            "desde": "2026-09-01",
+            "hasta": "2027-08-31"
+          },
+          "prima": "35000.00",
+          "sumaAsegurada": "1400000.00",
+          "moneda": "COP",
+          "periodicidad": "MENSUAL",
+          "documento": {
+            "clave": "polizas/b2100000-0000-4000-8000-000000000204/poliza.pdf",
+            "versionId": "v-sint-0204",
+            "huella": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "tamanoBytes": 48213
+          },
+          "firma": {
+            "firmaId": "FIR-SINT-0204",
+            "selloTiempo": "2026-11-10T10:00:00Z"
+          },
+          "emitidaEn": "2026-11-10T10:00:00Z",
+          "coberturaParametrica": {
+            "tipoEvento": "LLUVIA_ACUMULADA",
+            "zona": "50001",
+            "umbral": "120",
+            "unidad": "mm",
+            "valorPago": "1400000.00",
+            "moneda": "COP",
+            "versionRegla": "1"
+          }
+        },
+        "aggregateVersion": 2
+      }
+    },
+    {
+      "clave": "COB-ORD-5",
+      "polizaRef": "b2100000-0000-4000-8000-000000000205",
+      "sobre": {
+        "eventId": "e2100000-0000-4000-8000-000000000205",
+        "aggregateId": "b2100000-0000-4000-8000-000000000205",
+        "type": "PolizaEmitida",
+        "version": 1,
+        "occurredAt": "2026-11-10T10:00:00Z",
+        "correlationId": "corr-sint-cob-ord-5",
+        "payload": {
+          "polizaId": "b2100000-0000-4000-8000-000000000205",
+          "numero": "250-2026-000205",
+          "cotizacionId": "c2100000-0000-4000-8000-000000000205",
+          "claveRecaudo": "d2100000-0000-4000-8000-000000000205",
+          "clienteId": "00000000-0000-4000-8000-000000000006",
+          "producto": {
+            "id": "clima-lluvia",
+            "version": "2026.11.1"
+          },
+          "ramo": {
+            "codigo": "250",
+            "nombre": "Paramétrico"
+          },
+          "coberturas": [
+            {
+              "codigo": "LLUVIA_ACUMULADA",
+              "nombre": "LLUVIA_ACUMULADA",
+              "obligatoria": true
+            }
+          ],
+          "vigencia": {
+            "desde": "2026-09-01",
+            "hasta": "2027-08-31"
+          },
+          "prima": "35000.00",
+          "sumaAsegurada": "1400000.00",
+          "moneda": "COP",
+          "periodicidad": "MENSUAL",
+          "documento": {
+            "clave": "polizas/b2100000-0000-4000-8000-000000000205/poliza.pdf",
+            "versionId": "v-sint-0205",
+            "huella": "sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "tamanoBytes": 48213
+          },
+          "firma": {
+            "firmaId": "FIR-SINT-0205",
+            "selloTiempo": "2026-11-10T10:00:00Z"
+          },
+          "emitidaEn": "2026-11-10T10:00:00Z",
+          "coberturaParametrica": {
+            "tipoEvento": "LLUVIA_ACUMULADA",
+            "zona": "13001",
+            "umbral": "120",
+            "unidad": "mm",
+            "valorPago": "1400000.00",
+            "moneda": "COP",
+            "versionRegla": "1"
+          }
+        }
+      }
+    }
+  ],
+  "cancelaciones": [
+    {
+      "clave": "CAN-ORD-1",
+      "sobre": {
+        "eventId": "ca210000-0000-4000-8000-000000000201",
+        "aggregateId": "b2100000-0000-4000-8000-000000000201",
+        "type": "PolizaCancelada",
+        "version": 1,
+        "occurredAt": "2026-11-10T09:00:00Z",
+        "correlationId": "corr-sint-can-ord-1",
+        "payload": {
+          "polizaId": "b2100000-0000-4000-8000-000000000201",
+          "canceladaEn": "2026-11-10T09:00:00Z"
+        }
+      }
+    },
+    {
+      "clave": "CAN-ORD-2",
+      "sobre": {
+        "eventId": "ca210000-0000-4000-8000-000000000202",
+        "aggregateId": "b2100000-0000-4000-8000-000000000202",
+        "type": "PolizaCancelada",
+        "version": 1,
+        "occurredAt": "2026-11-10T11:00:00Z",
+        "correlationId": "corr-sint-can-ord-2",
+        "payload": {
+          "polizaId": "b2100000-0000-4000-8000-000000000202",
+          "canceladaEn": "2026-11-10T11:00:00Z"
+        }
+      }
+    },
+    {
+      "clave": "CAN-ORD-3",
+      "sobre": {
+        "eventId": "ca210000-0000-4000-8000-000000000203",
+        "aggregateId": "b2100000-0000-4000-8000-000000000203",
+        "type": "PolizaCancelada",
+        "version": 1,
+        "occurredAt": "2026-11-10T10:30:00Z",
+        "correlationId": "corr-sint-can-ord-3",
+        "payload": {
+          "polizaId": "b2100000-0000-4000-8000-000000000203",
+          "canceladaEn": "2026-11-10T10:30:00Z"
+        },
+        "aggregateVersion": 2
+      }
+    },
+    {
+      "clave": "CAN-ORD-4",
+      "sobre": {
+        "eventId": "ca210000-0000-4000-8000-000000000204",
+        "aggregateId": "b2100000-0000-4000-8000-000000000204",
+        "type": "PolizaCancelada",
+        "version": 1,
+        "occurredAt": "2026-11-10T10:30:00Z",
+        "correlationId": "corr-sint-can-ord-4",
+        "payload": {
+          "polizaId": "b2100000-0000-4000-8000-000000000204",
+          "canceladaEn": "2026-11-10T10:30:00Z"
+        },
+        "aggregateVersion": 1
+      }
+    },
+    {
+      "clave": "CAN-ORD-5",
+      "sobre": {
+        "eventId": "ca210000-0000-4000-8000-000000000205",
+        "aggregateId": "b2100000-0000-4000-8000-000000000205",
+        "type": "PolizaCancelada",
+        "version": 1,
+        "occurredAt": "2026-11-10T10:00:00Z",
+        "correlationId": "corr-sint-can-ord-5",
+        "payload": {
+          "polizaId": "b2100000-0000-4000-8000-000000000205",
+          "canceladaEn": "2026-11-10T10:00:00Z"
+        }
+      }
+    }
+  ],
+  "ordenCoberturas": [
+    {
+      "clave": "ORDEN-1",
+      "nota": "Emitida (10:00) y luego llega una cancelación atrasada (09:00): se ignora.",
+      "llegada": [
+        "COB-ORD-1",
+        "CAN-ORD-1"
+      ],
+      "esperado": {
+        "cobertura": "COB-ORD-1",
+        "estado": "ACTIVA"
+      }
+    },
+    {
+      "clave": "ORDEN-2",
+      "nota": "La cancelación (11:00) llega antes que la emisión (10:00): la emisión atrasada no reactiva la cobertura.",
+      "llegada": [
+        "CAN-ORD-2",
+        "COB-ORD-2"
+      ],
+      "esperado": {
+        "cobertura": "COB-ORD-2",
+        "estado": "CANCELADA"
+      }
+    },
+    {
+      "clave": "ORDEN-3",
+      "nota": "Con aggregateVersion: la cancelación (v2) llega antes que la emisión (v1).",
+      "llegada": [
+        "CAN-ORD-3",
+        "COB-ORD-3"
+      ],
+      "esperado": {
+        "cobertura": "COB-ORD-3",
+        "estado": "CANCELADA"
+      }
+    },
+    {
+      "clave": "ORDEN-4",
+      "nota": "Con aggregateVersion: la emisión (v2) llega primero y la cancelación (v1) es más vieja: se ignora, aunque su occurredAt sea posterior.",
+      "llegada": [
+        "COB-ORD-4",
+        "CAN-ORD-4"
+      ],
+      "esperado": {
+        "cobertura": "COB-ORD-4",
+        "estado": "ACTIVA"
+      }
+    },
+    {
+      "clave": "ORDEN-5",
+      "nota": "Empate de occurredAt: no cambia el estado.",
+      "llegada": [
+        "COB-ORD-5",
+        "CAN-ORD-5"
+      ],
+      "esperado": {
+        "cobertura": "COB-ORD-5",
+        "estado": "ACTIVA"
+      }
+    }
+  ],
+  "eventos": [
+    {
+      "clave": "valido",
+      "nota": "AC1: auténtico, dentro de la ventana y la zona, sobre el umbral.",
+      "envio": {
+        "fuente": "IDEAM-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": 0
+        },
+        "firma": "VALIDA",
+        "cuerpo": {
+          "versionContrato": "1",
+          "idExterno": "IDEAM-2026-1110-0001",
+          "eventoOrigen": "EVT-2026-0913",
+          "tipoEvento": "LLUVIA_ACUMULADA",
+          "valorObservado": "135",
+          "unidad": "mm",
+          "zona": "11001",
+          "observadoEn": "2026-11-10T14:00:00Z",
+          "ubicacion": {
+            "lat": 4.711,
+            "lon": -74.0721
+          }
+        }
+      },
+      "esperado": {
+        "http": {
+          "estado": 202,
+          "codigo": null
+        },
+        "eventoId": "bafc2b26-7c88-5ae3-b5ac-26fdf5427a09",
+        "archivado": true,
+        "outboxNuevas": 1,
+        "evaluacion": {
+          "decision": "ACTIVA",
+          "razonEvento": null,
+          "activaciones": 1,
+          "evaluadas": 2,
+          "porPoliza": {
+            "COB-BOG-1": {
+              "decision": "ACTIVA",
+              "razon": null
+            },
+            "COB-BOG-2": {
+              "decision": "NO_ACTIVA",
+              "razon": "FUERA_DE_VENTANA"
+            }
+          }
+        }
+      }
+    },
+    {
+      "clave": "justoEnElUmbral",
+      "nota": "AC1: valorObservado = umbral activa.",
+      "envio": {
+        "fuente": "IDEAM-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": 0
+        },
+        "firma": "VALIDA",
+        "cuerpo": {
+          "versionContrato": "1",
+          "idExterno": "IDEAM-2026-1110-0002",
+          "eventoOrigen": "EVT-2026-0913",
+          "tipoEvento": "LLUVIA_ACUMULADA",
+          "valorObservado": "120",
+          "unidad": "mm",
+          "zona": "11001",
+          "observadoEn": "2026-11-10T14:05:00Z",
+          "ubicacion": {
+            "lat": 4.711,
+            "lon": -74.0721
+          }
+        }
+      },
+      "esperado": {
+        "http": {
+          "estado": 202,
+          "codigo": null
+        },
+        "eventoId": "f07e4fc6-2458-510e-98ff-c268d7447c51",
+        "archivado": true,
+        "outboxNuevas": 1,
+        "evaluacion": {
+          "decision": "ACTIVA",
+          "razonEvento": null,
+          "activaciones": 1,
+          "evaluadas": 2,
+          "porPoliza": {
+            "COB-BOG-1": {
+              "decision": "ACTIVA",
+              "razon": null
+            },
+            "COB-BOG-2": {
+              "decision": "NO_ACTIVA",
+              "razon": "FUERA_DE_VENTANA"
+            }
+          }
+        }
+      }
+    },
+    {
+      "clave": "unaUnidadBajoElUmbral",
+      "nota": "AC2: una unidad bajo el umbral no activa; la ventana pesa más que el umbral en la póliza vencida (precedencia de razones).",
+      "envio": {
+        "fuente": "IDEAM-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": 0
+        },
+        "firma": "VALIDA",
+        "cuerpo": {
+          "versionContrato": "1",
+          "idExterno": "IDEAM-2026-1110-0003",
+          "eventoOrigen": "EVT-2026-0913",
+          "tipoEvento": "LLUVIA_ACUMULADA",
+          "valorObservado": "119",
+          "unidad": "mm",
+          "zona": "11001",
+          "observadoEn": "2026-11-10T14:10:00Z",
+          "ubicacion": {
+            "lat": 4.711,
+            "lon": -74.0721
+          }
+        }
+      },
+      "esperado": {
+        "http": {
+          "estado": 202,
+          "codigo": null
+        },
+        "eventoId": "1f2c46d8-6b25-529b-ad9c-afaf6d316340",
+        "archivado": true,
+        "outboxNuevas": 1,
+        "evaluacion": {
+          "decision": "NO_ACTIVA",
+          "razonEvento": null,
+          "activaciones": 0,
+          "evaluadas": 2,
+          "porPoliza": {
+            "COB-BOG-1": {
+              "decision": "NO_ACTIVA",
+              "razon": "BAJO_UMBRAL"
+            },
+            "COB-BOG-2": {
+              "decision": "NO_ACTIVA",
+              "razon": "FUERA_DE_VENTANA"
+            }
+          }
+        }
+      }
+    },
+    {
+      "clave": "fueraDeVentanaEnVigenteHasta",
+      "nota": "AC2: justo en vigenteHasta (1 nov 05:00Z) está excluido.",
+      "envio": {
+        "fuente": "IDEAM-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": 0
+        },
+        "firma": "VALIDA",
+        "cuerpo": {
+          "versionContrato": "1",
+          "idExterno": "IDEAM-2026-1101-0004",
+          "eventoOrigen": "EVT-2026-0913",
+          "tipoEvento": "LLUVIA_ACUMULADA",
+          "valorObservado": "150",
+          "unidad": "mm",
+          "zona": "05001",
+          "observadoEn": "2026-11-01T05:00:00Z",
+          "ubicacion": {
+            "lat": 4.711,
+            "lon": -74.0721
+          }
+        }
+      },
+      "esperado": {
+        "http": {
+          "estado": 202,
+          "codigo": null
+        },
+        "eventoId": "96b25eb4-8a59-51a4-bc19-cf3019f2e9ee",
+        "archivado": true,
+        "outboxNuevas": 1,
+        "evaluacion": {
+          "decision": "NO_ACTIVA",
+          "razonEvento": null,
+          "activaciones": 0,
+          "evaluadas": 1,
+          "porPoliza": {
+            "COB-MED-1": {
+              "decision": "NO_ACTIVA",
+              "razon": "FUERA_DE_VENTANA"
+            }
+          }
+        }
+      }
+    },
+    {
+      "clave": "justoEnVigenteDesde",
+      "nota": "Valor límite: justo en vigenteDesde (2 nov 05:00Z) está incluido.",
+      "envio": {
+        "fuente": "IDEAM-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": 0
+        },
+        "firma": "VALIDA",
+        "cuerpo": {
+          "versionContrato": "1",
+          "idExterno": "IDEAM-2026-1102-0005",
+          "eventoOrigen": "EVT-2026-0913",
+          "tipoEvento": "LLUVIA_ACUMULADA",
+          "valorObservado": "130",
+          "unidad": "mm",
+          "zona": "08001",
+          "observadoEn": "2026-11-02T05:00:00Z",
+          "ubicacion": {
+            "lat": 4.711,
+            "lon": -74.0721
+          }
+        }
+      },
+      "esperado": {
+        "http": {
+          "estado": 202,
+          "codigo": null
+        },
+        "eventoId": "54703a30-6e39-5649-a71b-8a1352104105",
+        "archivado": true,
+        "outboxNuevas": 1,
+        "evaluacion": {
+          "decision": "ACTIVA",
+          "razonEvento": null,
+          "activaciones": 1,
+          "evaluadas": 1,
+          "porPoliza": {
+            "COB-BAQ-1": {
+              "decision": "ACTIVA",
+              "razon": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "clave": "unSegundoAntesDeVigenteDesde",
+      "nota": "Valor límite: un segundo antes de vigenteDesde no activa.",
+      "envio": {
+        "fuente": "IDEAM-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": 0
+        },
+        "firma": "VALIDA",
+        "cuerpo": {
+          "versionContrato": "1",
+          "idExterno": "IDEAM-2026-1102-0006",
+          "eventoOrigen": "EVT-2026-0913",
+          "tipoEvento": "LLUVIA_ACUMULADA",
+          "valorObservado": "130",
+          "unidad": "mm",
+          "zona": "08001",
+          "observadoEn": "2026-11-02T04:59:59Z",
+          "ubicacion": {
+            "lat": 4.711,
+            "lon": -74.0721
+          }
+        }
+      },
+      "esperado": {
+        "http": {
+          "estado": 202,
+          "codigo": null
+        },
+        "eventoId": "1e380074-d083-5fb4-ad7d-00a9fa685d7d",
+        "archivado": true,
+        "outboxNuevas": 1,
+        "evaluacion": {
+          "decision": "NO_ACTIVA",
+          "razonEvento": null,
+          "activaciones": 0,
+          "evaluadas": 1,
+          "porPoliza": {
+            "COB-BAQ-1": {
+              "decision": "NO_ACTIVA",
+              "razon": "FUERA_DE_VENTANA"
+            }
+          }
+        }
+      }
+    },
+    {
+      "clave": "fueraDeZona",
+      "nota": "AC2: zona sin coberturas activas del tipo. Los candidatos salen del índice (tipo, zona) (DS3-19), así que FUERA_DE_ZONA no aparece por póliza: la razón es del evento, SIN_POLIZAS_EN_ZONA (R-151).",
+      "envio": {
+        "fuente": "IDEAM-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": 0
+        },
+        "firma": "VALIDA",
+        "cuerpo": {
+          "versionContrato": "1",
+          "idExterno": "IDEAM-2026-1110-0007",
+          "eventoOrigen": "EVT-2026-0913",
+          "tipoEvento": "LLUVIA_ACUMULADA",
+          "valorObservado": "200",
+          "unidad": "mm",
+          "zona": "76001",
+          "observadoEn": "2026-11-10T14:15:00Z",
+          "ubicacion": {
+            "lat": 4.711,
+            "lon": -74.0721
+          }
+        }
+      },
+      "esperado": {
+        "http": {
+          "estado": 202,
+          "codigo": null
+        },
+        "eventoId": "646e2412-8d49-51b2-a00b-034743100808",
+        "archivado": true,
+        "outboxNuevas": 1,
+        "evaluacion": {
+          "decision": "SIN_POLIZAS",
+          "razonEvento": "SIN_POLIZAS_EN_ZONA",
+          "activaciones": 0,
+          "evaluadas": 0,
+          "porPoliza": {}
+        }
+      }
+    },
+    {
+      "clave": "retrasoDeVueloEnElUmbral",
+      "nota": "Otro tipo y otra unidad: 180 min con umbral 180 min.",
+      "envio": {
+        "fuente": "AEROCIVIL-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": 0
+        },
+        "firma": "VALIDA",
+        "cuerpo": {
+          "versionContrato": "1",
+          "idExterno": "AEROCIVIL-2026-1105-0001",
+          "eventoOrigen": "EVT-2026-0105",
+          "tipoEvento": "RETRASO_VUELO",
+          "valorObservado": "180",
+          "unidad": "min",
+          "zona": "AV204",
+          "observadoEn": "2026-11-05T18:30:00Z"
+        }
+      },
+      "esperado": {
+        "http": {
+          "estado": 202,
+          "codigo": null
+        },
+        "eventoId": "46e3822d-cd3f-5245-bc4a-db502bdede0b",
+        "archivado": true,
+        "outboxNuevas": 1,
+        "evaluacion": {
+          "decision": "ACTIVA",
+          "razonEvento": null,
+          "activaciones": 1,
+          "evaluadas": 1,
+          "porPoliza": {
+            "COB-VUELO-1": {
+              "decision": "ACTIVA",
+              "razon": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "clave": "duplicado",
+      "nota": "AC4: el reenvío de `valido` (marca nueva, mismo idExterno) responde 200 con el mismo eventoId, sin otra fila de Outbox ni otra evaluación.",
+      "reenvioDe": "valido",
+      "envio": {
+        "fuente": "IDEAM-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": 0
+        },
+        "firma": "VALIDA",
+        "cuerpo": {
+          "versionContrato": "1",
+          "idExterno": "IDEAM-2026-1110-0001",
+          "eventoOrigen": "EVT-2026-0913",
+          "tipoEvento": "LLUVIA_ACUMULADA",
+          "valorObservado": "135",
+          "unidad": "mm",
+          "zona": "11001",
+          "observadoEn": "2026-11-10T14:00:00Z",
+          "ubicacion": {
+            "lat": 4.711,
+            "lon": -74.0721
+          }
+        }
+      },
+      "esperado": {
+        "http": {
+          "estado": 200,
+          "codigo": null
+        },
+        "eventoId": "bafc2b26-7c88-5ae3-b5ac-26fdf5427a09",
+        "archivado": true,
+        "outboxNuevas": 0,
+        "evaluacion": null
+      }
+    },
+    {
+      "clave": "firmaInvalida",
+      "nota": "AC3: un byte de la firma alterado.",
+      "envio": {
+        "fuente": "IDEAM-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": 0
+        },
+        "firma": "ALTERADA",
+        "cuerpo": {
+          "versionContrato": "1",
+          "idExterno": "IDEAM-2026-1110-0090",
+          "eventoOrigen": "EVT-2026-0913",
+          "tipoEvento": "LLUVIA_ACUMULADA",
+          "valorObservado": "135",
+          "unidad": "mm",
+          "zona": "11001",
+          "observadoEn": "2026-11-10T15:00:00Z",
+          "ubicacion": {
+            "lat": 4.711,
+            "lon": -74.0721
+          }
+        }
+      },
+      "esperado": {
+        "http": {
+          "estado": 401,
+          "codigo": "FIRMA_INVALIDA"
+        },
+        "archivado": false,
+        "outboxNuevas": 0,
+        "evaluacion": null
+      }
+    },
+    {
+      "clave": "sinFirma",
+      "nota": "AC3: sin encabezado de firma.",
+      "envio": {
+        "fuente": "IDEAM-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": 0
+        },
+        "firma": "AUSENTE",
+        "cuerpo": {
+          "versionContrato": "1",
+          "idExterno": "IDEAM-2026-1110-0090",
+          "eventoOrigen": "EVT-2026-0913",
+          "tipoEvento": "LLUVIA_ACUMULADA",
+          "valorObservado": "135",
+          "unidad": "mm",
+          "zona": "11001",
+          "observadoEn": "2026-11-10T15:00:00Z",
+          "ubicacion": {
+            "lat": 4.711,
+            "lon": -74.0721
+          }
+        }
+      },
+      "esperado": {
+        "http": {
+          "estado": 401,
+          "codigo": "FIRMA_INVALIDA"
+        },
+        "archivado": false,
+        "outboxNuevas": 0,
+        "evaluacion": null
+      }
+    },
+    {
+      "clave": "fuenteDesconocida",
+      "nota": "AC3: la fuente no está en TELEMETRIA_FUENTES (aunque la firma sea correcta).",
+      "envio": {
+        "fuente": "OTRA-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": 0
+        },
+        "firma": "VALIDA",
+        "cuerpo": {
+          "versionContrato": "1",
+          "idExterno": "IDEAM-2026-1110-0090",
+          "eventoOrigen": "EVT-2026-0913",
+          "tipoEvento": "LLUVIA_ACUMULADA",
+          "valorObservado": "135",
+          "unidad": "mm",
+          "zona": "11001",
+          "observadoEn": "2026-11-10T15:00:00Z",
+          "ubicacion": {
+            "lat": 4.711,
+            "lon": -74.0721
+          }
+        }
+      },
+      "esperado": {
+        "http": {
+          "estado": 401,
+          "codigo": "FIRMA_INVALIDA"
+        },
+        "archivado": false,
+        "outboxNuevas": 0,
+        "evaluacion": null
+      }
+    },
+    {
+      "clave": "marcaDeTiempoVieja",
+      "nota": "AC3 / SEC-W21-01: firma correcta pero marca de hace 5 min + 1 s (repetición).",
+      "envio": {
+        "fuente": "IDEAM-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": -301
+        },
+        "firma": "VALIDA",
+        "cuerpo": {
+          "versionContrato": "1",
+          "idExterno": "IDEAM-2026-1110-0090",
+          "eventoOrigen": "EVT-2026-0913",
+          "tipoEvento": "LLUVIA_ACUMULADA",
+          "valorObservado": "135",
+          "unidad": "mm",
+          "zona": "11001",
+          "observadoEn": "2026-11-10T15:00:00Z",
+          "ubicacion": {
+            "lat": 4.711,
+            "lon": -74.0721
+          }
+        }
+      },
+      "esperado": {
+        "http": {
+          "estado": 401,
+          "codigo": "MARCA_TIEMPO_FUERA_DE_RANGO"
+        },
+        "archivado": false,
+        "outboxNuevas": 0,
+        "evaluacion": null
+      }
+    },
+    {
+      "clave": "marcaDeTiempoFutura",
+      "nota": "AC3: marca 5 min + 1 s en el futuro (en cualquier sentido).",
+      "envio": {
+        "fuente": "IDEAM-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": 301
+        },
+        "firma": "VALIDA",
+        "cuerpo": {
+          "versionContrato": "1",
+          "idExterno": "IDEAM-2026-1110-0090",
+          "eventoOrigen": "EVT-2026-0913",
+          "tipoEvento": "LLUVIA_ACUMULADA",
+          "valorObservado": "135",
+          "unidad": "mm",
+          "zona": "11001",
+          "observadoEn": "2026-11-10T15:00:00Z",
+          "ubicacion": {
+            "lat": 4.711,
+            "lon": -74.0721
+          }
+        }
+      },
+      "esperado": {
+        "http": {
+          "estado": 401,
+          "codigo": "MARCA_TIEMPO_FUERA_DE_RANGO"
+        },
+        "archivado": false,
+        "outboxNuevas": 0,
+        "evaluacion": null
+      }
+    },
+    {
+      "clave": "malformadoNoJson",
+      "nota": "AC3: cuerpo truncado, firmado.",
+      "envio": {
+        "fuente": "IDEAM-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": 0
+        },
+        "firma": "VALIDA",
+        "cuerpoCrudo": "{\"versionContrato\": \"1\", \"idExterno\": \"IDEAM-2026-1110-0091\", "
+      },
+      "esperado": {
+        "http": {
+          "estado": 422,
+          "codigo": "CONTRATO_INVALIDO"
+        },
+        "archivado": false,
+        "outboxNuevas": 0,
+        "evaluacion": null
+      }
+    },
+    {
+      "clave": "malformadoValorNoDecimal",
+      "nota": "AC3: valorObservado no es texto decimal.",
+      "envio": {
+        "fuente": "IDEAM-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": 0
+        },
+        "firma": "VALIDA",
+        "cuerpo": {
+          "versionContrato": "1",
+          "idExterno": "IDEAM-2026-1110-0092",
+          "eventoOrigen": "EVT-2026-0913",
+          "tipoEvento": "LLUVIA_ACUMULADA",
+          "valorObservado": "mucha",
+          "unidad": "mm",
+          "zona": "11001",
+          "observadoEn": "2026-11-10T15:00:00Z",
+          "ubicacion": {
+            "lat": 4.711,
+            "lon": -74.0721
+          }
+        }
+      },
+      "esperado": {
+        "http": {
+          "estado": 422,
+          "codigo": "CONTRATO_INVALIDO",
+          "campos": [
+            "valorObservado"
+          ]
+        },
+        "archivado": false,
+        "outboxNuevas": 0,
+        "evaluacion": null
+      }
+    },
+    {
+      "clave": "versionNoSoportada",
+      "nota": "AC3: versionContrato distinta de 1.",
+      "envio": {
+        "fuente": "IDEAM-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": 0
+        },
+        "firma": "VALIDA",
+        "cuerpo": {
+          "versionContrato": "2",
+          "idExterno": "IDEAM-2026-1110-0093",
+          "eventoOrigen": "EVT-2026-0913",
+          "tipoEvento": "LLUVIA_ACUMULADA",
+          "valorObservado": "135",
+          "unidad": "mm",
+          "zona": "11001",
+          "observadoEn": "2026-11-10T15:00:00Z",
+          "ubicacion": {
+            "lat": 4.711,
+            "lon": -74.0721
+          }
+        }
+      },
+      "esperado": {
+        "http": {
+          "estado": 422,
+          "codigo": "CONTRATO_INVALIDO",
+          "campos": [
+            "versionContrato"
+          ]
+        },
+        "archivado": false,
+        "outboxNuevas": 0,
+        "evaluacion": null
+      }
+    },
+    {
+      "clave": "unidadIncoherente",
+      "nota": "AC3: lluvia acumulada en minutos.",
+      "envio": {
+        "fuente": "IDEAM-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": 0
+        },
+        "firma": "VALIDA",
+        "cuerpo": {
+          "versionContrato": "1",
+          "idExterno": "IDEAM-2026-1110-0094",
+          "eventoOrigen": "EVT-2026-0913",
+          "tipoEvento": "LLUVIA_ACUMULADA",
+          "valorObservado": "135",
+          "unidad": "min",
+          "zona": "11001",
+          "observadoEn": "2026-11-10T15:00:00Z",
+          "ubicacion": {
+            "lat": 4.711,
+            "lon": -74.0721
+          }
+        }
+      },
+      "esperado": {
+        "http": {
+          "estado": 422,
+          "codigo": "CONTRATO_INVALIDO",
+          "campos": [
+            "unidad"
+          ]
+        },
+        "archivado": false,
+        "outboxNuevas": 0,
+        "evaluacion": null
+      }
+    },
+    {
+      "clave": "campoDeMas",
+      "nota": "AC3: el contrato no admite campos adicionales (nada de datos personales).",
+      "envio": {
+        "fuente": "IDEAM-SIM",
+        "marcaTiempo": {
+          "desfaseSegundos": 0
+        },
+        "firma": "VALIDA",
+        "cuerpo": {
+          "versionContrato": "1",
+          "idExterno": "IDEAM-2026-1110-0095",
+          "eventoOrigen": "EVT-2026-0913",
+          "tipoEvento": "LLUVIA_ACUMULADA",
+          "valorObservado": "135",
+          "unidad": "mm",
+          "zona": "11001",
+          "observadoEn": "2026-11-10T15:00:00Z",
+          "ubicacion": {
+            "lat": 4.711,
+            "lon": -74.0721
+          },
+          "contacto": "x@ejemplo.test"
+        }
+      },
+      "esperado": {
+        "http": {
+          "estado": 422,
+          "codigo": "CONTRATO_INVALIDO",
+          "campos": [
+            "contacto"
+          ]
+        },
+        "archivado": false,
+        "outboxNuevas": 0,
+        "evaluacion": null
+      }
+    }
+  ],
+  "mensajesCola": [
+    {
+      "clave": "entregaDuplicada",
+      "nota": "AC4: el mismo mensaje de `valido` entregado dos veces (SQS al menos una vez): una sola evaluación.",
+      "evento": "valido",
+      "entregas": 2,
+      "esperado": {
+        "evaluaciones": 1,
+        "activaciones": 1,
+        "outboxEvaluado": 1
+      }
+    },
+    {
+      "clave": "envenenadoSinZona",
+      "nota": "Sobre de EventoParametricoObservado sin `zona`: no valida contra su esquema (EventoInvalido); termina en la DLQ tras 5 recepciones, con causa FORMATO_INVALIDO (H10).",
+      "sobre": {
+        "eventId": "ee210000-0000-4000-8000-000000000001",
+        "aggregateId": "ee210000-0000-4000-8000-000000000001",
+        "type": "EventoParametricoObservado",
+        "version": 1,
+        "occurredAt": "2026-11-10T14:20:00Z",
+        "correlationId": "corr-sint-envenenado",
+        "payload": {
+          "eventoId": "ee210000-0000-4000-8000-000000000001",
+          "fuente": "IDEAM-SIM",
+          "idExterno": "IDEAM-2026-1110-0096",
+          "eventoOrigen": "EVT-2026-0913",
+          "tipoEvento": "LLUVIA_ACUMULADA",
+          "valorObservado": "150",
+          "unidad": "mm",
+          "observadoEn": "2026-11-10T14:20:00Z",
+          "recibidoEn": "2026-11-10T14:20:01Z",
+          "archivoRef": "telemetria/2026/11/10/ee210000-0000-4000-8000-000000000001.json"
+        }
+      },
+      "esperado": {
+        "dlq": true,
+        "causa": "FORMATO_INVALIDO",
+        "evaluaciones": 0
+      }
+    },
+    {
+      "clave": "envenenadoNoJson",
+      "nota": "Cuerpo que no es JSON: sobre ilegible, DLQ con causa FORMATO_INVALIDO.",
+      "cuerpoCrudo": "esto no es un sobre",
+      "esperado": {
+        "dlq": true,
+        "causa": "FORMATO_INVALIDO",
+        "evaluaciones": 0
+      }
+    }
+  ]
+}

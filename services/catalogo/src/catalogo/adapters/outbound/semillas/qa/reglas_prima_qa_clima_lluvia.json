@@ -1,0 +1,24 @@
+{
+  "productoId": "clima-lluvia",
+  "moneda": "COP",
+  "periodicidad": "MENSUAL",
+  "tasaBase": "0.025",
+  "factoresNivel": {"BAJO": "1.00", "MEDIO": "1.00", "ALTO": "1.00", "SIN_PERFIL": "1.00"},
+  "factoresVariables": [],
+  "recargos": [],
+  "primaMinima": "20000",
+  "primaMaxima": "100000",
+  "redondeo": {"escala": 0, "modo": "ROUND_HALF_EVEN"},
+  "limites": {
+    "sumaAsegurada": {"minimo": "1400000", "maximo": "1400000"},
+    "plazoCreditoMeses": {"minimo": "1", "maximo": "12"},
+    "edad": {"minimo": "18", "maximo": "99"}
+  },
+  "oferta": {
+    "vigenciaMinutos": 30,
+    "exclusiones": [
+      {"codigo": "MEDICION_NO_OFICIAL", "descripcion": "Mediciones que no provienen de la fuente de telemetría oficial"}
+    ],
+    "sumasCoberturas": [{"cobertura": "LLUVIA_ACUMULADA", "porcentaje": "1"}]
+  }
+}

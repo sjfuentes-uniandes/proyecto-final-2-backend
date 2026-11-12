@@ -249,6 +249,55 @@ def test_el_payload_no_lleva_nombres_ni_documentos_de_identidad_ni_contacto() ->
     assert not prohibidos & set(payload)
 
 
+# --- coberturaParametrica (HU-W21, DS3-20 opción A) ----------------------------------------------
+def _cobertura_parametrica() -> dict[str, Any]:
+    return {
+        "tipoEvento": "LLUVIA_ACUMULADA",
+        "zona": "11001",
+        "umbral": "120",
+        "unidad": "mm",
+        "valorPago": "1400000.00",
+        "moneda": "COP",
+        "versionRegla": "1",
+    }
+
+
+def test_cobertura_parametrica_es_opcional_y_puede_ser_nula() -> None:
+    """Aditivo: v1 no sube de versión. `polizas` todavía no la llena (siempre null)."""
+    assert "coberturaParametrica" not in _publicado()["$defs"]["PolizaEmitidaV1"]["required"]
+    for valor in (None, _cobertura_parametrica()):
+        sobre = _ejemplo()
+        sobre["payload"]["coberturaParametrica"] = valor
+        assert _errores(sobre) == []
+
+
+def test_cobertura_parametrica_exige_todos_sus_campos() -> None:
+    for campo in _cobertura_parametrica():
+        sobre = _ejemplo()
+        sobre["payload"]["coberturaParametrica"] = _cobertura_parametrica()
+        del sobre["payload"]["coberturaParametrica"][campo]
+        assert _errores(sobre), f"aceptó la cobertura paramétrica sin {campo}"
+
+
+@pytest.mark.parametrize(
+    ("campo", "valor"),
+    [
+        ("tipoEvento", "GRANIZO"),
+        ("unidad", "km"),
+        ("umbral", 120),
+        ("umbral", "120,5"),
+        ("valorPago", "1400000.001"),
+        ("zona", "11-001"),
+        ("moneda", "cop"),
+        ("versionRegla", ""),
+    ],
+)
+def test_cobertura_parametrica_rechaza_cada_desvio(campo: str, valor: object) -> None:
+    sobre = _ejemplo()
+    sobre["payload"]["coberturaParametrica"] = {**_cobertura_parametrica(), campo: valor}
+    assert _errores(sobre)
+
+
 # --- El productor (HU-W17, 17.8) --------------------------------------------------------------
 def _coberturas_instantanea() -> Any:
     from polizas.domain.suscripcion.modelos import Cobertura

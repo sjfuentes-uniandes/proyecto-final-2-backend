@@ -50,14 +50,16 @@ def test_migrar_bloquea_aplica_los_sql_siembra_y_libera(monkeypatch: pytest.Monk
     assert "CREATE TABLE IF NOT EXISTS reglas_suscripcion" in sentencias[3]
     # HU-W06: las reglas de fallback, después de las de suscripción.
     assert "CREATE TABLE IF NOT EXISTS reglas_fallback" in sentencias[4]
-    assert "INSERT INTO modelos_riesgo" in sentencias[5]
-    assert "ON CONFLICT (version) DO NOTHING" in sentencias[5]
-    assert any("INSERT INTO productos" in s for s in sentencias[6:-1])
-    assert any("INSERT INTO reglas_prima" in s for s in sentencias[6:-1])
+    # HU-W21: el bloque paramétrico opcional del producto, la última migración.
+    assert "ADD COLUMN IF NOT EXISTS parametrico" in sentencias[5]
+    assert "INSERT INTO modelos_riesgo" in sentencias[6]
+    assert "ON CONFLICT (version) DO NOTHING" in sentencias[6]
+    assert any("INSERT INTO productos" in s for s in sentencias[7:-1])
+    assert any("INSERT INTO reglas_prima" in s for s in sentencias[7:-1])
     assert "INSERT INTO reglas_suscripcion" in sentencias[-3]
     assert "INSERT INTO reglas_fallback" in sentencias[-2]
     assert "pg_advisory_unlock" in sentencias[-1]
-    version, producto, desde, definicion, hash_, actor = conexion.sentencias[5][1]
+    version, producto, desde, definicion, hash_, actor = conexion.sentencias[6][1]
     assert (version, producto, desde, actor) == (
         "2026.10.1",
         "vida-hipotecario",

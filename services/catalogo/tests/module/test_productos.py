@@ -9,6 +9,7 @@ import json
 import os
 import time
 from collections.abc import Iterator
+from importlib import resources
 from typing import Any
 
 import psycopg
@@ -22,6 +23,14 @@ from fastapi.testclient import TestClient
 
 docker = pytest.importorskip("docker")
 IMAGEN_VALKEY = "valkey/valkey:8.0.2-alpine"
+MIGRACIONES = resources.files("catalogo.adapters.outbound").joinpath("migraciones")
+BLOQUE_CLIMA_LLUVIA = {
+    "tipoEvento": "LLUVIA_ACUMULADA",
+    "unidad": "mm",
+    "umbral": "120",
+    "valorPago": "1400000.00",
+    "versionRegla": "1",
+}
 
 
 @pytest.fixture(scope="module")
@@ -155,3 +164,57 @@ def test_catalogo_llena_e_invalida_la_cache(base: str, valkey: str) -> None:
     assert 0 < directo.ttl(clave_producto("vida-hipotecario")) <= 60
     vigentes = directo.get(clave_reglas_vigentes("vida-hipotecario"))
     assert vigentes is not None and json.loads(vigentes) == reglas
+
+
+def test_clima_lluvia_se_publica_una_vez_con_su_bloque_y_la_api_lo_entrega(base: str) -> None:
+    """HU-W21: el producto paramétrico de QA, con su regla y sus reglas de prima, solo por la
+    semilla de QA; el resto de los productos queda sin el bloque."""
+    from catalogo.adapters.outbound.productos_pg import sembrar_qa
+
+    # (La prueba de arriba ya la publicó con `sembrar_qa`: la semilla normal nunca lo hace.)
+    sembrar_qa(base)
+    sembrar_qa(base)
+    assert _filas(base, "SELECT count(*) FROM productos WHERE id = 'clima-lluvia'") == [(1,)]
+    assert _filas(base, "SELECT parametrico FROM productos WHERE id = 'clima-lluvia'") == [
+        (BLOQUE_CLIMA_LLUVIA,)
+    ]
+    assert _filas(base, "SELECT id FROM productos WHERE parametrico IS NOT NULL") == [
+        ("clima-lluvia",)
+    ]
+    with TestClient(crear_app(Settings(SOLVENTA_DATABASE_URL=base))) as api:
+        producto = api.get("/v1/productos/clima-lluvia").json()
+        otro = api.get("/v1/productos/vida-hipotecario").json()
+        reglas = api.get(
+            "/v1/productos/clima-lluvia/reglas-prima/vigente",
+            params={"fecha": "2026-11-11T15:00:00Z"},
+        )
+    assert producto["parametrico"] == BLOQUE_CLIMA_LLUVIA
+    assert (producto["ramo"], producto["moneda"], producto["version"]) == (
+        "PARAMETRICO",
+        "COP",
+        "2026.11.1",
+    )
+    assert "parametrico" not in otro
+    assert reglas.status_code == 200
+    assert reglas.json()["hash"] == hash_canonico(reglas.json()["definicion"])
+
+
+def test_migracion_005_adelante_y_atras(base: str) -> None:
+    """Revertir 005 quita la columna; volver a migrar la recrea vacía (los productos que ya
+    existían quedan sin bloque: la semilla no pisa filas existentes)."""
+    reversa = MIGRACIONES.joinpath("down", "005_producto_parametrico.sql").read_text(
+        encoding="utf-8"
+    )
+    columna = (
+        "SELECT count(*) FROM information_schema.columns "
+        "WHERE table_name = 'productos' AND column_name = 'parametrico'"
+    )
+    assert _filas(base, columna) == [(1,)]
+    with psycopg.connect(base, autocommit=True) as conexion:
+        conexion.execute(reversa)
+        conexion.execute(reversa)  # idempotente
+    assert _filas(base, columna) == [(0,)]
+    migrar(base)
+    migrar(base)
+    assert _filas(base, columna) == [(1,)]
+    assert _filas(base, "SELECT count(*) FROM productos WHERE parametrico IS NOT NULL") == [(0,)]
