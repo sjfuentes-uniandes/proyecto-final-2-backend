@@ -64,7 +64,12 @@ def armar_envio(
     """Los encabezados y el cuerpo crudo de un caso. `desfaseSegundos` es relativo a `ahora`;
     `firma` es VALIDA, ALTERADA (último dígito cambiado) o AUSENTE."""
     envio = caso["envio"]
-    marca = (ahora + timedelta(seconds=envio["marcaTiempo"]["desfaseSegundos"])).astimezone(UTC)
+    desfase = envio["marcaTiempo"]["desfaseSegundos"]
+    marca = (ahora + timedelta(seconds=desfase)).astimezone(UTC)
+    if desfase > 0 and marca.microsecond:
+        # La marca viaja en segundos enteros: truncar una marca futura la acerca hasta 1 s al
+        # presente y, con la latencia, un caso de +301 s cae dentro de la ventana de ± 300 s.
+        marca = marca.replace(microsecond=0) + timedelta(seconds=1)
     marca_texto = marca.isoformat(timespec="seconds").replace("+00:00", "Z")
     if "cuerpoCrudo" in envio:
         cuerpo = envio["cuerpoCrudo"].encode()

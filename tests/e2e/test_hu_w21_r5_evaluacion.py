@@ -142,7 +142,7 @@ def auditoria(ambiente: Any) -> Auditoria:
             "N3 HU-W21 C03: falta E2E_PUBLICAR_COBERTURAS=1 (publica las coberturas sintéticas en "
             "el tópico de eventos de INT)"
         )
-    salidas = ambiente.salidas
+    salidas = ambiente.salidas.get("platform", {})  # las dos salidas viven en el objeto `platform`
     if not (salidas.get("audit_bucket", {}).get("name") and salidas.get("events_topic_arn")):
         pytest.skip(
             "N3 HU-W21 C03: faltan las salidas audit_bucket y events_topic_arn de infra/platform"
