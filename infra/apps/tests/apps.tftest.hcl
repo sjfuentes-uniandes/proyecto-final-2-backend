@@ -371,6 +371,20 @@ run "todos_los_servicios" {
     ]) && !strcontains(jsonencode(local.task_statements["bff-web"]), "cloudwatch:PutMetricAlarm") && !strcontains(jsonencode(local.task_statements["bff-web"]), "cloudwatch:SetAlarmState") && strcontains(jsonencode(local.task_statements["api-socios"]), "\"cloudwatch:namespace\":\"Solventa/Socios\"")
     error_message = "Solo bff-web lee las alarmas (sin modificarlas) y solo api-socios publica PartnerQuotaUsage en Solventa/Socios."
   }
+  # HU-W29: Operación › Continuidad. Sin experiments_bucket (int) no hay informe que leer.
+  assert {
+    condition = (
+      local.environment["bff-web"]["CONTINUIDAD_EVENTOS"] == "/ecs/solventa-int/events" &&
+      local.environment["bff-web"]["CONTINUIDAD_ALB"] == "app/solventa-int-access/1" &&
+      local.environment["bff-web"]["CONTINUIDAD_BUCKET"] == "" &&
+      jsondecode(local.environment["bff-web"]["CONTINUIDAD_RECORRIDOS"]).R1 == { nombre = "Cotización", alarmas = ["cotizacion-errores-critica", "bff-web-sin-destinos", "api-canales-5xx"] } &&
+      alltrue([for r in values(jsondecode(local.environment["bff-web"]["CONTINUIDAD_RECORRIDOS"])) : alltrue([for a in r.alarmas : contains(keys(local.alert_catalog), a)])]) &&
+      alltrue([for name, statements in local.task_statements : strcontains(jsonencode(statements), "logs:StartQuery") == (name == "bff-web")]) &&
+      !strcontains(jsonencode(local.task_statements["bff-web"]), "s3:GetObject") &&
+      !contains(keys(local.environment["clientes"]), "CONTINUIDAD_EVENTOS")
+    )
+    error_message = "Solo bff-web lee la cronología del ambiente; los recorridos críticos solo citan alarmas existentes (sin meta de cotización no hay cotizacion-p95); sin bucket de experimentos no lee S3."
+  }
   assert {
     condition     = local.environment["api-socios"]["QUOTA_METRIC_INTERVAL_S"] == "300"
     error_message = "api-socios publica el consumo de cuota cada 5 minutos."

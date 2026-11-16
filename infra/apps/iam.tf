@@ -37,6 +37,20 @@ locals {
   trace_readers = ["bff-web"]
   # HU-W28: pantalla Operación › Alertas (alarmas del ambiente y su historial).
   alert_readers = ["bff-web"]
+  # HU-W29: pantalla Operación › Continuidad (cronología de ECS, RDS y FIS, tráfico del ALB por
+  # zona) y Conciliación (informe del experimento en el bucket de exp). Solo lectura de
+  # "Métricas, trazas, registros y alertas" (SeguimientoOperacion, modelo_despliegue.puml).
+  continuity_readers = ["bff-web"]
+  experiments_bucket = try(local.p.experiments_bucket, null)
+  # Recorridos críticos de la pantalla y las alarmas de HU-W28 que los degradan (sin prefijo);
+  # solo las que existen en el ambiente.
+  continuity_routes = {
+    for id, route in {
+      R1 = { nombre = "Cotización", alarmas = ["cotizacion-p95-critica", "cotizacion-errores-critica", "bff-web-sin-destinos", "api-canales-5xx"] }
+      R3 = { nombre = "Suscripción, aceptación y recaudo", alarmas = ["polizas-errores-critica", "emision-p95-critica", "dinero-errores-critica", "recaudos-pendientes", "api-canales-5xx"] }
+      R5 = { nombre = "Siniestros paramétricos", alarmas = ["adaptador-telemetria-errores-critica", "pagos-parametricos-errores-critica", "cola-parametricos-eventos-atraso"] }
+    } : id => { nombre = route.nombre, alarmas = [for a in route.alarmas : a if contains(keys(local.alert_catalog), a)] }
+  }
   # Administración › Usuarios del portal: alta de usuarios del back-office y sus grupos.
   backoffice_user_admins = ["bff-web"]
   cors_services          = ["bff-web"]
@@ -120,6 +134,18 @@ locals {
       # de recurso; bff-web filtra por el prefijo del ambiente (ALERTAS_PREFIJO).
       contains(local.alert_readers, name) ? [
         { Effect = "Allow", Action = ["cloudwatch:DescribeAlarms", "cloudwatch:DescribeAlarmHistory", "cloudwatch:GetMetricData"], Resource = ["*"] },
+      ] : [],
+      # StartQuery y FilterLogEvents solo sobre la cronología; GetQueryResults no admite ARN.
+      contains(local.continuity_readers, name) ? [
+        {
+          Effect   = "Allow"
+          Action   = ["logs:StartQuery", "logs:FilterLogEvents"]
+          Resource = ["arn:${local.partition}:logs:${local.p.region}:${local.p.account_id}:log-group:${local.p.events_log_group}", "arn:${local.partition}:logs:${local.p.region}:${local.p.account_id}:log-group:${local.p.events_log_group}:*"]
+        },
+        { Effect = "Allow", Action = ["logs:GetQueryResults"], Resource = ["*"] },
+      ] : [],
+      contains(local.continuity_readers, name) && local.experiments_bucket != null ? [
+        { Effect = "Allow", Action = ["s3:GetObject"], Resource = ["${local.experiments_bucket.arn}/hu-w29/*"] },
       ] : [],
       contains(local.backoffice_user_admins, name) ? [
         {

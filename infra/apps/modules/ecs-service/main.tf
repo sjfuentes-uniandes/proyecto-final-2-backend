@@ -117,3 +117,12 @@ output "service_name" {
 output "task_definition_arn" {
   value = aws_ecs_task_definition.this.arn
 }
+
+# Reparto entre zonas (HU-W29): subredes de A y B, rebalanceo y proveedor de capacidad.
+output "placement" {
+  value = {
+    subnet_ids                    = var.subnet_ids
+    availability_zone_rebalancing = aws_ecs_service.this.availability_zone_rebalancing
+    capacity_provider             = var.use_fargate_spot ? "FARGATE_SPOT" : "FARGATE"
+  }
+}

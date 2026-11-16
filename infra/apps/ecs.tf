@@ -119,6 +119,12 @@ locals {
         ALERTAS_ATENCION_MIN       = tostring(var.alert_attention_minutes)
         ALERTAS_FALSO_POSITIVO_MIN = tostring(var.false_positive_minutes)
       } : {},
+      contains(local.continuity_readers, name) ? {
+        CONTINUIDAD_EVENTOS    = local.p.events_log_group
+        CONTINUIDAD_ALB        = local.p.alb.arn_suffix
+        CONTINUIDAD_RECORRIDOS = jsonencode(local.continuity_routes)
+        CONTINUIDAD_BUCKET     = local.experiments_bucket == null ? "" : local.experiments_bucket.name
+      } : {},
       # Último: las variables de QA del ambiente (service_environment) tienen prioridad.
       lookup(var.service_environment, name, {}),
     )
