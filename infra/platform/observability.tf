@@ -36,6 +36,10 @@ resource "aws_cloudwatch_log_group" "metrics" {
 }
 
 # Reemplazos de tareas y despliegues para la continuidad multizona.
+# Cronología del incidente (HU-W29): además de ECS, los eventos de RDS (failover del
+# standby) y, en exp, los de AWS FIS (inyección y fin). bff-web la lee en Operación ›
+# Continuidad. Respaldo: `ECS ..> Observability` y `RDS ..> Observability` en
+# diagrama_despliegue_ecs_fargate.puml.
 resource "aws_cloudwatch_log_group" "ecs_events" {
   name              = "/ecs/${local.prefix}/events"
   retention_in_days = var.log_retention_days
@@ -50,6 +54,30 @@ resource "aws_cloudwatch_event_rule" "ecs" {
   })
 }
 
+resource "aws_cloudwatch_event_rule" "rds" {
+  name = "${local.prefix}-rds-events"
+  event_pattern = jsonencode({
+    source        = ["aws.rds"]
+    "detail-type" = ["RDS DB Instance Event"]
+    resources     = [aws_db_instance.main.arn]
+  })
+}
+
+# Experimentos de AWS FIS de la cuenta: solo exp tiene el rol y la plantilla (experiments_enabled).
+resource "aws_cloudwatch_event_rule" "fis" {
+  count = var.experiments_enabled ? 1 : 0
+  name  = "${local.prefix}-fis-events"
+  event_pattern = jsonencode({
+    source        = ["aws.fis"]
+    "detail-type" = ["FIS Experiment State Change"]
+    resources     = [{ prefix = "arn:${local.partition}:fis:${var.aws_region}:${local.account_id}:experiment/" }]
+  })
+}
+
+locals {
+  timeline_rules = concat([aws_cloudwatch_event_rule.ecs, aws_cloudwatch_event_rule.rds], aws_cloudwatch_event_rule.fis)
+}
+
 resource "aws_cloudwatch_log_resource_policy" "ecs_events" {
   policy_name = "${local.prefix}-ecs-events"
   policy_document = jsonencode({
@@ -59,16 +87,22 @@ resource "aws_cloudwatch_log_resource_policy" "ecs_events" {
       Principal = { Service = ["events.amazonaws.com", "delivery.logs.amazonaws.com"] }
       Action    = ["logs:CreateLogStream", "logs:PutLogEvents"]
       Resource  = "${aws_cloudwatch_log_group.ecs_events.arn}:*"
-      Condition = { ArnEquals = { "aws:SourceArn" = aws_cloudwatch_event_rule.ecs.arn } }
+      Condition = { ArnEquals = { "aws:SourceArn" = [for rule in local.timeline_rules : rule.arn] } }
     }]
   })
 }
 
 resource "aws_cloudwatch_event_target" "ecs_events" {
-  rule       = aws_cloudwatch_event_rule.ecs.name
+  for_each   = { for rule in local.timeline_rules : trimprefix(rule.name, "${local.prefix}-") => rule.name }
+  rule       = each.value
   target_id  = "cloudwatch-logs"
   arn        = aws_cloudwatch_log_group.ecs_events.arn
   depends_on = [aws_cloudwatch_log_resource_policy.ecs_events]
+}
+
+moved {
+  from = aws_cloudwatch_event_target.ecs_events
+  to   = aws_cloudwatch_event_target.ecs_events["ecs-events"]
 }
 
 # Limitaciones por socio (HU-W02 AC2): cada 429 del API de socios se cuenta con

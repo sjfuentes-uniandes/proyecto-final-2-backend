@@ -297,3 +297,9 @@ variable "alert_emails" {
   type        = list(string)
   default     = []
 }
+
+variable "experiments_enabled" {
+  description = "Recursos del experimento multizona (HU-W29): rol de AWS FIS, bucket de informes y tarea de reconciliación. Solo en exp."
+  type        = bool
+  default     = false
+}
