@@ -55,6 +55,88 @@ def test_contrato_de_alertas() -> None:
     ]
 
 
+def test_contrato_de_continuidad_y_conciliacion() -> None:
+    """HU-W29: I04 (continuidad) e I05 (conciliación, el informe de reconciliar.py tal cual)."""
+    contrato = app.openapi()
+    continuidad = contrato["paths"]["/operacion/continuidad"]["get"]
+    assert {p["name"] for p in continuidad["parameters"] if p["in"] == "query"} == {"horas"}
+    assert set(continuidad["responses"]) >= {"200", "422"}
+    assert set(contrato["paths"]["/operacion/continuidad/conciliacion"]["get"]["responses"]) >= {
+        "200"
+    }
+    esquemas = contrato["components"]["schemas"]
+    assert set(esquemas["ContinuidadRespuesta"]["properties"]) == {
+        "ambiente",
+        "estado",
+        "zonas",
+        "base",
+        "recorridos",
+        "cronologia",
+        "incidente_desde",
+        "indicadores",
+    }
+    assert esquemas["ZonaRespuesta"]["properties"]["estado"]["enum"] == [
+        "SALUDABLE",
+        "DEGRADADA",
+        "RETIRADA",
+        "NO_DISPONIBLE",
+    ]
+    assert esquemas["HitoRespuesta"]["properties"]["fuente"]["enum"] == [
+        "FIS",
+        "ECS",
+        "RDS",
+        "ALARMA",
+    ]
+    # Mismo formato que experiments/hu-w29/reconciliar.py (versión 1).
+    assert set(esquemas["InformeConciliacion"]["required"]) == {
+        "version",
+        "experimento",
+        "generado",
+        "ventana",
+        "estado",
+        "resumen",
+        "verificaciones",
+        "recorridos",
+        "dlq",
+    }
+    assert "cobrosDuplicados" in esquemas["ResumenInforme"]["properties"]
+
+
+def test_el_informe_de_reconciliar_cumple_el_contrato_de_conciliacion() -> None:
+    """El informe que genera reconciliar.py con datos sintéticos valida contra el DTO de I05."""
+    import importlib.util
+
+    from bff_web.adapters.inbound.operacion import InformeConciliacion
+
+    fuente = Path(__file__).parents[4] / "experiments" / "hu-w29" / "reconciliar.py"
+    spec = importlib.util.spec_from_file_location("reconciliar", fuente)
+    assert spec is not None and spec.loader is not None
+    reconciliar = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(reconciliar)
+    intentos = [
+        {
+            "hu29": 1,
+            "recorrido": "R1",
+            "paso": "cotizacion",
+            "clave": "k1",
+            "confirmada": True,
+            "instante": "2026-11-20T14:06:00Z",
+        },
+    ]
+    observadas = [{"base": "cotizacion", "tipo": "cotizacion", "clave": "k1"}]
+    informe = reconciliar.conciliar(
+        intentos,
+        observadas,
+        [],
+        {},
+        "EXP1",
+        "2026-11-20T14:00:00Z",
+        "2026-11-20T14:30:00Z",
+        inyeccion="2026-11-20T14:05:00Z",
+    )
+    assert InformeConciliacion.model_validate(informe).model_dump() == informe
+
+
 COTIZACION = CONTRATO.parent / "cotizacion.yaml"
 # HU-W11: el BFF publica los mismos esquemas que cotizacion para /v1/perfiles (04 W11-P15).
 ESQUEMAS_PERFILAMIENTO = (

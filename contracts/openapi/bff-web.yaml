@@ -114,6 +114,87 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /operacion/continuidad:
+    get:
+      tags:
+      - operacion
+      summary: Obtener Continuidad
+      operationId: obtener_continuidad_operacion_continuidad_get
+      parameters:
+      - name: horas
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 24
+          minimum: 1
+          default: 6
+          title: Horas
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContinuidadRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /operacion/continuidad/conciliacion:
+    get:
+      tags:
+      - operacion
+      summary: Obtener Conciliacion
+      operationId: obtener_conciliacion_operacion_continuidad_conciliacion_get
+      parameters:
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InformeConciliacion'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /backoffice/grupos:
     get:
       tags:
@@ -8599,3 +8680,363 @@ components:
       - indemnizacion
       title: PagoSiniestroVista
       description: 'H08: el pago de un siniestro aprobado con su trazabilidad.'
+    BaseRespuesta:
+      properties:
+        estado:
+          type: string
+          enum:
+          - MULTI_AZ
+          - FAILOVER_EN_CURSO
+          - STANDBY_PROMOVIDO
+          title: Estado
+        desde:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Desde
+      type: object
+      required:
+      - estado
+      - desde
+      title: BaseRespuesta
+    ContinuidadRespuesta:
+      properties:
+        ambiente:
+          type: string
+          title: Ambiente
+        estado:
+          type: string
+          enum:
+          - DOS_ZONAS
+          - UNA_ZONA
+          - SIN_DATOS
+          title: Estado
+        zonas:
+          items:
+            $ref: '#/components/schemas/ZonaRespuesta'
+          type: array
+          title: Zonas
+        base:
+          $ref: '#/components/schemas/BaseRespuesta'
+        recorridos:
+          items:
+            $ref: '#/components/schemas/RecorridoRespuesta'
+          type: array
+          title: Recorridos
+        cronologia:
+          items:
+            $ref: '#/components/schemas/HitoRespuesta'
+          type: array
+          title: Cronologia
+        incidente_desde:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Incidente Desde
+        indicadores:
+          anyOf:
+          - $ref: '#/components/schemas/IndicadoresRespuesta'
+          - type: 'null'
+      type: object
+      required:
+      - ambiente
+      - estado
+      - zonas
+      - base
+      - recorridos
+      - cronologia
+      - incidente_desde
+      - indicadores
+      title: ContinuidadRespuesta
+    HitoRespuesta:
+      properties:
+        instante:
+          type: string
+          format: date-time
+          title: Instante
+        fuente:
+          type: string
+          enum:
+          - FIS
+          - ECS
+          - RDS
+          - ALARMA
+          title: Fuente
+        tipo:
+          type: string
+          enum:
+          - INYECCION
+          - FIN_INYECCION
+          - TAREAS_DETENIDAS
+          - TAREAS_INICIADAS
+          - FAILOVER_INICIADO
+          - FAILOVER_COMPLETADO
+          - EVENTO_BASE
+          - ALARMA
+          - RECUPERADA
+          title: Tipo
+        descripcion:
+          type: string
+          title: Descripcion
+        zona:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Zona
+        cantidad:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Cantidad
+      type: object
+      required:
+      - instante
+      - fuente
+      - tipo
+      - descripcion
+      - zona
+      - cantidad
+      title: HitoRespuesta
+    IndicadoresRespuesta:
+      properties:
+        experimento:
+          type: string
+          title: Experimento
+        estado_conciliacion:
+          type: string
+          title: Estado Conciliacion
+        transacciones_perdidas:
+          type: integer
+          title: Transacciones Perdidas
+        cobros_duplicados:
+          type: integer
+          title: Cobros Duplicados
+        redireccion_s:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Redireccion S
+        objetivo_redireccion_s:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Objetivo Redireccion S
+        porcentaje_error:
+          type: number
+          title: Porcentaje Error
+      type: object
+      required:
+      - experimento
+      - estado_conciliacion
+      - transacciones_perdidas
+      - cobros_duplicados
+      - redireccion_s
+      - objetivo_redireccion_s
+      - porcentaje_error
+      title: IndicadoresRespuesta
+    InformeConciliacion:
+      properties:
+        version:
+          type: integer
+          const: 1
+          title: Version
+        experimento:
+          type: string
+          title: Experimento
+        generado:
+          type: string
+          title: Generado
+        ventana:
+          $ref: '#/components/schemas/VentanaInforme'
+        estado:
+          type: string
+          enum:
+          - SIN_DIFERENCIAS
+          - CON_DIFERENCIAS
+          - PENDIENTE
+          title: Estado
+        resumen:
+          $ref: '#/components/schemas/ResumenInforme'
+        verificaciones:
+          items:
+            $ref: '#/components/schemas/VerificacionInforme'
+          type: array
+          title: Verificaciones
+        recorridos:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+          type: object
+          title: Recorridos
+        continuidad:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Continuidad
+        dlq:
+          additionalProperties: true
+          type: object
+          title: Dlq
+      type: object
+      required:
+      - version
+      - experimento
+      - generado
+      - ventana
+      - estado
+      - resumen
+      - verificaciones
+      - recorridos
+      - dlq
+      title: InformeConciliacion
+    RecorridoRespuesta:
+      properties:
+        id:
+          type: string
+          title: Id
+        nombre:
+          type: string
+          title: Nombre
+        estado:
+          type: string
+          enum:
+          - OPERANDO
+          - DEGRADADO
+          title: Estado
+        alarmas_abiertas:
+          items:
+            type: string
+          type: array
+          title: Alarmas Abiertas
+      type: object
+      required:
+      - id
+      - nombre
+      - estado
+      - alarmas_abiertas
+      title: RecorridoRespuesta
+    ResumenInforme:
+      properties:
+        confirmadas:
+          type: integer
+          title: Confirmadas
+        perdidas:
+          type: integer
+          title: Perdidas
+        duplicadas:
+          type: integer
+          title: Duplicadas
+        cobrosDuplicados:
+          type: integer
+          title: Cobrosduplicados
+        dlqSinExplicacion:
+          type: integer
+          title: Dlqsinexplicacion
+        pendientesOutbox:
+          type: integer
+          title: Pendientesoutbox
+        solicitudes:
+          type: integer
+          title: Solicitudes
+        solicitudesConError:
+          type: integer
+          title: Solicitudesconerror
+        porcentajeError:
+          type: number
+          title: Porcentajeerror
+      type: object
+      required:
+      - confirmadas
+      - perdidas
+      - duplicadas
+      - cobrosDuplicados
+      - dlqSinExplicacion
+      - pendientesOutbox
+      - solicitudes
+      - solicitudesConError
+      - porcentajeError
+      title: ResumenInforme
+    VentanaInforme:
+      properties:
+        desde:
+          type: string
+          title: Desde
+        hasta:
+          type: string
+          title: Hasta
+      type: object
+      required:
+      - desde
+      - hasta
+      title: VentanaInforme
+    VerificacionInforme:
+      properties:
+        id:
+          type: string
+          title: Id
+        descripcion:
+          type: string
+          title: Descripcion
+        esperado:
+          type: integer
+          title: Esperado
+        observado:
+          type: integer
+          title: Observado
+        resultado:
+          type: string
+          enum:
+          - COINCIDE
+          - DIFERENCIA
+          - PENDIENTE
+          title: Resultado
+        detalle:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Detalle
+      type: object
+      required:
+      - id
+      - descripcion
+      - esperado
+      - observado
+      - resultado
+      - detalle
+      title: VerificacionInforme
+    ZonaRespuesta:
+      properties:
+        zona:
+          type: string
+          title: Zona
+        tareas_saludables:
+          type: integer
+          title: Tareas Saludables
+        tareas_esperadas:
+          type: integer
+          title: Tareas Esperadas
+        trafico_pct:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Trafico Pct
+        estado:
+          type: string
+          enum:
+          - SALUDABLE
+          - DEGRADADA
+          - RETIRADA
+          - NO_DISPONIBLE
+          title: Estado
+      type: object
+      required:
+      - zona
+      - tareas_saludables
+      - tareas_esperadas
+      - trafico_pct
+      - estado
+      title: ZonaRespuesta
