@@ -71,6 +71,29 @@ def insertar_borrador(conexion: psycopg.Connection[Any], descripcion: str) -> st
     return identificador
 
 
+def insertar_evidencia_borrador(
+    conexion: psycopg.Connection[Any], borrador_id: str, **cambios: Any
+) -> str:
+    identificador = str(uuid4())
+    datos: dict[str, Any] = {
+        "id": identificador,
+        "borrador_id": borrador_id,
+        "nombre_archivo": "foto.jpg",
+        "tipo": "FOTOGRAFIA",
+        "clave_objeto": f"tmp/{borrador_id}/{identificador}",
+        "sha256": SHA,
+        "tamano_bytes": 100,
+        "tipo_contenido": "image/jpeg",
+    }
+    datos.update(cambios)
+    columnas = ", ".join(datos)
+    marcas = ", ".join(["%s"] * len(datos))
+    conexion.execute(
+        f"INSERT INTO borrador_evidencias ({columnas}) VALUES ({marcas})", list(datos.values())
+    )
+    return identificador
+
+
 def test_crea_las_diez_tablas_con_sus_indices(conexion: psycopg.Connection[Any]) -> None:
     tablas = {
         fila[0]
@@ -115,6 +138,33 @@ def test_persiste_la_descripcion_del_borrador(conexion: psycopg.Connection[Any])
     assert conexion.execute(
         "SELECT descripcion FROM borradores WHERE id = %s", (borrador_id,)
     ).fetchone() == (descripcion,)
+
+
+def test_evidencia_temporal_inicia_pendiente_y_la_confirmacion_exige_fecha(
+    conexion: psycopg.Connection[Any],
+) -> None:
+    borrador_id = insertar_borrador(conexion, "Descripción válida")
+    evidencia_id = insertar_evidencia_borrador(conexion, borrador_id)
+    assert conexion.execute(
+        "SELECT estado_carga, carga_confirmada_en FROM borrador_evidencias WHERE id = %s",
+        (evidencia_id,),
+    ).fetchone() == ("PENDIENTE", None)
+
+    confirmada_en = "2026-01-01T00:00:00Z"
+    conexion.execute(
+        "UPDATE borrador_evidencias SET estado_carga = 'CARGADA', carga_confirmada_en = %s "
+        "WHERE id = %s",
+        (confirmada_en, evidencia_id),
+    )
+    cargada = conexion.execute(
+        "SELECT estado_carga, carga_confirmada_en FROM borrador_evidencias WHERE id = %s",
+        (evidencia_id,),
+    ).fetchone()
+    assert cargada is not None and cargada[0] == "CARGADA" and cargada[1] is not None
+    with pytest.raises(psycopg.errors.CheckViolation):
+        insertar_evidencia_borrador(
+            conexion, borrador_id, estado_carga="CARGADA", carga_confirmada_en=None
+        )
 
 
 @pytest.mark.parametrize("descripcion", ["", "   ", "x" * 2001])
@@ -353,9 +403,10 @@ def _reversa(nombre: str) -> str:
 
 
 def test_la_reversa_borra_todo_y_se_puede_volver_a_migrar(base: str) -> None:
-    # Las reversas van en orden inverso: descripción, borradores y decisiones antes de siniestros.
+    # Las reversas van en orden inverso: HU-M01 antes de decisiones y siniestros.
     reversa = (
-        _reversa("004_descripcion_borrador.sql")
+        _reversa("005_estado_carga_borrador.sql")
+        + _reversa("004_descripcion_borrador.sql")
         + _reversa("003_borradores.sql")
         + _reversa("002_decisiones.sql")
         + _reversa("001_siniestros.sql")

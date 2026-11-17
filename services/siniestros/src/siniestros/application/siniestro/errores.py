@@ -42,6 +42,27 @@ class BorradorNoEncontrado(ErrorNegocio):
         super().__init__("BORRADOR_NO_ENCONTRADO", "El borrador no existe", 404)
 
 
+class EvidenciaNoCargada(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__(
+            "EVIDENCIA_NO_CARGADA", "El archivo no está disponible para confirmar", 409
+        )
+
+
+class EvidenciaYaConfirmada(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("EVIDENCIA_YA_CONFIRMADA", "La evidencia ya fue confirmada", 409)
+
+
+class IntegridadEvidenciaInvalida(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__(
+            "INTEGRIDAD_EVIDENCIA_INVALIDA",
+            "El archivo no coincide con la evidencia declarada",
+            422,
+        )
+
+
 class PolizaNoVigente(ErrorNegocio):
     def __init__(self) -> None:
         super().__init__("POLIZA_NO_VIGENTE", "La póliza no está vigente", 409)

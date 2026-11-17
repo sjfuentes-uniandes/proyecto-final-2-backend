@@ -17,8 +17,12 @@ from bff_movil.adapters.inbound.http.codigos import (
 from bff_movil.adapters.inbound.http.comun import CABECERAS, Dto, error
 from bff_movil.application.siniestros.casos import (
     AgregarEvidencia,
+    ConfirmarEvidencia,
+    ConsultarBorrador,
     ConsultarLimitesEvidencia,
     CrearBorrador,
+    ListarBorradores,
+    RenovarCargaEvidencia,
 )
 from bff_movil.domain.polizas.modelos import PolizaNoAutorizada, PolizaNoEncontrada
 from bff_movil.domain.sesion.errores import (
@@ -92,6 +96,51 @@ class EvidenciaDto(Dto):
     sha256: str
     capturada_en: AwareDatetime | None
     duracion_segundos: int | None
+    estado_carga: Literal["PENDIENTE", "CARGADA"]
+    carga_confirmada_en: AwareDatetime | None
+    carga: CargaDto
+
+
+class BorradorResumenDto(Dto):
+    borrador_id: UUID
+    poliza_id: UUID
+    descripcion: str
+    estado: Literal["ABIERTO"]
+    creado_en: AwareDatetime
+    cantidad_evidencias: int
+    evidencias_pendientes: int
+
+
+class EvidenciaBorradorDto(Dto):
+    evidencia_id: UUID
+    nombre_archivo: str
+    tipo: Literal["FOTOGRAFIA", "VIDEO"]
+    tipo_contenido: str
+    tamano_bytes: int
+    sha256: str
+    capturada_en: AwareDatetime | None
+    duracion_segundos: int | None
+    estado_carga: Literal["PENDIENTE", "CARGADA"]
+    carga_confirmada_en: AwareDatetime | None
+
+
+class ListadoBorradoresDto(Dto):
+    items: list[BorradorResumenDto]
+
+
+class BorradorDetalleDto(BorradorResumenDto):
+    evidencias: list[EvidenciaBorradorDto]
+
+
+class EvidenciaConfirmadaDto(Dto):
+    evidencia_id: UUID
+    estado_carga: Literal["CARGADA"]
+    carga_confirmada_en: AwareDatetime
+
+
+class CargaRenovadaDto(Dto):
+    evidencia_id: UUID
+    estado_carga: Literal["PENDIENTE"]
     carga: CargaDto
 
 
@@ -104,6 +153,9 @@ _EVIDENCIA_INVALIDA = error(
     "TIPO_EVIDENCIA_NO_ADMITIDO, TAMANO_EVIDENCIA_EXCEDIDO, DURACION_VIDEO_EXCEDIDA "
     "o LIMITE_EVIDENCIAS_ALCANZADO"
 )
+_EVIDENCIA_NO_CARGADA = error("EVIDENCIA_NO_CARGADA")
+_EVIDENCIA_YA_CONFIRMADA = error("EVIDENCIA_YA_CONFIRMADA")
+_INTEGRIDAD_INVALIDA = error("INTEGRIDAD_EVIDENCIA_INVALIDA")
 
 
 def _error_cliente_no_encontrado() -> ErrorNegocio:
@@ -141,6 +193,54 @@ async def limites(
     caso: ConsultarLimitesEvidencia = request.app.state.consultar_limites_evidencia
     try:
         return LimitesDto.model_validate(await caso.ejecutar(identidad.sub))
+    except ServicioNoDisponible as error:
+        raise _error_no_disponible() from error
+
+
+@router.get(
+    "/borradores",
+    response_model=ListadoBorradoresDto,
+    response_model_by_alias=True,
+    responses={
+        200: {"headers": CABECERAS},
+        401: _NO_AUTENTICADO,
+        403: _ROL,
+        422: error("SOLICITUD_INVALIDA"),
+        503: _NO_DISPONIBLE,
+    },
+)
+async def listar_borradores(
+    request: Request,
+    identidad: Annotated[IdentidadAutenticada, Depends(autenticar)],
+) -> ListadoBorradoresDto:
+    caso: ListarBorradores = request.app.state.listar_borradores
+    try:
+        return ListadoBorradoresDto.model_validate(await caso.ejecutar(identidad.sub))
+    except ServicioNoDisponible as error:
+        raise _error_no_disponible() from error
+
+
+@router.get(
+    "/borradores/{borradorId}",
+    response_model=BorradorDetalleDto,
+    response_model_by_alias=True,
+    responses={
+        200: {"headers": CABECERAS},
+        401: _NO_AUTENTICADO,
+        403: _ROL,
+        404: _BORRADOR_NO_ENCONTRADO,
+        422: error("SOLICITUD_INVALIDA"),
+        503: _NO_DISPONIBLE,
+    },
+)
+async def consultar_borrador(
+    borrador_id: Annotated[UUID, Path(alias="borradorId")],
+    request: Request,
+    identidad: Annotated[IdentidadAutenticada, Depends(autenticar)],
+) -> BorradorDetalleDto:
+    caso: ConsultarBorrador = request.app.state.consultar_borrador
+    try:
+        return BorradorDetalleDto.model_validate(await caso.ejecutar(identidad.sub, borrador_id))
     except ServicioNoDisponible as error:
         raise _error_no_disponible() from error
 
@@ -211,6 +311,63 @@ async def agregar_evidencia(
             await caso.ejecutar(
                 identidad.sub, borrador_id, solicitud.model_dump(by_alias=True, mode="json")
             )
+        )
+    except ServicioNoDisponible as error:
+        raise _error_no_disponible() from error
+
+
+@router.post(
+    "/borradores/{borradorId}/evidencias/{evidenciaId}/confirmacion",
+    response_model=EvidenciaConfirmadaDto,
+    response_model_by_alias=True,
+    responses={
+        200: {"headers": CABECERAS},
+        401: _NO_AUTENTICADO,
+        403: _ROL,
+        404: _BORRADOR_NO_ENCONTRADO,
+        409: _EVIDENCIA_NO_CARGADA,
+        422: _INTEGRIDAD_INVALIDA,
+        503: _NO_DISPONIBLE,
+    },
+)
+async def confirmar_evidencia(
+    borrador_id: Annotated[UUID, Path(alias="borradorId")],
+    evidencia_id: Annotated[UUID, Path(alias="evidenciaId")],
+    request: Request,
+    identidad: Annotated[IdentidadAutenticada, Depends(autenticar)],
+) -> EvidenciaConfirmadaDto:
+    caso: ConfirmarEvidencia = request.app.state.confirmar_evidencia
+    try:
+        return EvidenciaConfirmadaDto.model_validate(
+            await caso.ejecutar(identidad.sub, borrador_id, evidencia_id)
+        )
+    except ServicioNoDisponible as error:
+        raise _error_no_disponible() from error
+
+
+@router.post(
+    "/borradores/{borradorId}/evidencias/{evidenciaId}/carga",
+    response_model=CargaRenovadaDto,
+    response_model_by_alias=True,
+    responses={
+        200: {"headers": CABECERAS},
+        401: _NO_AUTENTICADO,
+        403: _ROL,
+        404: _BORRADOR_NO_ENCONTRADO,
+        409: _EVIDENCIA_YA_CONFIRMADA,
+        503: _NO_DISPONIBLE,
+    },
+)
+async def renovar_carga(
+    borrador_id: Annotated[UUID, Path(alias="borradorId")],
+    evidencia_id: Annotated[UUID, Path(alias="evidenciaId")],
+    request: Request,
+    identidad: Annotated[IdentidadAutenticada, Depends(autenticar)],
+) -> CargaRenovadaDto:
+    caso: RenovarCargaEvidencia = request.app.state.renovar_carga_evidencia
+    try:
+        return CargaRenovadaDto.model_validate(
+            await caso.ejecutar(identidad.sub, borrador_id, evidencia_id)
         )
     except ServicioNoDisponible as error:
         raise _error_no_disponible() from error

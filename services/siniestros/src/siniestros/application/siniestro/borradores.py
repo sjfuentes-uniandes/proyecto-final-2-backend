@@ -8,16 +8,27 @@ from typing import Any, Protocol
 from uuid import UUID, uuid4
 
 from siniestros.application.siniestro.errores import (
+    BorradorNoEncontrado,
+    DependenciaNoDisponible,
     DuracionVideoExcedida,
+    EvidenciaNoCargada,
+    EvidenciaYaConfirmada,
+    IntegridadEvidenciaInvalida,
     TamanoEvidenciaExcedido,
     TipoEvidenciaNoAdmitido,
 )
 from siniestros.application.siniestro.puertos import AlmacenEvidencias, Reloj
 from siniestros.config import Settings
-from siniestros.domain.siniestro.modelos import TipoEvidencia
+from siniestros.domain.siniestro.modelos import IntegridadEvidencia, TipoEvidencia
 
 
 class BorradoresRepositorio(Protocol):
+    async def listar_borradores(self, actor_id: str) -> list[dict[str, Any]]: ...
+
+    async def consultar_borrador(
+        self, actor_id: str, borrador_id: UUID
+    ) -> dict[str, Any] | None: ...
+
     async def crear_borrador(
         self,
         clave: str,
@@ -47,6 +58,14 @@ class BorradoresRepositorio(Protocol):
         duracion_segundos: int | None,
         maximo: int,
     ) -> None: ...
+
+    async def evidencia_borrador(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID
+    ) -> dict[str, Any] | None: ...
+
+    async def confirmar_evidencia_borrador(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID, confirmada_en: datetime
+    ) -> datetime | None: ...
 
 
 @dataclass(frozen=True)
@@ -154,13 +173,11 @@ class Borradores:
 
         evidencia_id = uuid4()
         clave_objeto = f"tmp/{borrador_id}/{evidencia_id}"
-        url, campos = await self._almacen.firmar_carga(
+        url, campos = await self._firmar_carga(
             clave_objeto,
             solicitud.tipo_contenido,
             solicitud.tamano_bytes,
             solicitud.sha256,
-            self._settings.evidencia_url_carga_ttl_s,
-            self._settings.evidencias_bucket_sse,
         )
         ahora = self._reloj.ahora()
         await self._repo.agregar_evidencia_borrador(
@@ -186,6 +203,8 @@ class Borradores:
             "sha256": solicitud.sha256,
             "capturadaEn": solicitud.capturada_en,
             "duracionSegundos": solicitud.duracion_segundos,
+            "estadoCarga": "PENDIENTE",
+            "cargaConfirmadaEn": None,
             "carga": {
                 "metodo": "POST",
                 "url": url,
@@ -193,3 +212,80 @@ class Borradores:
                 "expiraEn": ahora + timedelta(seconds=self._settings.evidencia_url_carga_ttl_s),
             },
         }
+
+    async def listar(self, actor_id: str) -> dict[str, Any]:
+        items = await self._repo.listar_borradores(actor_id)
+        return {"items": [{**item, "estado": "ABIERTO"} for item in items]}
+
+    async def consultar(self, actor_id: str, borrador_id: UUID) -> dict[str, Any]:
+        borrador = await self._repo.consultar_borrador(actor_id, borrador_id)
+        if borrador is None:
+            raise BorradorNoEncontrado
+        return {**borrador, "estado": "ABIERTO"}
+
+    async def confirmar_evidencia(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID
+    ) -> dict[str, Any]:
+        evidencia = await self._repo.evidencia_borrador(actor_id, borrador_id, evidencia_id)
+        if evidencia is None:
+            raise BorradorNoEncontrado
+        if evidencia["estadoCarga"] == "CARGADA":
+            confirmada_en = evidencia["cargaConfirmadaEn"]
+        else:
+            integridad = await self._almacen.verificar(
+                evidencia["claveObjeto"], evidencia["sha256"]
+            )
+            if integridad is IntegridadEvidencia.NO_DISPONIBLE:
+                raise EvidenciaNoCargada
+            if integridad is IntegridadEvidencia.ALTERADA:
+                raise IntegridadEvidenciaInvalida
+            if integridad is IntegridadEvidencia.NO_VERIFICABLE:
+                raise DependenciaNoDisponible("evidencias")
+            confirmada_en = await self._repo.confirmar_evidencia_borrador(
+                actor_id, borrador_id, evidencia_id, self._reloj.ahora()
+            )
+            if confirmada_en is None:
+                raise BorradorNoEncontrado
+        return {
+            "evidenciaId": evidencia_id,
+            "estadoCarga": "CARGADA",
+            "cargaConfirmadaEn": confirmada_en,
+        }
+
+    async def renovar_carga(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID
+    ) -> dict[str, Any]:
+        evidencia = await self._repo.evidencia_borrador(actor_id, borrador_id, evidencia_id)
+        if evidencia is None:
+            raise BorradorNoEncontrado
+        if evidencia["estadoCarga"] == "CARGADA":
+            raise EvidenciaYaConfirmada
+        url, campos = await self._firmar_carga(
+            evidencia["claveObjeto"],
+            evidencia["tipoContenido"],
+            evidencia["tamanoBytes"],
+            evidencia["sha256"],
+        )
+        ahora = self._reloj.ahora()
+        return {
+            "evidenciaId": evidencia_id,
+            "estadoCarga": "PENDIENTE",
+            "carga": {
+                "metodo": "POST",
+                "url": url,
+                "campos": campos,
+                "expiraEn": ahora + timedelta(seconds=self._settings.evidencia_url_carga_ttl_s),
+            },
+        }
+
+    async def _firmar_carga(
+        self, clave: str, tipo_contenido: str, tamano_bytes: int, sha256: str
+    ) -> tuple[str, dict[str, str]]:
+        return await self._almacen.firmar_carga(
+            clave,
+            tipo_contenido,
+            tamano_bytes,
+            sha256,
+            self._settings.evidencia_url_carga_ttl_s,
+            self._settings.evidencias_bucket_sse,
+        )

@@ -5,12 +5,17 @@ from uuid import UUID
 import pytest
 from siniestros.application.siniestro.borradores import Borradores, EvidenciaSolicitada
 from siniestros.application.siniestro.errores import (
+    BorradorNoEncontrado,
+    DependenciaNoDisponible,
     DuracionVideoExcedida,
+    EvidenciaNoCargada,
+    EvidenciaYaConfirmada,
+    IntegridadEvidenciaInvalida,
     TamanoEvidenciaExcedido,
     TipoEvidenciaNoAdmitido,
 )
 from siniestros.config import Settings
-from siniestros.domain.siniestro.modelos import TipoEvidencia
+from siniestros.domain.siniestro.modelos import IntegridadEvidencia, TipoEvidencia
 
 pytestmark = pytest.mark.anyio
 
@@ -25,6 +30,16 @@ class Repositorio:
     def __init__(self) -> None:
         self.borrador: tuple[Any, ...] | None = None
         self.evidencia: tuple[Any, ...] | None = None
+        self.borradores: list[dict[str, Any]] = []
+        self.detalle: dict[str, Any] | None = None
+        self.carga: dict[str, Any] | None = None
+        self.confirmaciones: list[tuple[Any, ...]] = []
+
+    async def listar_borradores(self, actor_id: str) -> list[dict[str, Any]]:
+        return self.borradores
+
+    async def consultar_borrador(self, actor_id: str, borrador_id: UUID) -> dict[str, Any] | None:
+        return self.detalle
 
     async def crear_borrador(self, *argumentos: Any) -> UUID:
         self.borrador = argumentos
@@ -33,14 +48,33 @@ class Repositorio:
     async def agregar_evidencia_borrador(self, *argumentos: Any) -> None:
         self.evidencia = argumentos
 
+    async def evidencia_borrador(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID
+    ) -> dict[str, Any] | None:
+        return self.carga
+
+    async def confirmar_evidencia_borrador(self, *argumentos: Any) -> datetime | None:
+        self.confirmaciones.append(argumentos)
+        if self.carga is not None:
+            self.carga["estadoCarga"] = "CARGADA"
+            self.carga["cargaConfirmadaEn"] = argumentos[-1]
+            return argumentos[-1]
+        return None
+
 
 class Almacen:
     def __init__(self) -> None:
         self.solicitudes: list[tuple[Any, ...]] = []
+        self.integridad = IntegridadEvidencia.VERIFICADA
+        self.verificaciones: list[tuple[str, str]] = []
 
     async def firmar_carga(self, *argumentos: Any) -> tuple[str, dict[str, str]]:
         self.solicitudes.append(argumentos)
         return "https://s3.test/upload", {"key": argumentos[0]}
+
+    async def verificar(self, clave: str, sha256: str) -> IntegridadEvidencia:
+        self.verificaciones.append((clave, sha256))
+        return self.integridad
 
 
 class Reloj:
@@ -167,3 +201,129 @@ async def test_rechaza_video_mas_largo_que_el_limite() -> None:
 
     assert almacen.solicitudes == []
     assert repo.evidencia is None
+
+
+async def test_lista_y_consulta_borradores_con_estado_y_evidencias() -> None:
+    casos, repo, _ = crear_borradores()
+    repo.borradores = [{"borradorId": BORRADOR_ID}]
+    repo.detalle = {"borradorId": BORRADOR_ID, "evidencias": []}
+
+    listado = await casos.listar("actor")
+    detalle = await casos.consultar("actor", BORRADOR_ID)
+
+    assert listado == {"items": [{"borradorId": BORRADOR_ID, "estado": "ABIERTO"}]}
+    assert detalle == {"borradorId": BORRADOR_ID, "evidencias": [], "estado": "ABIERTO"}
+
+
+async def test_consultar_no_revela_un_borrador_ajeno_o_inexistente() -> None:
+    casos, _, _ = crear_borradores()
+
+    with pytest.raises(BorradorNoEncontrado):
+        await casos.consultar("otro-actor", BORRADOR_ID)
+
+
+async def test_confirmar_verifica_s3_y_es_idempotente() -> None:
+    casos, repo, almacen = crear_borradores()
+    repo.carga = {
+        "estadoCarga": "PENDIENTE",
+        "cargaConfirmadaEn": None,
+        "claveObjeto": f"tmp/{BORRADOR_ID}/evidencia",
+        "sha256": SHA256,
+    }
+
+    primera = await casos.confirmar_evidencia("actor", BORRADOR_ID, CLAVE)
+    segunda = await casos.confirmar_evidencia("actor", BORRADOR_ID, CLAVE)
+
+    assert (
+        primera
+        == segunda
+        == {
+            "evidenciaId": CLAVE,
+            "estadoCarga": "CARGADA",
+            "cargaConfirmadaEn": AHORA,
+        }
+    )
+    assert almacen.verificaciones == [(f"tmp/{BORRADOR_ID}/evidencia", SHA256)]
+    assert len(repo.confirmaciones) == 1
+
+
+@pytest.mark.parametrize(
+    ("integridad", "error"),
+    [
+        (IntegridadEvidencia.NO_DISPONIBLE, EvidenciaNoCargada),
+        (IntegridadEvidencia.ALTERADA, IntegridadEvidenciaInvalida),
+        (IntegridadEvidencia.NO_VERIFICABLE, DependenciaNoDisponible),
+    ],
+)
+async def test_confirmar_rechaza_objeto_ausente_alterado_o_no_verificable(
+    integridad: IntegridadEvidencia, error: type[Exception]
+) -> None:
+    casos, repo, almacen = crear_borradores()
+    repo.carga = {
+        "estadoCarga": "PENDIENTE",
+        "cargaConfirmadaEn": None,
+        "claveObjeto": f"tmp/{BORRADOR_ID}/evidencia",
+        "sha256": SHA256,
+    }
+    almacen.integridad = integridad
+
+    with pytest.raises(error):
+        await casos.confirmar_evidencia("actor", BORRADOR_ID, CLAVE)
+
+    assert repo.confirmaciones == []
+
+
+async def test_confirmar_evidencia_ajena_falla_sin_consultar_s3() -> None:
+    casos, repo, almacen = crear_borradores()
+    repo.carga = None
+
+    with pytest.raises(BorradorNoEncontrado):
+        await casos.confirmar_evidencia("otro-actor", BORRADOR_ID, CLAVE)
+
+    assert almacen.verificaciones == []
+
+
+async def test_renovar_url_reutiliza_la_evidencia_pendiente() -> None:
+    casos, repo, almacen = crear_borradores()
+    repo.carga = {
+        "estadoCarga": "PENDIENTE",
+        "cargaConfirmadaEn": None,
+        "claveObjeto": f"tmp/{BORRADOR_ID}/{CLAVE}",
+        "tipoContenido": "image/jpeg",
+        "tamanoBytes": 123,
+        "sha256": SHA256,
+    }
+
+    resultado = await casos.renovar_carga("actor", BORRADOR_ID, CLAVE)
+
+    assert resultado["evidenciaId"] == CLAVE
+    assert resultado["estadoCarga"] == "PENDIENTE"
+    assert resultado["carga"]["url"] == "https://s3.test/upload"
+    assert almacen.solicitudes == [
+        (
+            f"tmp/{BORRADOR_ID}/{CLAVE}",
+            "image/jpeg",
+            123,
+            SHA256,
+            300,
+            "AES256",
+        )
+    ]
+    assert repo.evidencia is None
+
+
+async def test_no_renueva_url_de_evidencia_ya_confirmada() -> None:
+    casos, repo, almacen = crear_borradores()
+    repo.carga = {
+        "estadoCarga": "CARGADA",
+        "cargaConfirmadaEn": AHORA,
+        "claveObjeto": f"tmp/{BORRADOR_ID}/{CLAVE}",
+        "tipoContenido": "image/jpeg",
+        "tamanoBytes": 123,
+        "sha256": SHA256,
+    }
+
+    with pytest.raises(EvidenciaYaConfirmada):
+        await casos.renovar_carga("actor", BORRADOR_ID, CLAVE)
+
+    assert almacen.solicitudes == []

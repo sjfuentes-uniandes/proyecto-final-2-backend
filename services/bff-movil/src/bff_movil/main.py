@@ -39,8 +39,12 @@ from bff_movil.application.sesion.consultar_sesion import ConsultarSesion
 from bff_movil.application.sesion.puertos import ResolutorCliente
 from bff_movil.application.siniestros.casos import (
     AgregarEvidencia,
+    ConfirmarEvidencia,
+    ConsultarBorrador,
     ConsultarLimitesEvidencia,
     CrearBorrador,
+    ListarBorradores,
+    RenovarCargaEvidencia,
 )
 from bff_movil.application.siniestros.puertos import SiniestrosApi
 from bff_movil.application.verificacion.verificar_identidad import VerificarIdentidad
@@ -125,10 +129,14 @@ def crear_app(
             )
             app.state.siniestros_api = servicio_siniestros
             app.state.consultar_limites_evidencia = ConsultarLimitesEvidencia(servicio_siniestros)
+            app.state.listar_borradores = ListarBorradores(servicio_siniestros)
+            app.state.consultar_borrador = ConsultarBorrador(servicio_siniestros)
             app.state.crear_borrador = CrearBorrador(
                 resolutor_cliente, servicio_polizas, servicio_siniestros
             )
             app.state.agregar_evidencia = AgregarEvidencia(servicio_siniestros)
+            app.state.confirmar_evidencia = ConfirmarEvidencia(servicio_siniestros)
+            app.state.renovar_carga_evidencia = RenovarCargaEvidencia(servicio_siniestros)
             yield
 
     app = instrumentar(

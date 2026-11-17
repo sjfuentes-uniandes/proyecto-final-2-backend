@@ -49,6 +49,18 @@ class SiniestrosHttp:
             lambda timeout_s: self._get_limites(actor_id, timeout_s),
         )
 
+    async def listar_borradores(self, actor_id: str) -> dict[str, Any]:
+        return await self._ejecutar(
+            "siniestros.borradores.listar",
+            lambda timeout_s: self._get_borradores(actor_id, timeout_s),
+        )
+
+    async def consultar_borrador(self, actor_id: str, borrador_id: UUID) -> dict[str, Any]:
+        return await self._ejecutar(
+            "siniestros.borrador.consultar",
+            lambda timeout_s: self._get_borrador(actor_id, borrador_id, timeout_s),
+        )
+
     async def crear_borrador(
         self,
         actor_id: str,
@@ -72,6 +84,24 @@ class SiniestrosHttp:
             lambda timeout_s: self._agregar_evidencia(actor_id, borrador_id, solicitud, timeout_s),
         )
 
+    async def confirmar_evidencia(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID
+    ) -> dict[str, Any]:
+        return await self._ejecutar(
+            "siniestros.borrador.evidencia.confirmar",
+            lambda timeout_s: self._confirmar_evidencia(
+                actor_id, borrador_id, evidencia_id, timeout_s
+            ),
+        )
+
+    async def renovar_carga(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID
+    ) -> dict[str, Any]:
+        return await self._ejecutar(
+            "siniestros.borrador.evidencia.renovar",
+            lambda timeout_s: self._renovar_carga(actor_id, borrador_id, evidencia_id, timeout_s),
+        )
+
     async def _ejecutar[T](self, clave: str, llamada: Callable[[float], Awaitable[T]]) -> T:
         try:
             return await self._proteccion.ejecutar(
@@ -85,6 +115,24 @@ class SiniestrosHttp:
     async def _get_limites(self, actor_id: str, timeout_s: float) -> dict[str, Any]:
         respuesta = await self._cliente.get(
             f"{self._base_url}/v1/siniestros/limites",
+            headers=self._cabeceras(actor_id),
+            timeout=timeout_s,
+        )
+        return self._json_ok(respuesta)
+
+    async def _get_borradores(self, actor_id: str, timeout_s: float) -> dict[str, Any]:
+        respuesta = await self._cliente.get(
+            f"{self._base_url}/v1/siniestros/borradores",
+            headers=self._cabeceras(actor_id),
+            timeout=timeout_s,
+        )
+        return self._json_ok(respuesta)
+
+    async def _get_borrador(
+        self, actor_id: str, borrador_id: UUID, timeout_s: float
+    ) -> dict[str, Any]:
+        respuesta = await self._cliente.get(
+            f"{self._base_url}/v1/siniestros/borradores/{borrador_id}",
             headers=self._cabeceras(actor_id),
             timeout=timeout_s,
         )
@@ -121,6 +169,28 @@ class SiniestrosHttp:
             timeout=timeout_s,
         )
         return self._json_ok(respuesta, estados_ok={200, 201})
+
+    async def _confirmar_evidencia(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID, timeout_s: float
+    ) -> dict[str, Any]:
+        respuesta = await self._cliente.post(
+            f"{self._base_url}/v1/siniestros/borradores/{borrador_id}/evidencias/"
+            f"{evidencia_id}/confirmacion",
+            headers=self._cabeceras(actor_id),
+            timeout=timeout_s,
+        )
+        return self._json_ok(respuesta)
+
+    async def _renovar_carga(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID, timeout_s: float
+    ) -> dict[str, Any]:
+        respuesta = await self._cliente.post(
+            f"{self._base_url}/v1/siniestros/borradores/{borrador_id}/evidencias/"
+            f"{evidencia_id}/carga",
+            headers=self._cabeceras(actor_id),
+            timeout=timeout_s,
+        )
+        return self._json_ok(respuesta)
 
     @staticmethod
     def _cabeceras(actor_id: str) -> dict[str, str]:

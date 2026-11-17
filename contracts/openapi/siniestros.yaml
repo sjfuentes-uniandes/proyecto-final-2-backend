@@ -168,12 +168,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
-  /v1/siniestros/limites:
+  /v1/siniestros/borradores:
     get:
       tags:
       - borradores
-      summary: Limites
-      operationId: limites_v1_siniestros_limites_get
+      summary: Listar Borradores
+      operationId: listar_borradores_v1_siniestros_borradores_get
       parameters:
       - name: X-Actor-Id
         in: header
@@ -201,11 +201,11 @@ paths:
           title: X-Actor-Nombre
       responses:
         '200':
-          description: Successful Response
+          description: Borradores abiertos del actor autenticado
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LimitesEvidencia'
+                $ref: '#/components/schemas/ListadoBorradores'
         '401':
           description: ACTOR_REQUERIDO
           content:
@@ -230,7 +230,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /v1/siniestros/borradores:
     post:
       tags:
       - borradores
@@ -317,6 +316,143 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/borradores/{borradorId}:
+    get:
+      tags:
+      - borradores
+      summary: Consultar Borrador
+      operationId: consultar_borrador_v1_siniestros_borradores__borradorId__get
+      parameters:
+      - name: borradorId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Borradorid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      - name: X-Actor-Nombre
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Nombre
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BorradorDetalle'
+        '401':
+          description: ACTOR_REQUERIDO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: ROL_NO_AUTORIZADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: BORRADOR_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: DEPENDENCIA_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/siniestros/limites:
+    get:
+      tags:
+      - borradores
+      summary: Limites
+      operationId: limites_v1_siniestros_limites_get
+      parameters:
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      - name: X-Actor-Nombre
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Nombre
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LimitesEvidencia'
+        '401':
+          description: ACTOR_REQUERIDO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: ROL_NO_AUTORIZADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: DEPENDENCIA_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/siniestros/borradores/{borradorId}/evidencias:
     post:
       tags:
@@ -405,6 +541,182 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/borradores/{borradorId}/evidencias/{evidenciaId}/confirmacion:
+    post:
+      tags:
+      - borradores
+      summary: Confirmar Evidencia
+      operationId: confirmar_evidencia_v1_siniestros_borradores__borradorId__evidencias__evidenciaId__confirmacion_post
+      parameters:
+      - name: borradorId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Borradorid
+      - name: evidenciaId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Evidenciaid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      - name: X-Actor-Nombre
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Nombre
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenciaConfirmada'
+        '401':
+          description: ACTOR_REQUERIDO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: ROL_NO_AUTORIZADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: BORRADOR_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: EVIDENCIA_NO_CARGADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: INTEGRIDAD_EVIDENCIA_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: DEPENDENCIA_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/borradores/{borradorId}/evidencias/{evidenciaId}/carga:
+    post:
+      tags:
+      - borradores
+      summary: Renovar Carga
+      operationId: renovar_carga_v1_siniestros_borradores__borradorId__evidencias__evidenciaId__carga_post
+      parameters:
+      - name: borradorId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Borradorid
+      - name: evidenciaId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Evidenciaid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      - name: X-Actor-Nombre
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Nombre
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CargaRenovada'
+        '401':
+          description: ACTOR_REQUERIDO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: ROL_NO_AUTORIZADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: BORRADOR_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: EVIDENCIA_YA_CONFIRMADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: DEPENDENCIA_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/siniestros:
     get:
       tags:
@@ -994,6 +1306,88 @@ components:
       - borradorId
       - polizaId
       title: BorradorCreado
+    BorradorDetalle:
+      properties:
+        borradorId:
+          type: string
+          format: uuid
+          title: Borradorid
+        polizaId:
+          type: string
+          format: uuid
+          title: Polizaid
+        descripcion:
+          type: string
+          title: Descripcion
+        estado:
+          type: string
+          const: ABIERTO
+          title: Estado
+        creadoEn:
+          type: string
+          format: date-time
+          title: Creadoen
+        cantidadEvidencias:
+          type: integer
+          title: Cantidadevidencias
+        evidenciasPendientes:
+          type: integer
+          title: Evidenciaspendientes
+        evidencias:
+          items:
+            $ref: '#/components/schemas/EvidenciaBorrador'
+          type: array
+          title: Evidencias
+      additionalProperties: false
+      type: object
+      required:
+      - borradorId
+      - polizaId
+      - descripcion
+      - estado
+      - creadoEn
+      - cantidadEvidencias
+      - evidenciasPendientes
+      - evidencias
+      title: BorradorDetalle
+    BorradorResumen:
+      properties:
+        borradorId:
+          type: string
+          format: uuid
+          title: Borradorid
+        polizaId:
+          type: string
+          format: uuid
+          title: Polizaid
+        descripcion:
+          type: string
+          title: Descripcion
+        estado:
+          type: string
+          const: ABIERTO
+          title: Estado
+        creadoEn:
+          type: string
+          format: date-time
+          title: Creadoen
+        cantidadEvidencias:
+          type: integer
+          title: Cantidadevidencias
+        evidenciasPendientes:
+          type: integer
+          title: Evidenciaspendientes
+      additionalProperties: false
+      type: object
+      required:
+      - borradorId
+      - polizaId
+      - descripcion
+      - estado
+      - creadoEn
+      - cantidadEvidencias
+      - evidenciasPendientes
+      title: BorradorResumen
     CanalSoporte:
       type: string
       enum:
@@ -1027,6 +1421,25 @@ components:
       - campos
       - expiraEn
       title: CargaEvidencia
+    CargaRenovada:
+      properties:
+        evidenciaId:
+          type: string
+          format: uuid
+          title: Evidenciaid
+        estadoCarga:
+          type: string
+          const: PENDIENTE
+          title: Estadocarga
+        carga:
+          $ref: '#/components/schemas/CargaEvidencia'
+      additionalProperties: false
+      type: object
+      required:
+      - evidenciaId
+      - estadoCarga
+      - carga
+      title: CargaRenovada
     CatalogosDecision:
       properties:
         causales:
@@ -1628,6 +2041,18 @@ components:
           - type: integer
           - type: 'null'
           title: Duracionsegundos
+        estadoCarga:
+          type: string
+          enum:
+          - PENDIENTE
+          - CARGADA
+          title: Estadocarga
+        cargaConfirmadaEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Cargaconfirmadaen
         carga:
           $ref: '#/components/schemas/CargaEvidencia'
       additionalProperties: false
@@ -1641,8 +2066,88 @@ components:
       - sha256
       - capturadaEn
       - duracionSegundos
+      - estadoCarga
+      - cargaConfirmadaEn
       - carga
       title: EvidenciaAgregada
+    EvidenciaBorrador:
+      properties:
+        evidenciaId:
+          type: string
+          format: uuid
+          title: Evidenciaid
+        nombreArchivo:
+          type: string
+          title: Nombrearchivo
+        tipo:
+          $ref: '#/components/schemas/TipoEvidencia'
+        tipoContenido:
+          type: string
+          title: Tipocontenido
+        tamanoBytes:
+          type: integer
+          title: Tamanobytes
+        sha256:
+          type: string
+          title: Sha256
+        capturadaEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Capturadaen
+        duracionSegundos:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duracionsegundos
+        estadoCarga:
+          type: string
+          enum:
+          - PENDIENTE
+          - CARGADA
+          title: Estadocarga
+        cargaConfirmadaEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Cargaconfirmadaen
+      additionalProperties: false
+      type: object
+      required:
+      - evidenciaId
+      - nombreArchivo
+      - tipo
+      - tipoContenido
+      - tamanoBytes
+      - sha256
+      - capturadaEn
+      - duracionSegundos
+      - estadoCarga
+      - cargaConfirmadaEn
+      title: EvidenciaBorrador
+    EvidenciaConfirmada:
+      properties:
+        evidenciaId:
+          type: string
+          format: uuid
+          title: Evidenciaid
+        estadoCarga:
+          type: string
+          const: CARGADA
+          title: Estadocarga
+        cargaConfirmadaEn:
+          type: string
+          format: date-time
+          title: Cargaconfirmadaen
+      additionalProperties: false
+      type: object
+      required:
+      - evidenciaId
+      - estadoCarga
+      - cargaConfirmadaEn
+      title: EvidenciaConfirmada
     EvidenciaVista:
       properties:
         id:
@@ -1816,6 +2321,18 @@ components:
         siniestro ya trae
 
         `valorReclamado`, que coincida. Si no, 422 VALOR_FUERA_DE_RANGO (`detalles.campos`).'
+    ListadoBorradores:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/BorradorResumen'
+          type: array
+          title: Items
+      additionalProperties: false
+      type: object
+      required:
+      - items
+      title: ListadoBorradores
     MotivoDenegacion:
       type: string
       enum:

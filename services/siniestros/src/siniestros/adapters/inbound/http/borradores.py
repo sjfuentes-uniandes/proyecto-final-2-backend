@@ -124,6 +124,51 @@ class EvidenciaAgregada(Dto):
     sha256: str
     capturada_en: AwareDatetime | None
     duracion_segundos: int | None
+    estado_carga: Literal["PENDIENTE", "CARGADA"]
+    carga_confirmada_en: AwareDatetime | None
+    carga: CargaEvidencia
+
+
+class BorradorResumen(Dto):
+    borrador_id: UUID
+    poliza_id: UUID
+    descripcion: str
+    estado: Literal["ABIERTO"]
+    creado_en: AwareDatetime
+    cantidad_evidencias: int
+    evidencias_pendientes: int
+
+
+class EvidenciaBorrador(Dto):
+    evidencia_id: UUID
+    nombre_archivo: str
+    tipo: TipoEvidencia
+    tipo_contenido: str
+    tamano_bytes: int
+    sha256: str
+    capturada_en: AwareDatetime | None
+    duracion_segundos: int | None
+    estado_carga: Literal["PENDIENTE", "CARGADA"]
+    carga_confirmada_en: AwareDatetime | None
+
+
+class ListadoBorradores(Dto):
+    items: list[BorradorResumen]
+
+
+class BorradorDetalle(BorradorResumen):
+    evidencias: list[EvidenciaBorrador]
+
+
+class EvidenciaConfirmada(Dto):
+    evidencia_id: UUID
+    estado_carga: Literal["CARGADA"]
+    carga_confirmada_en: AwareDatetime
+
+
+class CargaRenovada(Dto):
+    evidencia_id: UUID
+    estado_carga: Literal["PENDIENTE"]
     carga: CargaEvidencia
 
 
@@ -145,6 +190,35 @@ def _actor_cliente(
 Cliente = Annotated[Actor, Depends(_actor_cliente)]
 BorradoresDep = Annotated[Borradores, Depends(_borradores)]
 BorradorId = Annotated[UUID, Path(alias="borradorId")]
+EvidenciaId = Annotated[UUID, Path(alias="evidenciaId")]
+
+
+@router_borradores.get(
+    "/borradores",
+    response_model=ListadoBorradores,
+    response_model_by_alias=True,
+    responses={
+        200: {"description": "Borradores abiertos del actor autenticado"},
+        503: {"model": ErrorDto, "description": "DEPENDENCIA_NO_DISPONIBLE"},
+    },
+)
+async def listar_borradores(actor: Cliente, casos: BorradoresDep) -> ListadoBorradores:
+    return ListadoBorradores.model_validate(await casos.listar(actor.id))
+
+
+@router_borradores.get(
+    "/borradores/{borradorId}",
+    response_model=BorradorDetalle,
+    response_model_by_alias=True,
+    responses={
+        404: {"model": ErrorDto, "description": "BORRADOR_NO_ENCONTRADO"},
+        503: {"model": ErrorDto, "description": "DEPENDENCIA_NO_DISPONIBLE"},
+    },
+)
+async def consultar_borrador(
+    borrador_id: BorradorId, actor: Cliente, casos: BorradoresDep
+) -> BorradorDetalle:
+    return BorradorDetalle.model_validate(await casos.consultar(actor.id, borrador_id))
 
 
 @router_borradores.get(
@@ -230,3 +304,46 @@ async def agregar_evidencia(
         ),
     )
     return EvidenciaAgregada.model_validate(carga)
+
+
+@router_borradores.post(
+    "/borradores/{borradorId}/evidencias/{evidenciaId}/confirmacion",
+    response_model=EvidenciaConfirmada,
+    response_model_by_alias=True,
+    responses={
+        404: {"model": ErrorDto, "description": "BORRADOR_NO_ENCONTRADO"},
+        409: {"model": ErrorDto, "description": "EVIDENCIA_NO_CARGADA"},
+        422: {"model": ErrorDto, "description": "INTEGRIDAD_EVIDENCIA_INVALIDA"},
+        503: {"model": ErrorDto, "description": "DEPENDENCIA_NO_DISPONIBLE"},
+    },
+)
+async def confirmar_evidencia(
+    borrador_id: BorradorId,
+    evidencia_id: EvidenciaId,
+    actor: Cliente,
+    casos: BorradoresDep,
+) -> EvidenciaConfirmada:
+    return EvidenciaConfirmada.model_validate(
+        await casos.confirmar_evidencia(actor.id, borrador_id, evidencia_id)
+    )
+
+
+@router_borradores.post(
+    "/borradores/{borradorId}/evidencias/{evidenciaId}/carga",
+    response_model=CargaRenovada,
+    response_model_by_alias=True,
+    responses={
+        404: {"model": ErrorDto, "description": "BORRADOR_NO_ENCONTRADO"},
+        409: {"model": ErrorDto, "description": "EVIDENCIA_YA_CONFIRMADA"},
+        503: {"model": ErrorDto, "description": "DEPENDENCIA_NO_DISPONIBLE"},
+    },
+)
+async def renovar_carga(
+    borrador_id: BorradorId,
+    evidencia_id: EvidenciaId,
+    actor: Cliente,
+    casos: BorradoresDep,
+) -> CargaRenovada:
+    return CargaRenovada.model_validate(
+        await casos.renovar_carga(actor.id, borrador_id, evidencia_id)
+    )

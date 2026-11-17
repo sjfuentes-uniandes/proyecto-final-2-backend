@@ -21,6 +21,22 @@ class ConsultarLimitesEvidencia:
         return await self._siniestros.limites(sub)
 
 
+class ListarBorradores:
+    def __init__(self, siniestros: SiniestrosApi) -> None:
+        self._siniestros = siniestros
+
+    async def ejecutar(self, sub: str) -> dict[str, Any]:
+        return await self._siniestros.listar_borradores(sub)
+
+
+class ConsultarBorrador:
+    def __init__(self, siniestros: SiniestrosApi) -> None:
+        self._siniestros = siniestros
+
+    async def ejecutar(self, sub: str, borrador_id: UUID) -> dict[str, Any]:
+        return await self._siniestros.consultar_borrador(sub, borrador_id)
+
+
 class CrearBorrador:
     def __init__(
         self,
@@ -65,4 +81,28 @@ class AgregarEvidencia:
         return await self._siniestros.agregar_evidencia(sub, borrador_id, solicitud)
 
 
-__all__ = ["AgregarEvidencia", "ConsultarLimitesEvidencia", "CrearBorrador"]
+class ConfirmarEvidencia:
+    def __init__(self, siniestros: SiniestrosApi) -> None:
+        self._siniestros = siniestros
+
+    async def ejecutar(self, sub: str, borrador_id: UUID, evidencia_id: UUID) -> dict[str, Any]:
+        return await self._siniestros.confirmar_evidencia(sub, borrador_id, evidencia_id)
+
+
+class RenovarCargaEvidencia:
+    def __init__(self, siniestros: SiniestrosApi) -> None:
+        self._siniestros = siniestros
+
+    async def ejecutar(self, sub: str, borrador_id: UUID, evidencia_id: UUID) -> dict[str, Any]:
+        return await self._siniestros.renovar_carga(sub, borrador_id, evidencia_id)
+
+
+__all__ = [
+    "AgregarEvidencia",
+    "ConfirmarEvidencia",
+    "ConsultarBorrador",
+    "ConsultarLimitesEvidencia",
+    "CrearBorrador",
+    "ListarBorradores",
+    "RenovarCargaEvidencia",
+]

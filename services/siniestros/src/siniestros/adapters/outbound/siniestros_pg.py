@@ -280,6 +280,49 @@ class SiniestrosPg:
         async with self._pool.connection() as conexion, conexion.transaction():
             yield TxSiniestrosPg(conexion)
 
+    async def listar_borradores(self, actor_id: str) -> list[dict[str, Any]]:
+        consulta = (
+            'SELECT b.id AS "borradorId", b.poliza_id AS "polizaId", '
+            'b.descripcion AS descripcion, b.creado_en AS "creadoEn", '
+            'count(e.id)::int AS "cantidadEvidencias", '
+            "count(e.id) FILTER (WHERE e.estado_carga = 'PENDIENTE')::int "
+            'AS "evidenciasPendientes" '
+            "FROM borradores b LEFT JOIN borrador_evidencias e ON e.borrador_id = b.id "
+            "WHERE b.actor_id = %s "
+            "GROUP BY b.id ORDER BY b.creado_en DESC, b.id DESC"
+        )
+        async with self._pool.connection() as bruta:
+            filas = await (await _ConDict(bruta).execute(consulta, (actor_id,))).fetchall()
+        return list(filas)
+
+    async def consultar_borrador(self, actor_id: str, borrador_id: UUID) -> dict[str, Any] | None:
+        consulta = (
+            'SELECT b.id AS "borradorId", b.poliza_id AS "polizaId", '
+            'b.descripcion AS descripcion, b.creado_en AS "creadoEn", '
+            'count(e.id)::int AS "cantidadEvidencias", '
+            "count(e.id) FILTER (WHERE e.estado_carga = 'PENDIENTE')::int "
+            'AS "evidenciasPendientes" '
+            "FROM borradores b LEFT JOIN borrador_evidencias e ON e.borrador_id = b.id "
+            "WHERE b.id = %s AND b.actor_id = %s GROUP BY b.id"
+        )
+        consulta_evidencias = (
+            'SELECT id AS "evidenciaId", nombre_archivo AS "nombreArchivo", tipo, '
+            'tipo_contenido AS "tipoContenido", tamano_bytes AS "tamanoBytes", sha256, '
+            'capturada_en AS "capturadaEn", duracion_segundos AS "duracionSegundos", '
+            'estado_carga AS "estadoCarga", carga_confirmada_en AS "cargaConfirmadaEn" '
+            "FROM borrador_evidencias WHERE borrador_id = %s "
+            "ORDER BY capturada_en NULLS LAST, id"
+        )
+        async with self._pool.connection() as bruta:
+            conexion = _ConDict(bruta)
+            fila = await (await conexion.execute(consulta, (borrador_id, actor_id))).fetchone()
+            if fila is None:
+                return None
+            evidencias = await (
+                await conexion.execute(consulta_evidencias, (borrador_id,))
+            ).fetchall()
+        return {**fila, "evidencias": list(evidencias)}
+
     async def crear_borrador(
         self,
         clave: str,
@@ -370,6 +413,41 @@ class SiniestrosPg:
                     duracion_segundos,
                 ),
             )
+
+    async def evidencia_borrador(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID
+    ) -> dict[str, Any] | None:
+        consulta = (
+            'SELECT e.estado_carga AS "estadoCarga", e.carga_confirmada_en AS "cargaConfirmadaEn", '
+            'e.clave_objeto AS "claveObjeto", e.sha256, '
+            'e.tipo_contenido AS "tipoContenido", e.tamano_bytes AS "tamanoBytes" '
+            "FROM borrador_evidencias e JOIN borradores b ON b.id = e.borrador_id "
+            "WHERE b.actor_id = %s AND b.id = %s AND e.id = %s"
+        )
+        async with self._pool.connection() as bruta:
+            fila = await (
+                await _ConDict(bruta).execute(consulta, (actor_id, borrador_id, evidencia_id))
+            ).fetchone()
+        return fila
+
+    async def confirmar_evidencia_borrador(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID, confirmada_en: datetime
+    ) -> datetime | None:
+        consulta = (
+            "UPDATE borrador_evidencias AS e "
+            "SET estado_carga = 'CARGADA', "
+            "carga_confirmada_en = COALESCE(e.carga_confirmada_en, %s) "
+            "FROM borradores b "
+            "WHERE e.borrador_id = b.id AND b.actor_id = %s AND b.id = %s AND e.id = %s "
+            "RETURNING e.carga_confirmada_en"
+        )
+        async with self._pool.connection() as conexion, conexion.transaction():
+            fila = await (
+                await _ConDict(conexion).execute(
+                    consulta, (confirmada_en, actor_id, borrador_id, evidencia_id)
+                )
+            ).fetchone()
+        return fila["carga_confirmada_en"] if fila is not None else None
 
     async def bandeja(self, filtro: FiltroBandeja) -> PaginaSiniestros:
         corte = filtro.corte

@@ -34,8 +34,15 @@ def test_las_rutas_son_las_de_la_historia() -> None:
         ("POST", "/v1/siniestros/{siniestroId}/decision"),
         ("GET", "/v1/siniestros/catalogos-decision"),
         ("GET", "/v1/siniestros/limites"),
+        ("GET", "/v1/siniestros/borradores"),
         ("POST", "/v1/siniestros/borradores"),
+        ("GET", "/v1/siniestros/borradores/{borradorId}"),
         ("POST", "/v1/siniestros/borradores/{borradorId}/evidencias"),
+        (
+            "POST",
+            "/v1/siniestros/borradores/{borradorId}/evidencias/{evidenciaId}/confirmacion",
+        ),
+        ("POST", "/v1/siniestros/borradores/{borradorId}/evidencias/{evidenciaId}/carga"),
         ("GET", "/health"),
     }
 

@@ -1352,6 +1352,86 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
   /v1/siniestros/borradores:
+    get:
+      tags:
+      - siniestros
+      summary: Listar Borradores
+      operationId: listar_borradores_v1_siniestros_borradores_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoBorradoresDto'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '401':
+          description: 'NO_AUTENTICADO: se requiere un cliente autenticado'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: el token no es del pool de clientes'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: no se pudo consultar o crear el reporte'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
     post:
       tags:
       - siniestros
@@ -1458,6 +1538,105 @@ paths:
                 $ref: '#/components/schemas/ErrorDto'
         '422':
           description: SOLICITUD_INVALIDA o IDEMPOTENCIA_CONFLICTO
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: no se pudo consultar o crear el reporte'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/borradores/{borradorId}:
+    get:
+      tags:
+      - siniestros
+      summary: Consultar Borrador
+      operationId: consultar_borrador_v1_siniestros_borradores__borradorId__get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: borradorId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Borradorid
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BorradorDetalleDto'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '401':
+          description: 'NO_AUTENTICADO: se requiere un cliente autenticado'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: el token no es del pool de clientes'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: BORRADOR_NO_ENCONTRADO
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
           headers:
             X-Correlation-Id:
               description: Identificador de correlación de la solicitud
@@ -1595,6 +1774,235 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/borradores/{borradorId}/evidencias/{evidenciaId}/confirmacion:
+    post:
+      tags:
+      - siniestros
+      summary: Confirmar Evidencia
+      operationId: confirmar_evidencia_v1_siniestros_borradores__borradorId__evidencias__evidenciaId__confirmacion_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: borradorId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Borradorid
+      - name: evidenciaId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Evidenciaid
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenciaConfirmadaDto'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '401':
+          description: 'NO_AUTENTICADO: se requiere un cliente autenticado'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: el token no es del pool de clientes'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: BORRADOR_NO_ENCONTRADO
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: EVIDENCIA_NO_CARGADA
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: INTEGRIDAD_EVIDENCIA_INVALIDA
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: no se pudo consultar o crear el reporte'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/borradores/{borradorId}/evidencias/{evidenciaId}/carga:
+    post:
+      tags:
+      - siniestros
+      summary: Renovar Carga
+      operationId: renovar_carga_v1_siniestros_borradores__borradorId__evidencias__evidenciaId__carga_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: borradorId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Borradorid
+      - name: evidenciaId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Evidenciaid
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CargaRenovadaDto'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '401':
+          description: 'NO_AUTENTICADO: se requiere un cliente autenticado'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: el token no es del pool de clientes'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: BORRADOR_NO_ENCONTRADO
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: EVIDENCIA_YA_CONFIRMADA
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: no se pudo consultar o crear el reporte'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /health:
     get:
       summary: Health
@@ -1611,6 +2019,49 @@ paths:
                 title: Response Health Health Get
 components:
   schemas:
+    BorradorDetalleDto:
+      properties:
+        borradorId:
+          type: string
+          format: uuid
+          title: Borradorid
+        polizaId:
+          type: string
+          format: uuid
+          title: Polizaid
+        descripcion:
+          type: string
+          title: Descripcion
+        estado:
+          type: string
+          const: ABIERTO
+          title: Estado
+        creadoEn:
+          type: string
+          format: date-time
+          title: Creadoen
+        cantidadEvidencias:
+          type: integer
+          title: Cantidadevidencias
+        evidenciasPendientes:
+          type: integer
+          title: Evidenciaspendientes
+        evidencias:
+          items:
+            $ref: '#/components/schemas/EvidenciaBorradorDto'
+          type: array
+          title: Evidencias
+      type: object
+      required:
+      - borradorId
+      - polizaId
+      - descripcion
+      - estado
+      - creadoEn
+      - cantidadEvidencias
+      - evidenciasPendientes
+      - evidencias
+      title: BorradorDetalleDto
     BorradorDto:
       properties:
         borradorId:
@@ -1630,6 +2081,43 @@ components:
       - polizaId
       - estado
       title: BorradorDto
+    BorradorResumenDto:
+      properties:
+        borradorId:
+          type: string
+          format: uuid
+          title: Borradorid
+        polizaId:
+          type: string
+          format: uuid
+          title: Polizaid
+        descripcion:
+          type: string
+          title: Descripcion
+        estado:
+          type: string
+          const: ABIERTO
+          title: Estado
+        creadoEn:
+          type: string
+          format: date-time
+          title: Creadoen
+        cantidadEvidencias:
+          type: integer
+          title: Cantidadevidencias
+        evidenciasPendientes:
+          type: integer
+          title: Evidenciaspendientes
+      type: object
+      required:
+      - borradorId
+      - polizaId
+      - descripcion
+      - estado
+      - creadoEn
+      - cantidadEvidencias
+      - evidenciasPendientes
+      title: BorradorResumenDto
     CargaDto:
       properties:
         metodo:
@@ -1654,6 +2142,24 @@ components:
       - campos
       - expiraEn
       title: CargaDto
+    CargaRenovadaDto:
+      properties:
+        evidenciaId:
+          type: string
+          format: uuid
+          title: Evidenciaid
+        estadoCarga:
+          type: string
+          const: PENDIENTE
+          title: Estadocarga
+        carga:
+          $ref: '#/components/schemas/CargaDto'
+      type: object
+      required:
+      - evidenciaId
+      - estadoCarga
+      - carga
+      title: CargaRenovadaDto
     ClienteVinculadoDto:
       properties:
         clienteId:
@@ -1797,6 +2303,86 @@ components:
       - PENDIENTE
       - RECHAZADO
       title: EstadoIdentidad
+    EvidenciaBorradorDto:
+      properties:
+        evidenciaId:
+          type: string
+          format: uuid
+          title: Evidenciaid
+        nombreArchivo:
+          type: string
+          title: Nombrearchivo
+        tipo:
+          type: string
+          enum:
+          - FOTOGRAFIA
+          - VIDEO
+          title: Tipo
+        tipoContenido:
+          type: string
+          title: Tipocontenido
+        tamanoBytes:
+          type: integer
+          title: Tamanobytes
+        sha256:
+          type: string
+          title: Sha256
+        capturadaEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Capturadaen
+        duracionSegundos:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duracionsegundos
+        estadoCarga:
+          type: string
+          enum:
+          - PENDIENTE
+          - CARGADA
+          title: Estadocarga
+        cargaConfirmadaEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Cargaconfirmadaen
+      type: object
+      required:
+      - evidenciaId
+      - nombreArchivo
+      - tipo
+      - tipoContenido
+      - tamanoBytes
+      - sha256
+      - capturadaEn
+      - duracionSegundos
+      - estadoCarga
+      - cargaConfirmadaEn
+      title: EvidenciaBorradorDto
+    EvidenciaConfirmadaDto:
+      properties:
+        evidenciaId:
+          type: string
+          format: uuid
+          title: Evidenciaid
+        estadoCarga:
+          type: string
+          const: CARGADA
+          title: Estadocarga
+        cargaConfirmadaEn:
+          type: string
+          format: date-time
+          title: Cargaconfirmadaen
+      type: object
+      required:
+      - evidenciaId
+      - estadoCarga
+      - cargaConfirmadaEn
+      title: EvidenciaConfirmadaDto
     EvidenciaDto:
       properties:
         evidenciaId:
@@ -1832,6 +2418,18 @@ components:
           - type: integer
           - type: 'null'
           title: Duracionsegundos
+        estadoCarga:
+          type: string
+          enum:
+          - PENDIENTE
+          - CARGADA
+          title: Estadocarga
+        cargaConfirmadaEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Cargaconfirmadaen
         carga:
           $ref: '#/components/schemas/CargaDto'
       type: object
@@ -1844,8 +2442,19 @@ components:
       - sha256
       - capturadaEn
       - duracionSegundos
+      - estadoCarga
+      - cargaConfirmadaEn
       - carga
       title: EvidenciaDto
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
     HistorialDto:
       properties:
         consentimientoId:
@@ -1917,6 +2526,17 @@ components:
       - duracionMaximaVideoSegundos
       - urlCargaExpiraSegundos
       title: LimitesDto
+    ListadoBorradoresDto:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/BorradorResumenDto'
+          type: array
+          title: Items
+      type: object
+      required:
+      - items
+      title: ListadoBorradoresDto
     PolizaDetalleDto:
       properties:
         numero:
@@ -2331,6 +2951,32 @@ components:
       - REVOCADO
       - VENCIDO
       title: TipoHito
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
     VerificacionDto:
       properties:
         clienteId:

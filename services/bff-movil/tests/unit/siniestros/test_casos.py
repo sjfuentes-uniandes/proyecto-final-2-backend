@@ -74,10 +74,26 @@ class Siniestros:
     async def limites(self, actor_id: str) -> dict[str, Any]:
         raise AssertionError("no se deben consultar límites")
 
+    async def listar_borradores(self, actor_id: str) -> dict[str, Any]:
+        raise AssertionError("no se deben listar borradores")
+
+    async def consultar_borrador(self, actor_id: str, borrador_id: UUID) -> dict[str, Any]:
+        raise AssertionError("no se debe consultar un borrador")
+
     async def agregar_evidencia(
         self, actor_id: str, borrador_id: UUID, solicitud: dict[str, Any]
     ) -> dict[str, Any]:
         raise AssertionError("no se debe agregar evidencia")
+
+    async def confirmar_evidencia(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID
+    ) -> dict[str, Any]:
+        raise AssertionError("no se debe confirmar evidencia")
+
+    async def renovar_carga(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID
+    ) -> dict[str, Any]:
+        raise AssertionError("no se debe renovar la carga")
 
 
 async def test_crea_borrador_con_cliente_resuelto_y_poliza_vigente() -> None:
@@ -126,6 +142,30 @@ async def test_reenvia_la_descripcion_al_servicio_siniestros() -> None:
         )
 
     assert json.loads(recibidas[0].content)["descripcion"] == descripcion
+
+
+async def test_consulta_borradores_confirma_y_renueva_por_el_actor() -> None:
+    recibidas: list[httpx.Request] = []
+
+    def manejar(request: httpx.Request) -> httpx.Response:
+        recibidas.append(request)
+        return httpx.Response(200, json={"items": []})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(manejar)) as cliente:
+        api = SiniestrosHttp(cliente, "http://siniestros.test", timeout_ms=500)
+        await api.listar_borradores(SUB)
+        await api.consultar_borrador(SUB, CLAVE)
+        await api.confirmar_evidencia(SUB, CLAVE, POLIZA_ID)
+        await api.renovar_carga(SUB, CLAVE, POLIZA_ID)
+
+    assert [(request.method, request.url.path) for request in recibidas] == [
+        ("GET", "/v1/siniestros/borradores"),
+        ("GET", f"/v1/siniestros/borradores/{CLAVE}"),
+        ("POST", f"/v1/siniestros/borradores/{CLAVE}/evidencias/{POLIZA_ID}/confirmacion"),
+        ("POST", f"/v1/siniestros/borradores/{CLAVE}/evidencias/{POLIZA_ID}/carga"),
+    ]
+    assert all(request.headers["X-Actor-Id"] == SUB for request in recibidas)
+    assert all(request.headers["X-Actor-Rol"] == "CLIENTE" for request in recibidas)
 
 
 @pytest.mark.parametrize(
