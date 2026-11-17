@@ -2117,9 +2117,15 @@ components:
           type: string
           format: uuid
           title: Polizaid
+        descripcion:
+          type: string
+          maxLength: 2000
+          minLength: 1
+          title: Descripcion
       type: object
       required:
       - polizaId
+      - descripcion
       title: SolicitudBorrador
     SolicitudEvidencia:
       properties:

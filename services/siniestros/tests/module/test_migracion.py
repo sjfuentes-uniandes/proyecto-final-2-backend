@@ -52,6 +52,25 @@ def insertar_evidencia(conexion: psycopg.Connection[Any], siniestro_id: str, **c
     return identificador
 
 
+def insertar_borrador(conexion: psycopg.Connection[Any], descripcion: str) -> str:
+    identificador = str(uuid4())
+    conexion.execute(
+        "INSERT INTO borradores "
+        "(id, actor_id, cliente_id, poliza_id, descripcion, copia_poliza, creado_en, "
+        "correlation_id) VALUES (%s, %s, %s, %s, %s, %s, now(), %s)",
+        (
+            identificador,
+            "actor-cliente",
+            str(uuid4()),
+            str(uuid4()),
+            descripcion,
+            Jsonb({"numero": "900-2026-000001"}),
+            "corr-descripcion",
+        ),
+    )
+    return identificador
+
+
 def test_crea_las_diez_tablas_con_sus_indices(conexion: psycopg.Connection[Any]) -> None:
     tablas = {
         fila[0]
@@ -87,6 +106,23 @@ def test_crea_las_diez_tablas_con_sus_indices(conexion: psycopg.Connection[Any])
         "decisiones_una_final",
         "siniestros_plazo_soporte",
     } <= indices
+
+
+def test_persiste_la_descripcion_del_borrador(conexion: psycopg.Connection[Any]) -> None:
+    descripcion = "El vehículo recibió un impacto en la puerta."
+    borrador_id = insertar_borrador(conexion, descripcion)
+
+    assert conexion.execute(
+        "SELECT descripcion FROM borradores WHERE id = %s", (borrador_id,)
+    ).fetchone() == (descripcion,)
+
+
+@pytest.mark.parametrize("descripcion", ["", "   ", "x" * 2001])
+def test_la_base_rechaza_descripcion_vacia_o_mayor_a_2000(
+    conexion: psycopg.Connection[Any], descripcion: str
+) -> None:
+    with pytest.raises(psycopg.errors.CheckViolation):
+        insertar_borrador(conexion, descripcion)
 
 
 def test_migrar_es_idempotente(base: str, conexion: psycopg.Connection[Any]) -> None:
@@ -317,9 +353,10 @@ def _reversa(nombre: str) -> str:
 
 
 def test_la_reversa_borra_todo_y_se_puede_volver_a_migrar(base: str) -> None:
-    # Las reversas van en orden inverso: borradores y decisiones antes de siniestros.
+    # Las reversas van en orden inverso: descripción, borradores y decisiones antes de siniestros.
     reversa = (
-        _reversa("003_borradores.sql")
+        _reversa("004_descripcion_borrador.sql")
+        + _reversa("003_borradores.sql")
         + _reversa("002_decisiones.sql")
         + _reversa("001_siniestros.sql")
     )

@@ -2169,12 +2169,18 @@ components:
           type: string
           format: uuid
           title: Clienteid
+        descripcion:
+          type: string
+          maxLength: 2000
+          minLength: 1
+          title: Descripcion
         copiaPoliza:
           $ref: '#/components/schemas/CopiaPolizaDto-Input'
       additionalProperties: false
       type: object
       required:
       - clienteId
+      - descripcion
       - copiaPoliza
       title: SolicitudBorrador
     SolicitudDecision:

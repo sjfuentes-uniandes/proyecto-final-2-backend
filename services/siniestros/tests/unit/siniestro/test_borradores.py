@@ -16,6 +16,7 @@ pytestmark = pytest.mark.anyio
 
 BORRADOR_ID = UUID("00000000-0000-4000-8000-000000000001")
 POLIZA_ID = UUID("00000000-0000-4000-8000-000000000002")
+CLAVE = UUID("00000000-0000-4000-8000-000000000003")
 AHORA = datetime(2026, 1, 1, tzinfo=UTC)
 SHA256 = "a" * 64
 
@@ -63,6 +64,38 @@ def solicitud_foto(**cambios: Any) -> EvidenciaSolicitada:
         "duracion_segundos": None,
     }
     return EvidenciaSolicitada(**{**datos, **cambios})
+
+
+async def test_crear_guarda_descripcion_y_la_incluye_en_la_huella_de_idempotencia() -> None:
+    casos, repo, _ = crear_borradores()
+    cliente_id = UUID("00000000-0000-4000-8000-000000000004")
+    copia_poliza = {"numero": "900-2026-000001"}
+
+    await casos.crear(
+        cliente_id,
+        POLIZA_ID,
+        "El vehículo recibió un impacto.",
+        copia_poliza,
+        CLAVE,
+        "actor",
+        "corr",
+    )
+    assert repo.borrador is not None
+    huella_primera, descripcion = repo.borrador[1], repo.borrador[6]
+
+    await casos.crear(
+        cliente_id,
+        POLIZA_ID,
+        "El vehículo tuvo daños en la puerta.",
+        copia_poliza,
+        CLAVE,
+        "actor",
+        "corr",
+    )
+
+    assert descripcion == "El vehículo recibió un impacto."
+    assert repo.borrador is not None
+    assert repo.borrador[1] != huella_primera
 
 
 async def test_limites_publica_la_configuracion_de_evidencias() -> None:

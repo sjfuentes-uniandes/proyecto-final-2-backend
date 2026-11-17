@@ -15,6 +15,7 @@ from siniestros.adapters.outbound import siniestros_pg
 from siniestros.adapters.outbound.mapeo import copia_a_json, ubicacion_a_json
 from siniestros.adapters.outbound.siniestros_pg import (
     SiniestrosPg,
+    TxSiniestrosPg,
     codificar_cursor,
     decodificar_cursor,
 )
@@ -203,6 +204,27 @@ def test_un_cursor_con_clave_booleana_o_fecha_sin_zona_es_invalido(ahora: dateti
     for malo in (cursor(k=True), cursor(k=[1]), cursor(t="2026-11-05T01:00:00")):
         with pytest.raises(SolicitudInvalida):
             decodificar_cursor(malo)
+
+
+async def test_el_insert_del_borrador_persiste_la_descripcion() -> None:
+    conexion = ConexionFalsa()
+    tx = TxSiniestrosPg(conexion)  # type: ignore[arg-type]
+    descripcion = "El vehículo recibió un impacto."
+
+    await tx.crear_borrador(
+        uuid4(),
+        "actor-cliente",
+        uuid4(),
+        uuid4(),
+        descripcion,
+        {"numero": "900-2026-000001"},
+        datetime.now(UTC),
+        "corr",
+    )
+
+    sql, parametros = conexion.sentencias[0]
+    assert "descripcion" in sql
+    assert parametros[4] == descripcion
 
 
 # --- Bandeja ---------------------------------------------------------------------------------------

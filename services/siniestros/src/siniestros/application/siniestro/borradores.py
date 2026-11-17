@@ -26,6 +26,7 @@ class BorradoresRepositorio(Protocol):
         actor_id: str,
         cliente_id: UUID,
         poliza_id: UUID,
+        descripcion: str,
         copia_poliza: dict[str, Any],
         creado_en: datetime,
         correlation_id: str,
@@ -59,12 +60,19 @@ class EvidenciaSolicitada:
     duracion_segundos: int | None
 
 
-def _huella(actor_id: str, cliente_id: UUID, poliza_id: UUID, copia_poliza: dict[str, Any]) -> str:
+def _huella(
+    actor_id: str,
+    cliente_id: UUID,
+    poliza_id: UUID,
+    descripcion: str,
+    copia_poliza: dict[str, Any],
+) -> str:
     solicitud = json.dumps(
         {
             "actorId": actor_id,
             "clienteId": str(cliente_id),
             "polizaId": str(poliza_id),
+            "descripcion": descripcion,
             "copiaPoliza": copia_poliza,
         },
         ensure_ascii=False,
@@ -102,6 +110,7 @@ class Borradores:
         self,
         cliente_id: UUID,
         poliza_id: UUID,
+        descripcion: str,
         copia_poliza: dict[str, Any],
         clave: UUID,
         actor_id: str,
@@ -110,11 +119,12 @@ class Borradores:
         borrador_id = uuid4()
         return await self._repo.crear_borrador(
             f"borrador:{clave}",
-            _huella(actor_id, cliente_id, poliza_id, copia_poliza),
+            _huella(actor_id, cliente_id, poliza_id, descripcion, copia_poliza),
             borrador_id,
             actor_id,
             cliente_id,
             poliza_id,
+            descripcion,
             copia_poliza,
             self._reloj.ahora(),
             correlation_id,

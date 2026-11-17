@@ -50,11 +50,18 @@ class SiniestrosHttp:
         )
 
     async def crear_borrador(
-        self, actor_id: str, cliente_id: UUID, poliza: Poliza, clave: UUID
+        self,
+        actor_id: str,
+        cliente_id: UUID,
+        poliza: Poliza,
+        descripcion: str,
+        clave: UUID,
     ) -> dict[str, Any]:
         return await self._ejecutar(
             "siniestros.borrador.crear",
-            lambda timeout_s: self._crear_borrador(actor_id, cliente_id, poliza, clave, timeout_s),
+            lambda timeout_s: self._crear_borrador(
+                actor_id, cliente_id, poliza, descripcion, clave, timeout_s
+            ),
         )
 
     async def agregar_evidencia(
@@ -88,13 +95,18 @@ class SiniestrosHttp:
         actor_id: str,
         cliente_id: UUID,
         poliza: Poliza,
+        descripcion: str,
         clave: UUID,
         timeout_s: float,
     ) -> dict[str, Any]:
         respuesta = await self._cliente.post(
             f"{self._base_url}/v1/siniestros/borradores",
             headers={**self._cabeceras(actor_id), "Idempotency-Key": str(clave)},
-            json={"clienteId": str(cliente_id), "copiaPoliza": _copia_poliza(poliza)},
+            json={
+                "clienteId": str(cliente_id),
+                "descripcion": descripcion,
+                "copiaPoliza": _copia_poliza(poliza),
+            },
             timeout=timeout_s,
         )
         return self._json_ok(respuesta, estados_ok={200, 201})

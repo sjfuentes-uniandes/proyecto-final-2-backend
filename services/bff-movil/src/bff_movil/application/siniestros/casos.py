@@ -32,7 +32,9 @@ class CrearBorrador:
         self._consulta = consulta
         self._siniestros = siniestros
 
-    async def ejecutar(self, sub: str, poliza_id: UUID, clave: UUID) -> dict[str, Any]:
+    async def ejecutar(
+        self, sub: str, poliza_id: UUID, descripcion: str, clave: UUID
+    ) -> dict[str, Any]:
         with operacion("siniestros.borrador.crear") as op:
             try:
                 cliente_id = await self._resolutor.resolver(sub)
@@ -46,7 +48,9 @@ class CrearBorrador:
             if poliza.estado != "EMITIDA" or not poliza.vigente:
                 op.marcar(RESULTADO_RECHAZADO)
                 raise PolizaNoVigente
-            resultado = await self._siniestros.crear_borrador(sub, cliente_id, poliza, clave)
+            resultado = await self._siniestros.crear_borrador(
+                sub, cliente_id, poliza, descripcion, clave
+            )
             op.marcar("creado")
             return resultado
 

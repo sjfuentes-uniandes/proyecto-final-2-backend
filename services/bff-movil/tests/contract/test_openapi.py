@@ -137,8 +137,9 @@ def test_el_reporte_movil_usa_token_y_no_acepta_cliente_id() -> None:
 
     assert limites["security"] == crear["security"] == agregar["security"] == [{"bearerAuth": []}]
     esquema = app.openapi()["components"]["schemas"]["SolicitudBorrador"]
-    assert esquema["required"] == ["polizaId"]
-    assert set(esquema["properties"]) == {"polizaId"}
+    assert set(esquema["required"]) == {"polizaId", "descripcion"}
+    assert set(esquema["properties"]) == {"polizaId", "descripcion"}
+    assert esquema["properties"]["descripcion"]["maxLength"] == 2000
     clave = next(p for p in crear["parameters"] if p["name"] == "Idempotency-Key")
     assert clave["required"] is True and clave["schema"]["format"] == "uuid"
     assert set(crear["responses"]) == {"201", "400", "401", "403", "404", "409", "422", "503"}

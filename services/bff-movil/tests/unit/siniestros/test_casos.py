@@ -1,12 +1,17 @@
+import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+import httpx
 import pytest
+from bff_movil.adapters.inbound.http.siniestros import SolicitudBorrador
+from bff_movil.adapters.outbound.siniestros_http import SiniestrosHttp
 from bff_movil.application.siniestros.casos import CrearBorrador
 from bff_movil.domain.polizas.modelos import Cobertura, Poliza, Vigencia
 from bff_movil.domain.siniestros.errores import PolizaNoVigente
+from pydantic import ValidationError
 
 pytestmark = pytest.mark.anyio
 
@@ -58,12 +63,12 @@ class Consulta:
 
 class Siniestros:
     def __init__(self) -> None:
-        self.llamadas: list[tuple[str, UUID, Poliza, UUID]] = []
+        self.llamadas: list[tuple[str, UUID, Poliza, str, UUID]] = []
 
     async def crear_borrador(
-        self, actor_id: str, cliente_id: UUID, poliza: Poliza, clave: UUID
+        self, actor_id: str, cliente_id: UUID, poliza: Poliza, descripcion: str, clave: UUID
     ) -> dict[str, Any]:
-        self.llamadas.append((actor_id, cliente_id, poliza, clave))
+        self.llamadas.append((actor_id, cliente_id, poliza, descripcion, clave))
         return {"polizaId": str(poliza.poliza_id)}
 
     async def limites(self, actor_id: str) -> dict[str, Any]:
@@ -77,14 +82,50 @@ class Siniestros:
 
 async def test_crea_borrador_con_cliente_resuelto_y_poliza_vigente() -> None:
     consulta, siniestros = Consulta(poliza()), Siniestros()
+    descripcion = "El vehículo recibió un impacto en la puerta."
 
     resultado = await CrearBorrador(Resolutor(), consulta, siniestros).ejecutar(
-        SUB, POLIZA_ID, CLAVE
+        SUB, POLIZA_ID, descripcion, CLAVE
     )
 
     assert resultado == {"polizaId": str(POLIZA_ID)}
     assert consulta.llamadas == [(CLIENTE_ID, POLIZA_ID, SUB)]
-    assert siniestros.llamadas == [(SUB, CLIENTE_ID, poliza(), CLAVE)]
+    assert siniestros.llamadas == [(SUB, CLIENTE_ID, poliza(), descripcion, CLAVE)]
+
+
+def test_descripcion_del_borrador_se_normaliza_y_tiene_maximo_de_2000_caracteres() -> None:
+    texto = "  El vehículo recibió un impacto.  "
+    solicitud = SolicitudBorrador(polizaId=POLIZA_ID, descripcion=texto)
+    assert solicitud.descripcion == texto.strip()
+    assert len(SolicitudBorrador(polizaId=POLIZA_ID, descripcion="x" * 2000).descripcion) == 2000
+
+    with pytest.raises(ValidationError):
+        SolicitudBorrador(polizaId=POLIZA_ID, descripcion=" " * 4)
+    with pytest.raises(ValidationError):
+        SolicitudBorrador(polizaId=POLIZA_ID, descripcion="x" * 2001)
+
+
+async def test_reenvia_la_descripcion_al_servicio_siniestros() -> None:
+    recibidas: list[httpx.Request] = []
+
+    def manejar(request: httpx.Request) -> httpx.Response:
+        recibidas.append(request)
+        return httpx.Response(
+            201,
+            json={
+                "borradorId": str(CLAVE),
+                "polizaId": str(POLIZA_ID),
+                "estado": "ABIERTO",
+            },
+        )
+
+    descripcion = "El vehículo recibió un impacto."
+    async with httpx.AsyncClient(transport=httpx.MockTransport(manejar)) as cliente:
+        await SiniestrosHttp(cliente, "http://siniestros.test", timeout_ms=500).crear_borrador(
+            SUB, CLIENTE_ID, poliza(), descripcion, CLAVE
+        )
+
+    assert json.loads(recibidas[0].content)["descripcion"] == descripcion
 
 
 @pytest.mark.parametrize(
@@ -98,7 +139,9 @@ async def test_no_crea_borrador_para_poliza_no_vigente(datos: dict[str, Any]) ->
     consulta, siniestros = Consulta(poliza(**datos)), Siniestros()
 
     with pytest.raises(PolizaNoVigente):
-        await CrearBorrador(Resolutor(), consulta, siniestros).ejecutar(SUB, POLIZA_ID, CLAVE)
+        await CrearBorrador(Resolutor(), consulta, siniestros).ejecutar(
+            SUB, POLIZA_ID, "Descripción del siniestro", CLAVE
+        )
 
     assert consulta.llamadas == [(CLIENTE_ID, POLIZA_ID, SUB)]
     assert siniestros.llamadas == []

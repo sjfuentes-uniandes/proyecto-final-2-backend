@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Request
-from pydantic import AwareDatetime, Field, model_validator
+from pydantic import AwareDatetime, Field, field_validator, model_validator
 from solventa_common.errors import ErrorNegocio
 
 from bff_movil.adapters.inbound.http.auth import IdentidadAutenticada, autenticar
@@ -28,6 +28,7 @@ from bff_movil.domain.sesion.errores import (
 from bff_movil.domain.siniestros.errores import PolizaNoVigente
 
 router = APIRouter(prefix="/v1/siniestros", tags=["siniestros"])
+DESCRIPCION_MAX_CARACTERES = 2000
 
 
 class LimitesDto(Dto):
@@ -42,6 +43,15 @@ class LimitesDto(Dto):
 
 class SolicitudBorrador(Dto):
     poliza_id: UUID
+    descripcion: str = Field(min_length=1, max_length=DESCRIPCION_MAX_CARACTERES)
+
+    @field_validator("descripcion")
+    @classmethod
+    def _descripcion_no_vacia(cls, valor: str) -> str:
+        descripcion = valor.strip()
+        if not descripcion:
+            raise ValueError("descripcion es obligatoria")
+        return descripcion
 
 
 class BorradorDto(Dto):
@@ -160,7 +170,7 @@ async def crear_borrador(
     caso: CrearBorrador = request.app.state.crear_borrador
     try:
         return BorradorDto.model_validate(
-            await caso.ejecutar(identidad.sub, solicitud.poliza_id, clave)
+            await caso.ejecutar(identidad.sub, solicitud.poliza_id, solicitud.descripcion, clave)
         )
     except PolizaNoVigente:
         raise

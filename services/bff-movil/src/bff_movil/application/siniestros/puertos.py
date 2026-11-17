@@ -8,7 +8,7 @@ class SiniestrosApi(Protocol):
     async def limites(self, actor_id: str) -> dict[str, Any]: ...
 
     async def crear_borrador(
-        self, actor_id: str, cliente_id: UUID, poliza: Poliza, clave: UUID
+        self, actor_id: str, cliente_id: UUID, poliza: Poliza, descripcion: str, clave: UUID
     ) -> dict[str, Any]: ...
 
     async def agregar_evidencia(

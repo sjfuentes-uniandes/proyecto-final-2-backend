@@ -46,7 +46,8 @@ def test_el_borrador_exige_idempotencia_y_la_evidencia_declara_carga_prefirmada(
     clave = next(p for p in crear["parameters"] if p["name"] == "Idempotency-Key")
     assert clave["required"] is True and clave["schema"]["format"] == "uuid"
     solicitud = app.openapi()["components"]["schemas"]["SolicitudBorrador"]
-    assert set(solicitud["required"]) == {"clienteId", "copiaPoliza"}
+    assert set(solicitud["required"]) == {"clienteId", "descripcion", "copiaPoliza"}
+    assert solicitud["properties"]["descripcion"]["maxLength"] == 2000
 
     agregar = rutas["/v1/siniestros/borradores/{borradorId}/evidencias"]["post"]
     assert set(agregar["responses"]) == {"201", "400", "401", "403", "404", "422", "503"}

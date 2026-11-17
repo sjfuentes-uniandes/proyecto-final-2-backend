@@ -288,6 +288,7 @@ class SiniestrosPg:
         actor_id: str,
         cliente_id: UUID,
         poliza_id: UUID,
+        descripcion: str,
         copia_poliza: dict[str, Any],
         creado_en: datetime,
         correlation_id: str,
@@ -307,6 +308,7 @@ class SiniestrosPg:
                 actor_id,
                 cliente_id,
                 poliza_id,
+                descripcion,
                 copia_poliza,
                 creado_en,
                 correlation_id,
@@ -583,19 +585,21 @@ class TxSiniestrosPg:
         actor_id: str,
         cliente_id: UUID,
         poliza_id: UUID,
+        descripcion: str,
         copia_poliza: dict[str, Any],
         creado_en: datetime,
         correlation_id: str,
     ) -> None:
         await self._conexion.execute(
             "INSERT INTO borradores "
-            "(id, actor_id, cliente_id, poliza_id, copia_poliza, creado_en, correlation_id) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            "(id, actor_id, cliente_id, poliza_id, descripcion, copia_poliza, creado_en, "
+            "correlation_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
             (
                 borrador_id,
                 actor_id,
                 cliente_id,
                 poliza_id,
+                descripcion,
                 Jsonb(copia_poliza),
                 creado_en,
                 correlation_id,

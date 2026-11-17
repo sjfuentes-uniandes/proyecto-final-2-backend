@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Request
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 from solventa_common.errors import RutaB2
 
@@ -29,6 +29,7 @@ router_borradores = APIRouter(
         403: {"model": ErrorDto, "description": "ROL_NO_AUTORIZADO"},
     },
 )
+DESCRIPCION_MAX_CARACTERES = 2000
 
 
 class Dto(BaseModel):
@@ -63,7 +64,16 @@ class CopiaPolizaDto(Dto):
 
 class SolicitudBorrador(Dto):
     cliente_id: UUID
+    descripcion: str = Field(min_length=1, max_length=DESCRIPCION_MAX_CARACTERES)
     copia_poliza: CopiaPolizaDto
+
+    @field_validator("descripcion")
+    @classmethod
+    def _descripcion_no_vacia(cls, valor: str) -> str:
+        descripcion = valor.strip()
+        if not descripcion:
+            raise ValueError("descripcion es obligatoria")
+        return descripcion
 
 
 class BorradorCreado(Dto):
@@ -173,6 +183,7 @@ async def crear_borrador(
     borrador_id = await casos.crear(
         solicitud.cliente_id,
         copia.poliza_id,
+        solicitud.descripcion,
         copia.model_dump(by_alias=True, mode="json"),
         clave,
         actor.id,
