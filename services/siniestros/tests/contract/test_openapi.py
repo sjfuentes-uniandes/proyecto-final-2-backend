@@ -33,8 +33,26 @@ def test_las_rutas_son_las_de_la_historia() -> None:
         ("POST", "/v1/siniestros/{siniestroId}/evidencias/{evidenciaId}/enlace"),
         ("POST", "/v1/siniestros/{siniestroId}/decision"),
         ("GET", "/v1/siniestros/catalogos-decision"),
+        ("GET", "/v1/siniestros/limites"),
+        ("POST", "/v1/siniestros/borradores"),
+        ("POST", "/v1/siniestros/borradores/{borradorId}/evidencias"),
         ("GET", "/health"),
     }
+
+
+def test_el_borrador_exige_idempotencia_y_la_evidencia_declara_carga_prefirmada() -> None:
+    rutas = app.openapi()["paths"]
+    crear = rutas["/v1/siniestros/borradores"]["post"]
+    clave = next(p for p in crear["parameters"] if p["name"] == "Idempotency-Key")
+    assert clave["required"] is True and clave["schema"]["format"] == "uuid"
+    solicitud = app.openapi()["components"]["schemas"]["SolicitudBorrador"]
+    assert set(solicitud["required"]) == {"clienteId", "copiaPoliza"}
+
+    agregar = rutas["/v1/siniestros/borradores/{borradorId}/evidencias"]["post"]
+    assert set(agregar["responses"]) == {"201", "400", "401", "403", "404", "422", "503"}
+    carga = app.openapi()["components"]["schemas"]["CargaEvidencia"]
+    assert set(carga["required"]) == {"metodo", "url", "campos", "expiraEn"}
+    assert rutas["/v1/siniestros/limites"]["get"]["responses"]["200"]
 
 
 def test_el_detalle_nunca_expone_la_clave_del_objeto_ni_una_url() -> None:
@@ -48,7 +66,7 @@ def test_el_detalle_nunca_expone_la_clave_del_objeto_ni_una_url() -> None:
         "integridad",
     }
     for nombre, esquema in esquemas.items():
-        if nombre != "EnlaceEvidencia":
+        if nombre not in {"EnlaceEvidencia", "CargaEvidencia"}:
             assert not {"url", "claveObjeto", "clave"} & set(esquema.get("properties", {})), nombre
 
 

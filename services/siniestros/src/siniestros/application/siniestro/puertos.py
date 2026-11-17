@@ -52,6 +52,18 @@ class AlmacenEvidencias(Protocol):
         """URL prefirmada de lectura. Lanza `DependenciaNoDisponible` si no se puede firmar."""
         ...
 
+    async def firmar_carga(
+        self,
+        clave: str,
+        tipo_contenido: str,
+        tamano_bytes: int,
+        sha256: str,
+        ttl_s: int,
+        cifrado: str,
+    ) -> tuple[str, dict[str, str]]:
+        """POST prefirmado con tipo, tamaño, checksum y cifrado inmutables."""
+        ...
+
 
 @dataclass(frozen=True)
 class RegistroIdempotencia:

@@ -52,7 +52,7 @@ def insertar_evidencia(conexion: psycopg.Connection[Any], siniestro_id: str, **c
     return identificador
 
 
-def test_crea_las_ocho_tablas_con_sus_indices(conexion: psycopg.Connection[Any]) -> None:
+def test_crea_las_diez_tablas_con_sus_indices(conexion: psycopg.Connection[Any]) -> None:
     tablas = {
         fila[0]
         for fila in conexion.execute(
@@ -68,6 +68,8 @@ def test_crea_las_ocho_tablas_con_sus_indices(conexion: psycopg.Connection[Any])
         "inbox",
         "idempotencia",
         "secuencia_codigo",
+        "borradores",
+        "borrador_evidencias",
     }
     indices = {
         fila[0]
@@ -315,8 +317,12 @@ def _reversa(nombre: str) -> str:
 
 
 def test_la_reversa_borra_todo_y_se_puede_volver_a_migrar(base: str) -> None:
-    # La reversa de 002 va antes que la de 001 (decisiones_siniestro referencia a siniestros).
-    reversa = _reversa("002_decisiones.sql") + _reversa("001_siniestros.sql")
+    # Las reversas van en orden inverso: borradores y decisiones antes de siniestros.
+    reversa = (
+        _reversa("003_borradores.sql")
+        + _reversa("002_decisiones.sql")
+        + _reversa("001_siniestros.sql")
+    )
     with psycopg.connect(base, autocommit=True) as conexion:
         conexion.execute(reversa)
         assert conexion.execute(
@@ -331,7 +337,7 @@ def test_la_reversa_borra_todo_y_se_puede_volver_a_migrar(base: str) -> None:
     with psycopg.connect(base, autocommit=True) as conexion:
         assert conexion.execute(
             "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'"
-        ).fetchone() == (8,)
+        ).fetchone() == (10,)
 
 
 # --- Migración 002: decisiones (HU-W20, W20-B05) ---------------------------------------------------
@@ -510,10 +516,10 @@ def test_la_reversa_de_002_deja_la_base_de_001(limpia: str) -> None:
             ).fetchall()
         }
         assert not {"deducible", "valor_indemnizar"} & columnas
-        # Con 001 solamente, la reversa se repite sin fallar y 002 se vuelve a aplicar.
+        # La reversa se repite sin fallar y las migraciones pueden reaplicarse.
         conexion.execute(_reversa("002_decisiones.sql"))
     migrar(base)
     with psycopg.connect(base, autocommit=True) as conexion:
         assert conexion.execute(
             "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'"
-        ).fetchone() == (8,)
+        ).fetchone() == (10,)

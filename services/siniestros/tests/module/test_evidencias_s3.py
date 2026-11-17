@@ -91,6 +91,42 @@ async def test_la_url_prefirmada_descarga_el_objeto_y_expira_en_300_s(
     assert respuesta.headers["content-type"] == "image/png"
 
 
+async def test_el_post_prefirmado_acepta_el_tamano_fijado_y_registra_su_hash(
+    s3: Any, bucket: str, almacen: EvidenciasS3
+) -> None:
+    clave = f"tmp/{uuid4()}/{uuid4()}"
+    url, campos = await almacen.firmar_carga(clave, "image/png", len(CONTENIDO), SHA, 300, SSE)
+
+    async with httpx.AsyncClient() as http:
+        respuesta = await http.post(
+            url,
+            data=campos,
+            files={"file": ("foto.png", CONTENIDO, "image/png")},
+        )
+
+    assert respuesta.status_code == 204
+    assert await almacen.verificar(clave, SHA) is IntegridadEvidencia.VERIFICADA, s3.head_object(
+        Bucket=bucket, Key=clave, ChecksumMode="ENABLED"
+    )
+
+
+async def test_el_post_prefirmado_rechaza_un_archivo_mayor_al_tamano_fijado(
+    bucket: str, almacen: EvidenciasS3
+) -> None:
+    clave = f"tmp/{uuid4()}/{uuid4()}"
+    url, campos = await almacen.firmar_carga(clave, "image/png", len(CONTENIDO), SHA, 300, SSE)
+
+    async with httpx.AsyncClient() as http:
+        respuesta = await http.post(
+            url,
+            data=campos,
+            files={"file": ("foto.png", CONTENIDO + b"x", "image/png")},
+        )
+
+    assert respuesta.status_code != 204
+    assert await almacen.verificar(clave, SHA) is IntegridadEvidencia.NO_DISPONIBLE
+
+
 async def test_la_url_se_firma_con_el_endpoint_publico(
     s3: Any, localstack: str, bucket: str, credenciales: None
 ) -> None:
@@ -107,10 +143,10 @@ async def test_mt_w19_01_el_enlace_vencido_ya_no_descarga_el_objeto(
 ) -> None:
     """MT-W19-01: tras la caducidad S3 rechaza la URL (403); el analista pide un enlace nuevo."""
     clave = subir(s3, bucket, ChecksumSHA256=sha256_base64(CONTENIDO))
-    url = await almacen.firmar_lectura(clave, 1, "image/png")
+    url = await almacen.firmar_lectura(clave, 5, "image/png")
     async with httpx.AsyncClient() as http:
         assert (await http.get(url)).status_code == 200
-        await anyio.sleep(2.5)
+        await anyio.sleep(6.5)
         vencido = await http.get(url)
         assert vencido.status_code == 403
         assert "expired" in vencido.text.lower()

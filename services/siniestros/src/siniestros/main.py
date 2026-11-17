@@ -10,7 +10,7 @@ from solventa_common.inbox import ConsumidorInbox, InboxPg, Receptor, ReceptorSq
 from solventa_common.outbox import OutboxPg, PublicadorSns, RelayOutbox, cliente_sns
 from solventa_common.telemetry import instrumentar
 
-from siniestros.adapters.inbound.http import decisiones
+from siniestros.adapters.inbound.http import borradores, decisiones
 from siniestros.adapters.inbound.http import siniestros as http
 from siniestros.adapters.inbound.sqs.indemnizaciones import manejador_indemnizaciones
 from siniestros.adapters.outbound.base_de_datos import migrar
@@ -25,6 +25,7 @@ from siniestros.adapters.outbound.siniestros_pg import SiniestrosPg, TxSiniestro
 from siniestros.adapters.outbound.soportes_requeridos import SoportesRequeridosJson
 from siniestros.application.siniestro.acceso import RegistrarAccesoDenegado
 from siniestros.application.siniestro.bandeja import ConsultarResumen, ListarBandeja
+from siniestros.application.siniestro.borradores import Borradores
 from siniestros.application.siniestro.decidir import Decidir
 from siniestros.application.siniestro.detalle import ConsultarDetalle
 from siniestros.application.siniestro.enlace import EmitirEnlace
@@ -349,8 +350,12 @@ def crear_app(
                 app.state.pool = pool_base
             pool_activo = getattr(app.state, "pool", None)
             if pool_activo is not None:
+                almacen_activo = almacen or armar_almacen(settings)
+                app.state.borradores = Borradores(
+                    SiniestrosPg(pool_activo), almacen_activo, reloj_activo, settings
+                )
                 app.state.servicios = armar_servicios(
-                    pool_activo, almacen or armar_almacen(settings), reloj_activo, settings
+                    pool_activo, almacen_activo, reloj_activo, settings
                 )
             relay: _Fondo | None = None
             semilla: _Fondo | None = None
@@ -371,6 +376,7 @@ def crear_app(
     app = instrumentar(FastAPI(title=settings.service_name, lifespan=ciclo), settings)
     # Primero la decisión: `/catalogos-decision` va antes de `/{siniestroId}`.
     app.include_router(decisiones.router)
+    app.include_router(borradores.router_borradores)
     app.include_router(http.router)
     app.include_router(http.router_accesos)
 

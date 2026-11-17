@@ -1270,6 +1270,331 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/limites:
+    get:
+      tags:
+      - siniestros
+      summary: Limites
+      operationId: limites_v1_siniestros_limites_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LimitesDto'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '401':
+          description: 'NO_AUTENTICADO: se requiere un cliente autenticado'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: el token no es del pool de clientes'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: no se pudo consultar o crear el reporte'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/borradores:
+    post:
+      tags:
+      - siniestros
+      summary: Crear Borrador
+      operationId: crear_borrador_v1_siniestros_borradores_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Idempotency-Key
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudBorrador'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BorradorDto'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '401':
+          description: 'NO_AUTENTICADO: se requiere un cliente autenticado'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: ROL_NO_AUTORIZADO o POLIZA_NO_AUTORIZADA
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: CLIENTE_NO_ENCONTRADO o POLIZA_NO_ENCONTRADA
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: 'POLIZA_NO_VIGENTE: la póliza no está emitida y vigente'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '400':
+          description: SOLICITUD_INVALIDA
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA o IDEMPOTENCIA_CONFLICTO
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: no se pudo consultar o crear el reporte'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/borradores/{borradorId}/evidencias:
+    post:
+      tags:
+      - siniestros
+      summary: Agregar Evidencia
+      operationId: agregar_evidencia_v1_siniestros_borradores__borradorId__evidencias_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: borradorId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Borradorid
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudEvidencia'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenciaDto'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '401':
+          description: 'NO_AUTENTICADO: se requiere un cliente autenticado'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: el token no es del pool de clientes'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: BORRADOR_NO_ENCONTRADO
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '400':
+          description: SOLICITUD_INVALIDA
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: TIPO_EVIDENCIA_NO_ADMITIDO, TAMANO_EVIDENCIA_EXCEDIDO, DURACION_VIDEO_EXCEDIDA
+            o LIMITE_EVIDENCIAS_ALCANZADO
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: no se pudo consultar o crear el reporte'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /health:
     get:
       summary: Health
@@ -1286,6 +1611,49 @@ paths:
                 title: Response Health Health Get
 components:
   schemas:
+    BorradorDto:
+      properties:
+        borradorId:
+          type: string
+          format: uuid
+          title: Borradorid
+        polizaId:
+          type: string
+          format: uuid
+          title: Polizaid
+        estado:
+          type: string
+          title: Estado
+      type: object
+      required:
+      - borradorId
+      - polizaId
+      - estado
+      title: BorradorDto
+    CargaDto:
+      properties:
+        metodo:
+          type: string
+          title: Metodo
+        url:
+          type: string
+          title: Url
+        campos:
+          additionalProperties:
+            type: string
+          type: object
+          title: Campos
+        expiraEn:
+          type: string
+          format: date-time
+          title: Expiraen
+      type: object
+      required:
+      - metodo
+      - url
+      - campos
+      - expiraEn
+      title: CargaDto
     ClienteVinculadoDto:
       properties:
         clienteId:
@@ -1429,6 +1797,55 @@ components:
       - PENDIENTE
       - RECHAZADO
       title: EstadoIdentidad
+    EvidenciaDto:
+      properties:
+        evidenciaId:
+          type: string
+          format: uuid
+          title: Evidenciaid
+        nombreArchivo:
+          type: string
+          title: Nombrearchivo
+        tipo:
+          type: string
+          enum:
+          - FOTOGRAFIA
+          - VIDEO
+          title: Tipo
+        tipoContenido:
+          type: string
+          title: Tipocontenido
+        tamanoBytes:
+          type: integer
+          title: Tamanobytes
+        sha256:
+          type: string
+          title: Sha256
+        capturadaEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Capturadaen
+        duracionSegundos:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duracionsegundos
+        carga:
+          $ref: '#/components/schemas/CargaDto'
+      type: object
+      required:
+      - evidenciaId
+      - nombreArchivo
+      - tipo
+      - tipoContenido
+      - tamanoBytes
+      - sha256
+      - capturadaEn
+      - duracionSegundos
+      - carga
+      title: EvidenciaDto
     HistorialDto:
       properties:
         consentimientoId:
@@ -1463,6 +1880,43 @@ components:
       - tipo
       - ocurridoEn
       title: HitoDto
+    LimitesDto:
+      properties:
+        maxEvidencias:
+          type: integer
+          title: Maxevidencias
+        formatosFoto:
+          items:
+            type: string
+          type: array
+          title: Formatosfoto
+        formatosVideo:
+          items:
+            type: string
+          type: array
+          title: Formatosvideo
+        tamanoMaximoFotoBytes:
+          type: integer
+          title: Tamanomaximofotobytes
+        tamanoMaximoVideoBytes:
+          type: integer
+          title: Tamanomaximovideobytes
+        duracionMaximaVideoSegundos:
+          type: integer
+          title: Duracionmaximavideosegundos
+        urlCargaExpiraSegundos:
+          type: integer
+          title: Urlcargaexpirasegundos
+      type: object
+      required:
+      - maxEvidencias
+      - formatosFoto
+      - formatosVideo
+      - tamanoMaximoFotoBytes
+      - tamanoMaximoVideoBytes
+      - duracionMaximaVideoSegundos
+      - urlCargaExpiraSegundos
+      title: LimitesDto
     PolizaDetalleDto:
       properties:
         numero:
@@ -1657,6 +2111,62 @@ components:
       - serviciosAutorizados
       - expiraEn
       title: SesionDto
+    SolicitudBorrador:
+      properties:
+        polizaId:
+          type: string
+          format: uuid
+          title: Polizaid
+      type: object
+      required:
+      - polizaId
+      title: SolicitudBorrador
+    SolicitudEvidencia:
+      properties:
+        nombreArchivo:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Nombrearchivo
+        tipo:
+          type: string
+          enum:
+          - FOTOGRAFIA
+          - VIDEO
+          title: Tipo
+        tipoContenido:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Tipocontenido
+        tamanoBytes:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Tamanobytes
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          title: Sha256
+        capturadaEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Capturadaen
+        duracionSegundos:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Duracionsegundos
+      type: object
+      required:
+      - nombreArchivo
+      - tipo
+      - tipoContenido
+      - tamanoBytes
+      - sha256
+      title: SolicitudEvidencia
     SolicitudOtorgar:
       properties:
         proposito:

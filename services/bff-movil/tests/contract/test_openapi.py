@@ -129,6 +129,21 @@ def test_los_cambios_de_la_parte_2_son_aditivos() -> None:
     )
 
 
+def test_el_reporte_movil_usa_token_y_no_acepta_cliente_id() -> None:
+    rutas = app.openapi()["paths"]
+    limites = rutas["/v1/siniestros/limites"]["get"]
+    crear = rutas["/v1/siniestros/borradores"]["post"]
+    agregar = rutas["/v1/siniestros/borradores/{borradorId}/evidencias"]["post"]
+
+    assert limites["security"] == crear["security"] == agregar["security"] == [{"bearerAuth": []}]
+    esquema = app.openapi()["components"]["schemas"]["SolicitudBorrador"]
+    assert esquema["required"] == ["polizaId"]
+    assert set(esquema["properties"]) == {"polizaId"}
+    clave = next(p for p in crear["parameters"] if p["name"] == "Idempotency-Key")
+    assert clave["required"] is True and clave["schema"]["format"] == "uuid"
+    assert set(crear["responses"]) == {"201", "400", "401", "403", "404", "409", "422", "503"}
+
+
 def test_el_bff_es_compatible_con_lo_que_clientes_publica() -> None:
     """Las dos rutas nuevas reenvían a `clientes`: sus esquemas de respuesta tienen los mismos
     campos obligatorios en ambos contratos."""

@@ -1,6 +1,7 @@
 """La semilla de QA (R7) aplicada a PostgreSQL y S3 reales: cada caso cumple lo que declara su
 `esperado` y el resumen cuadra con `esperadoResumen` (HU-W19, DS3-07)."""
 
+import asyncio
 import time
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -36,7 +37,9 @@ def cliente(
         "SOLVENTA_S3_TIMEOUT_MS": "3000",
     }.items():
         monkeypatch.setenv(nombre, valor)
-    with TestClient(crear_app(Settings())) as aplicacion:
+    with TestClient(
+        crear_app(Settings()), backend_options={"loop_factory": asyncio.SelectorEventLoop}
+    ) as aplicacion:
         limite = time.monotonic() + 30
         while time.monotonic() < limite:
             if (
@@ -157,7 +160,7 @@ def test_repetir_la_semilla_no_duplica_nada(cliente: TestClient, limpia: str) ->
 
     import asyncio
 
-    asyncio.run(repetir())
+    asyncio.run(repetir(), loop_factory=asyncio.SelectorEventLoop)
     assert (
         _contar(limpia) == antes == {"siniestros": 8, "evidencias": 30, "historial_siniestro": 21}
     )

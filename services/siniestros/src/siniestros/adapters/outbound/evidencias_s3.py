@@ -117,6 +117,63 @@ class EvidenciasS3:
             raise DependenciaNoDisponible("evidencias") from error
         return url
 
+    def _post(
+        self,
+        clave: str,
+        tipo_contenido: str,
+        tamano_bytes: int,
+        sha256: str,
+        ttl_s: int,
+        cifrado: str,
+    ) -> dict[str, Any]:
+        checksum = checksum_base64(sha256)
+        campos = {
+            "key": clave,
+            "Content-Type": tipo_contenido,
+            "x-amz-checksum-algorithm": "SHA256",
+            "x-amz-checksum-sha256": checksum,
+            "x-amz-server-side-encryption": cifrado,
+        }
+        condiciones: list[Any] = [
+            {"key": clave},
+            {"Content-Type": tipo_contenido},
+            {"x-amz-checksum-algorithm": "SHA256"},
+            {"x-amz-checksum-sha256": checksum},
+            {"x-amz-server-side-encryption": cifrado},
+            ["content-length-range", tamano_bytes, tamano_bytes],
+        ]
+        return self._firma.generate_presigned_post(
+            Bucket=self._bucket,
+            Key=clave,
+            Fields=campos,
+            Conditions=condiciones,
+            ExpiresIn=ttl_s,
+        )
+
+    async def firmar_carga(
+        self,
+        clave: str,
+        tipo_contenido: str,
+        tamano_bytes: int,
+        sha256: str,
+        ttl_s: int,
+        cifrado: str,
+    ) -> tuple[str, dict[str, str]]:
+        try:
+            respuesta = await asyncio.to_thread(
+                self._post, clave, tipo_contenido, tamano_bytes, sha256, ttl_s, cifrado
+            )
+        except (ClientError, BotoCoreError) as error:
+            logger.error(
+                "s3: no se pudo firmar la carga", extra={"error_type": type(error).__name__}
+            )
+            raise DependenciaNoDisponible("evidencias") from error
+        url = respuesta.get("url")
+        campos = respuesta.get("fields")
+        if not isinstance(url, str) or not isinstance(campos, dict):
+            raise DependenciaNoDisponible("evidencias")
+        return url, {str(clave): str(valor) for clave, valor in campos.items()}
+
 
 class AlmacenSinConfigurar:
     """Sin `EVIDENCIAS_BUCKET` (local sin LocalStack): no se puede verificar ni firmar."""
@@ -125,4 +182,15 @@ class AlmacenSinConfigurar:
         return IntegridadEvidencia.NO_VERIFICABLE
 
     async def firmar_lectura(self, clave: str, ttl_s: int, tipo_contenido: str) -> str:
+        raise DependenciaNoDisponible("evidencias")
+
+    async def firmar_carga(
+        self,
+        clave: str,
+        tipo_contenido: str,
+        tamano_bytes: int,
+        sha256: str,
+        ttl_s: int,
+        cifrado: str,
+    ) -> tuple[str, dict[str, str]]:
         raise DependenciaNoDisponible("evidencias")

@@ -14,6 +14,7 @@ from bff_movil.adapters.inbound.http import (
     polizas,
     registro,
     sesion,
+    siniestros,
     verificacion,
 )
 from bff_movil.adapters.inbound.http.auth import Autenticador
@@ -23,6 +24,7 @@ from bff_movil.adapters.outbound.consentimientos_http import ConsentimientosHttp
 from bff_movil.adapters.outbound.polizas_http import PolizasHttp
 from bff_movil.adapters.outbound.registro_http import RegistroHttp
 from bff_movil.adapters.outbound.resolutor_cliente_http import ResolutorClienteHttp
+from bff_movil.adapters.outbound.siniestros_http import SiniestrosHttp
 from bff_movil.adapters.outbound.verificacion_http import VerificacionHttp
 from bff_movil.application.consentimientos.casos import (
     ConsultarConsentimientos,
@@ -35,6 +37,12 @@ from bff_movil.application.polizas.puertos import ConsultaPolizas
 from bff_movil.application.registro.casos import VerificarRegistro, VincularRegistro
 from bff_movil.application.sesion.consultar_sesion import ConsultarSesion
 from bff_movil.application.sesion.puertos import ResolutorCliente
+from bff_movil.application.siniestros.casos import (
+    AgregarEvidencia,
+    ConsultarLimitesEvidencia,
+    CrearBorrador,
+)
+from bff_movil.application.siniestros.puertos import SiniestrosApi
 from bff_movil.application.verificacion.verificar_identidad import VerificarIdentidad
 from bff_movil.config import Settings
 
@@ -45,6 +53,7 @@ def crear_app(
     transport: httpx.AsyncBaseTransport | None = None,
     resolutor: ResolutorCliente | None = None,
     consulta_polizas: ConsultaPolizas | None = None,
+    siniestros_api: SiniestrosApi | None = None,
     span_exporter: SpanExporter | None = None,
     metric_readers: Sequence[MetricReader] = (),
 ) -> FastAPI:
@@ -109,6 +118,17 @@ def crear_app(
             )
             app.state.listar_polizas = ListarPolizas(resolutor_cliente, servicio_polizas)
             app.state.consultar_poliza = ConsultarPoliza(resolutor_cliente, servicio_polizas)
+            servicio_siniestros = siniestros_api or SiniestrosHttp(
+                cliente_clientes,
+                settings.siniestros_url,
+                settings.siniestros_timeout_ms,
+            )
+            app.state.siniestros_api = servicio_siniestros
+            app.state.consultar_limites_evidencia = ConsultarLimitesEvidencia(servicio_siniestros)
+            app.state.crear_borrador = CrearBorrador(
+                resolutor_cliente, servicio_polizas, servicio_siniestros
+            )
+            app.state.agregar_evidencia = AgregarEvidencia(servicio_siniestros)
             yield
 
     app = instrumentar(
@@ -123,6 +143,7 @@ def crear_app(
     app.include_router(registro.router)
     app.include_router(consentimientos.router)
     app.include_router(polizas.router)
+    app.include_router(siniestros.router)
     if settings.environment == "local":
         # Simula el Lambda pre sign-up donde no hay Cognito; nunca existe fuera de local.
         app.include_router(registro.router_local)

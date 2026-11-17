@@ -3,6 +3,408 @@ info:
   title: siniestros
   version: 0.1.0
 paths:
+  /v1/siniestros/catalogos-decision:
+    get:
+      tags:
+      - siniestros
+      summary: Catalogos Decision
+      description: 'Causales de rechazo, documentos solicitables, canales y plazos,
+        como códigos que el portal
+
+        traduce (DS3-12).'
+      operationId: catalogos_decision_v1_siniestros_catalogos_decision_get
+      parameters:
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      - name: X-Actor-Nombre
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Nombre
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogosDecision'
+        '401':
+          description: 'ACTOR_REQUERIDO: falta X-Actor-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol falta o no es ANALISTA_SINIESTROS
+            (se audita con AccesoSiniestroDenegado)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/siniestros/{siniestroId}/decision:
+    post:
+      tags:
+      - siniestros
+      summary: Decidir
+      description: 'Registra la decisión del analista asignado sobre un caso EN_EVALUACION:
+        aprobar (con
+
+        liquidación), rechazar (con causal y explicación) o solicitar soporte (FALTA_SOPORTE,
+        reloj en
+
+        pausa). En una sola transacción escribe la decisión, el cambio de estado,
+        el historial inmutable
+
+        y el evento en el Outbox. La misma Idempotency-Key con el mismo cuerpo devuelve
+        el resultado
+
+        original; con otro cuerpo, 422 IDEMPOTENCIA_CONFLICTO.'
+      operationId: decidir_v1_siniestros__siniestroId__decision_post
+      parameters:
+      - name: siniestroId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Siniestroid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Idempotency-Key
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      - name: X-Actor-Nombre
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Nombre
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudDecision'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoDecisionSiniestro'
+        '401':
+          description: 'ACTOR_REQUERIDO: falta X-Actor-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol falta o no es ANALISTA_SINIESTROS
+            (se audita con AccesoSiniestroDenegado)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SINIESTRO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: TRANSICION_NO_PERMITIDA (detalles.estadoActual; también si
+            otra decisión ganó la carrera) o CASO_ASIGNADO_A_OTRO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: JUSTIFICACION_REQUERIDA, VALOR_FUERA_DE_RANGO (detalles.campos),
+            CAUSAL_INVALIDA, SOLICITUD_INVALIDA (detalles.campos) o IDEMPOTENCIA_CONFLICTO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/limites:
+    get:
+      tags:
+      - borradores
+      summary: Limites
+      operationId: limites_v1_siniestros_limites_get
+      parameters:
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      - name: X-Actor-Nombre
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Nombre
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LimitesEvidencia'
+        '401':
+          description: ACTOR_REQUERIDO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: ROL_NO_AUTORIZADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: DEPENDENCIA_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/siniestros/borradores:
+    post:
+      tags:
+      - borradores
+      summary: Crear Borrador
+      operationId: crear_borrador_v1_siniestros_borradores_post
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Idempotency-Key
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      - name: X-Actor-Nombre
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Nombre
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudBorrador'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BorradorCreado'
+        '401':
+          description: ACTOR_REQUERIDO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: ROL_NO_AUTORIZADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '400':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: POLIZA_NO_VIGENTE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: IDEMPOTENCIA_CONFLICTO o SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: DEPENDENCIA_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/borradores/{borradorId}/evidencias:
+    post:
+      tags:
+      - borradores
+      summary: Agregar Evidencia
+      operationId: agregar_evidencia_v1_siniestros_borradores__borradorId__evidencias_post
+      parameters:
+      - name: borradorId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Borradorid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      - name: X-Actor-Nombre
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Nombre
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudEvidencia'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenciaAgregada'
+        '401':
+          description: ACTOR_REQUERIDO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: ROL_NO_AUTORIZADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '400':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: BORRADOR_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: TIPO_EVIDENCIA_NO_ADMITIDO, TAMANO_EVIDENCIA_EXCEDIDO, DURACION_VIDEO_EXCEDIDA
+            o LIMITE_EVIDENCIAS_ALCANZADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: DEPENDENCIA_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
   /v1/siniestros:
     get:
       tags:
@@ -512,171 +914,6 @@ paths:
                   type: string
                 type: object
                 title: Response Health Health Get
-  /v1/siniestros/catalogos-decision:
-    get:
-      tags:
-      - siniestros
-      summary: Catalogos Decision
-      description: 'Causales de rechazo, documentos solicitables, canales y plazos,
-        como códigos que el portal
-
-        traduce (DS3-12).'
-      operationId: catalogos_decision_v1_siniestros_catalogos_decision_get
-      parameters:
-      - name: X-Actor-Id
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Actor-Id
-      - name: X-Actor-Rol
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Actor-Rol
-      - name: X-Actor-Nombre
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Actor-Nombre
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CatalogosDecision'
-        '401':
-          description: 'ACTOR_REQUERIDO: falta X-Actor-Id'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorDto'
-        '403':
-          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol falta o no es ANALISTA_SINIESTROS
-            (se audita con AccesoSiniestroDenegado)'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorDto'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /v1/siniestros/{siniestroId}/decision:
-    post:
-      tags:
-      - siniestros
-      summary: Decidir
-      description: 'Registra la decisión del analista asignado sobre un caso EN_EVALUACION:
-        aprobar (con
-
-        liquidación), rechazar (con causal y explicación) o solicitar soporte (FALTA_SOPORTE,
-        reloj en
-
-        pausa). En una sola transacción escribe la decisión, el cambio de estado,
-        el historial inmutable
-
-        y el evento en el Outbox. La misma Idempotency-Key con el mismo cuerpo devuelve
-        el resultado
-
-        original; con otro cuerpo, 422 IDEMPOTENCIA_CONFLICTO.'
-      operationId: decidir_v1_siniestros__siniestroId__decision_post
-      parameters:
-      - name: siniestroId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-          title: Siniestroid
-      - name: Idempotency-Key
-        in: header
-        required: true
-        schema:
-          type: string
-          format: uuid
-          title: Idempotency-Key
-      - name: X-Actor-Id
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Actor-Id
-      - name: X-Actor-Rol
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Actor-Rol
-      - name: X-Actor-Nombre
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Actor-Nombre
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SolicitudDecision'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ResultadoDecisionSiniestro'
-        '401':
-          description: 'ACTOR_REQUERIDO: falta X-Actor-Id'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorDto'
-        '403':
-          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol falta o no es ANALISTA_SINIESTROS
-            (se audita con AccesoSiniestroDenegado)'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorDto'
-        '404':
-          description: SINIESTRO_NO_ENCONTRADO
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorDto'
-        '409':
-          description: TRANSICION_NO_PERMITIDA (detalles.estadoActual; también si
-            otra decisión ganó la carrera) o CASO_ASIGNADO_A_OTRO
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorDto'
-        '422':
-          description: JUSTIFICACION_REQUERIDA, VALOR_FUERA_DE_RANGO (detalles.campos),
-            CAUSAL_INVALIDA, SOLICITUD_INVALIDA (detalles.campos) o IDEMPOTENCIA_CONFLICTO
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorDto'
 components:
   schemas:
     AmparoCopiaDto:
@@ -737,6 +974,26 @@ components:
       - beneficiarioRef
       - cuentaMascarada
       title: BeneficiarioDto
+    BorradorCreado:
+      properties:
+        borradorId:
+          type: string
+          format: uuid
+          title: Borradorid
+        polizaId:
+          type: string
+          format: uuid
+          title: Polizaid
+        estado:
+          type: string
+          title: Estado
+          default: ABIERTO
+      additionalProperties: false
+      type: object
+      required:
+      - borradorId
+      - polizaId
+      title: BorradorCreado
     CanalSoporte:
       type: string
       enum:
@@ -745,6 +1002,31 @@ components:
       - CORREO
       title: CanalSoporte
       description: Canal por el que se le pide el soporte al cliente (H05).
+    CargaEvidencia:
+      properties:
+        metodo:
+          type: string
+          title: Metodo
+        url:
+          type: string
+          title: Url
+        campos:
+          additionalProperties:
+            type: string
+          type: object
+          title: Campos
+        expiraEn:
+          type: string
+          format: date-time
+          title: Expiraen
+      additionalProperties: false
+      type: object
+      required:
+      - metodo
+      - url
+      - campos
+      - expiraEn
+      title: CargaEvidencia
     CatalogosDecision:
       properties:
         causales:
@@ -788,6 +1070,24 @@ components:
       - EXCLUSION_CONTRACTUAL
       title: CausalRechazo
       description: Causales contractuales del rechazo (H07), lista cerrada.
+    CoberturaDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        nombre:
+          type: string
+          title: Nombre
+        obligatoria:
+          type: boolean
+          title: Obligatoria
+      additionalProperties: false
+      type: object
+      required:
+      - codigo
+      - nombre
+      - obligatoria
+      title: CoberturaDto
     CodigoVerificacion:
       type: string
       enum:
@@ -837,7 +1137,69 @@ components:
       - archivosAlterados
       - resultado
       title: CoherenciaDto
-    CopiaPolizaDto:
+    CopiaPolizaDto-Input:
+      properties:
+        polizaId:
+          type: string
+          format: uuid
+          title: Polizaid
+        numero:
+          type: string
+          title: Numero
+        estado:
+          type: string
+          title: Estado
+        producto:
+          type: string
+          title: Producto
+        ramo:
+          type: string
+          title: Ramo
+        vigencia:
+          $ref: '#/components/schemas/VigenciaDto'
+        vigente:
+          type: boolean
+          title: Vigente
+        prima:
+          anyOf:
+          - type: number
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Prima
+        sumaAsegurada:
+          anyOf:
+          - type: number
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Sumaasegurada
+        moneda:
+          type: string
+          title: Moneda
+        periodicidad:
+          type: string
+          title: Periodicidad
+        coberturas:
+          items:
+            $ref: '#/components/schemas/CoberturaDto'
+          type: array
+          title: Coberturas
+      additionalProperties: false
+      type: object
+      required:
+      - polizaId
+      - numero
+      - estado
+      - producto
+      - ramo
+      - vigencia
+      - vigente
+      - prima
+      - sumaAsegurada
+      - moneda
+      - periodicidad
+      - coberturas
+      title: CopiaPolizaDto
+    CopiaPolizaDto-Output:
       properties:
         numero:
           type: string
@@ -950,7 +1312,7 @@ components:
         ubicacionDeclarada:
           $ref: '#/components/schemas/UbicacionSiniestroDto'
         poliza:
-          $ref: '#/components/schemas/CopiaPolizaDto'
+          $ref: '#/components/schemas/CopiaPolizaDto-Output'
         verificacionCobertura:
           items:
             $ref: '#/components/schemas/VerificacionCoberturaDto'
@@ -1235,6 +1597,52 @@ components:
       - versionRegla
       title: EventoParametricoDto
       description: Null hasta HU-W22.
+    EvidenciaAgregada:
+      properties:
+        evidenciaId:
+          type: string
+          format: uuid
+          title: Evidenciaid
+        nombreArchivo:
+          type: string
+          title: Nombrearchivo
+        tipo:
+          $ref: '#/components/schemas/TipoEvidencia'
+        tipoContenido:
+          type: string
+          title: Tipocontenido
+        tamanoBytes:
+          type: integer
+          title: Tamanobytes
+        sha256:
+          type: string
+          title: Sha256
+        capturadaEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Capturadaen
+        duracionSegundos:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duracionsegundos
+        carga:
+          $ref: '#/components/schemas/CargaEvidencia'
+      additionalProperties: false
+      type: object
+      required:
+      - evidenciaId
+      - nombreArchivo
+      - tipo
+      - tipoContenido
+      - tamanoBytes
+      - sha256
+      - capturadaEn
+      - duracionSegundos
+      - carga
+      title: EvidenciaAgregada
     EvidenciaVista:
       properties:
         id:
@@ -1286,6 +1694,44 @@ components:
       - NO_VERIFICABLE
       - NO_DISPONIBLE
       title: IntegridadEvidencia
+    LimitesEvidencia:
+      properties:
+        maxEvidencias:
+          type: integer
+          title: Maxevidencias
+        formatosFoto:
+          items:
+            type: string
+          type: array
+          title: Formatosfoto
+        formatosVideo:
+          items:
+            type: string
+          type: array
+          title: Formatosvideo
+        tamanoMaximoFotoBytes:
+          type: integer
+          title: Tamanomaximofotobytes
+        tamanoMaximoVideoBytes:
+          type: integer
+          title: Tamanomaximovideobytes
+        duracionMaximaVideoSegundos:
+          type: integer
+          title: Duracionmaximavideosegundos
+        urlCargaExpiraSegundos:
+          type: integer
+          title: Urlcargaexpirasegundos
+      additionalProperties: false
+      type: object
+      required:
+      - maxEvidencias
+      - formatosFoto
+      - formatosVideo
+      - tamanoMaximoFotoBytes
+      - tamanoMaximoVideoBytes
+      - duracionMaximaVideoSegundos
+      - urlCargaExpiraSegundos
+      title: LimitesEvidencia
     LiquidacionDto:
       properties:
         moneda:
@@ -1717,6 +2163,20 @@ components:
       - liquidacion
       title: SolicitudAprobacion
       description: 'APROBAR: el caso pasa a APROBADO y se ordena el pago único (`referenciaPago`).'
+    SolicitudBorrador:
+      properties:
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        copiaPoliza:
+          $ref: '#/components/schemas/CopiaPolizaDto-Input'
+      additionalProperties: false
+      type: object
+      required:
+      - clienteId
+      - copiaPoliza
+      title: SolicitudBorrador
     SolicitudDecision:
       oneOf:
       - $ref: '#/components/schemas/SolicitudAprobacion'
@@ -1730,6 +2190,53 @@ components:
           APROBAR: '#/components/schemas/SolicitudAprobacion'
           RECHAZAR: '#/components/schemas/SolicitudRechazo'
           SOLICITAR_SOPORTE: '#/components/schemas/SolicitudSoporte'
+    SolicitudEvidencia:
+      properties:
+        nombreArchivo:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Nombrearchivo
+        tipo:
+          type: string
+          enum:
+          - FOTOGRAFIA
+          - VIDEO
+          title: Tipo
+        tipoContenido:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Tipocontenido
+        tamanoBytes:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Tamanobytes
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          title: Sha256
+        capturadaEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Capturadaen
+        duracionSegundos:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Duracionsegundos
+      additionalProperties: false
+      type: object
+      required:
+      - nombreArchivo
+      - tipo
+      - tipoContenido
+      - tamanoBytes
+      - sha256
+      title: SolicitudEvidencia
     SolicitudRechazo:
       properties:
         justificacion:
@@ -1965,3 +2472,19 @@ components:
       - desde
       - hasta
       title: VigenciaCopiaDto
+    VigenciaDto:
+      properties:
+        desde:
+          type: string
+          format: date
+          title: Desde
+        hasta:
+          type: string
+          format: date
+          title: Hasta
+      additionalProperties: false
+      type: object
+      required:
+      - desde
+      - hasta
+      title: VigenciaDto

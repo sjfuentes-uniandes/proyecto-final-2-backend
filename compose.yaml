@@ -90,6 +90,7 @@ services:
       localstack: { condition: service_started }
       otel-collector: { condition: service_started }
       clientes: { condition: service_healthy }
+      siniestros: { condition: service_healthy }
     # El ancla define environment: se repiten sus variables junto con las propias.
     environment:
       SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
@@ -97,6 +98,8 @@ services:
       OTEL_PROPAGATORS: tracecontext,baggage,xray
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
       CLIENTES_URL: http://clientes:8080
+      CONSULTA_URL: http://consulta:8080
+      SINIESTROS_URL: http://siniestros:8080
 
   clientes:
     <<: *servicio

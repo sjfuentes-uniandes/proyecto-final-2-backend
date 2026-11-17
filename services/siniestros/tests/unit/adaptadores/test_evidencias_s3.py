@@ -33,6 +33,7 @@ class ClienteFalso:
         self.demora_s = demora_s
         self.llamadas: list[dict[str, Any]] = []
         self.firmas: list[tuple[str, dict[str, Any], int]] = []
+        self.firmas_carga: list[dict[str, Any]] = []
         self.falla_firma: Exception | None = None
 
     def head_object(self, **argumentos: Any) -> dict[str, Any]:
@@ -47,6 +48,13 @@ class ClienteFalso:
             raise self.falla_firma
         self.firmas.append((operacion, Params, ExpiresIn))
         return "https://s3.local/bucket/objeto?X-Amz-Signature=firma"
+
+    def generate_presigned_post(self, **argumentos: Any) -> dict[str, Any]:
+        self.firmas_carga.append(argumentos)
+        return {
+            "url": "https://s3.local/bucket",
+            "fields": argumentos["Fields"],
+        }
 
 
 def almacen(
@@ -121,6 +129,45 @@ async def test_firma_con_el_ttl_el_tipo_y_el_cliente_de_firma() -> None:
             300,
         )
     ]
+
+
+async def test_firma_post_fija_tipo_tamano_hash_cifrado_y_vencimiento() -> None:
+    cliente = ClienteFalso()
+    evidencia = almacen(cliente)
+
+    url, campos = await evidencia.firmar_carga(
+        "tmp/borrador/evidencia",
+        "image/jpeg",
+        1234,
+        SHA,
+        300,
+        "AES256",
+    )
+
+    assert url == "https://s3.local/bucket"
+    assert cliente.firmas_carga == [
+        {
+            "Bucket": "bucket-evidencias",
+            "Key": "tmp/borrador/evidencia",
+            "Fields": {
+                "key": "tmp/borrador/evidencia",
+                "Content-Type": "image/jpeg",
+                "x-amz-checksum-algorithm": "SHA256",
+                "x-amz-checksum-sha256": checksum_base64(SHA),
+                "x-amz-server-side-encryption": "AES256",
+            },
+            "Conditions": [
+                {"key": "tmp/borrador/evidencia"},
+                {"Content-Type": "image/jpeg"},
+                {"x-amz-checksum-algorithm": "SHA256"},
+                {"x-amz-checksum-sha256": checksum_base64(SHA)},
+                {"x-amz-server-side-encryption": "AES256"},
+                ["content-length-range", 1234, 1234],
+            ],
+            "ExpiresIn": 300,
+        }
+    ]
+    assert campos["x-amz-checksum-sha256"] == checksum_base64(SHA)
 
 
 async def test_sin_cliente_de_firma_firma_con_el_de_lectura() -> None:

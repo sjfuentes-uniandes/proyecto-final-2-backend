@@ -35,7 +35,12 @@ from siniestros.adapters.outbound.mapeo import (
     copia_de_json,
     ubicacion_de_json,
 )
-from siniestros.application.siniestro.errores import SolicitudInvalida
+from siniestros.application.siniestro.errores import (
+    BorradorNoEncontrado,
+    IdempotenciaConflicto,
+    LimiteEvidenciasAlcanzado,
+    SolicitudInvalida,
+)
 from siniestros.application.siniestro.puertos import DecisionFinalDuplicada, RegistroIdempotencia
 from siniestros.application.siniestro.vistas import (
     AccesoDenegado,
@@ -275,6 +280,95 @@ class SiniestrosPg:
         async with self._pool.connection() as conexion, conexion.transaction():
             yield TxSiniestrosPg(conexion)
 
+    async def crear_borrador(
+        self,
+        clave: str,
+        huella: str,
+        borrador_id: UUID,
+        actor_id: str,
+        cliente_id: UUID,
+        poliza_id: UUID,
+        copia_poliza: dict[str, Any],
+        creado_en: datetime,
+        correlation_id: str,
+    ) -> UUID:
+        async with self._pool.connection() as conexion, conexion.transaction():
+            tx = TxSiniestrosPg(conexion)
+            previo = await tx.adquirir_idempotencia(clave)
+            if previo is not None:
+                if previo.huella != huella:
+                    raise IdempotenciaConflicto
+                repetido = await tx.borrador(UUID(previo.respuesta["borradorId"]), actor_id)
+                if repetido is None:
+                    raise RuntimeError("La idempotencia apunta a un borrador inexistente")
+                return repetido
+            await tx.crear_borrador(
+                borrador_id,
+                actor_id,
+                cliente_id,
+                poliza_id,
+                copia_poliza,
+                creado_en,
+                correlation_id,
+            )
+            await tx.guardar_idempotencia(
+                clave, huella, {"borradorId": str(borrador_id)}, creado_en
+            )
+        return borrador_id
+
+    async def agregar_evidencia_borrador(
+        self,
+        actor_id: str,
+        borrador_id: UUID,
+        evidencia_id: UUID,
+        nombre_archivo: str,
+        tipo: TipoEvidencia,
+        clave_objeto: str,
+        sha256: str,
+        capturada_en: datetime | None,
+        tamano_bytes: int,
+        tipo_contenido: str,
+        duracion_segundos: int | None,
+        maximo: int,
+    ) -> None:
+        async with self._pool.connection() as conexion, conexion.transaction():
+            tx = _ConDict(conexion)
+            borrador = await (
+                await tx.execute(
+                    "SELECT id FROM borradores WHERE id = %s AND actor_id = %s FOR UPDATE",
+                    (borrador_id, actor_id),
+                )
+            ).fetchone()
+            if borrador is None:
+                raise BorradorNoEncontrado
+            fila = await (
+                await tx.execute(
+                    "SELECT count(*) AS total FROM borrador_evidencias WHERE borrador_id = %s",
+                    (borrador_id,),
+                )
+            ).fetchone()
+            assert fila is not None
+            if fila["total"] >= maximo:
+                raise LimiteEvidenciasAlcanzado(maximo)
+            await tx.execute(
+                "INSERT INTO borrador_evidencias "
+                "(id, borrador_id, nombre_archivo, tipo, clave_objeto, sha256, capturada_en, "
+                "tamano_bytes, tipo_contenido, duracion_segundos) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (
+                    evidencia_id,
+                    borrador_id,
+                    nombre_archivo,
+                    tipo.value,
+                    clave_objeto,
+                    sha256,
+                    capturada_en,
+                    tamano_bytes,
+                    tipo_contenido,
+                    duracion_segundos,
+                ),
+            )
+
     async def bandeja(self, filtro: FiltroBandeja) -> PaginaSiniestros:
         corte = filtro.corte
         cursor = decodificar_cursor(filtro.cursor) if filtro.cursor else None
@@ -473,6 +567,40 @@ class TxSiniestrosPg:
         if fila is None:
             return None
         return RegistroIdempotencia(fila["huella_solicitud"], fila["respuesta"])
+
+    async def borrador(self, borrador_id: UUID, actor_id: str) -> UUID | None:
+        fila = await (
+            await self._conexion.execute(
+                "SELECT id FROM borradores WHERE id = %s AND actor_id = %s",
+                (borrador_id, actor_id),
+            )
+        ).fetchone()
+        return fila["id"] if fila else None
+
+    async def crear_borrador(
+        self,
+        borrador_id: UUID,
+        actor_id: str,
+        cliente_id: UUID,
+        poliza_id: UUID,
+        copia_poliza: dict[str, Any],
+        creado_en: datetime,
+        correlation_id: str,
+    ) -> None:
+        await self._conexion.execute(
+            "INSERT INTO borradores "
+            "(id, actor_id, cliente_id, poliza_id, copia_poliza, creado_en, correlation_id) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (
+                borrador_id,
+                actor_id,
+                cliente_id,
+                poliza_id,
+                Jsonb(copia_poliza),
+                creado_en,
+                correlation_id,
+            ),
+        )
 
     async def guardar_idempotencia(
         self, clave: str, huella: str, respuesta: dict[str, Any], creada_en: datetime

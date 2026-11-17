@@ -37,6 +37,56 @@ class EvidenciaNoDisponible(ErrorNegocio):
         )
 
 
+class BorradorNoEncontrado(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("BORRADOR_NO_ENCONTRADO", "El borrador no existe", 404)
+
+
+class PolizaNoVigente(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("POLIZA_NO_VIGENTE", "La póliza no está vigente", 409)
+
+
+class TipoEvidenciaNoAdmitido(ErrorNegocio):
+    def __init__(self, tipos_admitidos: Sequence[str]) -> None:
+        super().__init__(
+            "TIPO_EVIDENCIA_NO_ADMITIDO",
+            "El formato de archivo no está admitido",
+            422,
+            {"tiposAdmitidos": list(tipos_admitidos)},
+        )
+
+
+class TamanoEvidenciaExcedido(ErrorNegocio):
+    def __init__(self, limite_bytes: int) -> None:
+        super().__init__(
+            "TAMANO_EVIDENCIA_EXCEDIDO",
+            "El archivo supera el tamaño máximo permitido",
+            422,
+            {"limiteBytes": limite_bytes},
+        )
+
+
+class DuracionVideoExcedida(ErrorNegocio):
+    def __init__(self, limite_segundos: int) -> None:
+        super().__init__(
+            "DURACION_VIDEO_EXCEDIDA",
+            "El video supera la duración máxima permitida",
+            422,
+            {"limiteSegundos": limite_segundos},
+        )
+
+
+class LimiteEvidenciasAlcanzado(ErrorNegocio):
+    def __init__(self, maximo: int) -> None:
+        super().__init__(
+            "LIMITE_EVIDENCIAS_ALCANZADO",
+            "El borrador alcanzó la cantidad máxima de archivos",
+            422,
+            {"maxArchivos": maximo},
+        )
+
+
 class ColaSinCasos(ErrorNegocio):
     def __init__(self) -> None:
         super().__init__("COLA_SIN_CASOS", "No hay siniestros sin asignar", 404)

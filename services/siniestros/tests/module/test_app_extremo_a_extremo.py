@@ -1,6 +1,7 @@
 """La app completa de siniestros contra PostgreSQL y LocalStack reales (HU-W19): bandeja, tomar el
 siguiente, detalle con S3, URL prefirmada y auditoría por Outbox → SNS → SQS."""
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -154,7 +155,9 @@ def cliente(
         "SOLVENTA_S3_TIMEOUT_MS": "2000",
     }.items():
         monkeypatch.setenv(nombre, valor)
-    with TestClient(crear_app(Settings())) as aplicacion:
+    with TestClient(
+        crear_app(Settings()), backend_options={"loop_factory": asyncio.SelectorEventLoop}
+    ) as aplicacion:
         yield aplicacion
 
 
