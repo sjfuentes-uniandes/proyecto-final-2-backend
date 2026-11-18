@@ -2555,6 +2555,124 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/siniestros/{siniestroId}/evidencias/{evidenciaId}/enlace:
+    post:
+      tags:
+      - siniestros
+      summary: Enlace Evidencia
+      operationId: enlace_evidencia_v1_siniestros__siniestroId__evidencias__evidenciaId__enlace_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: siniestroId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Siniestroid
+      - name: evidenciaId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Evidenciaid
+      - name: x-authenticated-sub
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Sub
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnlaceEvidenciaDto'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+        '401':
+          description: 'NO_AUTENTICADO: se requiere un cliente autenticado'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: el token no es del pool de clientes'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: CLIENTE_NO_ENCONTRADO, SINIESTRO_NO_ENCONTRADO, EVIDENCIA_NO_ENCONTRADA
+            o EVIDENCIA_NO_DISPONIBLE
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: EVIDENCIA_NO_CARGADA
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA o INTEGRIDAD_EVIDENCIA_INVALIDA
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: no se pudo consultar o crear el reporte'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
 components:
   schemas:
     BorradorDetalleDto:
@@ -3872,6 +3990,29 @@ components:
       title: SolicitudEnvio
       description: 'El envio no modifica datos: se envian los datos guardados mediante
         PATCH.'
+    EnlaceEvidenciaDto:
+      properties:
+        url:
+          type: string
+          pattern: ^https://
+          title: Url
+        expiraEn:
+          type: string
+          format: date-time
+          title: Expiraen
+        nombreArchivo:
+          type: string
+          title: Nombrearchivo
+        tipoContenido:
+          type: string
+          title: Tipocontenido
+      type: object
+      required:
+      - url
+      - expiraEn
+      - nombreArchivo
+      - tipoContenido
+      title: EnlaceEvidenciaDto
   securitySchemes:
     bearerAuth:
       type: http

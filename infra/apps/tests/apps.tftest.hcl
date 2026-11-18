@@ -551,9 +551,14 @@ run "sprint3" {
     condition = (
       !strcontains(jsonencode(local.task_statements["adaptador-telemetria"]), "s3:GetObject") &&
       !strcontains(jsonencode(local.task_statements), "s3:DeleteObject") &&
-      !strcontains(jsonencode(local.task_statements["siniestros"]), "s3:ListBucket")
+      contains(local.task_statements["siniestros"], {
+        Effect    = "Allow", Action = ["s3:ListBucket"],
+        Resource  = ["arn:aws:s3:::solventa-int-evidencias-123456789012"],
+        Condition = { StringLike = { "s3:prefix" = ["siniestros/*"] } }
+      }) &&
+      length([for statement in local.task_statements["siniestros"] : statement if contains(statement.Action, "s3:ListBucket")]) == 1
     )
-    error_message = "AC3: el adaptador no lee el archivo y nadie borra ni lista evidencias."
+    error_message = "AC3: nadie borra evidencias; solo siniestros comprueba existencia bajo siniestros/*, sin listar otros prefijos."
   }
   assert {
     condition = alltrue([

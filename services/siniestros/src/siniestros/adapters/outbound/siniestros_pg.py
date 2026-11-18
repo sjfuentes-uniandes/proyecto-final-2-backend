@@ -735,6 +735,33 @@ class SiniestrosPg:
             pago=pago,
         )
 
+    async def evidencia_cliente(
+        self, cliente_id: UUID, siniestro_id: UUID, evidencia_id: UUID
+    ) -> tuple[bool, Evidencia | None, bool]:
+        async with self._pool.connection() as bruta, bruta.transaction():
+            sql = _ConDict(bruta)
+            propio = await (
+                await sql.execute(
+                    "SELECT 1 FROM siniestros WHERE id = %s AND cliente_id = %s",
+                    (siniestro_id, cliente_id),
+                )
+            ).fetchone()
+            if propio is None:
+                return False, None, False
+            fila = await (
+                await sql.execute(
+                    "SELECT e.*, CASE WHEN b.id IS NULL THEN true "
+                    "ELSE be.estado_carga = 'CARGADA' END AS confirmada "
+                    "FROM evidencias e "
+                    "JOIN siniestros s ON s.id = e.siniestro_id "
+                    "LEFT JOIN borradores b ON b.siniestro_id = s.id "
+                    "LEFT JOIN borrador_evidencias be ON be.borrador_id = b.id AND be.id = e.id "
+                    "WHERE s.id = %s AND s.cliente_id = %s AND e.id = %s",
+                    (siniestro_id, cliente_id, evidencia_id),
+                )
+            ).fetchone()
+        return True, evidencia_de(fila) if fila else None, bool(fila and fila["confirmada"])
+
     async def evidencia(
         self, siniestro_id: UUID, evidencia_id: UUID
     ) -> tuple[bool, Evidencia | None]:

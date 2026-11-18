@@ -5,7 +5,7 @@ from typing import Any
 from uuid import UUID
 
 import httpx
-from pydantic import BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 from solventa_common.errors import ErrorNegocio
 from solventa_common.resiliencia import (
@@ -28,6 +28,13 @@ class _ErrorDto(_Dto):
     codigo: str
     mensaje: str
     detalles: dict[str, Any]
+
+
+class _EnlaceDto(_Dto):
+    url: str = Field(pattern=r"^https://")
+    expira_en: AwareDatetime
+    nombre_archivo: str = Field(min_length=1)
+    tipo_contenido: str = Field(min_length=1)
 
 
 class SiniestrosHttp:
@@ -134,6 +141,20 @@ class SiniestrosHttp:
             f"/v1/clientes/{cliente_id}/siniestros/{siniestro_id}",
             actor_id,
         )
+
+    async def enlace_evidencia(
+        self, actor_id: str, cliente_id: UUID, siniestro_id: UUID, evidencia_id: UUID
+    ) -> dict[str, Any]:
+        resultado = await self._reporte(
+            "siniestros.evidencia.enlace",
+            "POST",
+            f"/v1/clientes/{cliente_id}/siniestros/{siniestro_id}/evidencias/{evidencia_id}/enlace",
+            actor_id,
+        )
+        try:
+            return _EnlaceDto.model_validate(resultado).model_dump(by_alias=True, mode="json")
+        except ValueError as error:
+            raise ServicioNoDisponible("ERROR") from error
 
     async def limites(self, actor_id: str) -> dict[str, Any]:
         return await self._ejecutar(

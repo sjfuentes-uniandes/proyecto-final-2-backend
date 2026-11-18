@@ -139,6 +139,16 @@ class ConsultarSiniestro:
         return await self._siniestros.consultar_siniestro(sub, cliente_id, siniestro_id)
 
 
+class EnlazarEvidencia:
+    def __init__(self, resolutor: ResolutorCliente, siniestros: SiniestrosApi) -> None:
+        self._resolutor = resolutor
+        self._siniestros = siniestros
+
+    async def ejecutar(self, sub: str, siniestro_id: UUID, evidencia_id: UUID) -> dict[str, Any]:
+        cliente_id = await self._resolutor.resolver(sub)
+        return await self._siniestros.enlace_evidencia(sub, cliente_id, siniestro_id, evidencia_id)
+
+
 class AgregarEvidencia:
     def __init__(self, siniestros: SiniestrosApi) -> None:
         self._siniestros = siniestros
@@ -174,6 +184,7 @@ __all__ = [
     "ConsultarSiniestro",
     "CrearBorrador",
     "EliminarEvidencia",
+    "EnlazarEvidencia",
     "EnviarBorrador",
     "ListarBorradores",
     "ListarSiniestros",

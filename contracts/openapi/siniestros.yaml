@@ -1653,6 +1653,101 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/clientes/{clienteId}/siniestros/{siniestroId}/evidencias/{evidenciaId}/enlace:
+    post:
+      tags:
+      - siniestros-cliente
+      summary: Enlace Evidencia Cliente
+      operationId: enlace_evidencia_cliente_v1_clientes__clienteId__siniestros__siniestroId__evidencias__evidenciaId__enlace_post
+      parameters:
+      - name: clienteId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Clienteid
+      - name: siniestroId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Siniestroid
+      - name: evidenciaId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Evidenciaid
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      - name: X-Actor-Nombre
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Nombre
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnlaceDescargaMovil'
+        '401':
+          description: ACTOR_REQUERIDO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: ROL_NO_AUTORIZADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: DEPENDENCIA_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '404':
+          description: SINIESTRO_NO_ENCONTRADO, EVIDENCIA_NO_ENCONTRADA o EVIDENCIA_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '409':
+          description: EVIDENCIA_NO_CARGADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA o INTEGRIDAD_EVIDENCIA_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
 components:
   schemas:
     AmparoCopiaDto:
@@ -3719,3 +3814,27 @@ components:
       additionalProperties: false
       type: object
       title: SolicitudEnvio
+    EnlaceDescargaMovil:
+      properties:
+        url:
+          type: string
+          pattern: ^https://
+          title: Url
+        expiraEn:
+          type: string
+          format: date-time
+          title: Expiraen
+        nombreArchivo:
+          type: string
+          title: Nombrearchivo
+        tipoContenido:
+          type: string
+          title: Tipocontenido
+      additionalProperties: false
+      type: object
+      required:
+      - url
+      - expiraEn
+      - nombreArchivo
+      - tipoContenido
+      title: EnlaceDescargaMovil

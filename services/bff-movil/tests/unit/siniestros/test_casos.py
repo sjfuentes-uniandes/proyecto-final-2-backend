@@ -402,3 +402,79 @@ def test_consulta_enviados_usa_el_titular_resuelto_no_el_parametro(
     assert dict(lista.calls[0].request.url.params) == {"limite": "1"}
     assert lista.calls[0].request.headers["X-Actor-Id"] == entorno.sub
     assert detalle.status_code == 404
+
+
+ENLACE = {
+    "url": "https://s3.test/objeto?X-Amz-Signature=secreto-efimero",
+    "expiraEn": "2026-11-18T21:05:00Z",
+    "nombreArchivo": "evidencia.jpg",
+    "tipoContenido": "image/jpeg",
+}
+RUTA_ENLACE = f"/v1/siniestros/{POLIZA_ID}/evidencias/{CLAVE}/enlace"
+ENLACE_INTERNO = (
+    f"http://siniestros.test/v1/clientes/{CLIENTE_ID}/siniestros/"
+    f"{POLIZA_ID}/evidencias/{CLAVE}/enlace"
+)
+
+
+def test_enlace_resuelve_titular_y_no_registra_url(crear_entorno: Callable[..., Any]) -> None:
+    entorno = crear_entorno(SINIESTROS_URL="http://siniestros.test")
+    with respx.mock as router:
+        servicio = router.post(ENLACE_INTERNO).respond(200, json=ENLACE)
+        respuesta = entorno.pedir("POST", RUTA_ENLACE, params={"clienteId": str(POLIZA_ID)})
+    assert respuesta.status_code == 200 and respuesta.json() == ENLACE
+    pedido = servicio.calls[0].request
+    assert pedido.content == b"" and not pedido.url.params
+    assert pedido.headers["X-Actor-Id"] == entorno.sub
+    assert pedido.headers["X-Actor-Rol"] == "CLIENTE"
+    assert "secreto-efimero" not in entorno.telemetria.texto_logs()
+    assert "secreto-efimero" not in entorno.telemetria.texto_spans()
+
+
+@pytest.mark.parametrize(
+    ("estado", "codigo"),
+    [
+        (404, "SINIESTRO_NO_ENCONTRADO"),
+        (404, "EVIDENCIA_NO_ENCONTRADA"),
+        (404, "EVIDENCIA_NO_DISPONIBLE"),
+        (409, "EVIDENCIA_NO_CARGADA"),
+        (503, "DEPENDENCIA_NO_DISPONIBLE"),
+    ],
+)
+def test_enlace_propaga_errores_sin_url(
+    crear_entorno: Callable[..., Any], estado: int, codigo: str
+) -> None:
+    entorno = crear_entorno(SINIESTROS_URL="http://siniestros.test")
+    with respx.mock as router:
+        router.post(ENLACE_INTERNO).respond(
+            estado, json={"codigo": codigo, "mensaje": "No disponible", "detalles": {}}
+        )
+        respuesta = entorno.pedir("POST", RUTA_ENLACE)
+    assert respuesta.status_code == estado
+    assert respuesta.json()["codigo"] == (codigo if estado != 503 else "SERVICIO_NO_DISPONIBLE")
+    assert "url" not in respuesta.json() and respuesta.json()["correlationId"]
+
+
+def test_enlace_sesion_invalida_o_sin_titular_no_invoca_servicio(
+    crear_entorno: Callable[..., Any],
+) -> None:
+    entorno = crear_entorno(con_cliente=False, SINIESTROS_URL="http://siniestros.test")
+    with respx.mock(assert_all_called=False) as router:
+        servicio = router.post(ENLACE_INTERNO)
+        invalida = entorno.pedir("POST", RUTA_ENLACE, token="token-invalido")
+        sin_titular = entorno.pedir("POST", RUTA_ENLACE)
+    assert invalida.status_code == 401
+    assert sin_titular.status_code == 404 and not servicio.called
+
+
+def test_enlace_no_devuelve_http_ni_registra_respuesta_invalida(
+    crear_entorno: Callable[..., Any],
+) -> None:
+    entorno = crear_entorno(SINIESTROS_URL="http://siniestros.test")
+    with respx.mock as router:
+        router.post(ENLACE_INTERNO).respond(
+            200, json={**ENLACE, "url": "http://s3.test/?secreto=abc"}
+        )
+        respuesta = entorno.pedir("POST", RUTA_ENLACE)
+    assert respuesta.status_code == 503
+    assert "secreto=abc" not in entorno.telemetria.texto_logs()

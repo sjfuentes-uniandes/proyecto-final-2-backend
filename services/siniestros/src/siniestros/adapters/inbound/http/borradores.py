@@ -13,6 +13,7 @@ from solventa_common.errors import RutaB2
 from siniestros.adapters.inbound.http.dto import ErrorDto
 from siniestros.adapters.inbound.http.siniestros import Actor, actor_siniestros
 from siniestros.application.siniestro.borradores import Borradores, EvidenciaSolicitada
+from siniestros.application.siniestro.enlace import EmitirEnlaceCliente
 from siniestros.application.siniestro.envio import EnviarBorrador, PolizaReporte
 from siniestros.application.siniestro.errores import (
     DependenciaNoDisponible,
@@ -276,6 +277,13 @@ class SiniestroDetalleMovil(SiniestroResumenMovil):
     historial: list[HitoReporte]
 
 
+class EnlaceDescargaMovil(Dto):
+    url: str = Field(pattern=r"^https://")
+    expira_en: AwareDatetime
+    nombre_archivo: str
+    tipo_contenido: str
+
+
 def _borradores(request: Request) -> Borradores:
     servicio: Borradores | None = getattr(request.app.state, "borradores", None)
     if servicio is None:
@@ -307,6 +315,42 @@ router_cliente = APIRouter(
     },
 )
 ClienteId = Annotated[UUID, Path(alias="clienteId")]
+
+
+@router_cliente.post(
+    "/{siniestroId}/evidencias/{evidenciaId}/enlace",
+    response_model=EnlaceDescargaMovil,
+    responses={
+        404: {
+            "model": ErrorDto,
+            "description": (
+                "SINIESTRO_NO_ENCONTRADO, EVIDENCIA_NO_ENCONTRADA o EVIDENCIA_NO_DISPONIBLE"
+            ),
+        },
+        409: {"model": ErrorDto, "description": "EVIDENCIA_NO_CARGADA"},
+        422: {
+            "model": ErrorDto,
+            "description": "SOLICITUD_INVALIDA o INTEGRIDAD_EVIDENCIA_INVALIDA",
+        },
+    },
+)
+async def enlace_evidencia_cliente(
+    cliente_id: ClienteId,
+    siniestro_id: Annotated[UUID, Path(alias="siniestroId")],
+    evidencia_id: EvidenciaId,
+    actor: Cliente,
+    request: Request,
+) -> EnlaceDescargaMovil:
+    caso: EmitirEnlaceCliente | None = getattr(request.app.state, "enlace_evidencia_cliente", None)
+    if caso is None:
+        raise DependenciaNoDisponible("base de datos")
+    enlace = await caso.ejecutar(cliente_id, siniestro_id, evidencia_id, actor)
+    return EnlaceDescargaMovil(
+        url=enlace.url,
+        expira_en=enlace.expira_en,
+        nombre_archivo=enlace.nombre_archivo,
+        tipo_contenido=enlace.tipo_contenido,
+    )
 
 
 @router_cliente.get("", response_model=ListadoSiniestrosMovil)

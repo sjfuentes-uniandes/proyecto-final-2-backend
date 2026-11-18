@@ -42,6 +42,10 @@ def test_las_rutas_son_las_de_la_historia() -> None:
         ("DELETE", "/v1/siniestros/borradores/{borradorId}/evidencias/{evidenciaId}"),
         ("GET", "/v1/clientes/{clienteId}/siniestros"),
         ("GET", "/v1/clientes/{clienteId}/siniestros/{siniestroId}"),
+        (
+            "POST",
+            "/v1/clientes/{clienteId}/siniestros/{siniestroId}/evidencias/{evidenciaId}/enlace",
+        ),
         ("POST", "/v1/siniestros/borradores/{borradorId}/evidencias"),
         (
             "POST",
@@ -79,7 +83,7 @@ def test_el_detalle_nunca_expone_la_clave_del_objeto_ni_una_url() -> None:
         "integridad",
     }
     for nombre, esquema in esquemas.items():
-        if nombre not in {"EnlaceEvidencia", "CargaEvidencia"}:
+        if nombre not in {"EnlaceEvidencia", "CargaEvidencia", "EnlaceDescargaMovil"}:
             assert not {"url", "claveObjeto", "clave"} & set(esquema.get("properties", {})), nombre
 
 

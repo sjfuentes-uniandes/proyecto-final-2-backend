@@ -46,6 +46,7 @@ from bff_movil.application.siniestros.casos import (
     ConsultarSiniestro,
     CrearBorrador,
     EliminarEvidencia,
+    EnlazarEvidencia,
     EnviarBorrador,
     ListarBorradores,
     ListarSiniestros,
@@ -149,6 +150,7 @@ def crear_app(
             app.state.consultar_siniestro = ConsultarSiniestro(
                 resolutor_cliente, servicio_siniestros
             )
+            app.state.enlazar_evidencia = EnlazarEvidencia(resolutor_cliente, servicio_siniestros)
             app.state.agregar_evidencia = AgregarEvidencia(servicio_siniestros)
             app.state.confirmar_evidencia = ConfirmarEvidencia(servicio_siniestros)
             app.state.renovar_carga_evidencia = RenovarCargaEvidencia(servicio_siniestros)

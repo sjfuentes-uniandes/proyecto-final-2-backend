@@ -29,7 +29,7 @@ from siniestros.application.siniestro.bandeja import ConsultarResumen, ListarBan
 from siniestros.application.siniestro.borradores import Borradores
 from siniestros.application.siniestro.decidir import Decidir
 from siniestros.application.siniestro.detalle import ConsultarDetalle
-from siniestros.application.siniestro.enlace import EmitirEnlace
+from siniestros.application.siniestro.enlace import EmitirEnlace, EmitirEnlaceCliente
 from siniestros.application.siniestro.envio import EnviarBorrador
 from siniestros.application.siniestro.plazos import VencerPlazosSoporte
 from siniestros.application.siniestro.puertos import AlmacenEvidencias, Reloj
@@ -365,6 +365,12 @@ def crear_app(
                 almacen_activo = almacen or armar_almacen(settings)
                 app.state.borradores = Borradores(
                     SiniestrosPg(pool_activo), almacen_activo, reloj_activo, settings
+                )
+                app.state.enlace_evidencia_cliente = EmitirEnlaceCliente(
+                    SiniestrosPg(pool_activo),
+                    almacen_activo,
+                    reloj_activo,
+                    settings.evidencia_url_ttl_s,
                 )
                 app.state.enviar_borrador = EnviarBorrador(
                     EnviosPg(pool_activo),

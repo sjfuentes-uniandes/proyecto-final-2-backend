@@ -43,6 +43,12 @@ class SoportesRequeridos(Protocol):
 
 
 class AlmacenEvidencias(Protocol):
+    async def firmar_descarga(
+        self, clave: str, sha256: str, ttl_s: int, tipo_contenido: str, nombre_archivo: str
+    ) -> str:
+        """Comprueba el objeto y firma una descarga HTTPS con nombre y MIME, por hasta 300 s."""
+        ...
+
     async def conservar(
         self,
         origen: str,
@@ -169,6 +175,12 @@ class TxSiniestros(Protocol):
 
 
 class SiniestrosRepositorio(Protocol):
+    async def evidencia_cliente(
+        self, cliente_id: UUID, siniestro_id: UUID, evidencia_id: UUID
+    ) -> tuple[bool, Evidencia | None, bool]:
+        """(¿siniestro propio?, evidencia de ese siniestro, ¿confirmada?)."""
+        ...
+
     def transaccion(self) -> AbstractAsyncContextManager[TxSiniestros]: ...
 
     async def bandeja(self, filtro: FiltroBandeja) -> PaginaSiniestros:

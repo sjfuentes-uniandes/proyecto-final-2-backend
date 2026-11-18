@@ -5,6 +5,10 @@ from bff_movil.domain.polizas.modelos import Poliza
 
 
 class SiniestrosApi(Protocol):
+    async def enlace_evidencia(
+        self, actor_id: str, cliente_id: UUID, siniestro_id: UUID, evidencia_id: UUID
+    ) -> dict[str, Any]: ...
+
     async def actualizar_borrador(
         self, actor_id: str, borrador_id: UUID, cambios: dict[str, Any]
     ) -> dict[str, Any]: ...

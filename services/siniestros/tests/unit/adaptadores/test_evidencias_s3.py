@@ -15,7 +15,11 @@ from siniestros.adapters.outbound.evidencias_s3 import (
     checksum_base64,
     cliente_s3,
 )
-from siniestros.application.siniestro.errores import DependenciaNoDisponible
+from siniestros.application.siniestro.errores import (
+    DependenciaNoDisponible,
+    EvidenciaNoDisponible,
+    IntegridadEvidenciaInvalida,
+)
 from siniestros.domain.siniestro.modelos import IntegridadEvidencia
 
 pytestmark = pytest.mark.anyio
@@ -257,6 +261,75 @@ async def test_el_almacen_sin_configurar_no_verifica_ni_firma() -> None:
     assert await sin.verificar(CLAVE, SHA) is IntegridadEvidencia.NO_VERIFICABLE
     with pytest.raises(DependenciaNoDisponible):
         await sin.firmar_lectura(CLAVE, 300, "image/jpeg")
+    with pytest.raises(DependenciaNoDisponible):
+        await sin.firmar_descarga(CLAVE, SHA, 300, "image/jpeg", "foto.jpg")
+
+
+async def test_descarga_verifica_y_fija_version_nombre_utf8_y_duracion() -> None:
+    cliente = ClienteFalso({"ChecksumSHA256": checksum_base64(SHA), "VersionId": "v1"})
+    await almacen(cliente).firmar_descarga(CLAVE, SHA, 300, "image/jpeg", "da\u00f1o.jpg")
+    _, parametros, ttl = cliente.firmas[0]
+    assert ttl == 300 and parametros["VersionId"] == "v1"
+    assert parametros["ResponseContentType"] == "image/jpeg"
+    assert "filename*=UTF-8''da%C3%B1o.jpg" in parametros["ResponseContentDisposition"]
+
+
+@pytest.mark.parametrize(
+    ("respuesta", "error"),
+    [
+        (error_cliente("404"), EvidenciaNoDisponible),
+        (error_cliente("NoSuchBucket"), DependenciaNoDisponible),
+        ({}, DependenciaNoDisponible),
+        ({"ChecksumSHA256": checksum_base64("b" * 64)}, IntegridadEvidenciaInvalida),
+    ],
+)
+async def test_descarga_no_firma_archivo_ausente_inverificable_o_alterado(
+    respuesta: Any,
+    error: type[Exception],
+) -> None:
+    cliente = ClienteFalso(respuesta)
+    with pytest.raises(error):
+        await almacen(cliente).firmar_descarga(CLAVE, SHA, 300, "image/jpeg", "foto.jpg")
+    assert not cliente.firmas
+
+
+@pytest.mark.parametrize("estado", ["ausente", "presente", "denegado"])
+async def test_descarga_distingue_403_ambiguo_sin_listar_otros_prefijos(estado: str) -> None:
+    cliente = Mock()
+    cliente.head_object.side_effect = error_cliente("403")
+    if estado == "denegado":
+        cliente.list_objects_v2.side_effect = error_cliente("AccessDenied")
+    else:
+        cliente.list_objects_v2.return_value = {
+            "Contents": [{"Key": CLAVE if estado == "presente" else CLAVE + "-otro"}]
+        }
+    with pytest.raises(EvidenciaNoDisponible if estado == "ausente" else DependenciaNoDisponible):
+        await EvidenciasS3(cliente, "bucket-evidencias", 300).firmar_descarga(
+            CLAVE, SHA, 300, "image/jpeg", "foto.jpg"
+        )
+    cliente.list_objects_v2.assert_called_once_with(
+        Bucket="bucket-evidencias", Prefix=CLAVE, MaxKeys=1
+    )
+    cliente.generate_presigned_url.assert_not_called()
+
+
+async def test_descarga_rechaza_http_y_no_registra_url(caplog: pytest.LogCaptureFixture) -> None:
+    cliente = Mock()
+    cliente.head_object.return_value = {"ChecksumSHA256": checksum_base64(SHA)}
+    cliente.generate_presigned_url.return_value = "http://s3.test/objeto?firma=privada"
+    with pytest.raises(DependenciaNoDisponible):
+        await EvidenciasS3(cliente, "bucket-evidencias", 300).firmar_descarga(
+            CLAVE, SHA, 300, "image/jpeg", "foto.jpg"
+        )
+    assert "firma=privada" not in caplog.text
+
+
+@pytest.mark.parametrize("ttl", [0, 301])
+async def test_descarga_no_admite_duracion_fuera_de_limites(ttl: int) -> None:
+    cliente = ClienteFalso()
+    with pytest.raises(ValueError):
+        await almacen(cliente).firmar_descarga(CLAVE, SHA, ttl, "image/jpeg", "foto.jpg")
+    assert not cliente.llamadas and not cliente.firmas
 
 
 def test_el_cliente_real_tiene_corte_sin_reintentos_y_endpoint_configurable(

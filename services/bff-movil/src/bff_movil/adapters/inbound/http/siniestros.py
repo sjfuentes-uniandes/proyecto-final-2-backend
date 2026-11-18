@@ -24,6 +24,7 @@ from bff_movil.application.siniestros.casos import (
     ConsultarSiniestro,
     CrearBorrador,
     EliminarEvidencia,
+    EnlazarEvidencia,
     EnviarBorrador,
     ListarBorradores,
     ListarSiniestros,
@@ -75,6 +76,13 @@ class EnvioDto(Dto):
     codigo: str = Field(pattern=r"^88-[0-9]{4}-[0-9]{4,}$")
     estado: Literal["REPORTADO"]
     reportado_en: AwareDatetime
+
+
+class EnlaceEvidenciaDto(Dto):
+    url: str = Field(pattern=r"^https://")
+    expira_en: AwareDatetime
+    nombre_archivo: str
+    tipo_contenido: str
 
 
 class SolicitudEnvio(Dto):
@@ -581,6 +589,38 @@ async def renovar_carga(
         return CargaRenovadaDto.model_validate(
             await caso.ejecutar(identidad.sub, borrador_id, evidencia_id)
         )
+    except ServicioNoDisponible as error:
+        raise _error_no_disponible() from error
+
+
+@router.post(
+    "/{siniestroId}/evidencias/{evidenciaId}/enlace",
+    response_model=EnlaceEvidenciaDto,
+    responses={
+        200: {"headers": CABECERAS},
+        401: _NO_AUTENTICADO,
+        403: _ROL,
+        404: error(
+            "CLIENTE_NO_ENCONTRADO, SINIESTRO_NO_ENCONTRADO, EVIDENCIA_NO_ENCONTRADA "
+            "o EVIDENCIA_NO_DISPONIBLE"
+        ),
+        409: error("EVIDENCIA_NO_CARGADA"),
+        422: error("SOLICITUD_INVALIDA o INTEGRIDAD_EVIDENCIA_INVALIDA"),
+        503: _NO_DISPONIBLE,
+    },
+)
+async def enlace_evidencia(
+    siniestro_id: Annotated[UUID, Path(alias="siniestroId")],
+    evidencia_id: Annotated[UUID, Path(alias="evidenciaId")],
+    request: Request,
+    identidad: Annotated[IdentidadAutenticada, Depends(autenticar)],
+) -> EnlaceEvidenciaDto:
+    caso: EnlazarEvidencia = request.app.state.enlazar_evidencia
+    try:
+        resultado = await caso.ejecutar(identidad.sub, siniestro_id, evidencia_id)
+        return EnlaceEvidenciaDto.model_validate(resultado)
+    except ClienteNoEncontrado as error:
+        raise _error_cliente_no_encontrado() from error
     except ServicioNoDisponible as error:
         raise _error_no_disponible() from error
 

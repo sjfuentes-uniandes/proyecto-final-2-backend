@@ -12,6 +12,18 @@ def test_contrato_publicado_coincide_con_la_app() -> None:
     assert yaml.safe_load(CONTRATO.read_text(encoding="utf-8")) == app.openapi()
 
 
+def test_descarga_evidencia_no_recibe_titular_ni_cuerpo() -> None:
+    ruta = "/v1/siniestros/{siniestroId}/evidencias/{evidenciaId}/enlace"
+    operacion = app.openapi()["paths"][ruta]["post"]
+    assert operacion["security"] == [{"bearerAuth": []}]
+    assert "requestBody" not in operacion
+    assert "clienteId" not in {p["name"] for p in operacion["parameters"]}
+    assert set(operacion["responses"]) == {"200", "401", "403", "404", "409", "422", "503"}
+    esquema = app.openapi()["components"]["schemas"]["EnlaceEvidenciaDto"]
+    assert set(esquema["required"]) == {"url", "expiraEn", "nombreArchivo", "tipoContenido"}
+    assert esquema["properties"]["url"]["pattern"] == "^https://"
+
+
 def test_envio_explicito_y_consultas_del_titular() -> None:
     rutas = app.openapi()["paths"]
     envio = rutas["/v1/siniestros/borradores/{borradorId}/envio"]["post"]

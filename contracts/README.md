@@ -199,16 +199,58 @@ La consulta de pólizas no informa sumas por amparo: se representan con `null` e
 detalle del analista (también en BFF web), sin inventar montos ni beneficiarios.
 La aprobación monetaria permanece bloqueada si faltan esos datos.
 
+### Descargar evidencias desde Android
+
+`POST /v1/siniestros/{siniestroId}/evidencias/{evidenciaId}/enlace`,
+con `Authorization: Bearer <token>` y **sin cuerpo**:
+
+```json
+{
+  "url": "https://bucket.s3.amazonaws.com/...",
+  "expiraEn": "2026-11-18T21:05:00Z",
+  "nombreArchivo": "evidencia.jpg",
+  "tipoContenido": "image/jpeg"
+}
+```
+
+Responde `200`. El BFF resuelve el titular desde el token y `siniestros` comprueba
+la propiedad del caso, pertenencia de la evidencia y confirmación de la carga.
+Una evidencia definitiva sin borrador asociado sigue siendo una evidencia confirmada
+(casos previos/portal); si tiene borrador, se exige la confirmación correspondiente.
+Se verifica existencia e integridad antes de firmar. El enlace es **HTTPS**, dura como
+máximo **300 segundos** (`EVIDENCIA_URL_TTL_S`) y fija la versión del objeto cuando S3
+la informa. El archivo se entrega con `Content-Type` y `Content-Disposition: attachment`,
+incluyendo nombre UTF-8. No se publica el objeto ni se guardan URLs en logs/outbox.
+
+Android debe pedir el enlace al abrir/descargar el archivo y descargar directamente
+desde esa URL **sin reenviar el token de Cognito a S3**. No persistir ni registrar
+la URL firmada. Si vence, solicitar una nueva; no usar el detalle como fuente de enlaces.
+En local el endpoint público de firma también debe ser HTTPS (LocalStack admite TLS).
+
+- `401`: sesión inválida.
+- `404 SINIESTRO_NO_ENCONTRADO`: inexistente o de otro titular, sin revelar cuál.
+- `404 EVIDENCIA_NO_ENCONTRADA`: no existe o no corresponde al caso.
+- `404 EVIDENCIA_NO_DISPONIBLE`: archivo ausente.
+- `409 EVIDENCIA_NO_CARGADA`: falta confirmación.
+- `422 INTEGRIDAD_EVIDENCIA_INVALIDA`: checksum distinto; no se firma.
+- `503 SERVICIO_NO_DISPONIBLE`: falla de servicio, permisos S3 o almacenamiento.
+
+La ruta interna agrega `/v1/clientes/{clienteId}` y solo la invoca el BFF con el
+cliente resuelto, como las consultas móviles. No debe exponerse directamente.
+Esta ampliación requiere desplegar **bff-movil y siniestros**, incluyendo el cambio
+IAM de `infra/apps` descrito abajo. No requiere migraciones ni cambios en BFF web.
+
 ### Despliegue
 
 Workflow **Infra - Desplegar**, ambiente `int`, alcance `microservicios`,
 servicios `siniestros,bff-movil,bff-web`, `probar=true`. La migración `006` se aplica
 al arrancar siniestros; no requiere desplegar plataforma ni bases.
 Esperar a que los tres servicios estén estables antes de probar Android.
-No se amplían los permisos IAM: `siniestros` sigue sin `ListBucket` ni `DeleteObject`.
-S3 puede devolver `403` para un destino ausente sin permiso de listado: en ese caso
-se intenta conservar solo tras verificar el origen y se exige verificar el destino final.
-Un origen inaccesible o una copia no verificable produce error, nunca confirmación.
+Para la descarga se agrega a `siniestros` `s3:ListBucket` condicionado exclusivamente
+al prefijo `siniestros/*`. Permite consultar la clave exacta si HEAD devuelve `403`
+ambiguo y distinguir ausencia (`404`) de permisos/almacenamiento (`503`).
+No permite listar otros prefijos ni borrar archivos. `microservicios` aplica
+`infra/apps`, por lo que incluye este permiso sin desplegar plataforma ni bases.
 No revertir la migración si existen borradores convertidos: su reversa lo rechaza
 para conservar las confirmaciones y evitar reaperturas.
 
