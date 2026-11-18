@@ -61,7 +61,7 @@ class CrearBorrador:
             except (ClienteNoEncontrado, PolizaNoAutorizada, PolizaNoEncontrada):
                 op.marcar(RESULTADO_RECHAZADO)
                 raise
-            if poliza.estado != "EMITIDA" or not poliza.vigente:
+            if poliza.estado != "ACTIVA" or not poliza.vigente:
                 op.marcar(RESULTADO_RECHAZADO)
                 raise PolizaNoVigente
             resultado = await self._siniestros.crear_borrador(

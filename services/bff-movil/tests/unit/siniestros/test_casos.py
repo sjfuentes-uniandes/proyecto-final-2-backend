@@ -1,4 +1,5 @@
 import json
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
@@ -6,6 +7,7 @@ from uuid import UUID
 
 import httpx
 import pytest
+import respx
 from bff_movil.adapters.inbound.http.siniestros import SolicitudBorrador
 from bff_movil.adapters.outbound.siniestros_http import SiniestrosHttp
 from bff_movil.application.siniestros.casos import CrearBorrador
@@ -25,7 +27,7 @@ def poliza(**cambios: Any) -> Poliza:
     datos: dict[str, Any] = {
         "poliza_id": POLIZA_ID,
         "numero": "POL-1",
-        "estado": "EMITIDA",
+        "estado": "ACTIVA",
         "producto_nombre": "Producto",
         "ramo": "AUTO",
         "vigencia": Vigencia(date(2026, 1, 1), date(2026, 12, 31)),
@@ -142,6 +144,7 @@ async def test_reenvia_la_descripcion_al_servicio_siniestros() -> None:
         )
 
     assert json.loads(recibidas[0].content)["descripcion"] == descripcion
+    assert json.loads(recibidas[0].content)["copiaPoliza"]["estado"] == "ACTIVA"
 
 
 async def test_consulta_borradores_confirma_y_renueva_por_el_actor() -> None:
@@ -171,8 +174,9 @@ async def test_consulta_borradores_confirma_y_renueva_por_el_actor() -> None:
 @pytest.mark.parametrize(
     "datos",
     [
-        {"estado": "CANCELADA", "vigente": False},
-        {"estado": "EMITIDA", "vigente": False},
+        {"estado": "CANCELADA", "vigente": True},
+        {"estado": "EMITIDA", "vigente": True},
+        {"estado": "ACTIVA", "vigente": False},
     ],
 )
 async def test_no_crea_borrador_para_poliza_no_vigente(datos: dict[str, Any]) -> None:
@@ -185,3 +189,63 @@ async def test_no_crea_borrador_para_poliza_no_vigente(datos: dict[str, Any]) ->
 
     assert consulta.llamadas == [(CLIENTE_ID, POLIZA_ID, SUB)]
     assert siniestros.llamadas == []
+
+
+@pytest.mark.parametrize(
+    ("estado", "vigente", "http"),
+    [
+        ("ACTIVA", True, 201),
+        ("ACTIVA", False, 409),
+        ("EMITIDA", True, 409),
+        ("CANCELADA", True, 409),
+    ],
+)
+def test_creacion_http_segun_estado_y_vigencia(
+    crear_entorno: Callable[..., Any], estado: str, vigente: bool, http: int
+) -> None:
+    consulta = Consulta(poliza(estado=estado, vigente=vigente))
+    entorno = crear_entorno(consulta_polizas=consulta, SINIESTROS_URL="http://siniestros.test")
+    creado = {"borradorId": str(CLAVE), "polizaId": str(POLIZA_ID), "estado": "ABIERTO"}
+    with respx.mock(assert_all_called=False) as router:
+        servicio = router.post("http://siniestros.test/v1/siniestros/borradores").respond(
+            201, json=creado
+        )
+        respuesta = entorno.pedir(
+            "POST",
+            "/v1/siniestros/borradores",
+            cuerpo={"polizaId": str(POLIZA_ID), "descripcion": "Impacto en la puerta."},
+            encabezados={"Idempotency-Key": str(CLAVE)},
+        )
+
+    assert respuesta.status_code == http, respuesta.text
+    assert consulta.llamadas == [(CLIENTE_ID, POLIZA_ID, entorno.sub)]
+    if http == 201:
+        assert respuesta.json() == creado
+        assert json.loads(servicio.calls[0].request.content)["copiaPoliza"]["estado"] == "ACTIVA"
+    else:
+        assert respuesta.json()["codigo"] == "POLIZA_NO_VIGENTE"
+        assert not servicio.called
+
+
+def test_creacion_http_rechaza_poliza_de_otro_titular(
+    crear_entorno: Callable[..., Any],
+) -> None:
+    entorno = crear_entorno(
+        CONSULTA_URL="http://consulta.test", SINIESTROS_URL="http://siniestros.test"
+    )
+    with respx.mock(assert_all_called=False) as router:
+        consulta = router.get(
+            f"http://consulta.test/v1/clientes/{CLIENTE_ID}/polizas/{POLIZA_ID}"
+        ).respond(403, json={"codigo": "POLIZA_NO_AUTORIZADA"})
+        servicio = router.post("http://siniestros.test/v1/siniestros/borradores")
+        respuesta = entorno.pedir(
+            "POST",
+            "/v1/siniestros/borradores",
+            cuerpo={"polizaId": str(POLIZA_ID), "descripcion": "Impacto en la puerta."},
+            encabezados={"Idempotency-Key": str(CLAVE)},
+        )
+
+    assert respuesta.status_code == 403, respuesta.text
+    assert respuesta.json()["codigo"] == "POLIZA_NO_AUTORIZADA"
+    assert consulta.calls[0].request.headers["X-Actor-Id"] == entorno.sub
+    assert not servicio.called

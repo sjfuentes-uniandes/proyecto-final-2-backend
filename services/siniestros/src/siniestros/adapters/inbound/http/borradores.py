@@ -251,7 +251,7 @@ async def crear_borrador(
     clave: Annotated[UUID, Header(alias="Idempotency-Key")],
 ) -> BorradorCreado:
     copia = solicitud.copia_poliza
-    if copia.estado != "EMITIDA" or not copia.vigente:
+    if copia.estado != "ACTIVA" or not copia.vigente:
         raise PolizaNoVigente
     correlation_id = request.headers.get("X-Correlation-Id", "")
     borrador_id = await casos.crear(

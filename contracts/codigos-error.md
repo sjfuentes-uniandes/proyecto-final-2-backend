@@ -73,7 +73,7 @@ Formato estable de todo error de las rutas nuevas (`solventa_common.errors`):
 | `ERROR_HTTP` | otros | Todos | Cualquier otro `HTTPException` |
 | `ERROR_INTERNO` | 500 | Todos | Error no controlado; solo se registra el tipo |
 | `SINIESTRO_NO_ENCONTRADO` | 404 | `siniestros`, `bff-web` | El siniestro no existe (HU-W19): detalle o enlace de evidencia; (HU-W20) decisión; (HU-W23) `GET /v1/siniestros/{siniestroId}/pago` en `bff-web` |
-| `POLIZA_NO_VIGENTE` | 409 | `siniestros`, `bff-movil` | La póliza consultada no está `EMITIDA` y vigente al crear un borrador de reporte (HU-M01) |
+| `POLIZA_NO_VIGENTE` | 409 | `siniestros`, `bff-movil` | La póliza propia consultada no está `ACTIVA` o no está vigente al crear un borrador de reporte (HU-M01). Ambos servicios exigen `estado == "ACTIVA"` y `vigente == true`; el BFF conserva el estado recibido de `consulta` y la validación de titularidad |
 | `BORRADOR_NO_ENCONTRADO` | 404 | `siniestros`, `bff-movil` | El borrador no existe o no pertenece al actor al listar, consultar, confirmar o renovar una carga (HU-M01) |
 | `EVIDENCIA_NO_CARGADA` | 409 | `siniestros`, `bff-movil` | El objeto no está disponible en S3 al confirmar la carga de evidencia (HU-M01); se puede reintentar después de completar la carga |
 | `EVIDENCIA_YA_CONFIRMADA` | 409 | `siniestros`, `bff-movil` | No se puede renovar la URL de una evidencia cuya carga ya fue confirmada (HU-M01) |

@@ -1515,7 +1515,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
         '409':
-          description: 'POLIZA_NO_VIGENTE: la póliza no está emitida y vigente'
+          description: 'POLIZA_NO_VIGENTE: la póliza no está activa y vigente'
           headers:
             X-Correlation-Id:
               description: Identificador de correlación de la solicitud

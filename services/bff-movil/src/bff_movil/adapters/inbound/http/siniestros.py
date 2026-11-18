@@ -147,7 +147,7 @@ class CargaRenovadaDto(Dto):
 _NO_AUTENTICADO = error("NO_AUTENTICADO: se requiere un cliente autenticado")
 _ROL = error("ROL_NO_AUTORIZADO: el token no es del pool de clientes")
 _NO_DISPONIBLE = error("SERVICIO_NO_DISPONIBLE: no se pudo consultar o crear el reporte")
-_POLIZA_NO_VIGENTE = error("POLIZA_NO_VIGENTE: la póliza no está emitida y vigente")
+_POLIZA_NO_VIGENTE = error("POLIZA_NO_VIGENTE: la póliza no está activa y vigente")
 _BORRADOR_NO_ENCONTRADO = error("BORRADOR_NO_ENCONTRADO")
 _EVIDENCIA_INVALIDA = error(
     "TIPO_EVIDENCIA_NO_ADMITIDO, TAMANO_EVIDENCIA_EXCEDIDO, DURACION_VIDEO_EXCEDIDA "
