@@ -61,7 +61,18 @@ Se crea en `ciclo` (`main.py:133-212`), una vez por tarea, y no comparte datos d
 - **Se consulta antes de calcular.** `_ejecutar` busca la existente antes de llamar a las dependencias (`application/cotizacion/calcular_prima.py:345-350`, `:487-491`). La misma clave con otro cuerpo es `ConflictoIdempotencia`.
 - **Carrera entre dos solicitudes con la misma clave:** la unicidad hace perder a la segunda (`cotizaciones_pg.py:477-479`), que devuelve la cotización ganadora con `pasos` vacío (`calcular_prima.py:403-409`).
 - **Valkey no participa en la idempotencia ni en la sesión:** solo sirve para leer el catálogo (§2).
-- **Respuesta de la repetición (200):** `pasos` viene vacío. `oferta.estado` se calcula con el `ahora` de cada solicitud (`adapters/inbound/http/cotizaciones.py:398`) y puede pasar de vigente a vencida. El resto debe ser igual; la N1c lo comprueba en memoria, y la N2 lo comprobará contra PostgreSQL.
+- **Respuesta de la repetición (200):** `pasos` viene vacío. `oferta.estado` se calcula con el `ahora` de cada solicitud (`adapters/inbound/http/cotizaciones.py:398`) y puede pasar de vigente a vencida. El resto es igual: la N1c lo comprueba en memoria y la N2, contra PostgreSQL.
+
+**Confirmado contra PostgreSQL** (N2, `tests/module/test_hu_w07_replicas.py`). Hay dos instancias, A y B, sobre el mismo PostgreSQL, el mismo Valkey y el mismo `catalogo`:
+- **Repetición (a):** la misma clave, el mismo actor y el mismo cuerpo en B devuelven 200 con el `id` que creó A (201).
+  - Comparé los JSON que devuelve FastAPI. Son iguales salvo `pasos` y `oferta.estado`; en la práctica `oferta.estado` tampoco cambia.
+  - Hay una sola fila.
+  - En las solicitudes de B no hay ningún span `cotizacion.dependencia.*`: B no recalcula.
+- **GET en B (b):** devuelve lo mismo que la respuesta de A tras pasar por la base: `primaTotal`, `desglose`, `entradas`, el orden de las coberturas (también las de la oferta), `calculadoEn`, `vigenteHasta` y `oferta.precio`.
+- **Carrera (c):** la misma clave, a la vez en A y en B, da una sola fila, el mismo `id`, un 201 y un 200.
+  - En las corridas, las dos instancias calcularon (carrera real) 5 de 5 veces, y ganaron las dos.
+  - La que pierde recibe la ganadora por la restricción de unicidad.
+- **Alcance (d) y conflicto (e):** la misma clave con otro actor es otra cotización, en otra fila. Con otro cuerpo, B responde `IDEMPOTENCIA_CONFLICTO` (422) y no crea ninguna fila.
 
 ## 5. Riesgos y límites fuera del alcance de W07
 
@@ -76,5 +87,5 @@ Se crea en `ciclo` (`main.py:133-212`), una vez por tarea, y no comparte datos d
 | N1a | `tests/unit/test_hu_w07_sin_estado_local.py` (`test_n1a_*`) | Sin `global`/`nonlocal`; objetos de módulo solo en `PERMITIDOS`, cada uno justificado y existente; ninguna función muta un nombre de módulo; `CONTEXTO` y el contexto de `decimal` (§1) |
 | N1b | El mismo archivo (`test_n1b_*`) | Las cachés de `CatalogoHttp` y `ProductosCatalogo` son de cada instancia: dos instancias no comparten lo guardado ni los candados (§2) |
 | N1c | `tests/unit/cotizacion/test_hu_w07_serializacion.py` | Misma cotización, mismos pasos y mismo `ahora` dan los mismos bytes en `model_dump_json`, dos veces y con dos objetos construidos por separado; la repetición solo cambia `pasos` (§4) |
-| N2 | Paso 7.4 | Dos instancias sobre el mismo PostgreSQL y Valkey |
+| N2 | `tests/module/test_hu_w07_replicas.py` (`test_a_*` a `test_e_*`) | Dos apps de la fábrica `cotizacion` en el mismo proceso (lo justifica la N1), sobre el mismo PostgreSQL, Valkey (`CACHE_URL`), `catalogo` y `clientes`: repetición sin recalcular, GET desde la otra instancia, carrera, alcance por actor y conflicto (§4). Los spans de `operacion()` van al exportador de la última app creada (`_estado` de `solventa_common.telemetry`), así que cada solicitud se identifica por su `X-Correlation-Id` |
 | N3 | Paso 7.8 | Réplicas en INT |
