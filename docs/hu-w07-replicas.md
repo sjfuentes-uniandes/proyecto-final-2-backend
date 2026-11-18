@@ -103,6 +103,24 @@ Identifica en X-Ray qué réplica atendió cada cotización (AC1; plan §b, deci
   - En ese intervalo, una solicitud nueva hacia la tarea encuentra el socket cerrado. Si algo la reintenta (el proxy de Service Connect o el cliente que llama), no se comprobó aquí.
   - La N3 (7.8) mide los 5xx de una ráfaga mientras se detiene una tarea, frente al presupuesto del plan (§b, decisión 7).
 
+### 3.4 Configuración de INT
+
+- **`min = 2`** para `cotizacion` en `service_overrides` (`infra/envs/int/apps.tfvars:22`). Son dos réplicas siempre, una por zona:
+  - el servicio reparte sus tareas entre las dos subredes privadas, una por zona (la plataforma usa dos zonas, `infra/platform/main.tf:37`), con `availability_zone_rebalancing = "ENABLED"` (`infra/apps/modules/ecs-service/main.tf:53`), que ya existía;
+  - el resto de servicios sigue en `min_replicas = 1` (`apps.tfvars:6`).
+- **`max = 3`**, que sale de `max_replicas` (`apps.tfvars:7`), hasta HU-W08. La política `cpu` sigue existiendo porque 3 > 2 (`infra/apps/autoscaling.tf:14`).
+- **Spot y pausa:** se mantiene Fargate Spot (`apps.tfvars:10`). Con `paused = true`, el mínimo vuelve a 0 (`infra/apps/main.tf:32`).
+- **Qué lo fija:** `infra/apps/tests/int/int.tftest.hcl` exige `min_capacity = 2` y `max_capacity = 3` en `aws_appautoscaling_target.service["cotizacion"]`, y que exista la política `cpu`. Para los demás servicios solo afirma invariantes relativos.
+- **Cambio esperado en el plan de INT al fusionar** (deducido del código, sin ejecutar `plan`):
+  - **Cambia en el sitio:** `aws_appautoscaling_target.service["cotizacion"]`, cuyo `min_capacity` pasa de 1 a 2 (`autoscaling.tf:6`, con `local.sizing` en `main.tf:28-34`). `max_capacity` sigue en 3 (`autoscaling.tf:7`).
+  - **No cambian:**
+    - `aws_appautoscaling_policy.cpu["cotizacion"]` (`autoscaling.tf:13-28`): no depende del mínimo, salvo para existir;
+    - el servicio de ECS: `desired_count` sale de `local.sizing[name].min` (`infra/apps/ecs.tf:197`; `ecs-service/main.tf:47`), pero se ignora (`ignore_changes = [desired_count]`, `ecs-service/main.tf:109`). El autoescalado lleva las tareas al nuevo mínimo;
+    - la definición de tarea: CPU y memoria siguen en 512 y 1024 (`ecs.tf:195-196`).
+  - **El output `deployed_services`** muestra `replicas.min = 2` para `cotizacion` (`infra/apps/outputs.tf:8`).
+  - **Ningún otro servicio cambia por este diff:** solo se tocó la entrada de `cotizacion` en `service_overrides`.
+  - **Costo:** una tarea más de `cotizacion` (0,5 vCPU y 1 GB) en Fargate Spot, permanente mientras el ambiente no esté en pausa. En un despliegue, con `deployment_maximum_percent = 200` (`ecs-service/main.tf:51`), puede haber hasta 4 tareas mientras dura.
+
 ## 4. Idempotencia
 
 - **Vive en PostgreSQL.** Lo garantiza `UNIQUE (actor_id, idempotency_key)` en `cotizaciones` (`adapters/outbound/migraciones/003_cotizaciones.sql:24`, `:31`; restricción `cotizaciones_actor_id_idempotency_key_key`, `adapters/outbound/cotizaciones_pg.py:62`).
@@ -139,4 +157,5 @@ Identifica en X-Ray qué réplica atendió cada cotización (AC1; plan §b, deci
 | N2 | `tests/module/test_hu_w07_replicas.py` (`test_a_*` a `test_e_*`) | Dos apps de la fábrica `cotizacion` en el mismo proceso (lo justifica la N1), sobre el mismo PostgreSQL, Valkey (`CACHE_URL`), `catalogo` y `clientes`: repetición sin recalcular, GET desde la otra instancia, carrera, alcance por actor y conflicto (§4). Los spans de `operacion()` van al exportador de la última app creada (`_estado` de `solventa_common.telemetry`), así que cada solicitud se identifica por su `X-Correlation-Id` |
 | N1 (`task_id`) | `tests/unit/test_hu_w07_task_id.py` | Adaptador de metadatos con `respx`: el id, sin variable sin llamada, 5xx, JSON inválido, sin `TaskARN`, errores de red, tope de 1 s y ningún span de la lectura (con un control que sí lo deja). `Settings` con el nombre exacto. Span `cotizacion` con y sin `task_id` (también en la repetición y en el rechazo). Arranque con los metadatos en un puerto cerrado, en las dos ramas de `ciclo` (§3.2) |
 | Drenaje | `tests/unit/test_hu_w07_dockerfile.py` y `tests/module/test_hu_w07_drenaje.py` (con `apoyo_drenaje.py`) | El `CMD` tiene `--timeout-graceful-shutdown` menor que `stopTimeout`, ambos leídos de sus archivos. uvicorn en subproceso con los argumentos del `CMD`: con 25, la solicitud en curso termina en 201, una conexión nueva se rechaza y el lifespan se cierra; con 1, la solicitud se cancela y el proceso sale en 1-2 s (§3.3). Solo en Linux: en Windows se omite |
+| IaC INT | `infra/apps/tests/int/int.tftest.hcl` (con `-var-file=../envs/int/apps.tfvars`) | `cotizacion` en INT: `min_capacity = 2`, `max_capacity = 3` y la política `cpu`. Para el resto, invariantes relativos a las variables (§3.4) |
 | N3 | Paso 7.8 | Réplicas en INT |

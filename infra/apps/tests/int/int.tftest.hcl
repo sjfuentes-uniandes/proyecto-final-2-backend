@@ -114,10 +114,10 @@ variables {
 run "ambiente_int" {
   command = plan
 
-  # --- cotizacion: sus valores actuales en int (HU-W07) ----------------------------------
+  # --- cotizacion en int (HU-W07): dos réplicas siempre, una por zona; max hasta HU-W08 ----
   assert {
-    condition     = aws_appautoscaling_target.service["cotizacion"].min_capacity == 1 && aws_appautoscaling_target.service["cotizacion"].max_capacity == 3
-    error_message = "HU-W07: en int, cotizacion escala entre 1 y 3 tareas (min_capacity = ${aws_appautoscaling_target.service["cotizacion"].min_capacity}, max_capacity = ${aws_appautoscaling_target.service["cotizacion"].max_capacity})."
+    condition     = aws_appautoscaling_target.service["cotizacion"].min_capacity == 2 && aws_appautoscaling_target.service["cotizacion"].max_capacity == 3
+    error_message = "HU-W07: en int, cotizacion escala entre 2 y 3 tareas, al menos una por zona (min_capacity = ${aws_appautoscaling_target.service["cotizacion"].min_capacity}, max_capacity = ${aws_appautoscaling_target.service["cotizacion"].max_capacity})."
   }
   assert {
     condition     = contains(keys(aws_appautoscaling_policy.cpu), "cotizacion")
