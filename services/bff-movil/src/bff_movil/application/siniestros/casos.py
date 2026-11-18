@@ -71,6 +71,74 @@ class CrearBorrador:
             return resultado
 
 
+class EnviarBorrador:
+    def __init__(
+        self, resolutor: ResolutorCliente, consulta: ConsultaPolizas, siniestros: SiniestrosApi
+    ) -> None:
+        self._resolutor = resolutor
+        self._consulta = consulta
+        self._siniestros = siniestros
+
+    async def ejecutar(self, sub: str, borrador_id: UUID, clave: UUID) -> dict[str, Any]:
+        with operacion("siniestros.borrador.enviar"):
+            borrador = await self._siniestros.consultar_borrador(sub, borrador_id)
+            if borrador.get("estado") == "CONVERTIDO":
+                return await self._siniestros.enviar_borrador(sub, borrador_id, clave, None)
+            if borrador.get("estado") != "ABIERTO":
+                raise ServicioNoDisponible("ERROR")
+            try:
+                poliza_id = UUID(borrador["polizaId"])
+            except (KeyError, ValueError, TypeError, AttributeError) as error:
+                raise ServicioNoDisponible("ERROR") from error
+            cliente_id = await self._resolutor.resolver(sub)
+            poliza = await self._consulta.obtener(cliente_id, poliza_id, sub)
+            if poliza.estado != "ACTIVA" or not poliza.vigente:
+                # Otra solicitud pudo confirmar mientras consultabamos la poliza.
+                actual = await self._siniestros.consultar_borrador(sub, borrador_id)
+                if actual.get("estado") == "CONVERTIDO":
+                    return await self._siniestros.enviar_borrador(sub, borrador_id, clave, None)
+                raise PolizaNoVigente
+            return await self._siniestros.enviar_borrador(sub, borrador_id, clave, poliza)
+
+
+class ActualizarBorrador:
+    def __init__(self, siniestros: SiniestrosApi) -> None:
+        self._siniestros = siniestros
+
+    async def ejecutar(
+        self, sub: str, borrador_id: UUID, cambios: dict[str, Any]
+    ) -> dict[str, Any]:
+        return await self._siniestros.actualizar_borrador(sub, borrador_id, cambios)
+
+
+class EliminarEvidencia:
+    def __init__(self, siniestros: SiniestrosApi) -> None:
+        self._siniestros = siniestros
+
+    async def ejecutar(self, sub: str, borrador_id: UUID, evidencia_id: UUID) -> None:
+        await self._siniestros.eliminar_evidencia(sub, borrador_id, evidencia_id)
+
+
+class ListarSiniestros:
+    def __init__(self, resolutor: ResolutorCliente, siniestros: SiniestrosApi) -> None:
+        self._resolutor = resolutor
+        self._siniestros = siniestros
+
+    async def ejecutar(self, sub: str, limite: int, cursor: str | None) -> dict[str, Any]:
+        cliente_id = await self._resolutor.resolver(sub)
+        return await self._siniestros.listar_siniestros(sub, cliente_id, limite, cursor)
+
+
+class ConsultarSiniestro:
+    def __init__(self, resolutor: ResolutorCliente, siniestros: SiniestrosApi) -> None:
+        self._resolutor = resolutor
+        self._siniestros = siniestros
+
+    async def ejecutar(self, sub: str, siniestro_id: UUID) -> dict[str, Any]:
+        cliente_id = await self._resolutor.resolver(sub)
+        return await self._siniestros.consultar_siniestro(sub, cliente_id, siniestro_id)
+
+
 class AgregarEvidencia:
     def __init__(self, siniestros: SiniestrosApi) -> None:
         self._siniestros = siniestros
@@ -98,11 +166,16 @@ class RenovarCargaEvidencia:
 
 
 __all__ = [
+    "ActualizarBorrador",
     "AgregarEvidencia",
     "ConfirmarEvidencia",
     "ConsultarBorrador",
     "ConsultarLimitesEvidencia",
+    "ConsultarSiniestro",
     "CrearBorrador",
+    "EliminarEvidencia",
+    "EnviarBorrador",
     "ListarBorradores",
+    "ListarSiniestros",
     "RenovarCargaEvidencia",
 ]

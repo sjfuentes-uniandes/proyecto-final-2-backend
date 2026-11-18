@@ -32,6 +32,8 @@ class Settings(ServiceSettings):
     clientes_timeout_ms: int = Field(500, ge=1)
     consulta_timeout_ms: int = Field(500, ge=1)
     siniestros_timeout_ms: int = Field(500, ge=1)
+    # Confirmar conserva el archivo en S3; enviar verifica archivos y confirma la transaccion.
+    siniestros_escritura_timeout_ms: int = Field(15000, ge=1)
     # Debe superar el timeout de `clientes` hacia adaptador-identidad (4 s), que a su vez supera
     # el del proveedor KYC (3 s): cada nivel espera más que el que está debajo.
     verificacion_timeout_ms: int = Field(5000, ge=1)

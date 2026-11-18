@@ -36,6 +36,7 @@ from siniestros.adapters.outbound.mapeo import (
     ubicacion_de_json,
 )
 from siniestros.application.siniestro.errores import (
+    BorradorConvertido,
     BorradorNoEncontrado,
     IdempotenciaConflicto,
     LimiteEvidenciasAlcanzado,
@@ -108,6 +109,19 @@ class _ConDict:
         cursor = self._conexion.cursor(row_factory=dict_row)
         await cursor.execute(consulta, parametros)
         return cursor
+
+
+async def _bloquear_borrador_abierto(conexion: _ConDict, actor_id: str, borrador_id: UUID) -> None:
+    fila = await (
+        await conexion.execute(
+            "SELECT estado FROM borradores WHERE id = %s AND actor_id = %s FOR UPDATE",
+            (borrador_id, actor_id),
+        )
+    ).fetchone()
+    if fila is None:
+        raise BorradorNoEncontrado
+    if fila["estado"] != "ABIERTO":
+        raise BorradorConvertido
 
 
 def siniestro_de(fila: Mapping[str, Any]) -> Siniestro:
@@ -280,15 +294,83 @@ class SiniestrosPg:
         async with self._pool.connection() as conexion, conexion.transaction():
             yield TxSiniestrosPg(conexion)
 
+    async def listar_siniestros_cliente(
+        self, cliente_id: UUID, limite: int, cursor: str | None, corte: datetime
+    ) -> dict[str, Any]:
+        condiciones = ["cliente_id = %s", "reportado_en <= %s"]
+        parametros: list[Any] = [cliente_id, corte]
+        if cursor is not None:
+            clave, identificador, corte = decodificar_cursor(cursor)
+            try:
+                fecha = datetime.fromisoformat(str(clave))
+                if fecha.utcoffset() is None:
+                    raise ValueError
+            except ValueError as error:
+                raise SolicitudInvalida(["cursor"]) from error
+            parametros[1] = corte
+            condiciones.append("(reportado_en, id) < (%s, %s)")
+            parametros.extend((fecha, identificador))
+        parametros.append(limite + 1)
+        consulta = (
+            'SELECT id AS "siniestroId", codigo, origen, estado, poliza_id AS "polizaId", '
+            'reportado_en AS "reportadoEn" FROM siniestros '
+            f"WHERE {' AND '.join(condiciones)} ORDER BY reportado_en DESC, id DESC LIMIT %s"
+        )
+        async with self._pool.connection() as conexion:
+            filas = await (await _ConDict(conexion).execute(consulta, parametros)).fetchall()
+        items = list(filas[:limite])
+        siguiente = None
+        if len(filas) > limite:
+            ultimo = items[-1]
+            siguiente = codificar_cursor(
+                ultimo["reportadoEn"].isoformat(), ultimo["siniestroId"], corte
+            )
+        return {"items": items, "siguienteCursor": siguiente}
+
+    async def consultar_siniestro_cliente(
+        self, cliente_id: UUID, siniestro_id: UUID
+    ) -> dict[str, Any] | None:
+        async with self._pool.connection() as conexion:
+            sql = _ConDict(conexion)
+            caso = await (
+                await sql.execute(
+                    'SELECT id AS "siniestroId", codigo, origen, estado, poliza_id AS "polizaId", '
+                    'reportado_en AS "reportadoEn", descripcion, causa, fecha_evento AS "fechaEvento" '
+                    "FROM siniestros WHERE id = %s AND cliente_id = %s",
+                    (siniestro_id, cliente_id),
+                )
+            ).fetchone()
+            if caso is None:
+                return None
+            evidencias = await (
+                await sql.execute(
+                    'SELECT id AS "evidenciaId", nombre_archivo AS "nombreArchivo", tipo, '
+                    'tipo_contenido AS "tipoContenido", tamano_bytes AS "tamanoBytes", '
+                    'capturada_en AS "capturadaEn" FROM evidencias WHERE siniestro_id = %s ORDER BY id',
+                    (siniestro_id,),
+                )
+            ).fetchall()
+            historial = await (
+                await sql.execute(
+                    'SELECT accion, estado_anterior AS "estadoAnterior", estado_nuevo AS "estadoNuevo", '
+                    'ocurrido_en AS "ocurridoEn" FROM historial_siniestro '
+                    "WHERE siniestro_id = %s ORDER BY ocurrido_en, id",
+                    (siniestro_id,),
+                )
+            ).fetchall()
+        return {**caso, "evidencias": list(evidencias), "historial": list(historial)}
+
     async def listar_borradores(self, actor_id: str) -> list[dict[str, Any]]:
         consulta = (
             'SELECT b.id AS "borradorId", b.poliza_id AS "polizaId", '
             'b.descripcion AS descripcion, b.creado_en AS "creadoEn", '
+            'b.estado, b.causa, b.fecha_evento AS "fechaEvento", b.version, '
+            "b.envio_resultado AS envio, "
             'count(e.id)::int AS "cantidadEvidencias", '
             "count(e.id) FILTER (WHERE e.estado_carga = 'PENDIENTE')::int "
             'AS "evidenciasPendientes" '
             "FROM borradores b LEFT JOIN borrador_evidencias e ON e.borrador_id = b.id "
-            "WHERE b.actor_id = %s "
+            "WHERE b.actor_id = %s AND b.estado = 'ABIERTO' "
             "GROUP BY b.id ORDER BY b.creado_en DESC, b.id DESC"
         )
         async with self._pool.connection() as bruta:
@@ -299,6 +381,8 @@ class SiniestrosPg:
         consulta = (
             'SELECT b.id AS "borradorId", b.poliza_id AS "polizaId", '
             'b.descripcion AS descripcion, b.creado_en AS "creadoEn", '
+            'b.estado, b.causa, b.fecha_evento AS "fechaEvento", b.version, '
+            "b.envio_resultado AS envio, "
             'count(e.id)::int AS "cantidadEvidencias", '
             "count(e.id) FILTER (WHERE e.estado_carga = 'PENDIENTE')::int "
             'AS "evidenciasPendientes" '
@@ -378,14 +462,7 @@ class SiniestrosPg:
     ) -> None:
         async with self._pool.connection() as conexion, conexion.transaction():
             tx = _ConDict(conexion)
-            borrador = await (
-                await tx.execute(
-                    "SELECT id FROM borradores WHERE id = %s AND actor_id = %s FOR UPDATE",
-                    (borrador_id, actor_id),
-                )
-            ).fetchone()
-            if borrador is None:
-                raise BorradorNoEncontrado
+            await _bloquear_borrador_abierto(tx, actor_id, borrador_id)
             fila = await (
                 await tx.execute(
                     "SELECT count(*) AS total FROM borrador_evidencias WHERE borrador_id = %s",
@@ -413,12 +490,15 @@ class SiniestrosPg:
                     duracion_segundos,
                 ),
             )
+            await tx.execute(
+                "UPDATE borradores SET version = version + 1 WHERE id = %s", (borrador_id,)
+            )
 
     async def evidencia_borrador(
         self, actor_id: str, borrador_id: UUID, evidencia_id: UUID
     ) -> dict[str, Any] | None:
         consulta = (
-            'SELECT e.estado_carga AS "estadoCarga", e.carga_confirmada_en AS "cargaConfirmadaEn", '
+            'SELECT b.estado, e.estado_carga AS "estadoCarga", e.carga_confirmada_en AS "cargaConfirmadaEn", '
             'e.clave_objeto AS "claveObjeto", e.sha256, '
             'e.tipo_contenido AS "tipoContenido", e.tamano_bytes AS "tamanoBytes" '
             "FROM borrador_evidencias e JOIN borradores b ON b.id = e.borrador_id "
@@ -428,26 +508,73 @@ class SiniestrosPg:
             fila = await (
                 await _ConDict(bruta).execute(consulta, (actor_id, borrador_id, evidencia_id))
             ).fetchone()
+        if fila is not None and fila["estado"] != "ABIERTO":
+            raise BorradorConvertido
         return fila
 
     async def confirmar_evidencia_borrador(
-        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID, confirmada_en: datetime
+        self,
+        actor_id: str,
+        borrador_id: UUID,
+        evidencia_id: UUID,
+        confirmada_en: datetime,
+        clave_objeto: str | None = None,
     ) -> datetime | None:
         consulta = (
             "UPDATE borrador_evidencias AS e "
             "SET estado_carga = 'CARGADA', "
+            "clave_objeto = COALESCE(%s, e.clave_objeto), "
             "carga_confirmada_en = COALESCE(e.carga_confirmada_en, %s) "
             "FROM borradores b "
             "WHERE e.borrador_id = b.id AND b.actor_id = %s AND b.id = %s AND e.id = %s "
             "RETURNING e.carga_confirmada_en"
         )
         async with self._pool.connection() as conexion, conexion.transaction():
+            sql = _ConDict(conexion)
+            await _bloquear_borrador_abierto(sql, actor_id, borrador_id)
             fila = await (
-                await _ConDict(conexion).execute(
-                    consulta, (confirmada_en, actor_id, borrador_id, evidencia_id)
+                await sql.execute(
+                    consulta, (clave_objeto, confirmada_en, actor_id, borrador_id, evidencia_id)
                 )
             ).fetchone()
+            if fila is not None:
+                await sql.execute(
+                    "UPDATE borradores SET version = version + 1 WHERE id = %s", (borrador_id,)
+                )
         return fila["carga_confirmada_en"] if fila is not None else None
+
+    async def actualizar_borrador(
+        self, actor_id: str, borrador_id: UUID, cambios: dict[str, Any]
+    ) -> None:
+        columnas = {"descripcion": "descripcion", "causa": "causa", "fechaEvento": "fecha_evento"}
+        if not cambios or any(campo not in columnas for campo in cambios):
+            raise SolicitudInvalida(list(cambios) or ["body"])
+        if "descripcion" in cambios and cambios["descripcion"] is None:
+            raise SolicitudInvalida(["descripcion"])
+        asignaciones = ", ".join(f"{columnas[campo]} = %s" for campo in cambios)
+        async with self._pool.connection() as conexion, conexion.transaction():
+            sql = _ConDict(conexion)
+            await _bloquear_borrador_abierto(sql, actor_id, borrador_id)
+            await sql.execute(
+                f"UPDATE borradores SET {asignaciones}, version = version + 1 WHERE id = %s",
+                (*cambios.values(), borrador_id),
+            )
+
+    async def eliminar_evidencia_borrador(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID
+    ) -> None:
+        async with self._pool.connection() as conexion, conexion.transaction():
+            sql = _ConDict(conexion)
+            await _bloquear_borrador_abierto(sql, actor_id, borrador_id)
+            cursor = await sql.execute(
+                "DELETE FROM borrador_evidencias WHERE borrador_id = %s AND id = %s",
+                (borrador_id, evidencia_id),
+            )
+            if cursor.rowcount != 1:
+                raise BorradorNoEncontrado
+            await sql.execute(
+                "UPDATE borradores SET version = version + 1 WHERE id = %s", (borrador_id,)
+            )
 
     async def bandeja(self, filtro: FiltroBandeja) -> PaginaSiniestros:
         corte = filtro.corte

@@ -12,6 +12,30 @@ def test_contrato_publicado_coincide_con_la_app() -> None:
     assert yaml.safe_load(CONTRATO.read_text(encoding="utf-8")) == app.openapi()
 
 
+def test_envio_explicito_y_consultas_del_titular() -> None:
+    rutas = app.openapi()["paths"]
+    envio = rutas["/v1/siniestros/borradores/{borradorId}/envio"]["post"]
+    clave = next(p for p in envio["parameters"] if p["name"] == "Idempotency-Key")
+    assert clave["required"] and clave["schema"]["format"] == "uuid"
+    assert envio["responses"]["201"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/EnvioDto"
+    }
+    esquemas = app.openapi()["components"]["schemas"]
+    assert esquemas["SolicitudEnvio"]["additionalProperties"] is False
+    assert set(esquemas["EnvioDto"]["required"]) == {
+        "borradorId",
+        "siniestroId",
+        "codigo",
+        "estado",
+        "reportadoEn",
+    }
+    for ruta, operaciones in rutas.items():
+        if ruta.startswith("/v1/siniestros"):
+            for operacion in operaciones.values():
+                assert operacion["security"] == [{"bearerAuth": []}]
+                assert all(p["name"] != "clienteId" for p in operacion.get("parameters", []))
+
+
 def test_contrato_de_sesion() -> None:
     operacion = app.openapi()["paths"]["/v1/sesion"]["get"]
     assert set(operacion["responses"]) == {"200", "401", "403", "404", "422", "503"}

@@ -40,6 +40,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 SINIESTRO_EN_EVALUACION = "SiniestroEnEvaluacion"
+SINIESTRO_REPORTADO = "SiniestroReportado"
 SINIESTRO_APROBADO = "SiniestroAprobado"
 SINIESTRO_RECHAZADO = "SiniestroRechazado"
 SINIESTRO_SOPORTE_SOLICITADO = "SiniestroSoporteSolicitado"
@@ -64,6 +65,18 @@ class SiniestroEnEvaluacionV1(_Evento):
     poliza_id: UUID
     analista_id: UUID
     motivo: Literal["ASIGNACION", "PLAZO_SOPORTE_VENCIDO"]
+
+
+class SiniestroReportadoV1(_Evento):
+    """Reporte movil confirmado; sin descripcion, archivos ni datos personales."""
+
+    siniestro_id: UUID
+    codigo: Annotated[str, Field(pattern=CODIGO_SINIESTRO)]
+    origen: Literal["MOVIL"]
+    estado: Literal["REPORTADO"]
+    poliza_id: UUID
+    cliente_id: UUID
+    reportado_en: datetime
 
 
 class SiniestroAprobadoV1(_Evento):
@@ -158,7 +171,8 @@ class AccesoSiniestroDenegadoV1(_Evento):
 
 
 type PayloadSiniestro = (
-    SiniestroEnEvaluacionV1
+    SiniestroReportadoV1
+    | SiniestroEnEvaluacionV1
     | SiniestroAprobadoV1
     | SiniestroRechazadoV1
     | SiniestroSoporteSolicitadoV1
@@ -181,6 +195,7 @@ class SobreEvento[P: PayloadSiniestro](_Evento):
 
 
 ESQUEMAS: dict[str, type[BaseModel]] = {
+    f"{SINIESTRO_REPORTADO}.v1.schema.json": SobreEvento[SiniestroReportadoV1],
     f"{SINIESTRO_EN_EVALUACION}.v1.schema.json": SobreEvento[SiniestroEnEvaluacionV1],
     f"{SINIESTRO_APROBADO}.v1.schema.json": SobreEvento[SiniestroAprobadoV1],
     f"{SINIESTRO_RECHAZADO}.v1.schema.json": SobreEvento[SiniestroRechazadoV1],

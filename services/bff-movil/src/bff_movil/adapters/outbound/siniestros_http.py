@@ -37,11 +37,103 @@ class SiniestrosHttp:
         base_url: str,
         timeout_ms: int,
         proteccion: Proteccion | None = None,
+        *,
+        escritura_timeout_ms: int = 15000,
     ) -> None:
         self._cliente = cliente
         self._base_url = base_url.rstrip("/")
         self._timeout_ms = timeout_ms
         self._proteccion = proteccion or SinProteccion()
+        self._escritura_timeout_ms = escritura_timeout_ms
+        self._proteccion_escritura = proteccion or SinProteccion(corte_duro_ms=escritura_timeout_ms)
+
+    async def _reporte(
+        self,
+        operacion: str,
+        metodo: str,
+        ruta: str,
+        actor_id: str,
+        cuerpo: dict[str, Any] | None = None,
+        clave: UUID | None = None,
+        params: dict[str, str] | None = None,
+        *,
+        escritura: bool = False,
+    ) -> dict[str, Any]:
+        async def llamar(timeout_s: float) -> dict[str, Any]:
+            cabeceras = self._cabeceras(actor_id)
+            if clave is not None:
+                cabeceras["Idempotency-Key"] = str(clave)
+            respuesta = await self._cliente.request(
+                metodo,
+                f"{self._base_url}{ruta}",
+                headers=cabeceras,
+                json=cuerpo,
+                params=params,
+                timeout=timeout_s,
+            )
+            if metodo == "DELETE" and respuesta.status_code == 204:
+                return {}
+            return self._json_ok(respuesta, estados_ok={200, 201})
+
+        return await self._ejecutar(operacion, llamar, escritura=escritura)
+
+    async def actualizar_borrador(
+        self, actor_id: str, borrador_id: UUID, cambios: dict[str, Any]
+    ) -> dict[str, Any]:
+        return await self._reporte(
+            "siniestros.borrador.actualizar",
+            "PATCH",
+            f"/v1/siniestros/borradores/{borrador_id}",
+            actor_id,
+            cambios,
+        )
+
+    async def enviar_borrador(
+        self, actor_id: str, borrador_id: UUID, clave: UUID, poliza: Poliza | None
+    ) -> dict[str, Any]:
+        return await self._reporte(
+            "siniestros.borrador.enviar",
+            "POST",
+            f"/v1/siniestros/borradores/{borrador_id}/envio",
+            actor_id,
+            {"copiaPoliza": _copia_poliza(poliza) if poliza is not None else None},
+            clave,
+            escritura=True,
+        )
+
+    async def eliminar_evidencia(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID
+    ) -> None:
+        await self._reporte(
+            "siniestros.borrador.evidencia.eliminar",
+            "DELETE",
+            f"/v1/siniestros/borradores/{borrador_id}/evidencias/{evidencia_id}",
+            actor_id,
+        )
+
+    async def listar_siniestros(
+        self, actor_id: str, cliente_id: UUID, limite: int, cursor: str | None
+    ) -> dict[str, Any]:
+        params = {"limite": str(limite)}
+        if cursor is not None:
+            params["cursor"] = cursor
+        return await self._reporte(
+            "siniestros.propios.listar",
+            "GET",
+            f"/v1/clientes/{cliente_id}/siniestros",
+            actor_id,
+            params=params,
+        )
+
+    async def consultar_siniestro(
+        self, actor_id: str, cliente_id: UUID, siniestro_id: UUID
+    ) -> dict[str, Any]:
+        return await self._reporte(
+            "siniestros.propio.consultar",
+            "GET",
+            f"/v1/clientes/{cliente_id}/siniestros/{siniestro_id}",
+            actor_id,
+        )
 
     async def limites(self, actor_id: str) -> dict[str, Any]:
         return await self._ejecutar(
@@ -92,6 +184,7 @@ class SiniestrosHttp:
             lambda timeout_s: self._confirmar_evidencia(
                 actor_id, borrador_id, evidencia_id, timeout_s
             ),
+            escritura=True,
         )
 
     async def renovar_carga(
@@ -102,11 +195,13 @@ class SiniestrosHttp:
             lambda timeout_s: self._renovar_carga(actor_id, borrador_id, evidencia_id, timeout_s),
         )
 
-    async def _ejecutar[T](self, clave: str, llamada: Callable[[float], Awaitable[T]]) -> T:
+    async def _ejecutar[T](
+        self, clave: str, llamada: Callable[[float], Awaitable[T]], *, escritura: bool = False
+    ) -> T:
+        proteccion = self._proteccion_escritura if escritura else self._proteccion
+        timeout_ms = self._escritura_timeout_ms if escritura else self._timeout_ms
         try:
-            return await self._proteccion.ejecutar(
-                clave, "siniestros", llamada, self._timeout_ms, None
-            )
+            return await proteccion.ejecutar(clave, "siniestros", llamada, timeout_ms, None)
         except TiempoAgotado as error:
             raise ServicioNoDisponible("TIEMPO_AGOTADO") from error
         except DependenciaNoDisponible as error:

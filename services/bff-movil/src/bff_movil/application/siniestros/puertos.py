@@ -5,6 +5,26 @@ from bff_movil.domain.polizas.modelos import Poliza
 
 
 class SiniestrosApi(Protocol):
+    async def actualizar_borrador(
+        self, actor_id: str, borrador_id: UUID, cambios: dict[str, Any]
+    ) -> dict[str, Any]: ...
+
+    async def enviar_borrador(
+        self, actor_id: str, borrador_id: UUID, clave: UUID, poliza: Poliza | None
+    ) -> dict[str, Any]: ...
+
+    async def eliminar_evidencia(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID
+    ) -> None: ...
+
+    async def listar_siniestros(
+        self, actor_id: str, cliente_id: UUID, limite: int, cursor: str | None
+    ) -> dict[str, Any]: ...
+
+    async def consultar_siniestro(
+        self, actor_id: str, cliente_id: UUID, siniestro_id: UUID
+    ) -> dict[str, Any]: ...
+
     async def limites(self, actor_id: str) -> dict[str, Any]: ...
 
     async def listar_borradores(self, actor_id: str) -> dict[str, Any]: ...

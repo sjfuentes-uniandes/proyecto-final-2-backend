@@ -21,6 +21,7 @@ from siniestros.adapters.outbound.eventos import (
     SINIESTRO_CONSULTADO,
     SINIESTRO_EN_EVALUACION,
     SINIESTRO_RECHAZADO,
+    SINIESTRO_REPORTADO,
     SINIESTRO_SOPORTE_SOLICITADO,
     AccesoSiniestroDenegadoV1,
     EvidenciaConsultadaV1,
@@ -28,6 +29,7 @@ from siniestros.adapters.outbound.eventos import (
     SiniestroConsultadoV1,
     SiniestroEnEvaluacionV1,
     SiniestroRechazadoV1,
+    SiniestroReportadoV1,
     SiniestroSoporteSolicitadoV1,
     SobreEvento,
 )
@@ -58,6 +60,18 @@ def _validador(tipo: str) -> Draft202012Validator:
 
 
 EJEMPLOS = [
+    (
+        SINIESTRO_REPORTADO,
+        SiniestroReportadoV1(
+            siniestro_id=SINIESTRO,
+            codigo="88-2026-1000",
+            origen="MOVIL",
+            estado="REPORTADO",
+            poliza_id=uuid4(),
+            cliente_id=uuid4(),
+            reportado_en=AHORA,
+        ),
+    ),
     (
         SINIESTRO_EN_EVALUACION,
         SiniestroEnEvaluacionV1(
@@ -136,7 +150,7 @@ EJEMPLOS = [
 ]
 
 
-def test_los_siete_eventos_se_publican() -> None:
+def test_los_eventos_se_publican() -> None:
     assert sorted(ESQUEMAS) == [
         "AccesoSiniestroDenegado.v1.schema.json",
         "EvidenciaConsultada.v1.schema.json",
@@ -144,6 +158,7 @@ def test_los_siete_eventos_se_publican() -> None:
         "SiniestroConsultado.v1.schema.json",
         "SiniestroEnEvaluacion.v1.schema.json",
         "SiniestroRechazado.v1.schema.json",
+        "SiniestroReportado.v1.schema.json",
         "SiniestroSoporteSolicitado.v1.schema.json",
     ]
 
@@ -163,7 +178,8 @@ def test_cada_evento_cumple_su_esquema(tipo: str, payload: BaseModel) -> None:
 
 
 def test_la_evidencia_consultada_no_lleva_url_ni_clave_de_objeto() -> None:
-    payload = _sobre(*EJEMPLOS[2])["payload"]
+    ejemplo = next(e for e in EJEMPLOS if e[0] == EVIDENCIA_CONSULTADA)
+    payload = _sobre(*ejemplo)["payload"]
     assert set(payload) == {"siniestroId", "evidenciaId", "actorId", "expiraEn"}
 
 

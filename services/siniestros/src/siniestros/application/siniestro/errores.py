@@ -43,9 +43,24 @@ class BorradorNoEncontrado(ErrorNegocio):
 
 
 class EvidenciaNoCargada(ErrorNegocio):
+    def __init__(self, evidencias: Sequence[str] = ()) -> None:
+        super().__init__(
+            "EVIDENCIA_NO_CARGADA",
+            "El archivo no está disponible para confirmar",
+            409,
+            {"evidencias": list(evidencias)} if evidencias else {},
+        )
+
+
+class BorradorConvertido(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("BORRADOR_CONVERTIDO", "El borrador ya fue enviado", 409)
+
+
+class BorradorModificado(ErrorNegocio):
     def __init__(self) -> None:
         super().__init__(
-            "EVIDENCIA_NO_CARGADA", "El archivo no está disponible para confirmar", 409
+            "BORRADOR_MODIFICADO", "El borrador cambió durante el envío; consulte y reintente", 409
         )
 
 

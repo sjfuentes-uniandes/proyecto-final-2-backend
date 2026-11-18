@@ -3,8 +3,8 @@
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Path, Request
-from pydantic import AwareDatetime, Field, field_validator, model_validator
+from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
+from pydantic import AwareDatetime, ConfigDict, Field, field_validator, model_validator
 from solventa_common.errors import ErrorNegocio
 
 from bff_movil.adapters.inbound.http.auth import IdentidadAutenticada, autenticar
@@ -16,12 +16,17 @@ from bff_movil.adapters.inbound.http.codigos import (
 )
 from bff_movil.adapters.inbound.http.comun import CABECERAS, Dto, error
 from bff_movil.application.siniestros.casos import (
+    ActualizarBorrador,
     AgregarEvidencia,
     ConfirmarEvidencia,
     ConsultarBorrador,
     ConsultarLimitesEvidencia,
+    ConsultarSiniestro,
     CrearBorrador,
+    EliminarEvidencia,
+    EnviarBorrador,
     ListarBorradores,
+    ListarSiniestros,
     RenovarCargaEvidencia,
 )
 from bff_movil.domain.polizas.modelos import PolizaNoAutorizada, PolizaNoEncontrada
@@ -62,6 +67,50 @@ class BorradorDto(Dto):
     borrador_id: UUID
     poliza_id: UUID
     estado: str
+
+
+class EnvioDto(Dto):
+    borrador_id: UUID
+    siniestro_id: UUID
+    codigo: str = Field(pattern=r"^88-[0-9]{4}-[0-9]{4,}$")
+    estado: Literal["REPORTADO"]
+    reportado_en: AwareDatetime
+
+
+class SolicitudEnvio(Dto):
+    """El envio no modifica datos: se envian los datos guardados mediante PATCH."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ActualizacionBorrador(Dto):
+    model_config = ConfigDict(extra="forbid")
+
+    descripcion: str | None = Field(default=None, min_length=1, max_length=2000)
+    causa: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=64,
+        description="Codigo de cobertura/amparo de la poliza, separado de descripcion",
+    )
+    fecha_evento: AwareDatetime | None = Field(
+        default=None, description="Fecha real del evento, con zona horaria; obligatoria al enviar"
+    )
+
+    @field_validator("descripcion", "causa")
+    @classmethod
+    def _texto_no_vacio(cls, valor: str | None) -> str | None:
+        if valor is not None and not valor.strip():
+            raise ValueError("el texto no puede estar vacio")
+        return valor.strip() if valor is not None else None
+
+    @model_validator(mode="after")
+    def _cambios_validos(self) -> "ActualizacionBorrador":
+        if not self.model_fields_set:
+            raise ValueError("se requiere al menos un campo")
+        if "descripcion" in self.model_fields_set and self.descripcion is None:
+            raise ValueError("descripcion no puede ser null")
+        return self
 
 
 class SolicitudEvidencia(Dto):
@@ -105,10 +154,14 @@ class BorradorResumenDto(Dto):
     borrador_id: UUID
     poliza_id: UUID
     descripcion: str
-    estado: Literal["ABIERTO"]
+    estado: Literal["ABIERTO", "CONVERTIDO"]
     creado_en: AwareDatetime
     cantidad_evidencias: int
     evidencias_pendientes: int
+    causa: str | None = None
+    fecha_evento: AwareDatetime | None = None
+    version: int
+    envio: EnvioDto | None = None
 
 
 class EvidenciaBorradorDto(Dto):
@@ -144,6 +197,47 @@ class CargaRenovadaDto(Dto):
     carga: CargaDto
 
 
+EstadoSiniestro = Literal["REPORTADO", "EN_EVALUACION", "FALTA_SOPORTE", "APROBADO", "RECHAZADO"]
+
+
+class SiniestroResumenDto(Dto):
+    siniestro_id: UUID
+    codigo: str
+    origen: Literal["MOVIL", "PORTAL", "PARAMETRICO"]
+    estado: EstadoSiniestro
+    poliza_id: UUID
+    reportado_en: AwareDatetime
+
+
+class ListadoSiniestrosDto(Dto):
+    items: list[SiniestroResumenDto]
+    siguiente_cursor: str | None
+
+
+class EvidenciaReporteDto(Dto):
+    evidencia_id: UUID
+    nombre_archivo: str
+    tipo: Literal["FOTOGRAFIA", "VIDEO", "SOPORTE"]
+    tipo_contenido: str | None
+    tamano_bytes: int | None
+    capturada_en: AwareDatetime | None
+
+
+class HitoReporteDto(Dto):
+    accion: str
+    estado_anterior: EstadoSiniestro | None
+    estado_nuevo: EstadoSiniestro | None
+    ocurrido_en: AwareDatetime
+
+
+class SiniestroDetalleDto(SiniestroResumenDto):
+    descripcion: str | None
+    causa: str
+    fecha_evento: AwareDatetime
+    evidencias: list[EvidenciaReporteDto]
+    historial: list[HitoReporteDto]
+
+
 _NO_AUTENTICADO = error("NO_AUTENTICADO: se requiere un cliente autenticado")
 _ROL = error("ROL_NO_AUTORIZADO: el token no es del pool de clientes")
 _NO_DISPONIBLE = error("SERVICIO_NO_DISPONIBLE: no se pudo consultar o crear el reporte")
@@ -153,8 +247,8 @@ _EVIDENCIA_INVALIDA = error(
     "TIPO_EVIDENCIA_NO_ADMITIDO, TAMANO_EVIDENCIA_EXCEDIDO, DURACION_VIDEO_EXCEDIDA "
     "o LIMITE_EVIDENCIAS_ALCANZADO"
 )
-_EVIDENCIA_NO_CARGADA = error("EVIDENCIA_NO_CARGADA")
-_EVIDENCIA_YA_CONFIRMADA = error("EVIDENCIA_YA_CONFIRMADA")
+_EVIDENCIA_NO_CARGADA = error("EVIDENCIA_NO_CARGADA o BORRADOR_CONVERTIDO")
+_EVIDENCIA_YA_CONFIRMADA = error("EVIDENCIA_YA_CONFIRMADA o BORRADOR_CONVERTIDO")
 _INTEGRIDAD_INVALIDA = error("INTEGRIDAD_EVIDENCIA_INVALIDA")
 
 
@@ -172,6 +266,123 @@ def _error_poliza_no_autorizada() -> ErrorNegocio:
 
 def _error_no_disponible() -> ErrorNegocio:
     return ErrorNegocio(SERVICIO_NO_DISPONIBLE, "Servicio no disponible", 503)
+
+
+@router.patch(
+    "/borradores/{borradorId}",
+    response_model=BorradorDetalleDto,
+    responses={
+        401: _NO_AUTENTICADO,
+        403: _ROL,
+        404: _BORRADOR_NO_ENCONTRADO,
+        409: error("BORRADOR_CONVERTIDO"),
+        422: error("SOLICITUD_INVALIDA"),
+        503: _NO_DISPONIBLE,
+    },
+)
+async def actualizar_borrador(
+    borrador_id: Annotated[UUID, Path(alias="borradorId")],
+    solicitud: ActualizacionBorrador,
+    request: Request,
+    identidad: Annotated[IdentidadAutenticada, Depends(autenticar)],
+) -> BorradorDetalleDto:
+    caso: ActualizarBorrador = request.app.state.actualizar_borrador
+    try:
+        return BorradorDetalleDto.model_validate(
+            await caso.ejecutar(
+                identidad.sub,
+                borrador_id,
+                solicitud.model_dump(by_alias=True, exclude_unset=True, mode="json"),
+            )
+        )
+    except ServicioNoDisponible as error:
+        raise _error_no_disponible() from error
+
+
+@router.post(
+    "/borradores/{borradorId}/envio",
+    status_code=201,
+    response_model=EnvioDto,
+    responses={
+        401: _NO_AUTENTICADO,
+        403: error("ROL_NO_AUTORIZADO o POLIZA_NO_AUTORIZADA"),
+        404: error("BORRADOR_NO_ENCONTRADO, CLIENTE_NO_ENCONTRADO o POLIZA_NO_ENCONTRADA"),
+        409: error("POLIZA_NO_VIGENTE, EVIDENCIA_NO_CARGADA o BORRADOR_MODIFICADO"),
+        422: error("SOLICITUD_INVALIDA, IDEMPOTENCIA_CONFLICTO o INTEGRIDAD_EVIDENCIA_INVALIDA"),
+        503: _NO_DISPONIBLE,
+    },
+)
+async def enviar_borrador(
+    borrador_id: Annotated[UUID, Path(alias="borradorId")],
+    request: Request,
+    identidad: Annotated[IdentidadAutenticada, Depends(autenticar)],
+    clave: Annotated[UUID, Header(alias="Idempotency-Key")],
+    solicitud: SolicitudEnvio | None = None,
+) -> EnvioDto:
+    caso: EnviarBorrador = request.app.state.enviar_borrador
+    try:
+        return EnvioDto.model_validate(await caso.ejecutar(identidad.sub, borrador_id, clave))
+    except ClienteNoEncontrado as error:
+        raise _error_cliente_no_encontrado() from error
+    except PolizaNoEncontrada as error:
+        raise _error_poliza_no_encontrada() from error
+    except PolizaNoAutorizada as error:
+        raise _error_poliza_no_autorizada() from error
+    except ServicioNoDisponible as error:
+        raise _error_no_disponible() from error
+
+
+@router.delete(
+    "/borradores/{borradorId}/evidencias/{evidenciaId}",
+    status_code=204,
+    responses={
+        401: _NO_AUTENTICADO,
+        403: _ROL,
+        404: _BORRADOR_NO_ENCONTRADO,
+        409: error("BORRADOR_CONVERTIDO"),
+        503: _NO_DISPONIBLE,
+    },
+)
+async def eliminar_evidencia(
+    borrador_id: Annotated[UUID, Path(alias="borradorId")],
+    evidencia_id: Annotated[UUID, Path(alias="evidenciaId")],
+    request: Request,
+    identidad: Annotated[IdentidadAutenticada, Depends(autenticar)],
+) -> Response:
+    caso: EliminarEvidencia = request.app.state.eliminar_evidencia
+    try:
+        await caso.ejecutar(identidad.sub, borrador_id, evidencia_id)
+    except ServicioNoDisponible as error:
+        raise _error_no_disponible() from error
+    return Response(status_code=204)
+
+
+@router.get(
+    "",
+    response_model=ListadoSiniestrosDto,
+    responses={
+        401: _NO_AUTENTICADO,
+        403: _ROL,
+        404: error("CLIENTE_NO_ENCONTRADO"),
+        422: error("SOLICITUD_INVALIDA"),
+        503: _NO_DISPONIBLE,
+    },
+)
+async def listar_siniestros(
+    request: Request,
+    identidad: Annotated[IdentidadAutenticada, Depends(autenticar)],
+    limite: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
+) -> ListadoSiniestrosDto:
+    caso: ListarSiniestros = request.app.state.listar_siniestros
+    try:
+        return ListadoSiniestrosDto.model_validate(
+            await caso.ejecutar(identidad.sub, limite, cursor)
+        )
+    except ClienteNoEncontrado as error:
+        raise _error_cliente_no_encontrado() from error
+    except ServicioNoDisponible as error:
+        raise _error_no_disponible() from error
 
 
 @router.get(
@@ -295,6 +506,7 @@ async def crear_borrador(
         403: _ROL,
         404: _BORRADOR_NO_ENCONTRADO,
         400: error("SOLICITUD_INVALIDA"),
+        409: error("BORRADOR_CONVERTIDO"),
         422: _EVIDENCIA_INVALIDA,
         503: _NO_DISPONIBLE,
     },
@@ -369,5 +581,29 @@ async def renovar_carga(
         return CargaRenovadaDto.model_validate(
             await caso.ejecutar(identidad.sub, borrador_id, evidencia_id)
         )
+    except ServicioNoDisponible as error:
+        raise _error_no_disponible() from error
+
+
+@router.get(
+    "/{siniestroId}",
+    response_model=SiniestroDetalleDto,
+    responses={
+        401: _NO_AUTENTICADO,
+        403: _ROL,
+        404: error("SINIESTRO_NO_ENCONTRADO o CLIENTE_NO_ENCONTRADO"),
+        503: _NO_DISPONIBLE,
+    },
+)
+async def consultar_siniestro(
+    siniestro_id: Annotated[UUID, Path(alias="siniestroId")],
+    request: Request,
+    identidad: Annotated[IdentidadAutenticada, Depends(autenticar)],
+) -> SiniestroDetalleDto:
+    caso: ConsultarSiniestro = request.app.state.consultar_siniestro
+    try:
+        return SiniestroDetalleDto.model_validate(await caso.ejecutar(identidad.sub, siniestro_id))
+    except ClienteNoEncontrado as error:
+        raise _error_cliente_no_encontrado() from error
     except ServicioNoDisponible as error:
         raise _error_no_disponible() from error

@@ -19,7 +19,11 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
-from siniestros.application.siniestro.errores import DependenciaNoDisponible
+from siniestros.application.siniestro.errores import (
+    DependenciaNoDisponible,
+    EvidenciaNoCargada,
+    IntegridadEvidenciaInvalida,
+)
 from siniestros.domain.siniestro.modelos import IntegridadEvidencia
 
 logger = logging.getLogger("siniestros.evidencias")
@@ -63,17 +67,107 @@ class EvidenciasS3:
         bucket: str,
         timeout_ms: int,
         cliente_firma: Any | None = None,
+        *,
+        cliente_conservacion: Any | None = None,
+        conservacion_timeout_ms: int = 2000,
     ) -> None:
         self._cliente = cliente
         self._firma = cliente_firma or cliente
         self._bucket = bucket
         self._timeout_s = timeout_ms / 1000
+        self._conservacion = cliente_conservacion or cliente
+        self._conservacion_timeout_s = conservacion_timeout_ms / 1000
 
-    def _head(self, clave: str) -> dict[str, Any]:
-        respuesta: dict[str, Any] = self._cliente.head_object(
+    def _head(self, clave: str, *, cliente: Any | None = None) -> dict[str, Any]:
+        respuesta: dict[str, Any] = (cliente or self._cliente).head_object(
             Bucket=self._bucket, Key=clave, ChecksumMode="ENABLED"
         )
         return respuesta
+
+    @staticmethod
+    def _validar_archivo(
+        datos: dict[str, Any], sha256: str, tamano_bytes: int, tipo_contenido: str
+    ) -> None:
+        if not datos.get("ChecksumSHA256"):
+            raise DependenciaNoDisponible("evidencias")
+        if (
+            datos["ChecksumSHA256"] != checksum_base64(sha256)
+            or datos.get("ContentLength") != tamano_bytes
+            or datos.get("ContentType") != tipo_contenido
+        ):
+            raise IntegridadEvidenciaInvalida
+
+    def _conservar(
+        self,
+        origen: str,
+        destino: str,
+        sha256: str,
+        tamano_bytes: int,
+        tipo_contenido: str,
+        cifrado: str,
+    ) -> None:
+        try:
+            existente = self._head(destino, cliente=self._conservacion)
+        except ClientError as error:
+            codigo = str(error.response.get("Error", {}).get("Code", ""))
+            if codigo in {"403", "AccessDenied"}:
+                # Sin ListBucket, HEAD de un destino ausente devuelve 403. No se asume ausente:
+                # se exige origen verificable, copia autorizada y verificacion final del destino.
+                logger.info(
+                    "s3: destino no comprobable; se verificara la copia",
+                    extra={"error_type": codigo},
+                )
+            elif codigo not in _AUSENTE:
+                raise
+        else:
+            self._validar_archivo(existente, sha256, tamano_bytes, tipo_contenido)
+            return
+        fuente = self._head(origen, cliente=self._conservacion)
+        self._validar_archivo(fuente, sha256, tamano_bytes, tipo_contenido)
+        copia = {"Bucket": self._bucket, "Key": origen}
+        if fuente.get("VersionId"):
+            copia["VersionId"] = fuente["VersionId"]
+        # Se copia exactamente la version verificada, no un objeto sustituido durante el envio.
+        self._conservacion.copy_object(
+            Bucket=self._bucket,
+            Key=destino,
+            CopySource=copia,
+            CopySourceIfMatch=fuente["ETag"],
+            ChecksumAlgorithm="SHA256",
+            ServerSideEncryption=cifrado,
+            MetadataDirective="COPY",
+        )
+        self._validar_archivo(
+            self._head(destino, cliente=self._conservacion), sha256, tamano_bytes, tipo_contenido
+        )
+
+    async def conservar(
+        self,
+        origen: str,
+        destino: str,
+        sha256: str,
+        tamano_bytes: int,
+        tipo_contenido: str,
+        cifrado: str,
+    ) -> None:
+        try:
+            await asyncio.wait_for(
+                asyncio.to_thread(
+                    self._conservar, origen, destino, sha256, tamano_bytes, tipo_contenido, cifrado
+                ),
+                timeout=self._conservacion_timeout_s,
+            )
+        except ClientError as error:
+            codigo = str(error.response.get("Error", {}).get("Code", ""))
+            if codigo in _AUSENTE:
+                raise EvidenciaNoCargada from error
+            logger.warning("s3: no se pudo conservar la evidencia", extra={"error_type": codigo})
+            raise DependenciaNoDisponible("evidencias") from error
+        except (TimeoutError, BotoCoreError) as error:
+            logger.warning(
+                "s3: no se pudo conservar la evidencia", extra={"error_type": type(error).__name__}
+            )
+            raise DependenciaNoDisponible("evidencias") from error
 
     async def verificar(self, clave: str, sha256: str) -> IntegridadEvidencia:
         try:
@@ -180,6 +274,17 @@ class AlmacenSinConfigurar:
 
     async def verificar(self, clave: str, sha256: str) -> IntegridadEvidencia:
         return IntegridadEvidencia.NO_VERIFICABLE
+
+    async def conservar(
+        self,
+        origen: str,
+        destino: str,
+        sha256: str,
+        tamano_bytes: int,
+        tipo_contenido: str,
+        cifrado: str,
+    ) -> None:
+        raise DependenciaNoDisponible("evidencias")
 
     async def firmar_lectura(self, clave: str, ttl_s: int, tipo_contenido: str) -> str:
         raise DependenciaNoDisponible("evidencias")

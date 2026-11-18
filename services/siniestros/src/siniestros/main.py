@@ -14,6 +14,7 @@ from siniestros.adapters.inbound.http import borradores, decisiones
 from siniestros.adapters.inbound.http import siniestros as http
 from siniestros.adapters.inbound.sqs.indemnizaciones import manejador_indemnizaciones
 from siniestros.adapters.outbound.base_de_datos import migrar
+from siniestros.adapters.outbound.envios_pg import EnviosPg
 from siniestros.adapters.outbound.evidencias_s3 import (
     AlmacenSinConfigurar,
     EvidenciasS3,
@@ -29,6 +30,7 @@ from siniestros.application.siniestro.borradores import Borradores
 from siniestros.application.siniestro.decidir import Decidir
 from siniestros.application.siniestro.detalle import ConsultarDetalle
 from siniestros.application.siniestro.enlace import EmitirEnlace
+from siniestros.application.siniestro.envio import EnviarBorrador
 from siniestros.application.siniestro.plazos import VencerPlazosSoporte
 from siniestros.application.siniestro.puertos import AlmacenEvidencias, Reloj
 from siniestros.application.siniestro.resultado_pago import RegistrarResultadoPago
@@ -133,7 +135,17 @@ def armar_almacen(settings: Settings) -> AlmacenEvidencias:
         if settings.evidencias_endpoint_publico
         else cliente
     )
-    return EvidenciasS3(cliente, settings.evidencias_bucket, settings.s3_timeout_ms, firma)
+    conservacion = cliente_s3(
+        settings.aws_region, settings.s3_conservacion_timeout_ms, settings.aws_endpoint_url
+    )
+    return EvidenciasS3(
+        cliente,
+        settings.evidencias_bucket,
+        settings.s3_timeout_ms,
+        firma,
+        cliente_conservacion=conservacion,
+        conservacion_timeout_ms=settings.s3_conservacion_timeout_ms,
+    )
 
 
 @dataclass(frozen=True)
@@ -354,6 +366,12 @@ def crear_app(
                 app.state.borradores = Borradores(
                     SiniestrosPg(pool_activo), almacen_activo, reloj_activo, settings
                 )
+                app.state.enviar_borrador = EnviarBorrador(
+                    EnviosPg(pool_activo),
+                    almacen_activo,
+                    reloj_activo,
+                    settings.evidencias_bucket_sse,
+                )
                 app.state.servicios = armar_servicios(
                     pool_activo, almacen_activo, reloj_activo, settings
                 )
@@ -377,6 +395,7 @@ def crear_app(
     # Primero la decisión: `/catalogos-decision` va antes de `/{siniestroId}`.
     app.include_router(decisiones.router)
     app.include_router(borradores.router_borradores)
+    app.include_router(borradores.router_cliente)
     app.include_router(http.router)
     app.include_router(http.router_accesos)
 

@@ -1,0 +1,99 @@
+{
+  "$defs": {
+    "SiniestroReportadoV1": {
+      "description": "Reporte movil confirmado; sin descripcion, archivos ni datos personales.",
+      "properties": {
+        "clienteId": {
+          "format": "uuid",
+          "title": "Clienteid",
+          "type": "string"
+        },
+        "codigo": {
+          "pattern": "^88-[0-9]{4}-[0-9]{4,}$",
+          "title": "Codigo",
+          "type": "string"
+        },
+        "estado": {
+          "const": "REPORTADO",
+          "title": "Estado",
+          "type": "string"
+        },
+        "origen": {
+          "const": "MOVIL",
+          "title": "Origen",
+          "type": "string"
+        },
+        "polizaId": {
+          "format": "uuid",
+          "title": "Polizaid",
+          "type": "string"
+        },
+        "reportadoEn": {
+          "format": "date-time",
+          "title": "Reportadoen",
+          "type": "string"
+        },
+        "siniestroId": {
+          "format": "uuid",
+          "title": "Siniestroid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "siniestroId",
+        "codigo",
+        "origen",
+        "estado",
+        "polizaId",
+        "clienteId",
+        "reportadoEn"
+      ],
+      "title": "SiniestroReportadoV1",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/SiniestroReportadoV1"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreEvento[SiniestroReportadoV1]",
+  "type": "object"
+}

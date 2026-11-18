@@ -43,6 +43,18 @@ class SoportesRequeridos(Protocol):
 
 
 class AlmacenEvidencias(Protocol):
+    async def conservar(
+        self,
+        origen: str,
+        destino: str,
+        sha256: str,
+        tamano_bytes: int,
+        tipo_contenido: str,
+        cifrado: str,
+    ) -> None:
+        """Verifica y conserva el archivo fuera de tmp; repetir recupera la misma copia."""
+        ...
+
     async def verificar(self, clave: str, sha256: str) -> IntegridadEvidencia:
         """Compara el checksum del objeto con `sha256` sin descargarlo. Nunca lanza: un objeto
         ausente es `NO_DISPONIBLE`; un fallo o un corte por tiempo, `NO_VERIFICABLE`."""

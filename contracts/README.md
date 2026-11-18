@@ -141,6 +141,83 @@ Contrato entre `catalogo` (escribe e invalida) y `cotizacion` (solo lee), según
 - **Lectura en `cotizacion`:** usa las reglas guardadas solo si su `vigenteDesde` ≤ la fecha de la cotización; un valor fuera del contrato o una falla de Valkey (timeout de 50 ms, circuito) es un fallo de caché y va a `catalogo` por HTTP. Sin `CACHE_URL`, una caché TTL en memoria por réplica.
 - **Prefijo `v1`:** si cambia la forma del valor, se cambia el prefijo en ambos servicios a la vez.
 
+## Envío móvil de siniestros (HU-M01)
+
+Contratos: [BFF móvil](openapi/bff-movil.yaml), [siniestros](openapi/siniestros.yaml)
+y [evento SiniestroReportado v1](events/SiniestroReportado.v1.schema.json).
+El borrador no es un reporte definitivo. Flujo para Android:
+
+1. `POST /v1/siniestros/borradores` con `polizaId`, `descripcion` e `Idempotency-Key` UUID.
+2. `PATCH /v1/siniestros/borradores/{borradorId}` completa/corrige `descripcion`, `causa`
+   y `fechaEvento`. `causa` es el **código de cobertura/amparo**, no texto libre.
+   `fechaEvento` es un instante explícito con zona, por ejemplo `2026-11-17T10:00:00-05:00`;
+   no se sustituye por la fecha del envío. No puede ser futura ni estar fuera de la
+   vigencia de la póliza (fechas de vigencia evaluadas en Bogotá).
+   `causa` y `fechaEvento` pueden borrarse con `null`, pero deben completarse al enviar.
+3. Agregar, cargar y confirmar **al menos una evidencia**. Todas las incluidas deben
+   estar `CARGADA`. La confirmación verifica SHA-256, tamaño y MIME y conserva el
+   objeto fuera de `tmp/`; la limpieza temporal no elimina esa copia.
+   `DELETE .../{borradorId}/evidencias/{evidenciaId}` quita una referencia mientras
+   el borrador siga abierto; no elimina físicamente el archivo.
+4. `POST /v1/siniestros/borradores/{borradorId}/envio`, con `Idempotency-Key` UUID y
+   sin cuerpo o `{}`. No admite datos adicionales; se envía la versión guardada.
+   La póliza propia debe seguir `ACTIVA` y vigente. Devuelve **201**, también en reintentos:
+
+   ```json
+   {
+     "borradorId": "<uuid>",
+     "siniestroId": "<uuid>",
+     "codigo": "88-2026-1000",
+     "estado": "REPORTADO",
+     "reportadoEn": "2026-11-18T15:00:00Z"
+   }
+   ```
+
+El siniestro `MOVIL`, evidencias, historial, evento de outbox, cierre del borrador y
+resultado idempotente se guardan en una transacción. Dos envíos concurrentes, incluso
+con claves distintas, recuperan el mismo caso. Reusar una clave para otro borrador
+produce `422 IDEMPOTENCIA_CONFLICTO`. La clave identifica la operación sobre el borrador;
+los datos se corrigen por PATCH antes del primer envío confirmado.
+
+Ante un error se conserva el mismo borrador y sus evidencias confirmadas. Tras un
+timeout, repetir el envío con la misma clave o consultar el borrador: `estado=CONVERTIDO`
+y `envio` recuperan la confirmación, aunque la póliza haya vencido después.
+Los convertidos desaparecen de `GET /v1/siniestros/borradores`.
+Las cargas no confirmadas siguen siendo temporales y pueden requerir renovar su URL y recargar.
+
+`GET /v1/siniestros?limite=20&cursor=...` lista definitivos del titular, y
+`GET /v1/siniestros/{siniestroId}` muestra estado **actual**, datos, evidencias e historial.
+El envío conserva su respuesta original `REPORTADO`, aunque el analista ya haya tomado el caso.
+El BFF obtiene el cliente del token; las rutas internas `/v1/clientes/{clienteId}/siniestros`
+confían en ese cliente resuelto por el BFF, como las consultas internas de pólizas.
+No se deben exponer esas rutas internas directamente al móvil.
+
+Los errores incluyen código estable, `correlationId` y `detalles.campos` cuando aplica.
+Falta de datos, causa no cubierta, fecha inválida o ausencia de evidencias: `422 SOLICITUD_INVALIDA`.
+Ver también [códigos de error](codigos-error.md).
+La consulta de pólizas no informa sumas por amparo: se representan con `null` en el
+detalle del analista (también en BFF web), sin inventar montos ni beneficiarios.
+La aprobación monetaria permanece bloqueada si faltan esos datos.
+
+### Despliegue
+
+Workflow **Infra - Desplegar**, ambiente `int`, alcance `microservicios`,
+servicios `siniestros,bff-movil,bff-web`, `probar=true`. La migración `006` se aplica
+al arrancar siniestros; no requiere desplegar plataforma ni bases.
+Esperar a que los tres servicios estén estables antes de probar Android.
+No se amplían los permisos IAM: `siniestros` sigue sin `ListBucket` ni `DeleteObject`.
+S3 puede devolver `403` para un destino ausente sin permiso de listado: en ese caso
+se intenta conservar solo tras verificar el origen y se exige verificar el destino final.
+Un origen inaccesible o una copia no verificable produce error, nunca confirmación.
+No revertir la migración si existen borradores convertidos: su reversa lo rechaza
+para conservar las confirmaciones y evitar reaperturas.
+
+La conservación S3 tiene corte independiente `S3_CONSERVACION_TIMEOUT_MS=2000`;
+la lectura del detalle mantiene `S3_TIMEOUT_MS=300`.
+Confirmación y envío en el BFF usan `SOLVENTA_SINIESTROS_ESCRITURA_TIMEOUT_MS=15000`,
+sin ampliar el corte de las consultas. Los timeouts no reintentan automáticamente:
+el móvil recupera la confirmación o reintenta el mismo borrador.
+
 ## Datos sintéticos
 
 Todos los datos son **100 % sintéticos**: Solventa no usa datos reales de clientes ni proveedores reales. El simulador sustituye a Open Finance y a Datos Abiertos, y así las pruebas, los logs y las trazas nunca exponen información personal o financiera de nadie. Los identificadores de perfilamiento siguen el patrón `00000000-0000-4000-8000-0000000000NN`; los `consentimientoId` del stub, `00000000-0000-4000-9000-0000000000NN`.

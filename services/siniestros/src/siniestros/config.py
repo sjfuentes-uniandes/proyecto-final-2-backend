@@ -83,6 +83,9 @@ class Settings(ServiceSettings):
     # Corte de cada HeadObject al verificar la integridad (DS3-06). Si vence, la evidencia queda
     # NO_VERIFICABLE y el detalle responde igual.
     s3_timeout_ms: int = Field(300, ge=1, le=5000, validation_alias=_env("S3_TIMEOUT_MS"))
+    s3_conservacion_timeout_ms: int = Field(
+        2000, ge=1, le=10000, validation_alias=_env("S3_CONSERVACION_TIMEOUT_MS")
+    )
 
     # HU-W19 (DS3-04): compromiso de 48 h y umbrales de la prioridad derivada (ALTA < 8 h,
     # MEDIA < 24 h de tiempo restante).

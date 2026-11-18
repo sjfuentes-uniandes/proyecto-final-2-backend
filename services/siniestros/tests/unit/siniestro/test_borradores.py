@@ -4,6 +4,7 @@ from uuid import UUID
 
 import pytest
 from siniestros.application.siniestro.borradores import Borradores, EvidenciaSolicitada
+from siniestros.application.siniestro.envio import clave_permanente
 from siniestros.application.siniestro.errores import (
     BorradorNoEncontrado,
     DependenciaNoDisponible,
@@ -57,8 +58,9 @@ class Repositorio:
         self.confirmaciones.append(argumentos)
         if self.carga is not None:
             self.carga["estadoCarga"] = "CARGADA"
-            self.carga["cargaConfirmadaEn"] = argumentos[-1]
-            return argumentos[-1]
+            self.carga["cargaConfirmadaEn"] = self.carga["cargaConfirmadaEn"] or argumentos[3]
+            self.carga["claveObjeto"] = argumentos[4]
+            return self.carga["cargaConfirmadaEn"]
         return None
 
 
@@ -75,6 +77,23 @@ class Almacen:
     async def verificar(self, clave: str, sha256: str) -> IntegridadEvidencia:
         self.verificaciones.append((clave, sha256))
         return self.integridad
+
+    async def conservar(
+        self,
+        origen: str,
+        destino: str,
+        sha256: str,
+        tamano_bytes: int,
+        tipo_contenido: str,
+        cifrado: str,
+    ) -> None:
+        integridad = await self.verificar(origen, sha256)
+        if integridad is IntegridadEvidencia.NO_DISPONIBLE:
+            raise EvidenciaNoCargada
+        if integridad is IntegridadEvidencia.ALTERADA:
+            raise IntegridadEvidenciaInvalida
+        if integridad is IntegridadEvidencia.NO_VERIFICABLE:
+            raise DependenciaNoDisponible("evidencias")
 
 
 class Reloj:
@@ -205,8 +224,8 @@ async def test_rechaza_video_mas_largo_que_el_limite() -> None:
 
 async def test_lista_y_consulta_borradores_con_estado_y_evidencias() -> None:
     casos, repo, _ = crear_borradores()
-    repo.borradores = [{"borradorId": BORRADOR_ID}]
-    repo.detalle = {"borradorId": BORRADOR_ID, "evidencias": []}
+    repo.borradores = [{"borradorId": BORRADOR_ID, "estado": "ABIERTO"}]
+    repo.detalle = {"borradorId": BORRADOR_ID, "evidencias": [], "estado": "ABIERTO"}
 
     listado = await casos.listar("actor")
     detalle = await casos.consultar("actor", BORRADOR_ID)
@@ -229,6 +248,8 @@ async def test_confirmar_verifica_s3_y_es_idempotente() -> None:
         "cargaConfirmadaEn": None,
         "claveObjeto": f"tmp/{BORRADOR_ID}/evidencia",
         "sha256": SHA256,
+        "tipoContenido": "image/jpeg",
+        "tamanoBytes": 123,
     }
 
     primera = await casos.confirmar_evidencia("actor", BORRADOR_ID, CLAVE)
@@ -243,8 +264,11 @@ async def test_confirmar_verifica_s3_y_es_idempotente() -> None:
             "cargaConfirmadaEn": AHORA,
         }
     )
-    assert almacen.verificaciones == [(f"tmp/{BORRADOR_ID}/evidencia", SHA256)]
-    assert len(repo.confirmaciones) == 1
+    assert almacen.verificaciones == [
+        (f"tmp/{BORRADOR_ID}/evidencia", SHA256),
+        (clave_permanente(BORRADOR_ID, CLAVE), SHA256),
+    ]
+    assert len(repo.confirmaciones) == 2
 
 
 @pytest.mark.parametrize(
@@ -264,6 +288,8 @@ async def test_confirmar_rechaza_objeto_ausente_alterado_o_no_verificable(
         "cargaConfirmadaEn": None,
         "claveObjeto": f"tmp/{BORRADOR_ID}/evidencia",
         "sha256": SHA256,
+        "tipoContenido": "image/jpeg",
+        "tamanoBytes": 123,
     }
     almacen.integridad = integridad
 

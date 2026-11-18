@@ -5,6 +5,7 @@ import hashlib
 import logging
 import time
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 from botocore.exceptions import BotoCoreError, ClientError, ConnectTimeoutError
@@ -73,6 +74,72 @@ async def test_el_objeto_integro_es_verificada_y_se_pide_el_checksum() -> None:
     assert cliente.llamadas == [
         {"Bucket": "bucket-evidencias", "Key": CLAVE, "ChecksumMode": "ENABLED"}
     ]
+
+
+async def test_conservar_tiene_su_corte_sin_ampliar_el_del_detalle() -> None:
+    cliente = ClienteFalso(
+        {
+            "ChecksumSHA256": checksum_base64(SHA),
+            "ContentLength": len(CONTENIDO),
+            "ContentType": "image/png",
+        },
+        demora_s=0.4,
+    )
+    s3 = almacen(cliente)
+    await s3.conservar("tmp/origen", CLAVE, SHA, len(CONTENIDO), "image/png", "AES256")
+    assert await s3.verificar(CLAVE, SHA) is IntegridadEvidencia.NO_VERIFICABLE
+    with pytest.raises(DependenciaNoDisponible):
+        await EvidenciasS3(cliente, "bucket-evidencias", 300, conservacion_timeout_ms=50).conservar(
+            "tmp/origen", CLAVE, SHA, len(CONTENIDO), "image/png", "AES256"
+        )
+
+
+@pytest.mark.parametrize("final_denegado", [False, True])
+async def test_destino_sin_listbucket_exige_origen_y_copia_verificados(
+    final_denegado: bool,
+) -> None:
+    cliente = Mock()
+    datos = {
+        "ChecksumSHA256": checksum_base64(SHA),
+        "ContentLength": len(CONTENIDO),
+        "ContentType": "image/png",
+        "ETag": '"etag"',
+        "VersionId": "version-origen",
+    }
+    cliente.head_object.side_effect = [
+        error_cliente("403"),
+        datos,
+        error_cliente("403") if final_denegado else datos,
+    ]
+    s3 = EvidenciasS3(cliente, "bucket-evidencias", 300)
+    if final_denegado:
+        with pytest.raises(DependenciaNoDisponible):
+            await s3.conservar("tmp/origen", CLAVE, SHA, len(CONTENIDO), "image/png", "AES256")
+    else:
+        await s3.conservar("tmp/origen", CLAVE, SHA, len(CONTENIDO), "image/png", "AES256")
+    cliente.copy_object.assert_called_once_with(
+        Bucket="bucket-evidencias",
+        Key=CLAVE,
+        CopySource={
+            "Bucket": "bucket-evidencias",
+            "Key": "tmp/origen",
+            "VersionId": "version-origen",
+        },
+        CopySourceIfMatch='"etag"',
+        ChecksumAlgorithm="SHA256",
+        ServerSideEncryption="AES256",
+        MetadataDirective="COPY",
+    )
+
+
+async def test_destino_y_origen_denegados_no_permiten_copiar() -> None:
+    cliente = Mock()
+    cliente.head_object.side_effect = error_cliente("403")
+    with pytest.raises(DependenciaNoDisponible):
+        await EvidenciasS3(cliente, "bucket-evidencias", 300).conservar(
+            "tmp/origen", CLAVE, SHA, len(CONTENIDO), "image/png", "AES256"
+        )
+    cliente.copy_object.assert_not_called()
 
 
 async def test_un_checksum_distinto_es_alterada() -> None:

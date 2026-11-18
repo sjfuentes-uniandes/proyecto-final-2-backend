@@ -405,7 +405,8 @@ def _reversa(nombre: str) -> str:
 def test_la_reversa_borra_todo_y_se_puede_volver_a_migrar(base: str) -> None:
     # Las reversas van en orden inverso: HU-M01 antes de decisiones y siniestros.
     reversa = (
-        _reversa("005_estado_carga_borrador.sql")
+        _reversa("006_envio_borrador.sql")
+        + _reversa("005_estado_carga_borrador.sql")
         + _reversa("004_descripcion_borrador.sql")
         + _reversa("003_borradores.sql")
         + _reversa("002_decisiones.sql")

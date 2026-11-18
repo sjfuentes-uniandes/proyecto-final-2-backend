@@ -37,6 +37,11 @@ def test_las_rutas_son_las_de_la_historia() -> None:
         ("GET", "/v1/siniestros/borradores"),
         ("POST", "/v1/siniestros/borradores"),
         ("GET", "/v1/siniestros/borradores/{borradorId}"),
+        ("PATCH", "/v1/siniestros/borradores/{borradorId}"),
+        ("POST", "/v1/siniestros/borradores/{borradorId}/envio"),
+        ("DELETE", "/v1/siniestros/borradores/{borradorId}/evidencias/{evidenciaId}"),
+        ("GET", "/v1/clientes/{clienteId}/siniestros"),
+        ("GET", "/v1/clientes/{clienteId}/siniestros/{siniestroId}"),
         ("POST", "/v1/siniestros/borradores/{borradorId}/evidencias"),
         (
             "POST",
@@ -57,7 +62,7 @@ def test_el_borrador_exige_idempotencia_y_la_evidencia_declara_carga_prefirmada(
     assert solicitud["properties"]["descripcion"]["maxLength"] == 2000
 
     agregar = rutas["/v1/siniestros/borradores/{borradorId}/evidencias"]["post"]
-    assert set(agregar["responses"]) == {"201", "400", "401", "403", "404", "422", "503"}
+    assert set(agregar["responses"]) == {"201", "400", "401", "403", "404", "409", "422", "503"}
     carga = app.openapi()["components"]["schemas"]["CargaEvidencia"]
     assert set(carga["required"]) == {"metodo", "url", "campos", "expiraEn"}
     assert rutas["/v1/siniestros/limites"]["get"]["responses"]["200"]

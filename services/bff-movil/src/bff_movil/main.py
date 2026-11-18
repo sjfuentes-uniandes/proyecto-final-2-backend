@@ -38,12 +38,17 @@ from bff_movil.application.registro.casos import VerificarRegistro, VincularRegi
 from bff_movil.application.sesion.consultar_sesion import ConsultarSesion
 from bff_movil.application.sesion.puertos import ResolutorCliente
 from bff_movil.application.siniestros.casos import (
+    ActualizarBorrador,
     AgregarEvidencia,
     ConfirmarEvidencia,
     ConsultarBorrador,
     ConsultarLimitesEvidencia,
+    ConsultarSiniestro,
     CrearBorrador,
+    EliminarEvidencia,
+    EnviarBorrador,
     ListarBorradores,
+    ListarSiniestros,
     RenovarCargaEvidencia,
 )
 from bff_movil.application.siniestros.puertos import SiniestrosApi
@@ -126,6 +131,7 @@ def crear_app(
                 cliente_clientes,
                 settings.siniestros_url,
                 settings.siniestros_timeout_ms,
+                escritura_timeout_ms=settings.siniestros_escritura_timeout_ms,
             )
             app.state.siniestros_api = servicio_siniestros
             app.state.consultar_limites_evidencia = ConsultarLimitesEvidencia(servicio_siniestros)
@@ -133,6 +139,15 @@ def crear_app(
             app.state.consultar_borrador = ConsultarBorrador(servicio_siniestros)
             app.state.crear_borrador = CrearBorrador(
                 resolutor_cliente, servicio_polizas, servicio_siniestros
+            )
+            app.state.enviar_borrador = EnviarBorrador(
+                resolutor_cliente, servicio_polizas, servicio_siniestros
+            )
+            app.state.actualizar_borrador = ActualizarBorrador(servicio_siniestros)
+            app.state.eliminar_evidencia = EliminarEvidencia(servicio_siniestros)
+            app.state.listar_siniestros = ListarSiniestros(resolutor_cliente, servicio_siniestros)
+            app.state.consultar_siniestro = ConsultarSiniestro(
+                resolutor_cliente, servicio_siniestros
             )
             app.state.agregar_evidencia = AgregarEvidencia(servicio_siniestros)
             app.state.confirmar_evidencia = ConfirmarEvidencia(servicio_siniestros)

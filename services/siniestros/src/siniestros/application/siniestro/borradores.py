@@ -7,22 +7,29 @@ from datetime import datetime, timedelta
 from typing import Any, Protocol
 from uuid import UUID, uuid4
 
+from siniestros.application.siniestro.envio import clave_permanente
 from siniestros.application.siniestro.errores import (
     BorradorNoEncontrado,
-    DependenciaNoDisponible,
     DuracionVideoExcedida,
-    EvidenciaNoCargada,
     EvidenciaYaConfirmada,
-    IntegridadEvidenciaInvalida,
+    SiniestroNoEncontrado,
     TamanoEvidenciaExcedido,
     TipoEvidenciaNoAdmitido,
 )
 from siniestros.application.siniestro.puertos import AlmacenEvidencias, Reloj
 from siniestros.config import Settings
-from siniestros.domain.siniestro.modelos import IntegridadEvidencia, TipoEvidencia
+from siniestros.domain.siniestro.modelos import TipoEvidencia
 
 
 class BorradoresRepositorio(Protocol):
+    async def listar_siniestros_cliente(
+        self, cliente_id: UUID, limite: int, cursor: str | None, corte: datetime
+    ) -> dict[str, Any]: ...
+
+    async def consultar_siniestro_cliente(
+        self, cliente_id: UUID, siniestro_id: UUID
+    ) -> dict[str, Any] | None: ...
+
     async def listar_borradores(self, actor_id: str) -> list[dict[str, Any]]: ...
 
     async def consultar_borrador(
@@ -64,8 +71,21 @@ class BorradoresRepositorio(Protocol):
     ) -> dict[str, Any] | None: ...
 
     async def confirmar_evidencia_borrador(
-        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID, confirmada_en: datetime
+        self,
+        actor_id: str,
+        borrador_id: UUID,
+        evidencia_id: UUID,
+        confirmada_en: datetime,
+        clave_objeto: str | None = None,
     ) -> datetime | None: ...
+
+    async def actualizar_borrador(
+        self, actor_id: str, borrador_id: UUID, cambios: dict[str, Any]
+    ) -> None: ...
+
+    async def eliminar_evidencia_borrador(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID
+    ) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -113,6 +133,19 @@ class Borradores:
         self._almacen = almacen
         self._reloj = reloj
         self._settings = settings
+
+    async def listar_siniestros(
+        self, cliente_id: UUID, limite: int, cursor: str | None
+    ) -> dict[str, Any]:
+        return await self._repo.listar_siniestros_cliente(
+            cliente_id, limite, cursor, self._reloj.ahora()
+        )
+
+    async def consultar_siniestro(self, cliente_id: UUID, siniestro_id: UUID) -> dict[str, Any]:
+        caso = await self._repo.consultar_siniestro_cliente(cliente_id, siniestro_id)
+        if caso is None:
+            raise SiniestroNoEncontrado
+        return caso
 
     def limites(self) -> dict[str, Any]:
         return {
@@ -215,13 +248,24 @@ class Borradores:
 
     async def listar(self, actor_id: str) -> dict[str, Any]:
         items = await self._repo.listar_borradores(actor_id)
-        return {"items": [{**item, "estado": "ABIERTO"} for item in items]}
+        return {"items": items}
 
     async def consultar(self, actor_id: str, borrador_id: UUID) -> dict[str, Any]:
         borrador = await self._repo.consultar_borrador(actor_id, borrador_id)
         if borrador is None:
             raise BorradorNoEncontrado
-        return {**borrador, "estado": "ABIERTO"}
+        return borrador
+
+    async def actualizar(
+        self, actor_id: str, borrador_id: UUID, cambios: dict[str, Any]
+    ) -> dict[str, Any]:
+        await self._repo.actualizar_borrador(actor_id, borrador_id, cambios)
+        return await self.consultar(actor_id, borrador_id)
+
+    async def eliminar_evidencia(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID
+    ) -> None:
+        await self._repo.eliminar_evidencia_borrador(actor_id, borrador_id, evidencia_id)
 
     async def confirmar_evidencia(
         self, actor_id: str, borrador_id: UUID, evidencia_id: UUID
@@ -229,23 +273,20 @@ class Borradores:
         evidencia = await self._repo.evidencia_borrador(actor_id, borrador_id, evidencia_id)
         if evidencia is None:
             raise BorradorNoEncontrado
-        if evidencia["estadoCarga"] == "CARGADA":
-            confirmada_en = evidencia["cargaConfirmadaEn"]
-        else:
-            integridad = await self._almacen.verificar(
-                evidencia["claveObjeto"], evidencia["sha256"]
-            )
-            if integridad is IntegridadEvidencia.NO_DISPONIBLE:
-                raise EvidenciaNoCargada
-            if integridad is IntegridadEvidencia.ALTERADA:
-                raise IntegridadEvidenciaInvalida
-            if integridad is IntegridadEvidencia.NO_VERIFICABLE:
-                raise DependenciaNoDisponible("evidencias")
-            confirmada_en = await self._repo.confirmar_evidencia_borrador(
-                actor_id, borrador_id, evidencia_id, self._reloj.ahora()
-            )
-            if confirmada_en is None:
-                raise BorradorNoEncontrado
+        permanente = clave_permanente(borrador_id, evidencia_id)
+        await self._almacen.conservar(
+            evidencia["claveObjeto"],
+            permanente,
+            evidencia["sha256"],
+            evidencia["tamanoBytes"],
+            evidencia["tipoContenido"],
+            self._settings.evidencias_bucket_sse,
+        )
+        confirmada_en = await self._repo.confirmar_evidencia_borrador(
+            actor_id, borrador_id, evidencia_id, self._reloj.ahora(), permanente
+        )
+        if confirmada_en is None:
+            raise BorradorNoEncontrado
         return {
             "evidenciaId": evidencia_id,
             "estadoCarga": "CARGADA",
