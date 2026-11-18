@@ -123,6 +123,15 @@ run "ambiente_int" {
     condition     = contains(keys(aws_appautoscaling_policy.cpu), "cotizacion")
     error_message = "HU-W07: cotizacion escala por CPU en int (aws_appautoscaling_policy.cpu)."
   }
+  assert {
+    # HU-W08: cotizacion no ajusta su política en int; queda con los valores de hoy.
+    condition = (
+      aws_appautoscaling_policy.cpu["cotizacion"].target_tracking_scaling_policy_configuration[0].target_value == 60 &&
+      aws_appautoscaling_policy.cpu["cotizacion"].target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 30 &&
+      aws_appautoscaling_policy.cpu["cotizacion"].target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 300
+    )
+    error_message = "HU-W08: en int, la política cpu de cotizacion queda en 60 % y 30/300 s."
+  }
 
   # --- Resto de servicios: solo invariantes relativos a las variables, sin sus números -----
   assert {
@@ -151,5 +160,16 @@ run "ambiente_int" {
       contains(keys(aws_appautoscaling_policy.cpu), name) == (local.deployed[name].tier != "worker" && target.max_capacity > target.min_capacity)
     ])
     error_message = "La política cpu debe existir si y solo si el servicio no es worker y su máximo supera su mínimo."
+  }
+  assert {
+    # HU-W08: el objetivo y los enfriamientos de cada política salen de service_overrides o, sin
+    # él, de cpu_target, scale_out_cooldown_seconds y scale_in_cooldown_seconds.
+    condition = alltrue([
+      for name, policy in aws_appautoscaling_policy.cpu :
+      policy.target_tracking_scaling_policy_configuration[0].target_value == coalesce(try(var.service_overrides[name].cpu_target, null), var.cpu_target) &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == coalesce(try(var.service_overrides[name].scale_out_cooldown, null), var.scale_out_cooldown_seconds) &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_in_cooldown == coalesce(try(var.service_overrides[name].scale_in_cooldown, null), var.scale_in_cooldown_seconds)
+    ])
+    error_message = "El objetivo y los enfriamientos de cada política cpu deben salir de service_overrides o, sin él, de las variables del ambiente."
   }
 }
