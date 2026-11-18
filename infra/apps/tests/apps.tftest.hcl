@@ -893,3 +893,67 @@ run "politica_cpu_invalida" {
 
   expect_failures = [var.cpu_target, var.scale_out_cooldown_seconds, var.scale_in_cooldown_seconds, var.service_overrides]
 }
+
+# HU-W08: panel «Cotizaciones por minuto y capacidad» de Operación › Tablero (bff-web).
+run "capacidad_bff_web" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for name, statements in local.task_statements :
+      strcontains(jsonencode(statements), "application-autoscaling:") == (name == "bff-web")
+    ])
+    error_message = "HU-W08: solo bff-web recibe permisos de Application Auto Scaling."
+  }
+  assert {
+    # Solo las dos lecturas, sin ARN de recurso (no lo admiten) y ninguna acción de escritura.
+    condition = (
+      toset(flatten([
+        for statement in local.task_statements["bff-web"] : [
+          for action in statement.Action : action if startswith(action, "application-autoscaling:")
+        ]
+      ])) == toset(["application-autoscaling:DescribeScalableTargets", "application-autoscaling:DescribeScalingActivities"]) &&
+      alltrue([
+        for statement in local.task_statements["bff-web"] :
+        statement.Resource == ["*"] if anytrue([for action in statement.Action : startswith(action, "application-autoscaling:")])
+      ])
+    )
+    error_message = "HU-W08: bff-web solo lee el scalable target y las actividades de escalado (Resource *)."
+  }
+  assert {
+    # El nombre del servicio ECS sale de la clave del catálogo; se ata a la salida real del módulo.
+    condition = (
+      local.environment["bff-web"]["CAPACIDAD_CLUSTER"] == "solventa-int" &&
+      local.environment["bff-web"]["CAPACIDAD_SERVICIO"] == module.layer_3["cotizacion"].service_name &&
+      contains(keys(local.environment["bff-web"]), "METRICS_NAMESPACE")
+    )
+    error_message = "HU-W08: bff-web recibe el clúster y el nombre del servicio ECS de cotizacion (y ya tiene METRICS_NAMESPACE)."
+  }
+  assert {
+    condition = alltrue([
+      for name, environment in local.environment :
+      length([for key in keys(environment) : key if startswith(key, "CAPACIDAD_")]) == (name == "bff-web" ? 2 : 0)
+    ])
+    error_message = "HU-W08: ningún servicio distinto de bff-web recibe variables CAPACIDAD_*."
+  }
+}
+
+run "capacidad_sin_cotizacion" {
+  command = plan
+
+  variables {
+    image_digests = {
+      "bff-web" = "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    }
+  }
+
+  assert {
+    # Todo o nada: sin cotizacion no hay CAPACIDAD_*, pero los permisos de lectura se conservan.
+    condition = (
+      length([for key in keys(local.environment["bff-web"]) : key if startswith(key, "CAPACIDAD_")]) == 0 &&
+      strcontains(jsonencode(local.task_statements["bff-web"]), "application-autoscaling:DescribeScalableTargets") &&
+      strcontains(jsonencode(local.task_statements["bff-web"]), "application-autoscaling:DescribeScalingActivities")
+    )
+    error_message = "HU-W08: sin cotizacion desplegado, bff-web no recibe CAPACIDAD_* y conserva la política de lectura."
+  }
+}
