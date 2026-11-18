@@ -18,6 +18,7 @@ from cotizacion.adapters.inbound.http import cotizaciones, perfilamiento, suscri
 from cotizacion.adapters.outbound.adaptador_datos_http import AdaptadorDatosHttp
 from cotizacion.adapters.outbound.catalogo_http import CatalogoHttp
 from cotizacion.adapters.outbound.clientes_http import ClientesHttp
+from cotizacion.adapters.outbound.metadatos_ecs import leer_task_id
 from cotizacion.adapters.outbound.productos_catalogo import ProductosCatalogo
 from cotizacion.adapters.outbound.reloj import RelojSistema
 from cotizacion.application.cotizacion.calcular_prima import CalcularPrima, ConfigCotizacion
@@ -68,7 +69,9 @@ class Puertos:
     listado: ListadoCotizaciones | None = None
 
 
-def _configurar_casos(app: FastAPI, puertos: Puertos, settings: Settings) -> None:
+def _configurar_casos(
+    app: FastAPI, puertos: Puertos, settings: Settings, task_id: str | None = None
+) -> None:
     config = ConfigPerfilamiento(
         dependencia_timeout_ms=settings.dependencia_timeout_ms,
         fuente_timeout_ms=settings.fuente_timeout_ms,
@@ -99,6 +102,7 @@ def _configurar_casos(app: FastAPI, puertos: Puertos, settings: Settings) -> Non
                 presupuesto_ms=settings.cotizacion_presupuesto_ms,
                 presupuesto_recorrido_ms=settings.presupuesto_recorrido_ms,
                 oferta_vigencia_horas=settings.oferta_vigencia_horas,
+                task_id=task_id,
             ),
             reglas_fallback=puertos.reglas_fallback,
             decisiones=puertos.decisiones,
@@ -132,8 +136,10 @@ def crear_app(
     @asynccontextmanager
     async def ciclo(app: FastAPI) -> AsyncIterator[None]:
         async with AsyncExitStack() as pila:
+            # HU-W07: una vez al arrancar, en todas las ramas; sin metadatos, None (≤ 1 s).
+            task_id = await leer_task_id(settings.ecs_container_metadata_uri_v4)
             if puertos is not None:
-                _configurar_casos(app, puertos, settings)
+                _configurar_casos(app, puertos, settings, task_id)
             elif settings.db_host or settings.database_url_override:
                 from psycopg_pool import AsyncConnectionPool
 
@@ -208,6 +214,7 @@ def crear_app(
                         decisiones=cotizaciones_pg,
                     ),
                     settings,
+                    task_id,
                 )
             yield
 
