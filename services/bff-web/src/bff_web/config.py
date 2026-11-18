@@ -136,6 +136,19 @@ class Settings(ServiceSettings):
         ),
     )
 
+    # HU-W08: capacidad de cotizacion para Operación › Tablero (infra/apps/ecs.tf, todo o nada).
+    # Sin las dos, GET /operacion/capacidad responde 503. El namespace es el de las métricas EMF
+    # (METRICS_NAMESPACE, que la infraestructura entrega a todos; var.metrics_namespace).
+    capacidad_cluster: str | None = Field(
+        None, validation_alias=AliasChoices("CAPACIDAD_CLUSTER", "SOLVENTA_CAPACIDAD_CLUSTER")
+    )
+    capacidad_servicio: str | None = Field(
+        None, validation_alias=AliasChoices("CAPACIDAD_SERVICIO", "SOLVENTA_CAPACIDAD_SERVICIO")
+    )
+    metrics_namespace: str = Field(
+        "Solventa", validation_alias=AliasChoices("METRICS_NAMESPACE", "SOLVENTA_METRICS_NAMESPACE")
+    )
+
     @property
     def presupuesto_cotizar_ms(self) -> int:
         return self.latency_budget_ms.get(OPERACION_COTIZAR, PRESUPUESTO_COTIZAR_MS)
