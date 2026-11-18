@@ -82,6 +82,27 @@ Identifica en X-Ray qué réplica atendió cada cotización (AC1; plan §b, deci
   - si hay error de red, la respuesta no es 2xx, el JSON es inválido o no trae `TaskARN`, la app arranca igual y el span no lleva el atributo. Queda un aviso en el log con el tipo de error, sin la URI.
 - **No se indexa en X-Ray:** no se agrega a `indexed_attributes` (`infra/apps/ecs.tf:31`). Basta verlo en la traza; buscar por él exigiría un cambio de infraestructura que AC1 no necesita.
 
+### 3.3 Drenaje al retirar una tarea
+
+- **Qué hace uvicorn al recibir SIGTERM** (0.54.0, `uv.lock`; `uvicorn/server.py`):
+  - El `CMD` está en forma JSON, así que uvicorn es el PID 1 del contenedor y recibe directamente el SIGTERM que manda ECS al retirar la tarea.
+  - Primero deja de aceptar conexiones: cierra el socket de escucha, y una conexión nueva se rechaza. Luego pide cerrar las conexiones abiertas: las inactivas se cierran y las que tienen una solicitud en curso terminan su respuesta.
+  - Espera a las conexiones y tareas pendientes hasta `--timeout-graceful-shutdown`. Si se agota, cancela las que queden: el cliente recibe la desconexión sin respuesta (`Cancel N running task(s), timeout graceful shutdown exceeded`).
+  - Después corre el apagado del lifespan (`Waiting for application shutdown.` y `Application shutdown complete.`) e imprime `Finished server process`.
+  - Al final restaura el manejador original de la señal y la vuelve a lanzar, así que el proceso termina por SIGTERM: código 143 en el contenedor, -15 desde Python. Es el comportamiento normal de uvicorn tras un apagado ordenado, no un fallo.
+  - **Sin el flag**, uvicorn esperaría sin tope. ECS mandaría SIGKILL a los 30 s, y el lifespan no llegaría a correr.
+- **Por qué 25** (`services/cotizacion/Dockerfile:17`):
+  - Tiene que ser menor que `stopTimeout = 30` (`infra/apps/ecs.tf:148`), el plazo entre el SIGTERM y el SIGKILL de ECS. Los 5 s de margen son para el apagado del lifespan.
+  - Una cotización no pasa del presupuesto del recorrido: 700 ms por omisión (`config.py:10`) o el `latency_budget_ms` del ambiente. Así que 25 s sobran para las que estén en curso.
+  - `test_hu_w07_dockerfile.py` lee los dos valores de sus archivos y exige que el primero sea menor.
+- **Qué cierra el lifespan al apagarse** (lo comprobé leyendo el código, sin cambiarlo):
+  - En la rama con base, la `AsyncExitStack` de `ciclo` cierra, en orden inverso, la caché de Valkey (`main.py:178`), el cliente HTTP (`:161`) y el pool de PostgreSQL (`:157`).
+  - Después, `instrumentar` envuelve el lifespan y llama a `telemetry.apagar()` en un `finally` (`libs/solventa-common/src/solventa_common/telemetry.py:413-418`, `:207`). `apagar()` cierra el `TracerProvider` y el `MeterProvider`, y así vacía los lotes de trazas y métricas pendientes.
+  - La prueba de drenaje usa dobles, sin pool ni exportador OTLP. Muestra que el lifespan corre después de la última respuesta, no que el vaciado llegue a ADOT.
+- **Qué no se puede probar fuera de AWS:** cuánto tarda Service Connect en dejar de enviar solicitudes a una tarea que se retira.
+  - En ese intervalo, una solicitud nueva hacia la tarea encuentra el socket cerrado. Si algo la reintenta (el proxy de Service Connect o el cliente que llama), no se comprobó aquí.
+  - La N3 (7.8) mide los 5xx de una ráfaga mientras se detiene una tarea, frente al presupuesto del plan (§b, decisión 7).
+
 ## 4. Idempotencia
 
 - **Vive en PostgreSQL.** Lo garantiza `UNIQUE (actor_id, idempotency_key)` en `cotizaciones` (`adapters/outbound/migraciones/003_cotizaciones.sql:24`, `:31`; restricción `cotizaciones_actor_id_idempotency_key_key`, `adapters/outbound/cotizaciones_pg.py:62`).
@@ -117,4 +138,5 @@ Identifica en X-Ray qué réplica atendió cada cotización (AC1; plan §b, deci
 | N1c | `tests/unit/cotizacion/test_hu_w07_serializacion.py` | Misma cotización, mismos pasos y mismo `ahora` dan los mismos bytes en `model_dump_json`, dos veces y con dos objetos construidos por separado; la repetición solo cambia `pasos` (§4) |
 | N2 | `tests/module/test_hu_w07_replicas.py` (`test_a_*` a `test_e_*`) | Dos apps de la fábrica `cotizacion` en el mismo proceso (lo justifica la N1), sobre el mismo PostgreSQL, Valkey (`CACHE_URL`), `catalogo` y `clientes`: repetición sin recalcular, GET desde la otra instancia, carrera, alcance por actor y conflicto (§4). Los spans de `operacion()` van al exportador de la última app creada (`_estado` de `solventa_common.telemetry`), así que cada solicitud se identifica por su `X-Correlation-Id` |
 | N1 (`task_id`) | `tests/unit/test_hu_w07_task_id.py` | Adaptador de metadatos con `respx`: el id, sin variable sin llamada, 5xx, JSON inválido, sin `TaskARN`, errores de red, tope de 1 s y ningún span de la lectura (con un control que sí lo deja). `Settings` con el nombre exacto. Span `cotizacion` con y sin `task_id` (también en la repetición y en el rechazo). Arranque con los metadatos en un puerto cerrado, en las dos ramas de `ciclo` (§3.2) |
+| Drenaje | `tests/unit/test_hu_w07_dockerfile.py` y `tests/module/test_hu_w07_drenaje.py` (con `apoyo_drenaje.py`) | El `CMD` tiene `--timeout-graceful-shutdown` menor que `stopTimeout`, ambos leídos de sus archivos. uvicorn en subproceso con los argumentos del `CMD`: con 25, la solicitud en curso termina en 201, una conexión nueva se rechaza y el lifespan se cierra; con 1, la solicitud se cancela y el proceso sale en 1-2 s (§3.3). Solo en Linux: en Windows se omite |
 | N3 | Paso 7.8 | Réplicas en INT |
