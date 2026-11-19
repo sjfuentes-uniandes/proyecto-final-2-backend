@@ -163,7 +163,7 @@ async def test_limites_publica_la_configuracion_de_evidencias() -> None:
         "duracionMaximaVideoSegundos": 60,
         "urlCargaExpiraSegundos": 300,
         "ubicacionObligatoria": True,
-        "ubicacionTiposOpcionales": [],
+        "ubicacionTiposOpcionales": ["AUXILIO_FUNERARIO", "ENFERMEDADES_GRAVES"],
         "ubicacionPrecisionMaxM": 100.0,
     }
 

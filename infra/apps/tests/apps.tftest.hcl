@@ -533,6 +533,14 @@ run "sprint3" {
 
   assert {
     condition = (
+      local.environment["siniestros"]["UBICACION_OBLIGATORIA"] == "true" &&
+      toset(jsondecode(local.environment["siniestros"]["UBICACION_TIPOS_OPCIONALES"])) == toset(["AUXILIO_FUNERARIO", "ENFERMEDADES_GRAVES"])
+    )
+    error_message = "Solo auxilio funerario y enfermedades graves tienen ubicación opcional por defecto."
+  }
+
+  assert {
+    condition = (
       contains(local.task_statements["siniestros"], { Effect = "Allow", Action = ["s3:PutObject"], Resource = ["arn:aws:s3:::solventa-int-evidencias-123456789012/*"] }) &&
       contains(local.task_statements["siniestros"], { Effect = "Allow", Action = ["s3:GetObject", "s3:GetObjectVersion"], Resource = ["arn:aws:s3:::solventa-int-evidencias-123456789012/*"] }) &&
       contains(local.task_statements["siniestros"], { Effect = "Deny", Action = ["s3:*"], Resource = ["arn:aws:s3:::solventa-int-evidencias-123456789012/telemetria/*"] }) &&

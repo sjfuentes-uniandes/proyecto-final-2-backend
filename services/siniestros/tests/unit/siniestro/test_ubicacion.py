@@ -35,14 +35,42 @@ def test_precision_inclusiva_y_permiso_aproximado(
 @pytest.mark.parametrize(
     "permiso", ["DENEGADO", "DENEGADO_PERMANENTEMENTE", "NO_SOLICITADO", "PRECISO", "APROXIMADO"]
 )
-def test_ausencia_de_lectura_y_regla_por_tipo(permiso: str) -> None:
+@pytest.mark.parametrize(
+    "causa",
+    [
+        "COLISION",
+        "MUERTE",
+        "INCAPACIDAD_TOTAL_PERMANENTE",
+        "INCAPACIDAD",
+        "INCENDIO",
+        "HURTO",
+        "LLUVIA_ACUMULADA",
+    ],
+)
+def test_ausencia_de_lectura_y_regla_por_tipo(permiso: str, causa: str) -> None:
     ubicacion = evaluar_ubicacion(UbicacionCapturada.model_validate({"permiso": permiso}), 100)
     assert ubicacion.estado == "NO_DISPONIBLE" and ubicacion.lat is None
     datos = ubicacion.model_dump(by_alias=True, mode="json")
     with pytest.raises(SolicitudInvalida):
-        validar_ubicacion_envio(datos, "COLISION", Settings())
-    validar_ubicacion_envio(datos, "COLISION", Settings(UBICACION_TIPOS_OPCIONALES=("COLISION",)))
-    validar_ubicacion_envio(datos, "COLISION", Settings(UBICACION_OBLIGATORIA=False))
+        validar_ubicacion_envio(datos, causa, Settings())
+    validar_ubicacion_envio(datos, causa, Settings(UBICACION_TIPOS_OPCIONALES=(causa,)))
+    validar_ubicacion_envio(datos, causa, Settings(UBICACION_OBLIGATORIA=False))
+
+
+@pytest.mark.parametrize("causa", ["AUXILIO_FUNERARIO", "ENFERMEDADES_GRAVES"])
+@pytest.mark.parametrize("permiso", ["DENEGADO", "DENEGADO_PERMANENTEMENTE"])
+def test_amparos_exceptuados_permiten_rechazar_permiso_sin_desactivar_regla_global(
+    causa: str,
+    permiso: str,
+) -> None:
+    ubicacion = evaluar_ubicacion(UbicacionCapturada.model_validate({"permiso": permiso}), 100)
+    datos = ubicacion.model_dump(by_alias=True, mode="json")
+    assert datos["estado"] == "NO_DISPONIBLE" and datos["lat"] is None and datos["lon"] is None
+    validar_ubicacion_envio(datos, causa, Settings())
+    with pytest.raises(SolicitudInvalida):
+        validar_ubicacion_envio(datos, "MUERTE", Settings())
+    with pytest.raises(SolicitudInvalida):
+        validar_ubicacion_envio(datos, causa, Settings(UBICACION_TIPOS_OPCIONALES=()))
 
 
 @pytest.mark.parametrize(

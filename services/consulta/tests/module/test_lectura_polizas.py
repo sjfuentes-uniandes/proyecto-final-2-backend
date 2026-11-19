@@ -14,6 +14,7 @@ import httpx
 import psycopg
 import pytest
 from consulta.adapters.outbound.polizas_pg import COLUMNAS, fila_de
+from consulta.adapters.outbound.semilla_polizas import cargar, sembrar
 from consulta.domain.polizas.modelos import CoberturaProyectada, PolizaProyectada, Vigencia
 from consulta.main import crear_app
 from psycopg_pool import AsyncConnectionPool
@@ -172,3 +173,76 @@ async def test_sin_polizas_la_lista_es_vacia_con_200(api: httpx.AsyncClient) -> 
 
     assert r.status_code == 200
     assert r.json() == []
+
+
+async def test_semillas_de_ubicacion_publican_cada_poliza_con_sus_amparos(
+    base: str,
+    api: httpx.AsyncClient,
+) -> None:
+    semillas = cargar()
+    assert sembrar(base) == len(semillas)
+    amparos: set[str] = set()
+    for poliza in semillas:
+        r = await api.get(
+            f"/v1/clientes/{poliza['clienteId']}/polizas/{poliza['polizaId']}",
+            headers=ACTOR,
+        )
+        assert r.status_code == 200, r.text
+        detalle = r.json()
+        assert detalle["numero"] == poliza["numero"]
+        assert detalle["estado"] == "ACTIVA"
+        assert detalle["coberturas"] == poliza["coberturas"]
+        amparos.update(c["codigo"] for c in detalle["coberturas"])
+        assert detalle["vigencia"] == {
+            "desde": poliza["vigenciaDesde"],
+            "hasta": poliza["vigenciaHasta"],
+        }
+    assert amparos == {
+        "MUERTE",
+        "INCAPACIDAD_TOTAL_PERMANENTE",
+        "INCAPACIDAD",
+        "AUXILIO_FUNERARIO",
+        "ENFERMEDADES_GRAVES",
+        "INCENDIO",
+        "HURTO",
+        "LLUVIA_ACUMULADA",
+    }
+
+
+async def test_semillas_opcionales_no_eluden_vigencia_ni_titularidad(
+    base: str,
+    api: httpx.AsyncClient,
+) -> None:
+    sembrar(base)
+    titular = "00000000-0000-4000-8000-000000000001"
+    otro = "00000000-0000-4000-8000-00000000001c"
+    for sufijo, vigente in (("005", True), ("006", True), ("013", False), ("014", False)):
+        r = await api.get(
+            f"/v1/clientes/{titular}/polizas/5eed0000-0000-4000-8000-000000000{sufijo}",
+            headers=ACTOR,
+        )
+        assert r.status_code == 200 and r.json()["vigente"] is vigente
+    ajena = await api.get(
+        f"/v1/clientes/{otro}/polizas/5eed0000-0000-4000-8000-000000000005",
+        headers=ACTOR,
+    )
+    assert (ajena.status_code, ajena.json()["codigo"]) == (403, "POLIZA_NO_AUTORIZADA")
+    assert "AUXILIO_FUNERARIO" not in ajena.text and "900-2026-000005" not in ajena.text
+    propias = (await api.get(f"/v1/clientes/{otro}/polizas", headers=ACTOR)).json()
+    assert [p["numero"] for p in propias] == ["900-2026-000007"]
+
+
+def test_resembrar_no_duplica_ni_sobrescribe_polizas_del_ambiente(base: str) -> None:
+    cantidad = len(cargar())
+    assert sembrar(base) == cantidad
+    with psycopg.connect(base, autocommit=True) as conexion:
+        conexion.execute(
+            "UPDATE poliza_cliente SET producto_nombre = %s WHERE poliza_id = %s",
+            ("Nombre modificado en QA", "5eed0000-0000-4000-8000-000000000005"),
+        )
+        assert sembrar(base) == 0
+        assert conexion.execute("SELECT count(*) FROM poliza_cliente").fetchone() == (cantidad,)
+        assert conexion.execute(
+            "SELECT producto_nombre FROM poliza_cliente WHERE poliza_id = %s",
+            ("5eed0000-0000-4000-8000-000000000005",),
+        ).fetchone() == ("Nombre modificado en QA",)

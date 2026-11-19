@@ -276,6 +276,33 @@ async def test_ubicacion_no_disponible_se_conserva_y_bloquea_envio_obligatorio(
     assert detalle.json()["ubicacion"] == ubicacion
 
 
+@pytest.mark.parametrize("causa", ["AUXILIO_FUNERARIO", "ENFERMEDADES_GRAVES"])
+async def test_amparos_opcionales_se_reportan_con_permiso_denegado(
+    flujo: Flujo,
+    causa: str,
+) -> None:
+    borrador, _ = await flujo.crear()
+    ruta = f"/v1/siniestros/borradores/{borrador}"
+    r = await flujo.http.patch(
+        ruta,
+        json={"causa": causa, "ubicacion": {"permiso": "DENEGADO"}},
+    )
+    assert r.status_code == 200, r.text
+    ubicacion = r.json()["ubicacion"]
+    assert ubicacion["estado"] == "NO_DISPONIBLE"
+    assert ubicacion["lat"] is None and ubicacion["lon"] is None
+    enviado = await flujo.enviar(
+        borrador,
+        coberturas=[{"codigo": causa, "nombre": causa, "obligatoria": True}],
+    )
+    assert enviado.status_code == 201, enviado.text
+    assert enviado.json()["estado"] == "REPORTADO"
+    detalle = await flujo.http.get(
+        f"/v1/clientes/{CLIENTE}/siniestros/{enviado.json()['siniestroId']}"
+    )
+    assert detalle.json()["ubicacion"] == ubicacion
+
+
 async def test_precision_invalida_se_guarda_y_se_corrige_en_el_mismo_borrador(
     flujo: Flujo,
     conexion: psycopg.Connection[Any],

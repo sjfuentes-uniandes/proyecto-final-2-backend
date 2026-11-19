@@ -82,7 +82,8 @@ class Settings(ServiceSettings):
     )
     ubicacion_obligatoria: bool = Field(True, validation_alias=_env("UBICACION_OBLIGATORIA"))
     ubicacion_tipos_opcionales: tuple[str, ...] = Field(
-        (), validation_alias=_env("UBICACION_TIPOS_OPCIONALES")
+        ("AUXILIO_FUNERARIO", "ENFERMEDADES_GRAVES"),
+        validation_alias=_env("UBICACION_TIPOS_OPCIONALES"),
     )
     ubicacion_precision_max_m: float = Field(
         100.0, gt=0, allow_inf_nan=False, validation_alias=_env("UBICACION_PRECISION_MAX_M")

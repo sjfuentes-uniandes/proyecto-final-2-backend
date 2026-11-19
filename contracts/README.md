@@ -260,13 +260,14 @@ contexto; nunca se inventa una ubicacion ni un permiso para los casos existentes
 ```json
 {
   "ubicacionObligatoria": true,
-  "ubicacionTiposOpcionales": [],
+  "ubicacionTiposOpcionales": ["AUXILIO_FUNERARIO", "ENFERMEDADES_GRAVES"],
   "ubicacionPrecisionMaxM": 100.0
 }
 ```
 
-Por ahora **todos los tipos requieren ubicacion confiable para enviar**. Para esta
-regla, el tipo es `causa`, el codigo exacto de cobertura/amparo de la poliza.
+**AUXILIO_FUNERARIO y ENFERMEDADES_GRAVES permiten enviar sin ubicacion**;
+los demas tipos requieren ubicacion confiable. Para esta regla, el tipo es `causa`,
+el codigo exacto de cobertura/amparo de la poliza.
 Android debe consultar los limites y considerar obligatoria la ubicacion solo si
 `ubicacionObligatoria` es `true` y la causa no esta en `ubicacionTiposOpcionales`.
 Deshabilitar el boton es una ayuda UX: el servidor aplica la misma regla al enviar.
@@ -274,8 +275,11 @@ Deshabilitar el boton es una ayuda UX: el servidor aplica la misma regla al envi
 Configuracion exclusiva de `siniestros` (tambien admite prefijo `SOLVENTA_`):
 
 - `UBICACION_OBLIGATORIA=true`: valor global por defecto.
-- `UBICACION_TIPOS_OPCIONALES='["COLISION"]'`: excepciones por codigo de causa;
-  por defecto `[]`. No requiere modificar codigo para agregar excepciones.
+- `UBICACION_TIPOS_OPCIONALES='["AUXILIO_FUNERARIO","ENFERMEDADES_GRAVES"]'`:
+  excepciones por codigo de causa, con esos dos valores por defecto.
+  No requiere modificar codigo para cambiar excepciones; `[]` vuelve a exigir
+  ubicacion en todos los tipos. La obligatoriedad de una cobertura en el producto
+  no determina la obligatoriedad de ubicacion.
 - `UBICACION_PRECISION_MAX_M=100`: umbral positivo configurable. **100 m es una
   decision inicial de producto, no un estandar universal**. El limite es inclusivo;
   una lectura aproximada se conserva con su precision y usa la misma regla.
@@ -320,6 +324,90 @@ ubicacion, poliza ni archivos. Los eventos/outbox no incorporan coordenadas.
   visores de precision/fecha y ausencia, Robolectric/WireMock, Compose/Espresso,
   pruebas fisicas exterior/interior, TalkBack, fuente al 200 %, es-CO y en-US.
   No se verificaron esos criterios de UI en el backend.
+
+#### Semillas para ejecutar R4 en int/local
+
+`consulta` agrega las polizas de `services/consulta/src/consulta/adapters/outbound/semillas/polizas_semilla.json`
+al arrancar con `CONSULTA_SEMILLA_POLIZAS=true` (ya habilitado en `int`).
+Los clientes C01 y C28-C33 ya existen con `CLIENTES_SEMILLA_SINTETICA=true`.
+No se crean documentos nuevos, usuarios Cognito, contrasenas, evidencias ni siniestros
+definitivos: iniciar sesion con una cuenta vinculada al cliente elegido y completar
+el reporte desde Android. Los documentos siguientes son **100 % sinteticos**.
+
+Las polizas 001-004 se conservan sin cambios; 005-015 son nuevas y se insertan
+idempotentemente, sin duplicar ni sobrescribir datos del ambiente. Son proyecciones
+QA de consulta, no emisiones reales ni disparadores de la automatizacion parametrica.
+La lectura no exige consultar el catalogo para recuperar estas polizas.
+
+**Matriz de polizas** (vigencia evaluada al 19/11/2026):
+
+| Cliente / documento CC | Numero de poliza | Amparos disponibles | Caso de prueba |
+|---|---|---|---|
+| C01 / `9000000001` | `900-2026-000003` | `MUERTE` | Ubicacion obligatoria (original) |
+| C01 / `9000000001` | `900-2026-000005` | `AUXILIO_FUNERARIO` | AC2: rechazar permiso y enviar |
+| C01 / `9000000001` | `900-2026-000006` | `ENFERMEDADES_GRAVES` | AC2: rechazar permiso y enviar |
+| C28 / `9000000028` | `900-2026-000007` | `MUERTE`, `INCAPACIDAD_TOTAL_PERMANENTE` | AC1 y AC3: ubicacion obligatoria |
+| C29 / `9000000029` | `900-2026-000008` | `INCAPACIDAD` | Codigo legado: tambien exige ubicacion |
+| C30 / `9000000030` | `900-2026-000009` | `INCENDIO`, `HURTO` | Ambos exigen ubicacion, incluso si la cobertura es opcional en el producto |
+| C31 / `9000000031` | `900-2026-000010` | `LLUVIA_ACUMULADA` | Exige ubicacion; prueba de reporte movil, no de disparador automatico |
+| C32 / `9000000032` | `900-2026-000011` | `MUERTE`, `INCAPACIDAD_TOTAL_PERMANENTE`, `ENFERMEDADES_GRAVES`, `AUXILIO_FUNERARIO` | Cambiar de amparo opcional a obligatorio y viceversa en el mismo borrador |
+| C33 / `9000000033` | `900-2026-000012` | `ENFERMEDADES_GRAVES`, `AUXILIO_FUNERARIO` | Probar ambos amparos opcionales con otro titular |
+| C01 / `9000000001` | `900-2025-000013` | `AUXILIO_FUNERARIO` | Vencida: la excepcion de ubicacion no permite reportar |
+| C01 / `9000000001` | `900-2026-000014` | `ENFERMEDADES_GRAVES` | No iniciada: la excepcion de ubicacion no permite reportar |
+| Movil / `1020456789` | `900-2026-000015` | `MUERTE`, `INCAPACIDAD_TOTAL_PERMANENTE`, `ENFERMEDADES_GRAVES`, `AUXILIO_FUNERARIO` | Mismos cambios de amparo para el cliente movil preexistente |
+
+El cliente movil conserva ademas `900-2026-000001` (`MUERTE`, `INCAPACIDAD`,
+vigente) y `900-2025-000002` (`MUERTE`, vencida). C02 / CC `9000000002`
+conserva `900-2025-000004` (`INCENDIO`, `HURTO`), cuya vigencia termina
+**20/11/2026**; para pruebas posteriores usar C30.
+
+Obtener el `polizaId` desde `GET /v1/polizas` con el token del titular y abrir su
+detalle para elegir `causa` desde las coberturas. Como referencia, el UUID de
+`900-2026-000005` es `5eed0000-0000-4000-8000-000000000005`; los demas siguen
+el mismo prefijo y sufijo de 12 digitos de la secuencia 001-015. Los UUID de cliente
+C28-C33 usan sufijos hexadecimales: no deducirlos concatenando el documento.
+
+Las nuevas polizas vigentes cubren 15/10/2026-14/10/2027, excepto lluvia,
+01/11/2026-31/10/2027. La 013 termino el 30/09/2026 y la 014 inicia el
+01/01/2027. Son fechas fijas, no se renuevan al reiniciar. Todas se almacenan
+como `ACTIVA`: `vigente` se calcula con las fechas. La proyeccion actual solo
+admite ese estado; no se fabrican polizas `CANCELADA` o `EMITIDA` mediante esta
+semilla. Sus rechazos se cubren con pruebas automatizadas de validacion.
+
+**Ejecucion y resultados esperados** (en todos los envios positivos: descripcion,
+causa incluida en la poliza, fecha real pasada dentro de vigencia y al menos una
+evidencia cargada/confirmada):
+
+| Escenario | Datos / accion | Resultado |
+|---|---|---|
+| AC1 | C28, poliza 007; permiso `PRECISO`, lectura completa de 35.5 m | PATCH 200 `DISPONIBLE`; envio 201 `REPORTADO` |
+| AC2 | C01, 005 y 006; repetir con `DENEGADO` y `DENEGADO_PERMANENTEMENTE` sin coordenadas | PATCH 200 y envio 201; detalle conserva `NO_DISPONIBLE`, permiso y campos de lectura `null` |
+| Falta de permiso en obligatorio | C28/C29/C30/C31; denegar permiso o no tener lectura | Borrador recuperable; envio 422 con campo `ubicacion` |
+| Precision en el limite | C28: 99.99, 100 y 100.01 m con umbral 100 | Los dos primeros aceptan envio; el ultimo guarda `NO_CONFIABLE` y bloquea con 422 |
+| Permiso aproximado | C28, permiso `APROXIMADO`, precision real del proveedor | La misma comparacion inclusiva; no inventar ni redondear precision |
+| Precision mala en opcional | C01, 005/006, lectura autorizada por encima de 100 m | Guarda `NO_CONFIABLE` y permite envio, conservando el contexto |
+| Proveedor sin lectura | C01 005/006, permiso concedido sin los cuatro datos de lectura | `NO_DISPONIBLE`; permite envio por ser opcional |
+| Cambio de causa | C32 011 o movil 015: guardar rechazo con amparo opcional, cambiar a `MUERTE` antes de enviar | Bloquea con 422 hasta adjuntar ubicacion confiable; cambiar de nuevo a amparo opcional permite enviar |
+| Vigencia | C01 013 y 014 | `vigente=false`, selector no las ofrece como elegibles; POST forzado de borrador responde 409 `POLIZA_NO_VIGENTE` |
+| Titularidad | Sesion C01 intenta usar la poliza 007 de C28, y viceversa | 403 `POLIZA_NO_AUTORIZADA`, sin datos de la poliza ajena |
+| Amparo ajeno a la poliza | C01 005, guardar `causa=MUERTE` | Envio 422 con campo `causa`, sin crear caso |
+| Consentimiento incoherente | Enviar coordenadas con `DENEGADO`, lectura parcial o `ubicacion:null` | PATCH 422; no modifica lo guardado |
+| Carga incompleta | C01 005/006 con evidencia pendiente | Envio 409 `EVIDENCIA_NO_CARGADA`; no se elude por ser ubicacion opcional |
+| Recuperacion / idempotencia | C01 005/006: corregir mismo borrador, reintentar tras timeout o enviar simultaneamente | Un solo siniestro y misma confirmacion tras registrar; sin recrear borrador ni duplicar archivos |
+| Sesion invalida | Cualquier poliza, sin token valido | 401, sin cambios |
+
+AC4, TalkBack, fuente al 200 %, es-CO/en-US y lecturas fisicas exterior/interior
+se ejecutan en Android con estos mismos datos; no se validan con la semilla por si sola.
+No se registran coordenadas ni enlaces firmados en evidencias de prueba compartidas.
+
+**Despliegue de esta ampliacion:** workflow **Infra - Desplegar**, rama de la
+entrega, `ambiente=int`, `alcance=microservicios`,
+`servicios=consulta,siniestros,bff-movil`, `probar=true`. Reconstruir `consulta`
+es necesario para que cargue el JSON nuevo; desplegar solo aplicaciones no incorpora
+el archivo a la imagen. Se aplican las excepciones de ubicacion de `infra/apps`.
+No requiere modificar plataforma ni bases; si aun no estaba aplicada, la migracion
+007 de siniestros se ejecuta al arrancar. La siembra de clientes existente debe estar
+habilitada y las sesiones deben corresponder a los titulares de la matriz.
 
 ### Descargar evidencias desde Android
 
