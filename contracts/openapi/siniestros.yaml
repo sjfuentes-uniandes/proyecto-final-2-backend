@@ -677,6 +677,183 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/parametricos:
+    post:
+      tags:
+      - parametricos
+      summary: Crear Parametrico
+      description: 'Crea el siniestro paramétrico de un evento que activó una póliza:
+        nace APROBADO, sin
+
+        analista, con la póliza, el evento, la regla y su versión y `valorIndemnizar`
+        igual al valor de
+
+        la cobertura (`deducible` 0). En una sola transacción escribe el siniestro,
+        el historial
+
+        `CREADO_AUTOMATICAMENTE` (actor `SISTEMA_PARAMETRICO`) y `SiniestroAprobado`
+        en el Outbox. La
+
+        clave `(eventoId, polizaId)` es única: repetir la solicitud, o recibirla dos
+        réplicas a la vez,
+
+        devuelve el siniestro existente (200).'
+      operationId: crear_parametrico_v1_siniestros_parametricos_post
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}:[0-9a-fA-F-]{36}$
+          description: '<eventoId>:<polizaId>: la clave de negocio del caso (UNIQUE
+            evento-póliza)'
+          title: Idempotency-Key
+        description: '<eventoId>:<polizaId>: la clave de negocio del caso (UNIQUE
+          evento-póliza)'
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      - name: X-Actor-Nombre
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Nombre
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudSiniestroParametrico'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumenSiniestro'
+        '401':
+          description: 'ACTOR_REQUERIDO: falta X-Actor-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '200':
+          description: 'El siniestro de ese evento y esa póliza ya existía: es el
+            mismo `id`, sin escribir nada nuevo'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumenSiniestro'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol falta o no es SISTEMA_PARAMETRICO
+            (se audita con AccesoSiniestroDenegado)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos; también si la Idempotency-Key
+            no es <eventoId>:<polizaId> o la moneda no es la de la póliza) o IDEMPOTENCIA_CONFLICTO
+            (la misma clave con otro cuerpo)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/parametricos/pagos:
+    get:
+      tags:
+      - parametricos
+      summary: Pagos Parametricos
+      description: 'Estado de pago de los siniestros paramétricos pedidos (H09, «Últimos
+        pagos activados»), en una
+
+        sola consulta: el derivado de `PagoDto` (PENDIENTE hasta que `dinero` informa
+        su resultado). Los
+
+        ids inexistentes o de otro origen se omiten. No escribe nada ni audita una
+        consulta.'
+      operationId: pagos_parametricos_v1_siniestros_parametricos_pagos_get
+      parameters:
+      - name: siniestroIds
+        in: query
+        required: true
+        schema:
+          type: array
+          items:
+            type: string
+            format: uuid
+          minItems: 1
+          maxItems: 20
+          description: Hasta 20 ids; el parámetro se repite (siniestroIds=…&siniestroIds=…)
+          title: Siniestroids
+        description: Hasta 20 ids; el parámetro se repite (siniestroIds=…&siniestroIds=…)
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      - name: X-Actor-Nombre
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Nombre
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagosParametricosRespuesta'
+        '401':
+          description: 'ACTOR_REQUERIDO: falta X-Actor-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol falta o no es ANALISTA_SINIESTROS
+            (se audita con AccesoSiniestroDenegado)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (sin ids, más de 20 o alguno no es un UUID)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
 components:
   schemas:
     AmparoCopiaDto:
@@ -1047,9 +1224,9 @@ components:
       - plazoSoporteVenceEn
       title: DetalleSiniestro
       description: 'Detalle (H03, H04, Cobertura e Historial). `liquidacion` la llena
-        W20 al aprobar y `pago`, W23;
+        W20 al aprobar, `pago` W23 y
 
-        `evento` (W22) viene en null.'
+        `evento` (W22) solo existe en los siniestros de origen PARAMETRICO.'
     EnlaceEvidencia:
       properties:
         url:
@@ -1130,7 +1307,10 @@ components:
         ASIGNADO, APROBADO, RECHAZADO, SOPORTE_SOLICITADO, PLAZO_SOPORTE_VENCIDO,
         PAGO_CONFIRMADO,
 
-        PAGO_RECHAZADO; W22 agrega los suyos).'
+        PAGO_RECHAZADO y, desde HU-W22, CREADO_AUTOMATICAMENTE: el paramétrico nace
+        APROBADO con
+
+        `actorRol = SISTEMA_PARAMETRICO`, sin actor ni nombre).'
     ErrorDto:
       properties:
         codigo:
@@ -1218,9 +1398,15 @@ components:
         regla:
           type: string
           title: Regla
+          description: Código de la regla aplicada (DS3-21); el portal lo traduce
         versionRegla:
           type: string
           title: Versionregla
+        eventoOrigen:
+          type: string
+          title: Eventoorigen
+          description: Agrupa los eventos de un mismo episodio (p. ej. EVT-2026-0913);
+            es el selector de H09
       type: object
       required:
       - eventoId
@@ -1231,10 +1417,14 @@ components:
       - unidad
       - zona
       - observadoEn
+      - eventoOrigen
       - regla
       - versionRegla
       title: EventoParametricoDto
-      description: Null hasta HU-W22.
+      description: 'El evento externo y la regla que activaron un siniestro PARAMETRICO
+        (HU-W22, AC3). Null en
+
+        los demás orígenes.'
     EvidenciaVista:
       properties:
         id:
@@ -1334,7 +1524,8 @@ components:
       description: 'La liquidación aprobada (HU-W20). Null mientras el caso no esté
         APROBADO. En un paramétrico
 
-        (W22) solo trae `valorIndemnizar`.'
+        (W22) `valorIndemnizar` es el valor de la cobertura, `deducible` es 0 y `valorReclamado`
+        es null.'
     LiquidacionSolicitada:
       properties:
         valorReclamado:
@@ -1965,3 +2156,178 @@ components:
       - desde
       - hasta
       title: VigenciaCopiaDto
+    ObservacionParametricaDto:
+      properties:
+        fuente:
+          type: string
+          pattern: ^[A-Z][A-Z0-9-]{1,31}$
+          title: Fuente
+        tipoEvento:
+          type: string
+          pattern: ^[A-Z][A-Z_]{2,39}$
+          title: Tipoevento
+        valorObservado:
+          type: string
+          pattern: ^[0-9]{1,9}(\.[0-9]{1,3})?$
+          title: Valorobservado
+        umbral:
+          type: string
+          pattern: ^[0-9]{1,9}(\.[0-9]{1,3})?$
+          title: Umbral
+        unidad:
+          type: string
+          pattern: ^[a-z]{1,8}$
+          title: Unidad
+        zona:
+          type: string
+          pattern: ^[A-Z0-9]{2,16}$
+          title: Zona
+        observadoEn:
+          type: string
+          format: date-time
+          title: Observadoen
+        eventoOrigen:
+          type: string
+          pattern: ^[A-Za-z0-9._:-]{1,64}$
+          title: Eventoorigen
+      type: object
+      required:
+      - fuente
+      - tipoEvento
+      - valorObservado
+      - umbral
+      - unidad
+      - zona
+      - observadoEn
+      - eventoOrigen
+      title: ObservacionParametricaDto
+      description: La medición que superó el umbral (`EventoParametricoObservado`,
+        ya autenticada y archivada).
+    PagoParametricoDto:
+      properties:
+        siniestroId:
+          type: string
+          format: uuid
+          title: Siniestroid
+        codigo:
+          type: string
+          pattern: ^88-[0-9]{4}-[0-9]{4,}$
+          title: Codigo
+        estadoPago:
+          $ref: '#/components/schemas/EstadoPago'
+      type: object
+      required:
+      - siniestroId
+      - codigo
+      - estadoPago
+      title: PagoParametricoDto
+      description: 'Estado del pago de un siniestro paramétrico (H09, «Últimos pagos
+        activados»). `estadoPago` se
+
+        deriva como en `PagoDto`: PENDIENTE hasta que `dinero` informa un resultado.'
+    PagosParametricosRespuesta:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/PagoParametricoDto'
+          type: array
+          title: Items
+          description: Un elemento por siniestro PARAMETRICO encontrado; los ids inexistentes
+            o de otro origen se omiten (no es un error)
+      type: object
+      required:
+      - items
+      title: PagosParametricosRespuesta
+    PolizaParametricaDto:
+      properties:
+        numero:
+          type: string
+          pattern: ^[0-9]{3}-[0-9]{4}-[0-9]{6}$
+          title: Numero
+        ramo:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Ramo
+          description: Nombre del ramo
+        vigencia:
+          $ref: '#/components/schemas/VigenciaCopiaDto'
+        moneda:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Moneda
+      type: object
+      required:
+      - numero
+      - ramo
+      - vigencia
+      - moneda
+      title: PolizaParametricaDto
+      description: 'La póliza de la cobertura que activó el evento, tal como la conoce
+        `pagos-parametricos`
+
+        (copia de `PolizaEmitida`). `siniestros` completa el resto de la copia (amparo,
+        carencia,
+
+        plazo de aviso, primas y beneficiario) con los valores del caso paramétrico.'
+    SolicitudSiniestroParametrico:
+      properties:
+        eventoId:
+          type: string
+          format: uuid
+          title: Eventoid
+        polizaId:
+          type: string
+          format: uuid
+          title: Polizaid
+        clienteId:
+          type: string
+          format: uuid
+          title: Clienteid
+        poliza:
+          $ref: '#/components/schemas/PolizaParametricaDto'
+        evento:
+          $ref: '#/components/schemas/ObservacionParametricaDto'
+        regla:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]{2,63}$
+          title: Regla
+          description: Código de la regla aplicada (DS3-21), p. ej. VALOR_IGUAL_O_SUPERIOR_AL_UMBRAL
+        versionRegla:
+          type: string
+          maxLength: 32
+          minLength: 1
+          title: Versionregla
+        valor:
+          type: string
+          pattern: ^[0-9]+(\.[0-9]{1,2})?$
+          title: Valor
+          description: Valor de pago de la cobertura, texto decimal (DS2-16)
+        moneda:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Moneda
+      additionalProperties: false
+      type: object
+      required:
+      - eventoId
+      - polizaId
+      - clienteId
+      - poliza
+      - evento
+      - regla
+      - versionRegla
+      - valor
+      - moneda
+      title: SolicitudSiniestroParametrico
+      description: 'Cuerpo de `POST /v1/siniestros/parametricos`, de uso interno de
+        `pagos-parametricos` (DS3-23).
+
+        La clave del caso es `(eventoId, polizaId)`: la `Idempotency-Key` debe ser
+        `<eventoId>:<polizaId>`
+
+        y, si no coincide con el cuerpo, 422 SOLICITUD_INVALIDA. `moneda` debe ser
+        la de la póliza y
+
+        `valor` es lo que paga la cobertura (queda como `valorIndemnizar`, con `deducible
+        = 0`).'

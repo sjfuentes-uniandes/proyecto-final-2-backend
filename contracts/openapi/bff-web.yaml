@@ -3728,6 +3728,147 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/parametricos/resumen:
+    get:
+      tags:
+      - siniestros
+      summary: Resumen Parametricos
+      description: 'H09: el resumen de `pagos-parametricos` más la cola y los consumidores
+        (CloudWatch) y el
+
+        estado de pago de cada fila (`siniestros`). Una fuente secundaria que falla
+        deja su campo en
+
+        null; solo la falta de `pagos-parametricos` es un 503.'
+      operationId: resumen_parametricos_v1_siniestros_parametricos_resumen_get
+      parameters:
+      - name: eventoOrigen
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^[A-Za-z0-9._:-]{1,64}$
+          - type: 'null'
+          description: Sin valor, el origen de la evaluación más reciente
+          title: Eventoorigen
+        description: Sin valor, el origen de la evaluación más reciente
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumenParametricosVista'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo analistas-siniestros o no
+            es del back-office (se notifica a siniestros, DS3-09)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: pagos-parametricos no respondió o
+            respondió fuera de su contrato'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/siniestros/parametricos/eventos-origen:
+    get:
+      tags:
+      - siniestros
+      summary: Eventos Origen
+      description: Los `eventoOrigen` recientes de `pagos-parametricos`, para el selector
+        de H09.
+      operationId: eventos_origen_v1_siniestros_parametricos_eventos_origen_get
+      parameters:
+      - name: limite
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 10
+          title: Limite
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrigenesRecientesVista'
+        '401':
+          description: 'ACTOR_REQUERIDO: la solicitud no trae el usuario autenticado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo analistas-siniestros o no
+            es del back-office (se notifica a siniestros, DS3-09)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: pagos-parametricos no respondió o
+            respondió fuera de su contrato'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
 components:
   schemas:
     Accion:
@@ -5543,7 +5684,10 @@ components:
         ASIGNADO, APROBADO, RECHAZADO, SOPORTE_SOLICITADO, PLAZO_SOPORTE_VENCIDO,
         PAGO_CONFIRMADO,
 
-        PAGO_RECHAZADO; W22 agrega los suyos).'
+        PAGO_RECHAZADO y, desde HU-W22, CREADO_AUTOMATICAMENTE: el paramétrico nace
+        APROBADO con
+
+        `actorRol = SISTEMA_PARAMETRICO`, sin actor ni nombre).'
     EntradasPrimaDto:
       properties:
         sumaAsegurada:
@@ -5881,9 +6025,15 @@ components:
         regla:
           type: string
           title: Regla
+          description: Código de la regla aplicada (DS3-21); el portal lo traduce
         versionRegla:
           type: string
           title: Versionregla
+        eventoOrigen:
+          type: string
+          title: Eventoorigen
+          description: Agrupa los eventos de un mismo episodio (p. ej. EVT-2026-0913);
+            es el selector de H09
       type: object
       required:
       - eventoId
@@ -5894,10 +6044,14 @@ components:
       - unidad
       - zona
       - observadoEn
+      - eventoOrigen
       - regla
       - versionRegla
       title: EventoParametricoDto
-      description: Null hasta HU-W22.
+      description: 'El evento externo y la regla que activaron un siniestro PARAMETRICO
+        (HU-W22, AC3). Null en
+
+        los demás orígenes.'
     EvidenciaVista:
       properties:
         id:
@@ -6234,7 +6388,8 @@ components:
       description: 'La liquidación aprobada (HU-W20). Null mientras el caso no esté
         APROBADO. En un paramétrico
 
-        (W22) solo trae `valorIndemnizar`.'
+        (W22) `valorIndemnizar` es el valor de la cobertura, `deducible` es 0 y `valorReclamado`
+        es null.'
     LiquidacionSolicitada:
       properties:
         valorReclamado:
@@ -8599,3 +8754,228 @@ components:
       - indemnizacion
       title: PagoSiniestroVista
       description: 'H08: el pago de un siniestro aprobado con su trazabilidad.'
+    ColaParametricos:
+      properties:
+        profundidad:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Profundidad
+          description: Mensajes visibles esperando ser procesados
+        consumidoresActivos:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Consumidoresactivos
+          description: Tareas de `pagos-parametricos` en ejecución
+        consumidoresMaximos:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Consumidoresmaximos
+          description: Tareas que el escalado permite como máximo
+      type: object
+      required:
+      - profundidad
+      - consumidoresActivos
+      - consumidoresMaximos
+      title: ColaParametricos
+      description: 'La cola `parametricos-eventos` y quienes la consumen, desde CloudWatch
+        (DS3-26, HU-W28). Cada
+
+        campo es null si no hay métrica o `bff-web` no tiene permiso para leerla.'
+    DisparadorVista:
+      properties:
+        tipoEvento:
+          type: string
+          title: Tipoevento
+        valorObservado:
+          type: string
+          pattern: ^[0-9]+(\.[0-9]{1,3})?$
+          title: Valorobservado
+        umbral:
+          type: string
+          pattern: ^[0-9]+(\.[0-9]{1,3})?$
+          title: Umbral
+        unidad:
+          type: string
+          title: Unidad
+      type: object
+      required:
+      - tipoEvento
+      - valorObservado
+      - umbral
+      - unidad
+      title: DisparadorVista
+    OrigenRecienteVista:
+      properties:
+        eventoOrigen:
+          type: string
+          pattern: ^[A-Za-z0-9._:-]{1,64}$
+          title: Eventoorigen
+        desde:
+          type: string
+          format: date-time
+          title: Desde
+        hasta:
+          type: string
+          format: date-time
+          title: Hasta
+        eventos:
+          type: integer
+          title: Eventos
+      type: object
+      required:
+      - eventoOrigen
+      - desde
+      - hasta
+      - eventos
+      title: OrigenRecienteVista
+    OrigenesRecientesVista:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/OrigenRecienteVista'
+          type: array
+          title: Items
+      type: object
+      required:
+      - items
+      title: OrigenesRecientesVista
+    PagoActivadoVista:
+      properties:
+        siniestroId:
+          type: string
+          format: uuid
+          title: Siniestroid
+        siniestroCodigo:
+          type: string
+          pattern: ^88-[0-9]{4}-[0-9]{4,}$
+          title: Siniestrocodigo
+        polizaId:
+          type: string
+          format: uuid
+          title: Polizaid
+        polizaNumero:
+          anyOf:
+          - type: string
+            pattern: ^[0-9]{3}-[0-9]{4}-[0-9]{6}$
+          - type: 'null'
+          title: Polizanumero
+        disparador:
+          $ref: '#/components/schemas/DisparadorVista'
+        valor:
+          type: string
+          pattern: ^[0-9]+(\.[0-9]{1,2})?$
+          title: Valor
+        moneda:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Moneda
+        estadoActivacion:
+          type: string
+          pattern: ^[A-Z_]{3,32}$
+          title: Estadoactivacion
+        estadoPago:
+          anyOf:
+          - $ref: '#/components/schemas/EstadoPago'
+          - type: 'null'
+          description: 'Desde `siniestros`: PENDIENTE hasta que `dinero` informa un
+            resultado. Null si `siniestros` no respondió'
+      type: object
+      required:
+      - siniestroId
+      - siniestroCodigo
+      - polizaId
+      - polizaNumero
+      - disparador
+      - valor
+      - moneda
+      - estadoActivacion
+      - estadoPago
+      title: PagoActivadoVista
+      description: Una fila de «Últimos pagos activados». El enlace al detalle usa
+        `siniestroId`.
+    ResumenParametricosVista:
+      properties:
+        eventoOrigen:
+          anyOf:
+          - type: string
+            pattern: ^[A-Za-z0-9._:-]{1,64}$
+          - type: 'null'
+          title: Eventoorigen
+        desde:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Desde
+        recibidos:
+          type: integer
+          title: Recibidos
+        procesados:
+          type: integer
+          title: Procesados
+        activados:
+          type: integer
+          title: Activados
+        duplicados:
+          type: integer
+          title: Duplicados
+        enDlq:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Endlq
+          description: 'Mensajes en la DLQ de `parametricos-eventos`: el de `pagos-parametricos`
+            y, si ese es null, el de CloudWatch. Null si ninguna fuente lo da'
+        ritmoPorMinuto:
+          items:
+            $ref: '#/components/schemas/RitmoMinutoVista'
+          type: array
+          title: Ritmoporminuto
+        cola:
+          $ref: '#/components/schemas/ColaParametricos'
+        p95VentaConsultaMs:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: P95Ventaconsultams
+          description: 'p95 del tráfico en línea de venta y consulta durante la avalancha
+            (CF-S3-10). Null si no hay métrica: el portal oculta ese aviso'
+        ultimosPagos:
+          items:
+            $ref: '#/components/schemas/PagoActivadoVista'
+          type: array
+          title: Ultimospagos
+      type: object
+      required:
+      - eventoOrigen
+      - desde
+      - recibidos
+      - procesados
+      - activados
+      - duplicados
+      - enDlq
+      - ritmoPorMinuto
+      - cola
+      - p95VentaConsultaMs
+      - ultimosPagos
+      title: ResumenParametricosVista
+      description: H09. Los números de procesamiento son los de `pagos-parametricos`
+        para `eventoOrigen`.
+    RitmoMinutoVista:
+      properties:
+        minuto:
+          type: string
+          format: date-time
+          title: Minuto
+          description: Inicio del minuto (UTC)
+        procesados:
+          type: integer
+          title: Procesados
+      type: object
+      required:
+      - minuto
+      - procesados
+      title: RitmoMinutoVista
