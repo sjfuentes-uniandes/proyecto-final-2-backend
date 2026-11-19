@@ -46,6 +46,7 @@ from enum import StrEnum
 from typing import Any, NoReturn, Protocol, TypeVar
 from uuid import UUID, uuid4
 
+from opentelemetry import trace
 from solventa_common import presupuesto
 from solventa_common.resiliencia import SinProteccion, TiempoAgotado, registrar_tiempo_agotado
 from solventa_common.telemetry import (
@@ -124,6 +125,8 @@ from cotizacion.domain.perfilamiento.modelos import Perfil
 logger = logging.getLogger("cotizacion.cotizacion")
 
 OPERACION = "cotizacion"
+# HU-W07: la tarea de ECS que atendió, en el span `cotizacion` (sin indexar en X-Ray).
+ATRIBUTO_TASK_ID = "solventa.task_id"
 DEPENDENCIA_PRODUCTO = "catalogo.producto"
 DEPENDENCIA_REGLAS = "catalogo.reglas_prima"
 DEPENDENCIA_CLIENTE = "clientes.identidad"
@@ -192,6 +195,8 @@ class ConfigCotizacion:
     # HU-W13 (DS2-20): horas de vigencia de la oferta desde el cálculo. Desde HU-W04 solo se usa
     # con reglas sin condiciones de oferta (las anteriores a 2026.10.1).
     oferta_vigencia_horas: int = VIGENCIA_HORAS_POR_OMISION
+    # HU-W07: id de la tarea de ECS, leído una vez al arrancar; None fuera de ECS.
+    task_id: str | None = None
 
 
 class ResultadoDependencia(StrEnum):
@@ -325,6 +330,9 @@ class CalcularPrima:
             operacion(OPERACION) as op,
             presupuesto.iniciar(self.config.presupuesto_recorrido_ms, cmd.deadline_ms),
         ):
+            if self.config.task_id:
+                # HU-W07: en el span `cotizacion` (el actual), también en la repetición.
+                trace.get_current_span().set_attribute(ATRIBUTO_TASK_ID, self.config.task_id)
             try:
                 resultado = await self._ejecutar(cmd)
             except ERRORES_DE_NEGOCIO:
