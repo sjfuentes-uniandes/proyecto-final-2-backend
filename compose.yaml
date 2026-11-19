@@ -79,6 +79,8 @@ services:
       CONSULTA_URL: http://consulta:8080
       # HU-W19: siniestros del analista (grupo analistas-siniestros).
       SINIESTROS_URL: http://siniestros:8080
+      # HU-W22 (H09) y HU-W24 (H10 y H11): el seguimiento y la cola de descarte de pagos-parametricos.
+      PAGOS_PARAMETRICOS_URL: http://pagos-parametricos:8080
 
   bff-movil:
     <<: *servicio

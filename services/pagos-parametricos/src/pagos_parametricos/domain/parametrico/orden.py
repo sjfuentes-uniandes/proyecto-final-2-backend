@@ -30,6 +30,9 @@ class PolizaEmitida:
     regla: Regla
     occurred_at: datetime
     aggregate_version: int | None = None
+    # HU-W22: el titular y el nombre del ramo (de `PolizaEmitida`), para crear el siniestro.
+    cliente_id: UUID | None = None
+    ramo: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +75,8 @@ def aplicar_evento_poliza(actual: Cobertura | None, evento: EventoPoliza) -> Cob
                 ultimo_evento_en=evento.occurred_at,
                 aggregate_version=evento.aggregate_version,
                 numero=evento.numero,
+                cliente_id=evento.cliente_id,
+                ramo=evento.ramo,
             )
         case PolizaCancelada():
             return Cobertura(
@@ -83,4 +88,6 @@ def aplicar_evento_poliza(actual: Cobertura | None, evento: EventoPoliza) -> Cob
                 ultimo_evento_en=evento.occurred_at,
                 aggregate_version=evento.aggregate_version,
                 numero=actual.numero if actual else None,
+                cliente_id=actual.cliente_id if actual else None,
+                ramo=actual.ramo if actual else None,
             )

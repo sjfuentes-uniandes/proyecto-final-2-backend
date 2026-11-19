@@ -468,7 +468,12 @@ async def test_la_verificacion_de_h11_sale_de_la_copia_local(
         poliza,
     )
     assert (await cola.detalle(mensaje.message_id)).verificacion["pagoPrevio"] is False  # type: ignore[index]
-    sql(entorno.base, "UPDATE activaciones SET siniestro_id = %s", uuid4())
+    # HU-W22: con siniestro, la activación está `SINIESTRO_CREADO` (la CHECK de la migración 003).
+    sql(
+        entorno.base,
+        "UPDATE activaciones SET estado = 'SINIESTRO_CREADO', siniestro_id = %s",
+        uuid4(),
+    )
     assert (await cola.detalle(mensaje.message_id)).verificacion["pagoPrevio"] is True  # type: ignore[index]
 
 

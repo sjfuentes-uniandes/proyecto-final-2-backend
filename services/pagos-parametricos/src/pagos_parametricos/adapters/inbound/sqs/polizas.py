@@ -75,10 +75,18 @@ class VigenciaV1(Lector):
     hasta: date
 
 
+class RamoV1(Lector):
+    nombre: Annotated[str, Field(min_length=1, max_length=64)]
+
+
 class PolizaEmitidaV1(Lector):
     poliza_id: UUID
     numero: Annotated[str, Field(pattern=r"^[0-9]{3}-[0-9]{4}-[0-9]{6}$")]
     vigencia: VigenciaV1
+    # HU-W22: el titular y el ramo (`PolizaEmitida.v1` los exige); opcionales aquí para que un
+    # evento sin ellos siga alimentando la copia (su activación no podría crear el siniestro).
+    cliente_id: UUID | None = None
+    ramo: RamoV1 | None = None
     cobertura_parametrica: CoberturaParametricaV1 | None = None
 
 
@@ -173,7 +181,15 @@ def manejador_polizas(
             regla = _regla_de(p, p.cobertura_parametrica)
         except EventoInvalido:
             raise invalido(evento, ["coberturaParametrica"]) from None
-        return PolizaEmitida(p.poliza_id, p.numero, regla, emitida.occurred_at, version)
+        return PolizaEmitida(
+            p.poliza_id,
+            p.numero,
+            regla,
+            emitida.occurred_at,
+            version,
+            p.cliente_id,
+            p.ramo.nombre if p.ramo else None,
+        )
 
     async def manejar(evento: EventoRecibido, tx: TransaccionInboxPg) -> Continuacion | None:
         aplicable = a_dominio(evento)

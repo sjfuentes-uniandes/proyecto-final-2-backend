@@ -1,4 +1,4 @@
-"""DTO de siniestros para el portal (HU-W19 y HU-W20): copia de `contracts/openapi/siniestros.yaml` con los
+"""DTO de siniestros para el portal (HU-W19, HU-W20 y HU-W22): copia de `contracts/openapi/siniestros.yaml` con los
 mismos nombres, campos y descripciones. `bff-web` solo agrega las vistas (`clienteNombre` y
 `polizaVista`) en `siniestros.py`. `tests/contract/test_openapi.py` compara `bff-web.yaml` con la app.
 """
@@ -308,7 +308,8 @@ class PasoTramiteDto(_Dto):
 class EntradaHistorial(_Dto):
     """Historial inmutable. `accion` es un código en mayúsculas (REPORTADO, EVIDENCIAS_VALIDADAS,
     ASIGNADO, APROBADO, RECHAZADO, SOPORTE_SOLICITADO, PLAZO_SOPORTE_VENCIDO, PAGO_CONFIRMADO,
-    PAGO_RECHAZADO; W22 agrega los suyos)."""
+    PAGO_RECHAZADO y, desde HU-W22, CREADO_AUTOMATICAMENTE: el paramétrico nace APROBADO con
+    `actorRol = SISTEMA_PARAMETRICO`, sin actor ni nombre)."""
 
     id: UUID
     accion: str = Field(pattern=r"^[A-Z_]{3,40}$")
@@ -323,7 +324,7 @@ class EntradaHistorial(_Dto):
 
 class LiquidacionDto(_Dto):
     """La liquidación aprobada (HU-W20). Null mientras el caso no esté APROBADO. En un paramétrico
-    (W22) solo trae `valorIndemnizar`."""
+    (W22) `valorIndemnizar` es el valor de la cobertura, `deducible` es 0 y `valorReclamado` es null."""
 
     moneda: str = Field(pattern=r"^[A-Z]{3}$")
     valor_reclamado: TextoDecimal | None
@@ -336,7 +337,8 @@ class LiquidacionDto(_Dto):
 
 
 class EventoParametricoDto(_Dto):
-    """Null hasta HU-W22."""
+    """El evento externo y la regla que activaron un siniestro PARAMETRICO (HU-W22, AC3). Null en
+    los demás orígenes."""
 
     evento_id: UUID
     fuente: str
@@ -346,7 +348,10 @@ class EventoParametricoDto(_Dto):
     unidad: str
     zona: str
     observado_en: datetime
-    regla: str
+    evento_origen: str = Field(
+        description="Agrupa los eventos de un mismo episodio (p. ej. EVT-2026-0913); es el selector de H09"
+    )
+    regla: str = Field(description="Código de la regla aplicada (DS3-21); el portal lo traduce")
     version_regla: str
 
 
@@ -365,8 +370,8 @@ class PagoDto(_Dto):
 
 
 class DetalleSiniestro(ResumenSiniestro):
-    """Detalle (H03, H04, Cobertura e Historial). `liquidacion` la llena W20 al aprobar y `pago`, W23;
-    `evento` (W22) viene en null."""
+    """Detalle (H03, H04, Cobertura e Historial). `liquidacion` la llena W20 al aprobar, `pago` W23 y
+    `evento` (W22) solo existe en los siniestros de origen PARAMETRICO."""
 
     causa: str = Field(description="Código del amparo reclamado (uno de poliza.amparos)")
     fecha_evento: datetime

@@ -2,7 +2,7 @@
 
 Documento de la historia [HU-W22](https://github.com/sjfuentes-uniandes/proyecto-final/issues/64) (Sprint 3, recorrido R5). Es la evidencia de contrato que pide el issue: cómo una activación de [HU-W21](hu-w21-evento-parametrico.md) se convierte en **un** siniestro `APROBADO`, qué pasa si `siniestros` no responde, el gancho `reanudar` del Inbox común (DS3-15) y la vista de H09. Cierra el recorrido R5 con el pago de [HU-W23](hu-w23-indemnizacion.md).
 
-Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (gancho del Inbox y creación en `siniestros`)** ✅ · **B3 (activaciones, resumen y `bff-web`)** ☐ · **F1 (portal)** ☐ · **C (cierre y pacto)** ☐.
+Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (gancho del Inbox y creación en `siniestros`)** ✅ · **B3 (activaciones, resumen y `bff-web`)** ✅ · **F1 (portal)** ☐ · **C (cierre y pacto)** ☐.
 
 ## 1. Qué entrega la historia
 
@@ -105,7 +105,10 @@ reanudar: Callable[[EventoRecibido], Awaitable[Continuacion | None]] | None = No
 
 - La continuación crea los siniestros de las activaciones `PENDIENTE` del evento, en paralelo y acotado por el *bulkhead*; cada respuesta pasa su activación a `SINIESTRO_CREADO` con `siniestro_id` en una transacción corta. Si alguna falla, la continuación lanza y el mensaje no se borra.
 - Un timeout **después** del commit de `siniestros` no duplica: el reintento recibe 200 con el existente.
-- Los datos que `siniestros` necesita y que la cobertura no guardaba (cliente, ramo) y lo que H09 muestra (código del siniestro y disparador) se agregan en B3 (R-177 y R-179).
+- Los datos que `siniestros` necesita y que la cobertura no guardaba (cliente, ramo) y lo que H09 muestra (código del siniestro y disparador) los agrega la migración `003_activacion_siniestro.sql` (R-177 y R-179): `coberturas_activas.cliente_id` y `ramo` (de `PolizaEmitida`), y `activaciones.siniestro_codigo` y `disparador`, que se escriben junto con `SINIESTRO_CREADO`. Una CHECK exige que el estado y el siniestro vayan juntos.
+- **Código.** `domain/parametrico/activacion.py` (solicitud y vigencia), `application/parametrico/{activar,resumen}.py`, `adapters/outbound/{siniestros_http,activaciones_pg,resumen_pg}.py` y `adapters/inbound/{http/resumen.py,sqs/eventos.py}`. `main.armar_consumidores` conserva la forma de W24 (`concurrencia`, `visibilidad_s=30`, `plazo_parada_s=10`, `al_fallar`) y suma `reanudar`.
+- **Límites.** Dentro de un evento, las activaciones se crean en paralelo con un semáforo de 10 (el *bulkhead* no espera cupo); el *bulkhead* y el circuito son por proceso. Si alguna falla, la continuación intenta todas y lanza `ActivacionFallida`: el mensaje no se borra y H10 lo muestra como `ERROR_PROCESAMIENTO`.
+- **Una cobertura anterior a la migración** no tiene titular: su activación no puede crear el siniestro y el mensaje termina en la DLQ hasta que se vuelva a publicar su `PolizaEmitida`.
 
 **Seguimiento (B3).** `GET /v1/parametricos/resumen?eventoOrigen=` y `GET /v1/parametricos/eventos-origen?limite=`, lectura con índices por `evento_origen` y `evaluado_en`:
 

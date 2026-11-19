@@ -73,6 +73,10 @@ class Cobertura:
     ultimo_evento_en: datetime
     aggregate_version: int | None = None
     numero: str | None = None
+    # HU-W22 (R-177): lo que el siniestro paramétrico necesita de la póliza. Nulos en las coberturas
+    # aplicadas antes de la migración 003.
+    cliente_id: UUID | None = None
+    ramo: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

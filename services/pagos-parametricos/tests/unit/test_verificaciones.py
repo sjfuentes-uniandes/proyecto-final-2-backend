@@ -108,6 +108,7 @@ class Cursor:
 FILA = (
     UUID(int=1), "250-2026-000001", "ACTIVA", "LLUVIA_ACUMULADA", "11001", Decimal(120), "mm",
     Decimal("1400000.00"), "COP", "1", DESDE, HASTA, None, DESDE,
+    UUID(int=9), "Paramétrico",
 )  # fmt: skip
 
 

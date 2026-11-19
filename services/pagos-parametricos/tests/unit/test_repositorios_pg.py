@@ -21,6 +21,7 @@ from pagos_parametricos.domain.parametrico.modelos import (
 pytestmark = pytest.mark.anyio
 AHORA = datetime(2026, 11, 10, 14, 0, 6, tzinfo=UTC)
 POLIZA = UUID(int=1)
+CLIENTE = UUID("00000000-0000-4000-8000-000000000002")
 EVENTO = UUID("bafc2b26-7c88-5ae3-b5ac-26fdf5427a09")
 REGLA = Regla(
     "LLUVIA_ACUMULADA",
@@ -36,11 +37,11 @@ REGLA = Regla(
 FILA_ACTIVA = (
     POLIZA, "250-2026-000101", "ACTIVA", "LLUVIA_ACUMULADA", "11001", Decimal(120), "mm",
     Decimal("1400000.00"), "COP", "1", REGLA.vigente_desde, REGLA.vigente_hasta, 2,
-    datetime(2026, 11, 1, tzinfo=UTC),
+    datetime(2026, 11, 1, tzinfo=UTC), CLIENTE, "Paramétrico",
 )  # fmt: skip
 FILA_CANCELADA_SIN_REGLA = (
     POLIZA, None, "CANCELADA", None, None, None, None, None, None, None, None, None, None,
-    datetime(2026, 11, 1, tzinfo=UTC),
+    datetime(2026, 11, 1, tzinfo=UTC), None, None,
 )  # fmt: skip
 
 
@@ -105,6 +106,8 @@ def test_la_fila_activa_se_lee_con_su_regla_y_la_cancelada_sin_regla_tambien() -
     activa = cobertura_de(FILA_ACTIVA)
     assert activa.estado is EstadoCobertura.ACTIVA and activa.regla == REGLA
     assert (activa.aggregate_version, activa.numero) == (2, "250-2026-000101")
+    # HU-W22: el titular y el ramo de la póliza.
+    assert (activa.cliente_id, activa.ramo) == (CLIENTE, "Paramétrico")
     cancelada = cobertura_de(FILA_CANCELADA_SIN_REGLA)
     assert (cancelada.estado, cancelada.regla, cancelada.numero) == (
         EstadoCobertura.CANCELADA,
@@ -136,12 +139,12 @@ async def test_guardar_es_un_upsert_con_todas_las_columnas_de_la_regla() -> None
     await CoberturasPg().guardar(Tx(conexion), cobertura)  # type: ignore[arg-type]
     [(sql, parametros)] = conexion.sentencias
     assert "ON CONFLICT (poliza_id) DO UPDATE" in sql
-    assert parametros is not None and len(parametros) == 14
+    assert parametros is not None and len(parametros) == 16
     assert parametros[:3] == (POLIZA, "250-2026-000101", "ACTIVA")
     assert parametros[3:10] == (
         "LLUVIA_ACUMULADA", "11001", Decimal(120), "mm", Decimal("1400000.00"), "COP", "1",
     )  # fmt: skip
-    assert parametros[12:] == (2, datetime(2026, 11, 1, tzinfo=UTC))
+    assert parametros[12:] == (2, datetime(2026, 11, 1, tzinfo=UTC), CLIENTE, "Paramétrico")
 
 
 async def test_guardar_una_cancelada_sin_regla_escribe_nulos_en_la_regla() -> None:

@@ -100,6 +100,17 @@ class SiniestrosCliente:
             "POST", f"/{siniestro_id}/evidencias/{evidencia_id}/enlace", actor, nombre
         )
 
+    async def pagos_parametricos(self, ids: list[UUID], actor: str, nombre: str) -> Any:
+        """El estado de pago de hasta 20 siniestros paramétricos (HU-W22, H09). El parámetro se
+        repite (`siniestroIds=…&siniestroIds=…`)."""
+        return await self._json(
+            "GET",
+            "/parametricos/pagos",
+            actor,
+            nombre,
+            params={"siniestroIds": [str(i) for i in ids]},
+        )
+
     async def catalogos_decision(self, actor: str, nombre: str) -> Any:
         return await self._json("GET", "/catalogos-decision", actor, nombre)
 
