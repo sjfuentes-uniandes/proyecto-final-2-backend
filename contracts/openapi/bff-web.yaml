@@ -114,6 +114,56 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /operacion/capacidad:
+    get:
+      tags:
+      - operacion
+      summary: Obtener Capacidad
+      operationId: obtener_capacidad_operacion_capacidad_get
+      parameters:
+      - name: x-authenticated-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Groups
+      - name: x-authenticated-issuer
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Authenticated-Issuer
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapacidadRespuesta'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: falta el grupo operacion o no es del back-office'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'SERVICIO_NO_DISPONIBLE: CloudWatch o Application Auto Scaling
+            no respondieron, o el ambiente no tiene configurada la capacidad (sin
+            detalles)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /backoffice/grupos:
     get:
       tags:
@@ -4043,6 +4093,48 @@ components:
       - comercio
       - otro
       title: CanalVenta
+    CapacidadRespuesta:
+      properties:
+        ambiente:
+          type: string
+          title: Ambiente
+        servicio:
+          type: string
+          title: Servicio
+        ventana_min:
+          type: integer
+          title: Ventana Min
+        cotizaciones_por_minuto:
+          items:
+            $ref: '#/components/schemas/PuntoCapacidadRespuesta'
+          type: array
+          title: Cotizaciones Por Minuto
+        tareas_activas:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Tareas Activas
+        minimo:
+          type: integer
+          title: Minimo
+        maximo:
+          type: integer
+          title: Maximo
+        ultimo_escalado:
+          anyOf:
+          - $ref: '#/components/schemas/EscaladoRespuesta'
+          - type: 'null'
+      type: object
+      required:
+      - ambiente
+      - servicio
+      - ventana_min
+      - cotizaciones_por_minuto
+      - tareas_activas
+      - minimo
+      - maximo
+      - ultimo_escalado
+      title: CapacidadRespuesta
     CasoBandejaVista:
       properties:
         decisionId:
@@ -5597,6 +5689,37 @@ components:
       - correlationId
       - detalles
       title: ErrorDto
+    EscaladoRespuesta:
+      properties:
+        inicio:
+          type: string
+          format: date-time
+          title: Inicio
+        fin:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Fin
+        duracion_s:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duracion S
+        descripcion:
+          type: string
+          title: Descripcion
+        estado:
+          type: string
+          title: Estado
+      type: object
+      required:
+      - inicio
+      - fin
+      - duracion_s
+      - descripcion
+      - estado
+      title: EscaladoRespuesta
     Estado:
       type: string
       enum:
@@ -7008,6 +7131,20 @@ components:
       - id
       - version
       title: ProductoPolizaDto
+    PuntoCapacidadRespuesta:
+      properties:
+        instante:
+          type: string
+          format: date-time
+          title: Instante
+        valor:
+          type: integer
+          title: Valor
+      type: object
+      required:
+      - instante
+      - valor
+      title: PuntoCapacidadRespuesta
     RamoPolizaDto:
       properties:
         codigo:

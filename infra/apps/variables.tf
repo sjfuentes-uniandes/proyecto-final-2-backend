@@ -55,14 +55,26 @@ variable "max_replicas" {
 }
 
 variable "service_overrides" {
-  description = "Ajustes por servicio: cpu, memory, min, max."
+  description = "Ajustes por servicio: cpu, memory, min, max y, para la política de CPU (HU-W08), cpu_target (%), scale_out_cooldown y scale_in_cooldown (s). Un campo sin valor toma el global del ambiente."
   type = map(object({
-    cpu    = optional(number)
-    memory = optional(number)
-    min    = optional(number)
-    max    = optional(number)
+    cpu                = optional(number)
+    memory             = optional(number)
+    min                = optional(number)
+    max                = optional(number)
+    cpu_target         = optional(number)
+    scale_out_cooldown = optional(number)
+    scale_in_cooldown  = optional(number)
   }))
   default = {}
+  validation {
+    condition = alltrue([
+      for override in values(var.service_overrides) :
+      (override.cpu_target == null ? true : override.cpu_target >= 1 && override.cpu_target <= 100) &&
+      (override.scale_out_cooldown == null ? true : override.scale_out_cooldown >= 0 && floor(override.scale_out_cooldown) == override.scale_out_cooldown) &&
+      (override.scale_in_cooldown == null ? true : override.scale_in_cooldown >= 0 && floor(override.scale_in_cooldown) == override.scale_in_cooldown)
+    ])
+    error_message = "En service_overrides, cpu_target va de 1 a 100 y los enfriamientos son enteros mayores o iguales a 0."
+  }
 }
 
 variable "use_fargate_spot" {
@@ -72,8 +84,33 @@ variable "use_fargate_spot" {
 }
 
 variable "cpu_target" {
-  type    = number
-  default = 60
+  description = "Objetivo de CPU promedio (%) de la política de autoescalado de los servicios que no son workers. service_overrides lo ajusta por servicio."
+  type        = number
+  default     = 60
+  validation {
+    condition     = var.cpu_target >= 1 && var.cpu_target <= 100
+    error_message = "Use un porcentaje entre 1 y 100."
+  }
+}
+
+variable "scale_out_cooldown_seconds" {
+  description = "Enfriamiento (s) tras escalar hacia fuera por CPU, antes de volver a escalar hacia fuera. service_overrides lo ajusta por servicio."
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.scale_out_cooldown_seconds >= 0 && floor(var.scale_out_cooldown_seconds) == var.scale_out_cooldown_seconds
+    error_message = "Use un entero mayor o igual a 0."
+  }
+}
+
+variable "scale_in_cooldown_seconds" {
+  description = "Enfriamiento (s) tras escalar hacia dentro por CPU, antes de volver a retirar tareas. service_overrides lo ajusta por servicio."
+  type        = number
+  default     = 300
+  validation {
+    condition     = var.scale_in_cooldown_seconds >= 0 && floor(var.scale_in_cooldown_seconds) == var.scale_in_cooldown_seconds
+    error_message = "Use un entero mayor o igual a 0."
+  }
 }
 
 variable "queue_backlog_target" {
