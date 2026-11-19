@@ -130,7 +130,7 @@ run "carga_sin_api_socios" {
   }
 
   assert {
-    condition     = length(aws_ecs_task_definition.load_test) == 1 && length(aws_vpc_security_group_ingress_rule.load_test_alb) == 0
-    error_message = "HU-W09: sin api-socios en el catálogo, la tarea k6 existe pero no se abre ningún puerto del ALB."
+    condition     = length(aws_ecs_task_definition.load_test) == 2 && length(aws_vpc_security_group_ingress_rule.load_test_alb) == 0
+    error_message = "HU-W09: sin api-socios en el catálogo, las dos tareas k6 existen pero no se abre ningún puerto del ALB."
   }
 }

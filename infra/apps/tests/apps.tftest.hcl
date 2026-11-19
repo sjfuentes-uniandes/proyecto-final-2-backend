@@ -1033,45 +1033,69 @@ run "carga_encendida" {
       length(aws_cloudwatch_log_group.load_test) == 1 &&
       length(aws_iam_role.load_test_execution) == 1 &&
       length(aws_iam_role_policy.load_test_execution) == 1 &&
-      length(aws_ecs_task_definition.load_test) == 1 &&
+      length(aws_ecs_task_definition.load_test) == 2 &&
       length(aws_security_group.load_test) == 1 &&
       length(aws_vpc_security_group_egress_rule.load_test) == 1 &&
       length(aws_vpc_security_group_ingress_rule.load_test_alb) == 1
     )
-    error_message = "HU-W09: encendida, existen el log group, el rol de ejecución y su política, la definición de tarea, el SG, su salida y la entrada al ALB."
+    error_message = "HU-W09: encendida, existen el log group, el rol de ejecución y su política, las dos definiciones de tarea (carga y alta), el SG, su salida y la entrada al ALB."
   }
   assert {
-    # Las pruebas de tests/e2e buscan la familia y el SG por nombre (no leen las salidas de apps).
+    # Las pruebas de tests/e2e buscan las familias y el SG por nombre (no leen las salidas de apps).
     condition = (
-      aws_ecs_task_definition.load_test[0].family == "solventa-int-carga" &&
+      toset(keys(aws_ecs_task_definition.load_test)) == toset(["carga", "alta"]) &&
+      aws_ecs_task_definition.load_test["carga"].family == "solventa-int-carga" &&
+      aws_ecs_task_definition.load_test["alta"].family == "solventa-int-carga-alta" &&
       aws_security_group.load_test[0].name == "solventa-int-carga" &&
       aws_security_group.load_test[0].vpc_id == local.p.vpc_id &&
       aws_cloudwatch_log_group.load_test[0].name == "/ecs/solventa-int/carga" &&
       aws_cloudwatch_log_group.load_test[0].retention_in_days == var.load_test_log_retention_days
     )
-    error_message = "HU-W09: la familia y el SG se llaman <prefijo>-carga, el SG está en la VPC de platform y el log group es /ecs/<prefijo>/carga con su retención."
+    error_message = "HU-W09: las familias son <prefijo>-carga y <prefijo>-carga-alta, el SG se llama <prefijo>-carga y está en la VPC de platform, y el log group es /ecs/<prefijo>/carga con su retención."
   }
   assert {
-    condition = (
-      aws_ecs_task_definition.load_test[0].requires_compatibilities == toset(["FARGATE"]) &&
-      aws_ecs_task_definition.load_test[0].network_mode == "awsvpc" &&
-      aws_ecs_task_definition.load_test[0].cpu == tostring(var.load_test_cpu) &&
-      aws_ecs_task_definition.load_test[0].memory == tostring(var.load_test_memory) &&
-      aws_ecs_task_definition.load_test[0].execution_role_arn == aws_iam_role.load_test_execution[0].arn &&
-      aws_ecs_task_definition.load_test[0].task_role_arn == null
-    )
-    error_message = "HU-W09: la tarea k6 es FARGATE, awsvpc, con CPU y memoria por variable, su rol de ejecución y sin rol de tarea."
+    condition = alltrue([for definicion in aws_ecs_task_definition.load_test : (
+      definicion.requires_compatibilities == toset(["FARGATE"]) &&
+      definicion.network_mode == "awsvpc" &&
+      definicion.cpu == tostring(var.load_test_cpu) &&
+      definicion.memory == tostring(var.load_test_memory) &&
+      definicion.execution_role_arn == aws_iam_role.load_test_execution[0].arn &&
+      definicion.task_role_arn == null
+    )])
+    error_message = "HU-W09: las dos tareas k6 son FARGATE, awsvpc, con CPU y memoria por variable, el mismo rol de ejecución y sin rol de tarea."
   }
   assert {
-    # Un solo contenedor, la imagen por variable, sin command fijo (se pasa al lanzar) y el log a su grupo.
-    condition = (
-      length(jsondecode(aws_ecs_task_definition.load_test[0].container_definitions)) == 1 &&
-      jsondecode(aws_ecs_task_definition.load_test[0].container_definitions)[0].image == var.load_test_image &&
-      try(jsondecode(aws_ecs_task_definition.load_test[0].container_definitions)[0].command, null) == null &&
-      jsondecode(aws_ecs_task_definition.load_test[0].container_definitions)[0].logConfiguration.logDriver == "awslogs" &&
-      jsondecode(aws_ecs_task_definition.load_test[0].container_definitions)[0].logConfiguration.options["awslogs-group"] == aws_cloudwatch_log_group.load_test[0].name
-    )
-    error_message = "HU-W09: el contenedor k6 usa load_test_image, no fija command y escribe en /ecs/<prefijo>/carga."
+    # Un solo contenedor k6, la imagen por variable y el log a su grupo, en las dos definiciones.
+    condition = alltrue([for definicion in aws_ecs_task_definition.load_test : (
+      length(jsondecode(definicion.container_definitions)) == 1 &&
+      jsondecode(definicion.container_definitions)[0].name == "k6" &&
+      jsondecode(definicion.container_definitions)[0].image == var.load_test_image &&
+      jsondecode(definicion.container_definitions)[0].logConfiguration.logDriver == "awslogs" &&
+      jsondecode(definicion.container_definitions)[0].logConfiguration.options["awslogs-group"] == aws_cloudwatch_log_group.load_test[0].name
+    )])
+    error_message = "HU-W09: el contenedor k6 usa load_test_image y escribe en /ecs/<prefijo>/carga, en las dos definiciones."
+  }
+  assert {
+    # El script viaja en la definición (no en una URL): sh -c lo decodifica a /tmp/s.js y k6 corre
+    # el archivo local, con -q (sin progreso ni encabezado). command y entryPoint son fijos.
+    condition = alltrue([for definicion in aws_ecs_task_definition.load_test : (
+      jsondecode(definicion.container_definitions)[0].entryPoint == ["sh", "-c"] &&
+      jsondecode(definicion.container_definitions)[0].command == ["echo \"$HU_W09_SCRIPT\" | base64 -d > /tmp/s.js && exec k6 run --log-format=raw -q /tmp/s.js"] &&
+      [for variable in jsondecode(definicion.container_definitions)[0].environment : variable.name] == ["HU_W09_SCRIPT"]
+    )])
+    error_message = "HU-W09: entryPoint [sh, -c] y el command fijo que decodifica HU_W09_SCRIPT a /tmp/s.js y corre k6 con --log-format=raw -q; HU_W09_SCRIPT es la única variable fija."
+  }
+  assert {
+    # Cada definición lleva su script, tal cual está en experiments/hu-w09/.
+    condition = alltrue([for nombre, definicion in aws_ecs_task_definition.load_test :
+      base64decode(one([for variable in jsondecode(definicion.container_definitions)[0].environment : variable.value if variable.name == "HU_W09_SCRIPT"])) == file("${path.module}/../../experiments/hu-w09/${nombre}.js")
+    ])
+    error_message = "HU-W09: HU_W09_SCRIPT de la definición carga es experiments/hu-w09/carga.js en base64, y el de alta, alta.js."
+  }
+  assert {
+    # Una definición de tarea admite 64 KiB (cuota de ECS no ajustable): la guarda es 48 KiB.
+    condition     = alltrue([for definicion in aws_ecs_task_definition.load_test : length(definicion.container_definitions) < 49152])
+    error_message = "HU-W09: container_definitions de cada tarea k6 mide menos de 48 KiB (la definición de tarea admite 64 KiB)."
   }
   assert {
     # Solo escribir en su log group: ni ECR (imagen pública), ni secretos, ni KMS.

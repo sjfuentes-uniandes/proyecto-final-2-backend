@@ -1,16 +1,27 @@
 # ---------------------------------------------------------------------------
 # Experimento de carga (HU-W09): tarea k6 puntual dentro de la VPC, contra el ALB
 # interno en el listener de api-socios. No se ejecuta sola: la lanza
-# tests/e2e/test_hu_w09_carga.py con run-task, pasa el comando en containerOverrides
-# y el script llega por una URL prefirmada (la tarea no llama a AWS: sin rol de tarea).
+# tests/e2e/test_hu_w09_carga.py con run-task, con solo variables de entorno en
+# containerOverrides (la tarea no llama a AWS: sin rol de tarea).
+# Dos definiciones con el mismo contenedor, rol, log group y SG: <prefijo>-carga
+# (experiments/hu-w09/carga.js) y <prefijo>-carga-alta (alta.js). El script viaja en
+# base64 en HU_W09_SCRIPT y el command fijo lo decodifica a /tmp/s.js: sin S3 ni URL
+# prefirmada, cuya firma y token de sesión k6 imprimía al arrancar. Una definición
+# admite 64 KiB (cuota de ECS no ajustable); las pruebas exigen menos de 48 KiB.
+# Cambiar un script crea una revisión nueva de su definición al aplicar exp.
 # Todo depende de load_test_enabled (false por omisión; solo envs/exp lo enciende).
-# Las pruebas buscan la familia y el SG por nombre (<prefijo>-carga), sin salidas.
+# Las pruebas buscan las familias y el SG por nombre, sin salidas.
 # ---------------------------------------------------------------------------
 locals {
   load_test = var.load_test_enabled ? 1 : 0
   # Puerto del listener de api-socios en el ALB, del catálogo de platform. En AWS siempre está
   # (platform/catalog.tf); si faltara (fixtures reducidos de las pruebas), no se abre el ALB.
   load_test_port = try(local.p.catalog["api-socios"].listener_port, null)
+  # Familia (sufijo de <prefijo>-) y script de cada definición de tarea k6.
+  load_test_tasks = var.load_test_enabled ? {
+    carga = { family = "carga", script = filebase64("${path.module}/../../experiments/hu-w09/carga.js") }
+    alta  = { family = "carga-alta", script = filebase64("${path.module}/../../experiments/hu-w09/alta.js") }
+  } : {}
 }
 
 resource "aws_cloudwatch_log_group" "load_test" {
@@ -41,8 +52,8 @@ resource "aws_iam_role_policy" "load_test_execution" {
 }
 
 resource "aws_ecs_task_definition" "load_test" {
-  count                    = local.load_test
-  family                   = "${local.prefix}-carga"
+  for_each                 = local.load_test_tasks
+  family                   = "${local.prefix}-${each.value.family}"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = tostring(var.load_test_cpu)
@@ -52,6 +63,11 @@ resource "aws_ecs_task_definition" "load_test" {
     name      = "k6"
     image     = var.load_test_image
     essential = true
+    # El ENTRYPOINT de la imagen es k6; sh -c decodifica el script y cede el proceso a k6.
+    # -q quita el progreso y el encabezado; los avisos de k6 y las líneas HU-W09-* siguen.
+    entryPoint  = ["sh", "-c"]
+    command     = ["echo \"$HU_W09_SCRIPT\" | base64 -d > /tmp/s.js && exec k6 run --log-format=raw -q /tmp/s.js"]
+    environment = [{ name = "HU_W09_SCRIPT", value = each.value.script }]
     logConfiguration = {
       logDriver = "awslogs"
       options = {

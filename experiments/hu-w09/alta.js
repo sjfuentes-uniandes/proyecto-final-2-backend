@@ -8,7 +8,13 @@
 // ni la apiKey, que son la única vez que aparecen (SocioCreado). Si la respuesta no es 201,
 // termina con un código distinto de 0 y el estado y el código de error del servicio.
 //
-//   k6 run --log-format=raw -e ALB_URL=http://<dns del ALB>:8083 <URL prefirmada de este archivo>
+// Lo lanza tests/e2e/test_hu_w09_carga.py (hu_w09_preparar) como tarea Fargate (infra/apps/carga.tf,
+// familia <prefijo>-carga-alta). Este archivo viaja en base64 en la variable HU_W09_SCRIPT de la
+// definición de tarea, y el contenedor (entryPoint sh -c) lo decodifica y lo corre:
+//   echo "$HU_W09_SCRIPT" | base64 -d > /tmp/s.js && exec k6 run --log-format=raw -q /tmp/s.js
+// ALB_URL=http://<dns del ALB>:8083 llega como variable de entorno en las sobrescrituras de run_task.
+// En local:
+//   k6 run --log-format=raw -e ALB_URL=http://localhost:8083 alta.js
 import http from 'k6/http';
 import exec from 'k6/execution';
 

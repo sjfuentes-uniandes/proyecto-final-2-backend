@@ -7,11 +7,16 @@
 //   apigw  Verificación de extremo a extremo (WAF → API Gateway → api-socios), DESPUÉS de la
 //          curva y solo si llegan todas sus variables: token client_credentials y API key.
 //
-// Lo lanza tests/e2e/test_hu_w09_carga.py como tarea Fargate (infra/apps/carga.tf):
-//   k6 run --log-format=raw <URL prefirmada de este archivo>
-//     -e ALB_URL=http://<dns del ALB>:8083 -e SOCIO_CLIENT_ID=<clientId> -e SOCIO_KEY_ID=<id de la API key>
-//     [-e APIGW_URL=<api de socios> -e APIGW_TOKEN_URL=<token de Cognito> -e APIGW_CLIENT_SECRET=...
-//      -e APIGW_API_KEY=... -e APIGW_SCOPE=solventa/cotizar]
+// Lo lanza tests/e2e/test_hu_w09_carga.py como tarea Fargate (infra/apps/carga.tf, familia
+// <prefijo>-carga). Este archivo viaja en base64 en la variable HU_W09_SCRIPT de la definición de
+// tarea, y el contenedor (entryPoint sh -c) lo decodifica y lo corre:
+//   echo "$HU_W09_SCRIPT" | base64 -d > /tmp/s.js && exec k6 run --log-format=raw -q /tmp/s.js
+// La configuración llega como variables de entorno en las sobrescrituras de run_task:
+//   ALB_URL=http://<dns del ALB>:8083, SOCIO_CLIENT_ID=<clientId>, SOCIO_KEY_ID=<id de la API key>
+//   [APIGW_URL=<api de socios>, APIGW_TOKEN_URL=<token de Cognito>, APIGW_CLIENT_SECRET=...,
+//    APIGW_API_KEY=... y APIGW_SCOPE=solventa/cotizar]
+// En local, las mismas variables van como -e de k6:
+//   k6 run --log-format=raw -e ALB_URL=http://localhost:8083 -e SOCIO_CLIENT_ID=... -e SOCIO_KEY_ID=... carga.js
 //
 // Resultado: una línea por etapa en el log, con el prefijo «HU-W09-ETAPA » y un JSON compacto
 // (handleSummary), más un resumen de texto breve por etapa (sin jslib). Al empezar, una línea
@@ -168,7 +173,8 @@ if (CON_APIGW) {
 const errores4xx = new Counter('hu_w09_errores_4xx');
 const errores5xx = new Counter('hu_w09_errores_5xx');
 const erroresRed = new Counter('hu_w09_errores_red');
-const tokensFallidos = new Counter('hu_w09_tokens_fallidos');
+const tokensFallidos = new Counter('hu_w09_tokens_fallidos'); // solicitudes de token fallidas
+const sinToken = new Counter('hu_w09_sin_token'); // iteraciones de gw terminadas sin token
 
 // Thresholds que siempre se cumplen: hacen aparecer las submétricas por escenario en el resumen.
 function umbrales() {
@@ -249,12 +255,20 @@ export function cotizarPorAlb() {
 }
 
 // Un token por VU (variables de módulo: cada VU tiene las suyas), renovado 60 s antes de vencer.
+// Tras un fallo, el VU no vuelve a pedirlo hasta pasados ESPERA_TRAS_FALLO_MS: sin sleep, sus
+// iteraciones terminan sin cotizar (cuentan en hu_w09_sin_token). Así, si Cognito falla, recibe a lo
+// sumo una solicitud por VU cada 10 s, y no una por iteración. El aviso sale solo en el primer fallo
+// de cada VU; los demás solo suman a hu_w09_tokens_fallidos.
 let token = null;
 let venceMs = 0;
+let proximoIntentoMs = 0;
+let avisado = false;
 const RENOVAR_ANTES_MS = 60 * 1000;
+const ESPERA_TRAS_FALLO_MS = 10 * 1000;
 
 function tokenVigente() {
   if (token !== null && Date.now() < venceMs - RENOVAR_ANTES_MS) return token;
+  if (Date.now() < proximoIntentoMs) return null;
   const respuesta = http.post(
     APIGW_TOKEN_URL,
     { grant_type: 'client_credentials', scope: APIGW_SCOPE },
@@ -267,9 +281,13 @@ function tokenVigente() {
   );
   if (respuesta.status !== 200) {
     tokensFallidos.add(1);
-    // Solo el estado: el cuerpo de un error de Cognito no se imprime.
-    console.warn(`HU-W09: el token no se obtuvo (HTTP ${respuesta.status}); se reintenta en la próxima iteración`);
+    if (!avisado) {
+      // Solo el estado: el cuerpo de un error de Cognito no se imprime.
+      console.warn(`HU-W09: el token no se obtuvo (HTTP ${respuesta.status}); este VU lo reintenta cada ${ESPERA_TRAS_FALLO_MS / 1000} s y no vuelve a avisar (total en HU-W09-TOKENS)`);
+      avisado = true;
+    }
     token = null;
+    proximoIntentoMs = Date.now() + ESPERA_TRAS_FALLO_MS;
     return null;
   }
   const datos = JSON.parse(respuesta.body);
@@ -280,7 +298,10 @@ function tokenVigente() {
 
 export function cotizarPorApigw() {
   const vigente = tokenVigente();
-  if (vigente === null) return;
+  if (vigente === null) {
+    sinToken.add(1);
+    return;
+  }
   cotizar(`${APIGW_URL}/cotizaciones`, { Authorization: `Bearer ${vigente}`, 'x-api-key': APIGW_API_KEY });
 }
 
@@ -374,7 +395,10 @@ export function resumenTexto(data) {
 }
 
 export function handleSummary(data) {
-  const tokens = valores(data, 'hu_w09_tokens_fallidos');
-  const pie = CON_APIGW ? `\n${PREFIJO_TOKENS} ${JSON.stringify({ fallidos: tokens ? tokens.count : 0 })}` : '';
+  const fallidos = valores(data, 'hu_w09_tokens_fallidos');
+  const sinTokenTotal = valores(data, 'hu_w09_sin_token');
+  // fallidos: solicitudes de token fallidas; sin_token: iteraciones de gw terminadas sin token.
+  const tokens = { fallidos: fallidos ? fallidos.count : 0, sin_token: sinTokenTotal ? sinTokenTotal.count : 0 };
+  const pie = CON_APIGW ? `\n${PREFIJO_TOKENS} ${JSON.stringify(tokens)}` : '';
   return { stdout: `${lineasPorEtapa(data).join('\n')}${pie}\n\n${resumenTexto(data)}\n` };
 }

@@ -118,7 +118,7 @@ run "ambiente_exp" {
     error_message = "exp tiene su tablero y sus alarmas con su propio prefijo."
   }
   assert {
-    condition     = var.load_test_enabled && length(aws_ecs_task_definition.load_test) == 1 && try(aws_ecs_task_definition.load_test[0].family, "") == "solventa-exp-carga"
-    error_message = "HU-W09: en exp existe la tarea k6 del experimento de carga (solventa-exp-carga)."
+    condition     = var.load_test_enabled && toset([for definicion in aws_ecs_task_definition.load_test : definicion.family]) == toset(["solventa-exp-carga", "solventa-exp-carga-alta"])
+    error_message = "HU-W09: en exp existen las dos tareas k6 del experimento de carga (solventa-exp-carga y solventa-exp-carga-alta)."
   }
 }
