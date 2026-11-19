@@ -218,6 +218,15 @@ def test_fuera_de_int_y_local_no_arranca_con_la_semilla(
         Settings()
 
 
+def test_en_exp_arranca_con_la_semilla(monkeypatch: pytest.MonkeyPatch) -> None:
+    # HU-W09: EXP es desechable y solo tiene datos sintéticos (envs/exp/apps.tfvars la activa).
+    monkeypatch.setenv("CLIENTES_SEMILLA_SINTETICA", "true")
+    monkeypatch.setenv("ENVIRONMENT", "exp")
+    monkeypatch.setenv("REGISTRO_TOKEN_SECRET", SECRETO)
+
+    assert Settings().semilla_sintetica is True
+
+
 @pytest.mark.parametrize("activa", [True, False])
 def test_el_arranque_siembra_despues_de_migrar_solo_con_la_bandera(
     monkeypatch: pytest.MonkeyPatch, pools: list[Any], activa: bool

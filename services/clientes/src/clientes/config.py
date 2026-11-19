@@ -4,7 +4,8 @@ from solventa_common.settings import ServiceSettings
 from solventa_common.token_registro import SECRETO_LOCAL
 
 # Los clientes sintéticos nunca se siembran en un ambiente con datos reales.
-AMBIENTES_CON_SEMILLA = frozenset({"int", "local"})
+# HU-W09: EXP es desechable y solo usa datos sintéticos.
+AMBIENTES_CON_SEMILLA = frozenset({"int", "exp", "local"})
 
 
 def _env(nombre: str) -> AliasChoices:
@@ -40,13 +41,13 @@ class Settings(ServiceSettings):
     # Conexiones mínimas del pool de consentimientos; el máximo es `db_pool_size` (DB_POOL_SIZE).
     db_pool_min_size: int = Field(1, ge=1, validation_alias=_env("DB_POOL_MIN_SIZE"))
 
-    # Siembra C01–C33 al arrancar (DEF-01). Solo la activa infra/envs/int/apps.tfvars.
+    # Siembra C01–C33 al arrancar (DEF-01). La activan infra/envs/{int,exp}/apps.tfvars.
     semilla_sintetica: bool = Field(False, validation_alias=_env("CLIENTES_SEMILLA_SINTETICA"))
 
     @model_validator(mode="after")
     def _semilla_solo_en_pruebas(self) -> "Settings":
         if self.semilla_sintetica and self.environment not in AMBIENTES_CON_SEMILLA:
-            raise ValueError("CLIENTES_SEMILLA_SINTETICA solo se permite en int o local")
+            raise ValueError("CLIENTES_SEMILLA_SINTETICA solo se permite en int, exp o local")
         return self
 
     @model_validator(mode="after")
