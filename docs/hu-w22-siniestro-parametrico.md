@@ -2,7 +2,7 @@
 
 Documento de la historia [HU-W22](https://github.com/sjfuentes-uniandes/proyecto-final/issues/64) (Sprint 3, recorrido R5). Es la evidencia de contrato que pide el issue: cómo una activación de [HU-W21](hu-w21-evento-parametrico.md) se convierte en **un** siniestro `APROBADO`, qué pasa si `siniestros` no responde, el gancho `reanudar` del Inbox común (DS3-15) y la vista de H09. Cierra el recorrido R5 con el pago de [HU-W23](hu-w23-indemnizacion.md).
 
-Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (gancho del Inbox y creación en `siniestros`)** ☐ · **B3 (activaciones, resumen y `bff-web`)** ☐ · **F1 (portal)** ☐ · **C (cierre y pacto)** ☐.
+Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (gancho del Inbox y creación en `siniestros`)** ✅ · **B3 (activaciones, resumen y `bff-web`)** ☐ · **F1 (portal)** ☐ · **C (cierre y pacto)** ☐.
 
 ## 1. Qué entrega la historia
 
@@ -60,6 +60,10 @@ Uso interno. `X-Actor-Id = pagos-parametricos` y `X-Actor-Rol = SISTEMA_PARAMETR
 - **El siniestro nace `APROBADO`**, sin analista (no aparece en «Sin asignar»), con `valorIndemnizar = valor` y `deducible = 0` (lo exige la CHECK `siniestros_liquidacion_segun_estado`, W20) y `decididoEn = ahora`. `evento_id` y `regla` (código y versión) quedan en sus columnas de W19.
 - **Historial `CREADO_AUTOMATICAMENTE`** con `actorRol = SISTEMA_PARAMETRICO` y sin actor ni nombre, y `SiniestroAprobado` (`origen = PARAMETRICO`, `decididoPor` null, `referenciaPago = IND-<codigo>-01`) en el Outbox, en la misma transacción.
 - **Respuesta:** `ResumenSiniestro`. `pagos-parametricos` solo lee `id` y `codigo`.
+- **Tres tiempos, sin conexiones anidadas.** (1) Una transacción corta de lectura: la clave y el siniestro del par; si existen, es una repetición. (2) El código `88-AAAA-NNNN` sale de `secuencia_codigo` en su propia transacción corta (una repetición no gasta consecutivo; una carrera puede dejar un hueco, que es aceptable). (3) Una transacción de escritura que vuelve a mirar la clave (el bloqueo asesor serializa la misma clave), inserta con `ON CONFLICT (evento_id, poliza_id) DO NOTHING` y, solo si insertó, escribe el historial, el evento y la clave. Si el `INSERT` pierde la carrera, relee al ganador y responde 200.
+- **Lo que fija el dominio** (`domain/siniestro/parametrico.py`, R-178 y R-189): amparo = el tipo de evento con el valor de la cobertura como suma asegurada; `causa` = ese código; carencia 0 y plazo de aviso de 365 días (así las verificaciones de «Cobertura» no marcan un incumplimiento que no aplica); primas al día; ubicación `Zona <zona>`; beneficiario = el titular, con `beneficiarioRef = ben-par-<clienteId>` y cuenta enmascarada sintética `****0000`. El simulador de pagos confirma `ben-par-<clienteId>` (mappings `desembolso-*-parametrico.json`).
+- **Persistencia.** Migración `003_parametricos.sql` (con su reversa): la columna `evento` (la medición, en jsonb), `regla` = `{codigo, version}` y el índice único parcial `siniestros_parametrico_evento_poliza`.
+- **Trámite.** La entrada `CREADO_AUTOMATICAMENTE` completa los pasos hasta la decisión (el proceso automático recibió, validó y evaluó por regla) y deja «Pago de la indemnización» como paso actual.
 
 `GET /v1/siniestros/parametricos/pagos?siniestroIds=` (rol `ANALISTA_SINIESTROS`) devuelve, por lote de hasta 20, el `estadoPago` de cada paramétrico: el derivado de `PagoDto` (R-105, `PENDIENTE` hasta que `dinero` informa un resultado). Los ids inexistentes o de otro origen se omiten.
 

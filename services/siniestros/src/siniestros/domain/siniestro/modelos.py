@@ -1,4 +1,4 @@
-"""Modelo del siniestro (HU-W19; DS3-02 a DS3-06). Puro: sin Pydantic, sin E/S y sin reloj.
+"""Modelo del siniestro (HU-W19; DS3-02 a DS3-06; HU-W22). Puro: sin Pydantic, sin E/S y sin reloj.
 
 - `Siniestro` es inmutable: un cambio de estado devuelve otro (`asignar`, en `transiciones`).
 - Los enumerados llevan los nombres del contrato (`siniestros.yaml`): el adaptador HTTP los reutiliza
@@ -261,6 +261,28 @@ class EntradaHistorial:
 
 
 @dataclass(frozen=True)
+class EventoParametrico:
+    """La medición externa y la regla que activaron un siniestro PARAMETRICO (HU-W22, AC3). Solo la
+    medición y la zona: sin datos del cliente. Las medidas son texto decimal (DS2-16)."""
+
+    evento_id: UUID
+    fuente: str
+    tipo_evento: str
+    valor_observado: str
+    umbral: str
+    unidad: str
+    zona: str
+    observado_en: datetime
+    evento_origen: str
+    regla: str
+    version_regla: str
+
+    def __post_init__(self) -> None:
+        if not con_zona(self.observado_en):
+            raise SiniestroInvalido("observado_en: debe traer zona horaria")
+
+
+@dataclass(frozen=True)
 class Siniestro:
     id: UUID
     codigo: str
@@ -286,8 +308,13 @@ class Siniestro:
     moneda: str | None = None
     deducible: Decimal | None = None
     valor_indemnizar: Decimal | None = None
+    # HU-W22: solo en los de origen PARAMETRICO (no todos los PARAMETRICO lo traen: los datos de
+    # pruebas anteriores a W22 no tienen medición).
+    evento: EventoParametrico | None = None
 
     def __post_init__(self) -> None:
+        if self.evento is not None and self.origen is not OrigenSiniestro.PARAMETRICO:
+            raise SiniestroInvalido("evento: solo en un siniestro de origen PARAMETRICO")
         if CODIGO_SINIESTRO.fullmatch(self.codigo) is None:
             raise SiniestroInvalido("codigo: debe tener la forma 88-AAAA-NNNN")
         for nombre in (

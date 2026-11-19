@@ -315,8 +315,13 @@ def _reversa(nombre: str) -> str:
 
 
 def test_la_reversa_borra_todo_y_se_puede_volver_a_migrar(base: str) -> None:
-    # La reversa de 002 va antes que la de 001 (decisiones_siniestro referencia a siniestros).
-    reversa = _reversa("002_decisiones.sql") + _reversa("001_siniestros.sql")
+    # La reversa de 003 va antes que la de 002 y la de 002 antes que la de 001
+    # (decisiones_siniestro referencia a siniestros).
+    reversa = (
+        _reversa("003_parametricos.sql")
+        + _reversa("002_decisiones.sql")
+        + _reversa("001_siniestros.sql")
+    )
     with psycopg.connect(base, autocommit=True) as conexion:
         conexion.execute(reversa)
         assert conexion.execute(
@@ -517,3 +522,99 @@ def test_la_reversa_de_002_deja_la_base_de_001(limpia: str) -> None:
         assert conexion.execute(
             "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'"
         ).fetchone() == (8,)
+
+
+# --- Migración 003: siniestros paramétricos (HU-W22, W22-B07) -------------------------------------
+
+
+def _parametrico(
+    conexion: psycopg.Connection[Any], evento_id: str | None, poliza: str, **c: Any
+) -> str:
+    estado = {
+        "estado": "APROBADO",
+        "valor_indemnizar": "1400000.00",
+        "deducible": "0.00",
+        "decidido_en": "2026-11-10T14:05:00Z",
+    }
+    return insertar_siniestro(
+        conexion, origen="PARAMETRICO", evento_id=evento_id, poliza_id=poliza, **(estado | c)
+    )
+
+
+def test_un_solo_siniestro_paramétrico_por_evento_y_poliza(
+    conexion: psycopg.Connection[Any],
+) -> None:
+    evento, poliza = str(uuid4()), str(uuid4())
+    _parametrico(conexion, evento, poliza)
+
+    with pytest.raises(psycopg.errors.UniqueViolation) as error:
+        _parametrico(conexion, evento, poliza)
+
+    assert error.value.diag.constraint_name == "siniestros_parametrico_evento_poliza"
+
+
+def test_el_indice_unico_es_parcial_y_solo_mira_los_paramétricos(
+    conexion: psycopg.Connection[Any],
+) -> None:
+    evento, poliza = str(uuid4()), str(uuid4())
+    _parametrico(conexion, evento, poliza)
+
+    # El mismo evento con otra póliza, y otro origen con los mismos ids, no chocan.
+    _parametrico(conexion, evento, str(uuid4()))
+    insertar_siniestro(conexion, origen="MOVIL", evento_id=evento, poliza_id=poliza)
+    insertar_siniestro(conexion, origen="MOVIL", evento_id=evento, poliza_id=poliza)
+    # Los paramétricos anteriores a W22 (sin `evento_id`) tampoco: NULL no choca con NULL.
+    _parametrico(conexion, None, poliza)
+    _parametrico(conexion, None, poliza)
+
+
+def test_el_siniestro_guarda_la_regla_y_la_medicion_como_jsonb(
+    conexion: psycopg.Connection[Any],
+) -> None:
+    identificador = _parametrico(
+        conexion,
+        str(uuid4()),
+        str(uuid4()),
+        regla=Jsonb({"codigo": "VALOR_IGUAL_O_SUPERIOR_AL_UMBRAL", "version": "1"}),
+        evento=Jsonb({"fuente": "IDEAM-SIM", "tipoEvento": "LLUVIA_ACUMULADA"}),
+    )
+
+    (regla, evento) = conexion.execute(
+        "SELECT regla, evento FROM siniestros WHERE id=%s", (identificador,)
+    ).fetchone()  # type: ignore[misc]
+
+    assert regla["version"] == "1" and evento["fuente"] == "IDEAM-SIM"
+
+
+def test_la_base_exige_la_liquidacion_de_un_paramétrico_aprobado(
+    conexion: psycopg.Connection[Any],
+) -> None:
+    # La CHECK de W20 también cubre a los paramétricos: APROBADO sin `valor_indemnizar` no existe.
+    with pytest.raises(psycopg.errors.CheckViolation):
+        insertar_siniestro(
+            conexion,
+            origen="PARAMETRICO",
+            estado="APROBADO",
+            decidido_en="2026-11-10T14:05:00Z",
+        )
+
+
+def test_la_reversa_de_003_deja_la_base_de_002_y_se_vuelve_a_migrar(limpia: str) -> None:
+    base = limpia
+    with psycopg.connect(base, autocommit=True) as conexion:
+        conexion.execute(_reversa("003_parametricos.sql"))
+        columnas = {
+            f[0]
+            for f in conexion.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='siniestros'"
+            ).fetchall()
+        }
+        indices = {f[0] for f in conexion.execute("SELECT indexname FROM pg_indexes").fetchall()}
+        assert "evento" not in columnas and {"evento_id", "regla"} <= columnas
+        assert "siniestros_parametrico_evento_poliza" not in indices
+        # Repetirla no falla.
+        conexion.execute(_reversa("003_parametricos.sql"))
+    migrar(base)
+    with psycopg.connect(base, autocommit=True) as conexion:
+        indices = {f[0] for f in conexion.execute("SELECT indexname FROM pg_indexes").fetchall()}
+        assert "siniestros_parametrico_evento_poliza" in indices

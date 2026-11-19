@@ -20,7 +20,7 @@ from siniestros.domain.siniestro.modelos import (
     PrioridadSiniestro,
     Siniestro,
 )
-from siniestros.domain.siniestro.pago import PagoSiniestro
+from siniestros.domain.siniestro.pago import EstadoPago, PagoSiniestro
 from siniestros.domain.siniestro.plazos import prioridad, tiempo_restante
 from siniestros.domain.siniestro.tramite import PasoDeTramite
 
@@ -149,6 +149,16 @@ class DetalleLeido:
     liquidacion: LiquidacionAprobada | None = None
     # HU-W23: lo que `dinero` informó (null si aún no); el detalle lo completa con `pago_de`.
     pago: PagoSiniestro | None = None
+
+
+@dataclass(frozen=True)
+class PagoParametrico:
+    """El estado de pago de un siniestro paramétrico (H09): el derivado de `pago_de` (PENDIENTE
+    mientras `dinero` no informa un resultado)."""
+
+    siniestro_id: UUID
+    codigo: str
+    estado_pago: EstadoPago
 
 
 @dataclass(frozen=True)

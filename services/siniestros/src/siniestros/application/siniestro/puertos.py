@@ -1,5 +1,6 @@
 """Puertos de la aplicación de siniestros (HU-W19). Los implementan los adaptadores de salida."""
 
+from collections.abc import Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,6 +14,7 @@ from siniestros.application.siniestro.vistas import (
     FiltroBandeja,
     Indicadores,
     PaginaSiniestros,
+    PagoParametrico,
 )
 from siniestros.domain.siniestro.modelos import (
     CanalSoporte,
@@ -34,6 +36,12 @@ class DecisionFinalDuplicada(Exception):
 
 class Reloj(Protocol):
     def ahora(self) -> datetime: ...
+
+
+class Codigos(Protocol):
+    """El consecutivo del código `88-AAAA-NNNN` (DS3-11): una transacción corta por código."""
+
+    async def siguiente(self, anio: int) -> str: ...
 
 
 class SoportesRequeridos(Protocol):
@@ -82,6 +90,16 @@ class TxSiniestros(Protocol):
 
     async def ids_evidencias(self, siniestro_id: UUID) -> frozenset[UUID]: ...
 
+    # HU-W22 (DS3-23): el siniestro paramétrico, una sola vez por evento y póliza.
+    async def siniestro_parametrico(self, evento_id: UUID, poliza_id: UUID) -> Siniestro | None:
+        """El siniestro PARAMETRICO de ese evento y esa póliza, si ya existe."""
+        ...
+
+    async def insertar_parametrico(self, siniestro: Siniestro) -> bool:
+        """`INSERT ... ON CONFLICT (evento_id, poliza_id) DO NOTHING`: False si otra transacción ya
+        había creado el de ese evento y esa póliza (la barrera de negocio contra el duplicado)."""
+        ...
+
     async def reservar_plazos_vencidos(self, ahora: datetime, lote: int) -> list[Siniestro]:
         """Hasta `lote` casos FALTA_SOPORTE con el plazo vencido, bloqueados con `FOR UPDATE SKIP
         LOCKED` (varias réplicas nunca toman el mismo), el más antiguo primero."""
@@ -115,8 +133,14 @@ class TxSiniestros(Protocol):
     ) -> None: ...
 
     async def evento_aprobado(
-        self, siniestro: Siniestro, referencia_pago: str, decidido_por: UUID, aprobado_en: datetime
-    ) -> None: ...
+        self,
+        siniestro: Siniestro,
+        referencia_pago: str,
+        decidido_por: UUID | None,
+        aprobado_en: datetime,
+    ) -> None:
+        """`decidido_por` es null en un paramétrico (R-65)."""
+        ...
 
     async def evento_rechazado(
         self, siniestro: Siniestro, causal: CausalRechazo, decidido_por: UUID, decidido_en: datetime
@@ -166,4 +190,11 @@ class SiniestrosRepositorio(Protocol):
         self, siniestro_id: UUID, evidencia_id: UUID
     ) -> tuple[bool, Evidencia | None]:
         """(¿existe el siniestro?, la evidencia si es de ese siniestro)."""
+        ...
+
+    async def pagos_parametricos(
+        self, siniestro_ids: Sequence[UUID]
+    ) -> tuple[PagoParametrico, ...]:
+        """El estado de pago de los siniestros PARAMETRICO pedidos (HU-W22, H09), en una consulta.
+        Los ids inexistentes o de otro origen no aparecen."""
         ...

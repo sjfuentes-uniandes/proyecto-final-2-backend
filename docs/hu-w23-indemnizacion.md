@@ -115,6 +115,7 @@ El escenario lo elige el `beneficiarioRef` sintético de `SiniestroAprobado` (el
 | `beneficiarioRef` | Desembolso | Consulta de estado |
 | --- | --- | --- |
 | `ben-sint-001` a `ben-sint-007` (los de la semilla de R7, salvo el último) | 200 `CONFIRMADO` con `transaccionId`, 50 ms | 200 `CONFIRMADO`, el mismo cuerpo |
+| `ben-par-<clienteId>` (HU-W22: el titular de un siniestro paramétrico, R-178) | 200 `CONFIRMADO` con `transaccionId`, 50 ms | 200 `CONFIRMADO`, el mismo cuerpo |
 | `ben-sint-008` (VEN-01 de la semilla) y `ben-sint-rechaza` | 200 `RECHAZADO` con `motivo` (`BENEFICIARIO_NO_HABILITADO`), 50 ms | 200 `RECHAZADO`, el mismo cuerpo |
 | `ben-sint-lento` | 200 `CONFIRMADO` tras más de 700 ms (supera el timeout del adaptador; el desembolso sí ocurre) | 200 `CONFIRMADO` |
 | `ben-sint-caido` | 503 | 404 `desembolso_no_encontrado` (la orden nunca llegó) |

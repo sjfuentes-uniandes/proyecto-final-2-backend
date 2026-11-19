@@ -134,6 +134,10 @@ def fila_siniestro(s: Siniestro, **extra: Any) -> dict[str, Any]:
         "moneda": s.moneda,
         "deducible": s.deducible,
         "valor_indemnizar": s.valor_indemnizar,
+        # HU-W22: la medición del paramétrico (null en los demás).
+        "evento_id": None,
+        "regla": None,
+        "evento": None,
         **extra,
     }
 
@@ -1034,3 +1038,131 @@ async def test_guardar_pago_solo_escribe_si_no_habia_resultado(filas: int) -> No
         2,
         resultado.siniestro_id,
     )
+
+
+# --- HU-W22: el siniestro paramétrico -----------------------------------------------------------
+def _parametrico(datos_parametrico: Callable[..., Any], ahora: datetime) -> Siniestro:
+    from siniestros.domain.siniestro.parametrico import nuevo_siniestro
+
+    return nuevo_siniestro(
+        datos_parametrico(),
+        siniestro_id=uuid4(),
+        codigo="88-2026-1001",
+        ahora=ahora,
+        correlation_id="corr-w22",
+    )
+
+
+def _fila_parametrica(s: Siniestro) -> dict[str, Any]:
+    from siniestros.adapters.outbound.mapeo import medicion_a_json, regla_a_json
+
+    assert s.evento is not None
+    return fila_siniestro(
+        s,
+        evento_id=s.evento.evento_id,
+        regla=regla_a_json(s.evento),
+        evento=medicion_a_json(s.evento),
+    )
+
+
+def test_el_mapeo_de_un_paramétrico_conserva_el_evento_y_la_regla(
+    datos_parametrico: Callable[..., Any], ahora: datetime
+) -> None:
+    caso = _parametrico(datos_parametrico, ahora)
+
+    leido = siniestros_pg.siniestro_de(_fila_parametrica(caso))
+
+    assert leido == caso
+    assert leido.evento is not None and leido.evento.regla == "VALOR_IGUAL_O_SUPERIOR_AL_UMBRAL"
+
+
+@pytest.mark.parametrize(
+    "faltante",
+    [{"evento_id": None}, {"regla": None}, {"evento": None}],
+    ids=["id", "regla", "medicion"],
+)
+def test_un_paramétrico_sin_medicion_completa_no_trae_evento(
+    datos_parametrico: Callable[..., Any], ahora: datetime, faltante: dict[str, Any]
+) -> None:
+    caso = _parametrico(datos_parametrico, ahora)
+
+    # Los paramétricos anteriores a W22 (sin medición) se leen igual, con `evento` nulo.
+    leido = siniestros_pg.siniestro_de({**_fila_parametrica(caso), **faltante})
+
+    assert leido.evento is None and leido.origen is OrigenSiniestro.PARAMETRICO
+
+
+async def test_siniestro_parametrico_busca_por_evento_y_poliza_solo_de_origen_parametrico(
+    datos_parametrico: Callable[..., Any], ahora: datetime
+) -> None:
+    caso = _parametrico(datos_parametrico, ahora)
+    conexion = ConexionFalsa([_fila_parametrica(caso)], [])
+    async with SiniestrosPg(PoolFalso(conexion)).transaccion() as tx:  # type: ignore[arg-type]
+        assert await tx.siniestro_parametrico(caso.evento.evento_id, caso.poliza_id) == caso  # type: ignore[union-attr]
+        assert await tx.siniestro_parametrico(uuid4(), uuid4()) is None
+    sql, parametros = conexion.sentencias[0]
+    assert "evento_id = %s AND poliza_id = %s AND origen = 'PARAMETRICO'" in sql
+    assert parametros == (caso.evento.evento_id, caso.poliza_id)  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize("filas", [[{"id": uuid4()}], []], ids=["inserta", "ya-existia"])
+async def test_insertar_parametrico_usa_on_conflict_y_dice_si_lo_inserto(
+    datos_parametrico: Callable[..., Any], ahora: datetime, filas: list[Any]
+) -> None:
+    caso = _parametrico(datos_parametrico, ahora)
+    conexion = ConexionFalsa(filas)
+    async with SiniestrosPg(PoolFalso(conexion)).transaccion() as tx:  # type: ignore[arg-type]
+        insertado = await tx.insertar_parametrico(caso)  # type: ignore[attr-defined]
+    assert insertado is bool(filas)
+    [(sql, parametros)] = conexion.sentencias
+    # La segunda barrera: el índice único parcial evento-póliza.
+    assert "ON CONFLICT (evento_id, poliza_id) WHERE origen = 'PARAMETRICO' DO NOTHING" in sql
+    assert "RETURNING id" in sql
+    assert len(parametros) == sql.count("%s") == 20
+    assert parametros[:4] == (caso.id, "88-2026-1001", "PARAMETRICO", "APROBADO")
+    assert caso.valor_indemnizar in parametros and caso.evento.evento_id in parametros  # type: ignore[union-attr]
+    # El `evento` y la `regla` van como jsonb, sin datos del cliente.
+    jsonb = [p.obj for p in parametros if hasattr(p, "obj")]
+    assert {"codigo": "VALOR_IGUAL_O_SUPERIOR_AL_UMBRAL", "version": "1"} in jsonb
+    regla, medicion = jsonb[-2:]
+    assert "fuente" in medicion and str(caso.cliente_id) not in repr([regla, medicion])
+
+
+async def test_pagos_parametricos_lee_el_lote_en_una_consulta_y_deriva_el_pendiente() -> None:
+    from siniestros.domain.siniestro.pago import EstadoPago
+
+    a, b = uuid4(), uuid4()
+    conexion = ConexionFalsa(
+        [
+            {"id": a, "codigo": "88-2026-1001", "pago_estado": None},
+            {"id": b, "codigo": "88-2026-1002", "pago_estado": "CONFIRMADO"},
+        ]
+    )
+    pool = PoolFalso(conexion)
+
+    pagos = await SiniestrosPg(pool).pagos_parametricos([a, b])  # type: ignore[arg-type]
+
+    assert [(p.siniestro_id, p.codigo, p.estado_pago) for p in pagos] == [
+        (a, "88-2026-1001", EstadoPago.PENDIENTE),
+        (b, "88-2026-1002", EstadoPago.CONFIRMADO),
+    ]
+    [(sql, parametros)] = conexion.sentencias
+    assert "id = ANY(%s) AND origen = 'PARAMETRICO'" in sql
+    assert parametros == ([a, b],) and pool.prestadas == 1
+
+
+async def test_el_evento_aprobado_de_un_paramétrico_no_trae_quien_decide(
+    datos_parametrico: Callable[..., Any], ahora: datetime
+) -> None:
+    caso = _parametrico(datos_parametrico, ahora)
+    conexion = ConexionFalsa()
+    async with SiniestrosPg(PoolFalso(conexion)).transaccion() as tx:  # type: ignore[arg-type]
+        await tx.evento_aprobado(caso, "IND-88-2026-1001-01", None, ahora)  # type: ignore[attr-defined]
+    [(_, parametros)] = conexion.sentencias
+    assert parametros[2] == "SiniestroAprobado"
+    payload = parametros[6].obj
+    assert payload["decididoPor"] is None and payload["origen"] == "PARAMETRICO"
+    assert payload["beneficiarioRef"] == f"ben-par-{caso.cliente_id}"
+    assert payload["valorIndemnizar"] == "1400000.00" and payload["referenciaPago"].endswith("-01")
+    # Ni la cuenta ni la medición viajan en el evento.
+    assert "****" not in repr(payload) and "IDEAM" not in repr(payload)

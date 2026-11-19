@@ -13,9 +13,11 @@ from fastapi.testclient import TestClient
 from siniestros.adapters.inbound.http.siniestros import Servicios
 from siniestros.application.siniestro.acceso import RegistrarAccesoDenegado
 from siniestros.application.siniestro.bandeja import ConsultarResumen, ListarBandeja
+from siniestros.application.siniestro.crear_parametrico import CrearParametrico
 from siniestros.application.siniestro.decidir import Decidir
 from siniestros.application.siniestro.detalle import ConsultarDetalle
 from siniestros.application.siniestro.enlace import EmitirEnlace
+from siniestros.application.siniestro.pagos_parametricos import ConsultarPagosParametricos
 from siniestros.application.siniestro.tomar import TomarSiguiente
 from siniestros.application.siniestro.vistas import Plazos
 from siniestros.domain.siniestro.modelos import EstadoSiniestro, Siniestro
@@ -34,7 +36,7 @@ MENSAJE = "MENSAJE-PRIVADO-AL-CLIENTE"
 
 
 @pytest.fixture
-def cliente(repo, almacen, soportes, reloj, plazos: Plazos) -> Iterator[TestClient]:  # type: ignore[no-untyped-def]
+def cliente(repo, almacen, soportes, reloj, plazos: Plazos, codigos) -> Iterator[TestClient]:  # type: ignore[no-untyped-def]
     app = crear_app()
     app.state.servicios = Servicios(
         bandeja=ListarBandeja(repo, reloj, plazos),
@@ -43,6 +45,8 @@ def cliente(repo, almacen, soportes, reloj, plazos: Plazos) -> Iterator[TestClie
         detalle=ConsultarDetalle(repo, almacen, soportes, reloj, plazos),
         enlace=EmitirEnlace(repo, almacen, reloj, 300),
         decidir=Decidir(repo, reloj),
+        crear_parametrico=CrearParametrico(repo, codigos, reloj, plazos),
+        pagos_parametricos=ConsultarPagosParametricos(repo),
         acceso=RegistrarAccesoDenegado(repo, reloj),
         reloj=reloj,
         plazos=plazos,

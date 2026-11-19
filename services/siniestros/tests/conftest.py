@@ -6,6 +6,7 @@ referencia y los datos se definen relativos a él.
 
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -16,6 +17,7 @@ from siniestros.domain.siniestro.modelos import (
     CopiaPoliza,
     EntradaHistorial,
     EstadoSiniestro,
+    EventoParametrico,
     Evidencia,
     OrigenSiniestro,
     Siniestro,
@@ -24,6 +26,7 @@ from siniestros.domain.siniestro.modelos import (
     Ubicacion,
     Vigencia,
 )
+from siniestros.domain.siniestro.parametrico import DatosParametrico
 
 AHORA = datetime(2026, 11, 5, 15, 0, tzinfo=UTC)
 ANALISTA = UUID("a0a0a0a0-0000-4000-8000-000000000001")
@@ -91,6 +94,45 @@ def siniestro(copia: Callable[..., CopiaPoliza]) -> Callable[..., Siniestro]:
         }
         datos.update(cambios)
         return Siniestro(**datos)
+
+    return fabricar
+
+
+EVENTO_ID = UUID("bafc2b26-7c88-5ae3-b5ac-26fdf5427a09")
+POLIZA_PARAMETRICA = UUID("b2100000-0000-4000-8000-000000000101")
+CLIENTE_PARAMETRICO = UUID("00000000-0000-4000-8000-000000000002")
+
+
+@pytest.fixture
+def datos_parametrico() -> Callable[..., DatosParametrico]:
+    """La activación de COB-BOG-1 por el evento válido de `eventos-parametricos.json` (W21)."""
+
+    def fabricar(**cambios: Any) -> DatosParametrico:
+        evento = cambios.pop("evento", None) or EventoParametrico(
+            evento_id=cambios.pop("evento_id", EVENTO_ID),
+            fuente="IDEAM-SIM",
+            tipo_evento="LLUVIA_ACUMULADA",
+            valor_observado="135",
+            umbral="120",
+            unidad="mm",
+            zona="11001",
+            observado_en=datetime(2026, 11, 10, 14, 0, tzinfo=UTC),
+            evento_origen="EVT-2026-0913",
+            regla="VALOR_IGUAL_O_SUPERIOR_AL_UMBRAL",
+            version_regla="1",
+        )
+        datos: dict[str, Any] = {
+            "evento": evento,
+            "poliza_id": POLIZA_PARAMETRICA,
+            "cliente_id": CLIENTE_PARAMETRICO,
+            "numero": "250-2026-000101",
+            "ramo": "Paramétrico",
+            "vigencia": Vigencia(date(2026, 9, 1), date(2027, 8, 31)),
+            "moneda": "COP",
+            "valor": Decimal("1400000.00"),
+        }
+        datos.update(cambios)
+        return DatosParametrico(**datos)
 
     return fabricar
 

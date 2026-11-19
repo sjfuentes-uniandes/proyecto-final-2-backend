@@ -111,6 +111,7 @@ prioridad 10 (404) para cualquier otra solicitud.
 | Caso | Beneficiario | Desembolso | Consulta de estado |
 | --- | --- | --- | --- |
 | Confirmado | `ben-sint-001` a `ben-sint-007` | 200 `{"referencia", "estado": "CONFIRMADO", "transaccionId": "TRX-SINT-<referencia>", "motivo": null}`, 50 ms | 200, el mismo cuerpo |
+| Confirmado (paramétrico, HU-W22) | `ben-par-<clienteId>` (UUID del cliente): el titular de un siniestro paramétrico | 200 `{"referencia", "estado": "CONFIRMADO", "transaccionId": "TRX-SINT-<referencia>", "motivo": null}`, 50 ms | 200, el mismo cuerpo |
 | Rechazado | `ben-sint-008` (VEN-01 de la semilla) y `ben-sint-rechaza` | 200 `{"referencia", "estado": "RECHAZADO", "transaccionId": null, "motivo": "BENEFICIARIO_NO_HABILITADO"}`, 50 ms | 200, el mismo cuerpo |
 | Lento (incierto) | `ben-sint-lento` | 200 `CONFIRMADO` en 8000 ms, por encima del timeout de 5 s: el desembolso sí ocurre | 200 `CONFIRMADO` |
 | Caído | `ben-sint-caido` | 503 `{"error": "unavailable"}` | 404 `{"error": "desembolso_no_encontrado"}`: la orden nunca llegó |

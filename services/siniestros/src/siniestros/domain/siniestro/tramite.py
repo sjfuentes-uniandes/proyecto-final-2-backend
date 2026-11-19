@@ -33,6 +33,14 @@ ACCION_REPORTADO = "REPORTADO"
 ACCION_EVIDENCIAS_VALIDADAS = "EVIDENCIAS_VALIDADAS"
 ACCION_ASIGNADO = "ASIGNADO"
 ACCION_PAGO_CONFIRMADO = "PAGO_CONFIRMADO"
+# HU-W22: el paramétrico nace APROBADO; el proceso automático recibe, valida y evalúa el evento por
+# regla, así que esa sola entrada completa los pasos hasta la decisión.
+ACCION_CREADO_AUTOMATICAMENTE = "CREADO_AUTOMATICAMENTE"
+_PASOS_DEL_AUTOMATICO = (
+    PasoTramite.RECIBIDO,
+    PasoTramite.EVIDENCIAS_VALIDADAS,
+    PasoTramite.EN_EVALUACION,
+)
 
 _PASO_DE_ACCION = {
     ACCION_REPORTADO: PasoTramite.RECIBIDO,
@@ -61,6 +69,9 @@ def pasos_tramite(
         if paso is not None:
             # La primera vez que ocurrió: un reintento no mueve la fecha del paso.
             ocurridos.setdefault(paso, entrada)
+        if entrada.accion == ACCION_CREADO_AUTOMATICAMENTE:
+            for previo in _PASOS_DEL_AUTOMATICO:
+                ocurridos.setdefault(previo, entrada)
         if entrada.estado_nuevo in ESTADOS_DECIDIDOS:
             ocurridos.setdefault(PasoTramite.DECISION, entrada)
 
