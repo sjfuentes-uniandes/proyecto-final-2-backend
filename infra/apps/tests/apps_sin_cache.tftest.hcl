@@ -119,3 +119,18 @@ run "cache_deshabilitada" {
     error_message = "Sin las colas de la Saga no hay alarma de recaudos pendientes, y el catálogo de alertas sigue coincidiendo."
   }
 }
+
+# HU-W09: este fixture no tiene api-socios en el catálogo. Con la tarea k6 encendida, el plan no
+# falla: la tarea existe y no se abre ningún puerto del ALB.
+run "carga_sin_api_socios" {
+  command = plan
+
+  variables {
+    load_test_enabled = true
+  }
+
+  assert {
+    condition     = length(aws_ecs_task_definition.load_test) == 1 && length(aws_vpc_security_group_ingress_rule.load_test_alb) == 0
+    error_message = "HU-W09: sin api-socios en el catálogo, la tarea k6 existe pero no se abre ningún puerto del ALB."
+  }
+}

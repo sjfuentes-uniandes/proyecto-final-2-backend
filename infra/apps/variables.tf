@@ -374,3 +374,50 @@ variable "push_failure_count" {
   type        = number
   default     = 5
 }
+
+# --- Experimento de carga (HU-W09): tarea k6 de carga.tf, apagada fuera de exp ---------
+variable "load_test_enabled" {
+  description = "true crea la tarea k6 del experimento de carga (carga.tf): definición, rol de ejecución, log group, SG y la entrada al ALB en el puerto de api-socios. Solo se enciende en envs/exp/apps.tfvars."
+  type        = bool
+  default     = false
+}
+
+variable "load_test_image" {
+  description = "Imagen pública de k6 con versión fija (nunca latest) y el digest de su variante linux/amd64. Se descarga por el NAT, sin permisos de ECR."
+  type        = string
+  default     = "grafana/k6:1.8.2@sha256:cbdf083a01e5245b2fdb3e4bb0cbcea5d52519b9aa66abd1f63b3f0249d18af9"
+  validation {
+    condition     = can(regex(":v?[0-9]+\\.[0-9]+\\.[0-9]+(@sha256:[0-9a-f]{64})?$", var.load_test_image))
+    error_message = "Use una etiqueta de versión fija (por ejemplo, grafana/k6:1.8.2), opcionalmente con su digest; latest no se admite."
+  }
+}
+
+variable "load_test_cpu" {
+  description = "CPU de la tarea k6 (unidades de Fargate). Holgada para que k6 no sea el cuello de botella (HU-W09, decisión 15)."
+  type        = number
+  default     = 2048
+  validation {
+    condition     = contains([1024, 2048, 4096], var.load_test_cpu)
+    error_message = "Use 1024, 2048 o 4096."
+  }
+}
+
+variable "load_test_memory" {
+  description = "Memoria de la tarea k6 (MiB). Fargate admite de 2 a 8 veces la CPU, en múltiplos de 1024."
+  type        = number
+  default     = 4096
+  validation {
+    condition     = var.load_test_memory % 1024 == 0 && var.load_test_memory >= 2 * var.load_test_cpu && var.load_test_memory <= 8 * var.load_test_cpu
+    error_message = "La memoria es múltiplo de 1024 y está entre 2 y 8 veces load_test_cpu."
+  }
+}
+
+variable "load_test_log_retention_days" {
+  description = "Retención (días) del log de k6. Corta: los resultados se copian del log del job de E2E (N3) al recogerlos."
+  type        = number
+  default     = 7
+  validation {
+    condition     = contains([1, 3, 5, 7, 14], var.load_test_log_retention_days)
+    error_message = "Use una retención corta admitida por CloudWatch Logs: 1, 3, 5, 7 o 14 días."
+  }
+}

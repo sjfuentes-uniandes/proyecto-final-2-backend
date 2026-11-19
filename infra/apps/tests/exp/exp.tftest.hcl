@@ -117,4 +117,8 @@ run "ambiente_exp" {
     condition     = local.prefix == "solventa-exp" && aws_cloudwatch_dashboard.main.dashboard_name == "solventa-exp"
     error_message = "exp tiene su tablero y sus alarmas con su propio prefijo."
   }
+  assert {
+    condition     = var.load_test_enabled && length(aws_ecs_task_definition.load_test) == 1 && try(aws_ecs_task_definition.load_test[0].family, "") == "solventa-exp-carga"
+    error_message = "HU-W09: en exp existe la tarea k6 del experimento de carga (solventa-exp-carga)."
+  }
 }
