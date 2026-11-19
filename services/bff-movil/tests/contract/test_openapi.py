@@ -24,6 +24,20 @@ def test_descarga_evidencia_no_recibe_titular_ni_cuerpo() -> None:
     assert esquema["properties"]["url"]["pattern"] == "^https://"
 
 
+def test_ubicacion_es_metadato_del_reporte_y_estado_solo_de_respuesta() -> None:
+    esquemas = app.openapi()["components"]["schemas"]
+    captura = esquemas["UbicacionCapturada"]
+    assert captura["additionalProperties"] is False
+    assert set(captura["properties"]) == {"permiso", "lat", "lon", "precisionM", "capturadaEn"}
+    assert "estado" in esquemas["UbicacionReporte"]["properties"]
+    for dto in ("ActualizacionBorrador", "BorradorResumenDto", "SiniestroDetalleDto"):
+        assert "ubicacion" in esquemas[dto]["properties"]
+    assert {"ubicacionObligatoria", "ubicacionTiposOpcionales", "ubicacionPrecisionMaxM"} <= set(
+        esquemas["LimitesDto"]["properties"]
+    )
+    assert "ubicacion" not in esquemas["SolicitudEvidencia"]["properties"]
+
+
 def test_envio_explicito_y_consultas_del_titular() -> None:
     rutas = app.openapi()["paths"]
     envio = rutas["/v1/siniestros/borradores/{borradorId}/envio"]["post"]

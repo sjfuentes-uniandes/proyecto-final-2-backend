@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 from typing import Any, Protocol
 from uuid import UUID, uuid4
 
+from solventa_common.ubicacion import UbicacionCapturada
+
 from siniestros.application.siniestro.envio import clave_permanente
 from siniestros.application.siniestro.errores import (
     BorradorNoEncontrado,
@@ -17,6 +19,7 @@ from siniestros.application.siniestro.errores import (
     TipoEvidenciaNoAdmitido,
 )
 from siniestros.application.siniestro.puertos import AlmacenEvidencias, Reloj
+from siniestros.application.siniestro.ubicacion import evaluar_ubicacion
 from siniestros.config import Settings
 from siniestros.domain.siniestro.modelos import TipoEvidencia
 
@@ -156,6 +159,9 @@ class Borradores:
             "tamanoMaximoVideoBytes": self._settings.evidencia_video_max_bytes,
             "duracionMaximaVideoSegundos": self._settings.evidencia_video_max_duracion_s,
             "urlCargaExpiraSegundos": self._settings.evidencia_url_carga_ttl_s,
+            "ubicacionObligatoria": self._settings.ubicacion_obligatoria,
+            "ubicacionTiposOpcionales": list(self._settings.ubicacion_tipos_opcionales),
+            "ubicacionPrecisionMaxM": self._settings.ubicacion_precision_max_m,
         }
 
     async def crear(
@@ -259,6 +265,12 @@ class Borradores:
     async def actualizar(
         self, actor_id: str, borrador_id: UUID, cambios: dict[str, Any]
     ) -> dict[str, Any]:
+        if "ubicacion" in cambios:
+            cambios = dict(cambios)
+            lectura = UbicacionCapturada.model_validate(cambios["ubicacion"])
+            cambios["ubicacion"] = evaluar_ubicacion(
+                lectura, self._settings.ubicacion_precision_max_m
+            ).model_dump(by_alias=True, mode="json")
         await self._repo.actualizar_borrador(actor_id, borrador_id, cambios)
         return await self.consultar(actor_id, borrador_id)
 

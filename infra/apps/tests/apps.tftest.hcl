@@ -760,6 +760,10 @@ run "variables_de_qa_por_servicio" {
   variables {
     service_environment = {
       clientes = { CLIENTES_SEMILLA_SINTETICA = "true", ENVIRONMENT = "qa-sobrescrito" }
+      siniestros = {
+        UBICACION_PRECISION_MAX_M  = "50"
+        UBICACION_TIPOS_OPCIONALES = "[\"COLISION\"]"
+      }
     }
   }
 
@@ -773,6 +777,15 @@ run "variables_de_qa_por_servicio" {
   assert {
     condition     = local.environment["clientes"]["ENVIRONMENT"] == "qa-sobrescrito"
     error_message = "service_environment va al final del merge: tiene prioridad."
+  }
+  assert {
+    condition = (
+      local.environment["siniestros"]["UBICACION_PRECISION_MAX_M"] == "50" &&
+      local.environment["siniestros"]["UBICACION_TIPOS_OPCIONALES"] == "[\"COLISION\"]" &&
+      local.environment["siniestros"]["UBICACION_OBLIGATORIA"] == "true" &&
+      !contains(keys(local.environment["bff-movil"]), "UBICACION_PRECISION_MAX_M")
+    )
+    error_message = "La regla de ubicación llega a siniestros y admite excepciones por tipo sin duplicarse en el BFF."
   }
   assert {
     condition     = alltrue([for name, env in local.environment : !contains(keys(env), "CLIENTES_SEMILLA_SINTETICA") if name != "clientes"])

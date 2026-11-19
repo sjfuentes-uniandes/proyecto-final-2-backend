@@ -80,6 +80,13 @@ class Settings(ServiceSettings):
     evidencia_formatos_video: tuple[str, ...] = Field(
         ("video/mp4",), min_length=1, validation_alias=_env("EVIDENCIA_FORMATOS_VIDEO")
     )
+    ubicacion_obligatoria: bool = Field(True, validation_alias=_env("UBICACION_OBLIGATORIA"))
+    ubicacion_tipos_opcionales: tuple[str, ...] = Field(
+        (), validation_alias=_env("UBICACION_TIPOS_OPCIONALES")
+    )
+    ubicacion_precision_max_m: float = Field(
+        100.0, gt=0, allow_inf_nan=False, validation_alias=_env("UBICACION_PRECISION_MAX_M")
+    )
     # Corte de cada HeadObject al verificar la integridad (DS3-06). Si vence, la evidencia queda
     # NO_VERIFICABLE y el detalle responde igual.
     s3_timeout_ms: int = Field(300, ge=1, le=5000, validation_alias=_env("S3_TIMEOUT_MS"))

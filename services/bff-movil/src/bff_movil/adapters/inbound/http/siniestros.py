@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 from pydantic import AwareDatetime, ConfigDict, Field, field_validator, model_validator
 from solventa_common.errors import ErrorNegocio
+from solventa_common.ubicacion import UbicacionCapturada, UbicacionReporte
 
 from bff_movil.adapters.inbound.http.auth import IdentidadAutenticada, autenticar
 from bff_movil.adapters.inbound.http.codigos import (
@@ -49,6 +50,9 @@ class LimitesDto(Dto):
     tamano_maximo_video_bytes: int
     duracion_maxima_video_segundos: int
     url_carga_expira_segundos: int
+    ubicacion_obligatoria: bool
+    ubicacion_tipos_opcionales: list[str]
+    ubicacion_precision_max_m: float
 
 
 class SolicitudBorrador(Dto):
@@ -104,6 +108,7 @@ class ActualizacionBorrador(Dto):
     fecha_evento: AwareDatetime | None = Field(
         default=None, description="Fecha real del evento, con zona horaria; obligatoria al enviar"
     )
+    ubicacion: UbicacionCapturada | None = None
 
     @field_validator("descripcion", "causa")
     @classmethod
@@ -118,6 +123,8 @@ class ActualizacionBorrador(Dto):
             raise ValueError("se requiere al menos un campo")
         if "descripcion" in self.model_fields_set and self.descripcion is None:
             raise ValueError("descripcion no puede ser null")
+        if "ubicacion" in self.model_fields_set and self.ubicacion is None:
+            raise ValueError("ubicacion requiere un estado de permiso explicito")
         return self
 
 
@@ -170,6 +177,7 @@ class BorradorResumenDto(Dto):
     fecha_evento: AwareDatetime | None = None
     version: int
     envio: EnvioDto | None = None
+    ubicacion: UbicacionReporte | None = None
 
 
 class EvidenciaBorradorDto(Dto):
@@ -244,6 +252,7 @@ class SiniestroDetalleDto(SiniestroResumenDto):
     fecha_evento: AwareDatetime
     evidencias: list[EvidenciaReporteDto]
     historial: list[HitoReporteDto]
+    ubicacion: UbicacionReporte | None = None
 
 
 _NO_AUTENTICADO = error("NO_AUTENTICADO: se requiere un cliente autenticado")

@@ -11,7 +11,7 @@ from solventa_common import correlation
 
 from siniestros.adapters.outbound import outbox_pg
 from siniestros.adapters.outbound.codigos import siguiente_en_transaccion
-from siniestros.adapters.outbound.mapeo import copia_a_json
+from siniestros.adapters.outbound.mapeo import copia_a_json, ubicacion_de_json
 from siniestros.adapters.outbound.siniestros_pg import TxSiniestrosPg, _ConDict
 from siniestros.application.siniestro.envio import (
     BOGOTA,
@@ -27,6 +27,8 @@ from siniestros.application.siniestro.errores import (
     BorradorNoEncontrado,
     IdempotenciaConflicto,
 )
+from siniestros.application.siniestro.ubicacion import reevaluar_ubicacion
+from siniestros.config import Settings
 from siniestros.domain.siniestro.modelos import (
     EntradaHistorial,
     EstadoSiniestro,
@@ -67,6 +69,7 @@ async def _leer(conexion: _ConDict, actor_id: str, borrador_id: UUID) -> Borrado
         fecha_evento=fila["fecha_evento"],
         version=fila["version"],
         resultado=fila["envio_resultado"],
+        ubicacion=fila["ubicacion"],
         evidencias=tuple(
             EvidenciaEnvio(
                 id=e["id"],
@@ -86,8 +89,9 @@ async def _leer(conexion: _ConDict, actor_id: str, borrador_id: UUID) -> Borrado
 
 
 class EnviosPg:
-    def __init__(self, pool: AsyncConnectionPool[Any]) -> None:
+    def __init__(self, pool: AsyncConnectionPool[Any], settings: Settings) -> None:
         self._pool = pool
+        self._settings = settings
 
     async def preparar(self, actor_id: str, borrador_id: UUID, clave: UUID) -> BorradorEnvio:
         async with self._pool.connection() as conexion, conexion.transaction():
@@ -115,7 +119,11 @@ class EnviosPg:
                 return actual.resultado
             if actual.version != borrador.version:
                 raise BorradorModificado
-            validar_reporte(actual, poliza, ahora)
+            validar_reporte(actual, poliza, ahora, self._settings)
+            ubicacion = reevaluar_ubicacion(
+                actual.ubicacion, self._settings.ubicacion_precision_max_m
+            )
+            ubicacion_json = ubicacion.model_dump(by_alias=True, mode="json") if ubicacion else None
             assert (
                 poliza is not None and actual.causa is not None and actual.fecha_evento is not None
             )
@@ -130,7 +138,7 @@ class EnviosPg:
                 copia_poliza=poliza.copia,
                 causa=actual.causa,
                 fecha_evento=actual.fecha_evento,
-                ubicacion_declarada=Ubicacion(),
+                ubicacion_declarada=ubicacion_de_json(ubicacion_json) or Ubicacion(),
                 reportado_en=ahora,
                 correlation_id=correlation.obtener() or str(uuid4()),
             )
@@ -147,7 +155,7 @@ class EnviosPg:
                     Jsonb(copia_a_json(caso.copia_poliza)),
                     caso.causa,
                     caso.fecha_evento,
-                    Jsonb({}),
+                    Jsonb(ubicacion_json or {}),
                     caso.reportado_en,
                     caso.correlation_id,
                     actual.descripcion,
@@ -202,8 +210,13 @@ class EnviosPg:
             }
             await sql.execute(
                 "UPDATE borradores SET estado = 'CONVERTIDO', siniestro_id = %s, "
-                "envio_resultado = %s, version = version + 1 WHERE id = %s",
-                (caso.id, Jsonb(resultado), actual.id),
+                "envio_resultado = %s, ubicacion = %s, version = version + 1 WHERE id = %s",
+                (
+                    caso.id,
+                    Jsonb(resultado),
+                    Jsonb(ubicacion_json) if ubicacion_json is not None else None,
+                    actual.id,
+                ),
             )
             await tx.guardar_idempotencia(clave_envio, huella, resultado, ahora)
         return resultado

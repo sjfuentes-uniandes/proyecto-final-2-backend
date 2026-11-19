@@ -373,10 +373,11 @@ def crear_app(
                     settings.evidencia_url_ttl_s,
                 )
                 app.state.enviar_borrador = EnviarBorrador(
-                    EnviosPg(pool_activo),
+                    EnviosPg(pool_activo, settings),
                     almacen_activo,
                     reloj_activo,
                     settings.evidencias_bucket_sse,
+                    settings,
                 )
                 app.state.servicios = armar_servicios(
                     pool_activo, almacen_activo, reloj_activo, settings

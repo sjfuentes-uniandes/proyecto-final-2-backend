@@ -1883,6 +1883,10 @@ components:
           anyOf:
           - $ref: '#/components/schemas/EnvioConfirmado'
           - type: 'null'
+        ubicacion:
+          anyOf:
+          - $ref: '#/components/schemas/UbicacionReporte'
+          - type: 'null'
       additionalProperties: false
       type: object
       required:
@@ -1942,6 +1946,10 @@ components:
         envio:
           anyOf:
           - $ref: '#/components/schemas/EnvioConfirmado'
+          - type: 'null'
+        ubicacion:
+          anyOf:
+          - $ref: '#/components/schemas/UbicacionReporte'
           - type: 'null'
       additionalProperties: false
       type: object
@@ -2793,6 +2801,17 @@ components:
         urlCargaExpiraSegundos:
           type: integer
           title: Urlcargaexpirasegundos
+        ubicacionObligatoria:
+          type: boolean
+          title: Ubicacionobligatoria
+        ubicacionTiposOpcionales:
+          items:
+            type: string
+          type: array
+          title: Ubicaciontiposopcionales
+        ubicacionPrecisionMaxM:
+          type: number
+          title: Ubicacionprecisionmaxm
       additionalProperties: false
       type: object
       required:
@@ -2803,6 +2822,9 @@ components:
       - tamanoMaximoVideoBytes
       - duracionMaximaVideoSegundos
       - urlCargaExpiraSegundos
+      - ubicacionObligatoria
+      - ubicacionTiposOpcionales
+      - ubicacionPrecisionMaxM
       title: LimitesEvidencia
     LiquidacionDto:
       properties:
@@ -3602,6 +3624,10 @@ components:
           - type: 'null'
           title: Fechaevento
           description: Instante declarado por el cliente, con zona horaria
+        ubicacion:
+          anyOf:
+          - $ref: '#/components/schemas/UbicacionCapturada'
+          - type: 'null'
       additionalProperties: false
       type: object
       title: ActualizacionBorrador
@@ -3759,6 +3785,10 @@ components:
             $ref: '#/components/schemas/HitoReporte'
           type: array
           title: Historial
+        ubicacion:
+          anyOf:
+          - $ref: '#/components/schemas/UbicacionReporte'
+          - type: 'null'
       additionalProperties: false
       type: object
       required:
@@ -3838,3 +3868,95 @@ components:
       - nombreArchivo
       - tipoContenido
       title: EnlaceDescargaMovil
+    UbicacionCapturada:
+      properties:
+        permiso:
+          type: string
+          enum:
+          - PRECISO
+          - APROXIMADO
+          - DENEGADO
+          - DENEGADO_PERMANENTEMENTE
+          - NO_SOLICITADO
+          title: Permiso
+        lat:
+          anyOf:
+          - type: number
+            maximum: 90.0
+            minimum: -90.0
+          - type: 'null'
+          title: Lat
+        lon:
+          anyOf:
+          - type: number
+            maximum: 180.0
+            minimum: -180.0
+          - type: 'null'
+          title: Lon
+        precisionM:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Precisionm
+        capturadaEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Capturadaen
+      additionalProperties: false
+      type: object
+      required:
+      - permiso
+      title: UbicacionCapturada
+    UbicacionReporte:
+      properties:
+        permiso:
+          type: string
+          enum:
+          - PRECISO
+          - APROXIMADO
+          - DENEGADO
+          - DENEGADO_PERMANENTEMENTE
+          - NO_SOLICITADO
+          title: Permiso
+        lat:
+          anyOf:
+          - type: number
+            maximum: 90.0
+            minimum: -90.0
+          - type: 'null'
+          title: Lat
+        lon:
+          anyOf:
+          - type: number
+            maximum: 180.0
+            minimum: -180.0
+          - type: 'null'
+          title: Lon
+        precisionM:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Precisionm
+        capturadaEn:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Capturadaen
+        estado:
+          type: string
+          enum:
+          - DISPONIBLE
+          - NO_CONFIABLE
+          - NO_DISPONIBLE
+          title: Estado
+      additionalProperties: false
+      type: object
+      required:
+      - permiso
+      - estado
+      title: UbicacionReporte

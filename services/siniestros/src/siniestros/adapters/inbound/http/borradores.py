@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 from solventa_common.errors import RutaB2
+from solventa_common.ubicacion import UbicacionCapturada, UbicacionReporte
 
 from siniestros.adapters.inbound.http.dto import ErrorDto
 from siniestros.adapters.inbound.http.siniestros import Actor, actor_siniestros
@@ -128,6 +129,7 @@ class ActualizacionBorrador(Dto):
     fecha_evento: AwareDatetime | None = Field(
         default=None, description="Instante declarado por el cliente, con zona horaria"
     )
+    ubicacion: UbicacionCapturada | None = None
 
     @field_validator("descripcion", "causa")
     @classmethod
@@ -142,6 +144,8 @@ class ActualizacionBorrador(Dto):
             raise ValueError("se requiere al menos un campo")
         if "descripcion" in self.model_fields_set and self.descripcion is None:
             raise ValueError("descripcion no puede ser null")
+        if "ubicacion" in self.model_fields_set and self.ubicacion is None:
+            raise ValueError("ubicacion requiere un estado de permiso explicito")
         return self
 
 
@@ -153,6 +157,9 @@ class LimitesEvidencia(Dto):
     tamano_maximo_video_bytes: int
     duracion_maxima_video_segundos: int
     url_carga_expira_segundos: int
+    ubicacion_obligatoria: bool
+    ubicacion_tipos_opcionales: list[str]
+    ubicacion_precision_max_m: float
 
 
 class SolicitudEvidencia(Dto):
@@ -204,6 +211,7 @@ class BorradorResumen(Dto):
     fecha_evento: AwareDatetime | None = None
     version: int
     envio: EnvioConfirmado | None = None
+    ubicacion: UbicacionReporte | None = None
 
 
 class EvidenciaBorrador(Dto):
@@ -275,6 +283,7 @@ class SiniestroDetalleMovil(SiniestroResumenMovil):
     fecha_evento: AwareDatetime
     evidencias: list[EvidenciaReporte]
     historial: list[HitoReporte]
+    ubicacion: UbicacionReporte | None = None
 
 
 class EnlaceDescargaMovil(Dto):

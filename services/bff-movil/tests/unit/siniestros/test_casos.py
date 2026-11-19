@@ -478,3 +478,78 @@ def test_enlace_no_devuelve_http_ni_registra_respuesta_invalida(
         respuesta = entorno.pedir("POST", RUTA_ENLACE)
     assert respuesta.status_code == 503
     assert "secreto=abc" not in entorno.telemetria.texto_logs()
+
+
+@pytest.mark.parametrize(
+    "permiso", ["PRECISO", "APROXIMADO", "DENEGADO", "DENEGADO_PERMANENTEMENTE"]
+)
+def test_patch_ubicacion_conserva_contrato_sin_registrar_coordenadas(
+    crear_entorno: Callable[..., Any],
+    permiso: str,
+) -> None:
+    entorno = crear_entorno(SINIESTROS_URL="http://siniestros.test")
+    ubicacion: dict[str, Any] = {"permiso": permiso}
+    if permiso in {"PRECISO", "APROXIMADO"}:
+        ubicacion.update(
+            {
+                "lat": 4.60971,
+                "lon": -74.08175,
+                "precisionM": 100.01,
+                "capturadaEn": "2026-11-18T10:00:00-05:00",
+            }
+        )
+    estado = "NO_CONFIABLE" if "lat" in ubicacion else "NO_DISPONIBLE"
+    with respx.mock as router:
+        servicio = router.patch(f"http://siniestros.test{RUTA_BORRADOR}").respond(
+            200,
+            json={**BORRADOR, "ubicacion": {**ubicacion, "estado": estado}},
+        )
+        r = entorno.pedir("PATCH", RUTA_BORRADOR, cuerpo={"ubicacion": ubicacion})
+    assert r.status_code == 200 and r.json()["ubicacion"]["estado"] == estado
+    assert json.loads(servicio.calls[0].request.content) == {"ubicacion": ubicacion}
+    assert servicio.calls[0].request.headers["X-Actor-Id"] == entorno.sub
+    texto = entorno.telemetria.texto_logs() + entorno.telemetria.texto_spans()
+    assert "4.60971" not in texto and "-74.08175" not in texto
+
+
+@pytest.mark.parametrize(
+    "ubicacion",
+    [
+        None,
+        {"permiso": "DENEGADO", "lat": 4.60971, "lon": -74.08175},
+        {"permiso": "PRECISO", "estado": "DISPONIBLE"},
+        {"permiso": "PRECISO", "lat": 4.60971},
+    ],
+)
+def test_patch_ubicacion_invalida_no_invoca_servicio(
+    crear_entorno: Callable[..., Any],
+    ubicacion: Any,
+) -> None:
+    entorno = crear_entorno(SINIESTROS_URL="http://siniestros.test")
+    with respx.mock(assert_all_called=False) as router:
+        servicio = router.patch(f"http://siniestros.test{RUTA_BORRADOR}")
+        r = entorno.pedir("PATCH", RUTA_BORRADOR, cuerpo={"ubicacion": ubicacion})
+    assert r.status_code == 422 and not servicio.called
+    assert "4.60971" not in r.text and "-74.08175" not in r.text
+    texto = entorno.telemetria.texto_logs() + entorno.telemetria.texto_spans()
+    assert "4.60971" not in texto and "-74.08175" not in texto
+
+
+def test_limites_publica_regla_de_ubicacion_del_servicio(crear_entorno: Callable[..., Any]) -> None:
+    entorno = crear_entorno(SINIESTROS_URL="http://siniestros.test")
+    limites = {
+        "maxEvidencias": 10,
+        "formatosFoto": ["image/jpeg"],
+        "formatosVideo": ["video/mp4"],
+        "tamanoMaximoFotoBytes": 1000,
+        "tamanoMaximoVideoBytes": 10000,
+        "duracionMaximaVideoSegundos": 60,
+        "urlCargaExpiraSegundos": 300,
+        "ubicacionObligatoria": True,
+        "ubicacionTiposOpcionales": ["COLISION"],
+        "ubicacionPrecisionMaxM": 50,
+    }
+    with respx.mock as router:
+        router.get("http://siniestros.test/v1/siniestros/limites").respond(200, json=limites)
+        r = entorno.pedir("GET", "/v1/siniestros/limites")
+    assert r.status_code == 200 and r.json() == limites

@@ -335,7 +335,9 @@ class SiniestrosPg:
             caso = await (
                 await sql.execute(
                     'SELECT id AS "siniestroId", codigo, origen, estado, poliza_id AS "polizaId", '
-                    'reportado_en AS "reportadoEn", descripcion, causa, fecha_evento AS "fechaEvento" '
+                    'reportado_en AS "reportadoEn", descripcion, causa, fecha_evento AS "fechaEvento", '
+                    "CASE WHEN ubicacion_declarada ? 'permiso' THEN ubicacion_declarada "
+                    "ELSE NULL END AS ubicacion "
                     "FROM siniestros WHERE id = %s AND cliente_id = %s",
                     (siniestro_id, cliente_id),
                 )
@@ -365,7 +367,7 @@ class SiniestrosPg:
             'SELECT b.id AS "borradorId", b.poliza_id AS "polizaId", '
             'b.descripcion AS descripcion, b.creado_en AS "creadoEn", '
             'b.estado, b.causa, b.fecha_evento AS "fechaEvento", b.version, '
-            "b.envio_resultado AS envio, "
+            "b.envio_resultado AS envio, b.ubicacion, "
             'count(e.id)::int AS "cantidadEvidencias", '
             "count(e.id) FILTER (WHERE e.estado_carga = 'PENDIENTE')::int "
             'AS "evidenciasPendientes" '
@@ -382,7 +384,7 @@ class SiniestrosPg:
             'SELECT b.id AS "borradorId", b.poliza_id AS "polizaId", '
             'b.descripcion AS descripcion, b.creado_en AS "creadoEn", '
             'b.estado, b.causa, b.fecha_evento AS "fechaEvento", b.version, '
-            "b.envio_resultado AS envio, "
+            "b.envio_resultado AS envio, b.ubicacion, "
             'count(e.id)::int AS "cantidadEvidencias", '
             "count(e.id) FILTER (WHERE e.estado_carga = 'PENDIENTE')::int "
             'AS "evidenciasPendientes" '
@@ -546,7 +548,12 @@ class SiniestrosPg:
     async def actualizar_borrador(
         self, actor_id: str, borrador_id: UUID, cambios: dict[str, Any]
     ) -> None:
-        columnas = {"descripcion": "descripcion", "causa": "causa", "fechaEvento": "fecha_evento"}
+        columnas = {
+            "descripcion": "descripcion",
+            "causa": "causa",
+            "fechaEvento": "fecha_evento",
+            "ubicacion": "ubicacion",
+        }
         if not cambios or any(campo not in columnas for campo in cambios):
             raise SolicitudInvalida(list(cambios) or ["body"])
         if "descripcion" in cambios and cambios["descripcion"] is None:
@@ -557,7 +564,10 @@ class SiniestrosPg:
             await _bloquear_borrador_abierto(sql, actor_id, borrador_id)
             await sql.execute(
                 f"UPDATE borradores SET {asignaciones}, version = version + 1 WHERE id = %s",
-                (*cambios.values(), borrador_id),
+                (
+                    *(Jsonb(v) if k == "ubicacion" else v for k, v in cambios.items()),
+                    borrador_id,
+                ),
             )
 
     async def eliminar_evidencia_borrador(

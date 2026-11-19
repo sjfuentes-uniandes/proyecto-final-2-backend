@@ -11,6 +11,8 @@ from siniestros.application.siniestro.errores import (
     SolicitudInvalida,
 )
 from siniestros.application.siniestro.puertos import AlmacenEvidencias, Reloj
+from siniestros.application.siniestro.ubicacion import validar_ubicacion_envio
+from siniestros.config import Settings
 from siniestros.domain.siniestro.modelos import CopiaPoliza, TipoEvidencia
 
 BOGOTA = timezone(timedelta(hours=-5))
@@ -50,6 +52,7 @@ class BorradorEnvio:
     version: int
     evidencias: tuple[EvidenciaEnvio, ...]
     resultado: dict[str, Any] | None
+    ubicacion: dict[str, Any] | None
 
 
 @dataclass(frozen=True)
@@ -68,7 +71,9 @@ class EnviosRepositorio(Protocol):
     ) -> dict[str, Any]: ...
 
 
-def validar_reporte(borrador: BorradorEnvio, poliza: PolizaReporte | None, ahora: datetime) -> None:
+def validar_reporte(
+    borrador: BorradorEnvio, poliza: PolizaReporte | None, ahora: datetime, settings: Settings
+) -> None:
     if poliza is None or poliza.id != borrador.poliza_id:
         raise SolicitudInvalida(["copiaPoliza"])
     vigencia = poliza.copia.vigencia
@@ -97,6 +102,7 @@ def validar_reporte(borrador: BorradorEnvio, poliza: PolizaReporte | None, ahora
         campos.append("evidencias")
     if campos:
         raise SolicitudInvalida(campos)
+    validar_ubicacion_envio(borrador.ubicacion, borrador.causa, settings)
     pendientes = [str(e.id) for e in borrador.evidencias if e.estado_carga != "CARGADA"]
     if pendientes:
         raise EvidenciaNoCargada(pendientes)
@@ -104,12 +110,18 @@ def validar_reporte(borrador: BorradorEnvio, poliza: PolizaReporte | None, ahora
 
 class EnviarBorrador:
     def __init__(
-        self, repo: EnviosRepositorio, almacen: AlmacenEvidencias, reloj: Reloj, cifrado: str
+        self,
+        repo: EnviosRepositorio,
+        almacen: AlmacenEvidencias,
+        reloj: Reloj,
+        cifrado: str,
+        settings: Settings,
     ) -> None:
         self._repo = repo
         self._almacen = almacen
         self._reloj = reloj
         self._cifrado = cifrado
+        self._settings = settings
 
     async def ejecutar(
         self, actor_id: str, borrador_id: UUID, clave: UUID, poliza: PolizaReporte | None
@@ -117,7 +129,7 @@ class EnviarBorrador:
         borrador = await self._repo.preparar(actor_id, borrador_id, clave)
         # La confirmacion es inmutable: un reintento no consulta S3 ni revalida la poliza.
         if borrador.resultado is None:
-            validar_reporte(borrador, poliza, self._reloj.ahora())
+            validar_reporte(borrador, poliza, self._reloj.ahora(), self._settings)
             for evidencia in borrador.evidencias:
                 await self._almacen.conservar(
                     evidencia.clave_objeto,

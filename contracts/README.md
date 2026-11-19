@@ -199,6 +199,128 @@ La consulta de pólizas no informa sumas por amparo: se representan con `null` e
 detalle del analista (también en BFF web), sin inventar montos ni beneficiarios.
 La aprobación monetaria permanece bloqueada si faltan esos datos.
 
+### Adjuntar ubicacion al reporte movil (F-M1.1)
+
+La ubicacion es metadato del **reporte**, no del archivo de evidencia. Se agrega al
+mismo borrador mediante `PATCH /v1/siniestros/borradores/{borradorId}` con el token
+del cliente, sin `clienteId`:
+
+```json
+{
+  "ubicacion": {
+    "permiso": "PRECISO",
+    "lat": 4.60971,
+    "lon": -74.08175,
+    "precisionM": 35.5,
+    "capturadaEn": "2026-11-18T10:00:00-05:00"
+  }
+}
+```
+
+`lat` y `lon` son coordenadas WGS84 en grados (rangos inclusivos -90..90 y
+-180..180). `precisionM` es la precision horizontal real informada por el proveedor,
+en metros, finita y mayor que cero; no se calcula por decimales de las coordenadas.
+`capturadaEn` es la fecha de la lectura **con zona horaria**, no sustituye
+`fechaEvento`. No se modifica EXIF, contenido, checksum ni metadatos de S3.
+
+El permiso declarado admite `PRECISO`, `APROXIMADO`, `DENEGADO`,
+`DENEGADO_PERMANENTEMENTE` y `NO_SOLICITADO`. Solo los dos primeros admiten
+coordenadas. Si se adjunta una lectura, deben enviarse juntos latitud, longitud,
+precision y fecha. No se aceptan valores infinitos, NaN, booleanos ni lecturas
+parciales. El backend no puede comprobar el permiso del SO: Android debe obtener
+consentimiento antes de leer o enviar coordenadas.
+
+Para registrar rechazo, permiso permanente denegado o ausencia de lectura:
+
+```json
+{"ubicacion": {"permiso": "DENEGADO"}}
+```
+
+Enviar `PRECISO` o `APROXIMADO` sin lectura permite registrar que el permiso existe
+pero el proveedor no entrego ubicacion. Este objeto **reemplaza** la ubicacion
+anterior y elimina sus coordenadas; omitir `ubicacion` conserva lo guardado.
+`ubicacion: null` no se admite: la ausencia debe ser explicita mediante el permiso.
+
+El PATCH devuelve `200` con el borrador y `ubicacion`, incluyendo el `estado`
+calculado por el servidor (no enviarlo en la solicitud):
+
+- `DISPONIBLE`: lectura autorizada con `precisionM <= ubicacionPrecisionMaxM`.
+- `NO_CONFIABLE`: lectura completa que supera ese maximo. Se guarda sin redondear
+  ni perder coordenadas, precision o fecha; Android debe marcarla y ofrecer reintento.
+- `NO_DISPONIBLE`: no hay lectura. Las coordenadas, precision y fecha son `null`.
+
+Los GET de borrador, pendientes y detalle del siniestro definitivo conservan esos
+metadatos. `ubicacion: null` en datos anteriores significa que no se registro este
+contexto; nunca se inventa una ubicacion ni un permiso para los casos existentes.
+
+#### Regla por tipo y configuracion
+
+`GET /v1/siniestros/limites` conserva los limites de evidencia y agrega:
+
+```json
+{
+  "ubicacionObligatoria": true,
+  "ubicacionTiposOpcionales": [],
+  "ubicacionPrecisionMaxM": 100.0
+}
+```
+
+Por ahora **todos los tipos requieren ubicacion confiable para enviar**. Para esta
+regla, el tipo es `causa`, el codigo exacto de cobertura/amparo de la poliza.
+Android debe consultar los limites y considerar obligatoria la ubicacion solo si
+`ubicacionObligatoria` es `true` y la causa no esta en `ubicacionTiposOpcionales`.
+Deshabilitar el boton es una ayuda UX: el servidor aplica la misma regla al enviar.
+
+Configuracion exclusiva de `siniestros` (tambien admite prefijo `SOLVENTA_`):
+
+- `UBICACION_OBLIGATORIA=true`: valor global por defecto.
+- `UBICACION_TIPOS_OPCIONALES='["COLISION"]'`: excepciones por codigo de causa;
+  por defecto `[]`. No requiere modificar codigo para agregar excepciones.
+- `UBICACION_PRECISION_MAX_M=100`: umbral positivo configurable. **100 m es una
+  decision inicial de producto, no un estandar universal**. El limite es inclusivo;
+  una lectura aproximada se conserva con su precision y usa la misma regla.
+
+En AWS se pueden sobrescribir estas variables mediante
+`service_environment.siniestros` de `infra/apps`. Los limites del BFF se obtienen
+del servicio, sin duplicar configuracion en Android ni en el BFF.
+
+Si la ubicacion es obligatoria y falta o no es confiable, el envio responde
+`422 SOLICITUD_INVALIDA`, con `detalles.campos: ["ubicacion"]` y `correlationId`.
+El borrador queda abierto y conserva sus evidencias; corregir por PATCH y reintentar
+el envio del **mismo borrador y clave idempotente**. Si es opcional, puede enviarse
+con estado no disponible o no confiable, sin falsear el contexto.
+Coordenadas sin permiso, fecha sin zona, lectura incompleta, rangos invalidos,
+`ubicacion: null` o un `estado` enviado por Android tambien producen `422`.
+Se mantienen `401`, `403`, `404 BORRADOR_NO_ENCONTRADO`, `409 BORRADOR_CONVERTIDO`
+y `503` de las rutas existentes. Otro titular no puede leer ni modificar la ubicacion.
+
+La conversion copia los metadatos a `siniestros.ubicacion_declarada` (JSONB existente)
+en la misma transaccion del reporte. El envio revalida el umbral vigente, incluso
+dentro de la transaccion, y guarda la confianza recalculada tanto en el borrador
+convertido como en el definitivo. Una confirmacion previa se recupera sin revalidar
+ubicacion, poliza ni archivos. Los eventos/outbox no incorporan coordenadas.
+
+#### Privacidad, despliegue y trabajo Android pendiente
+
+- RDS ya usa `storage_encrypted=true` y KMS en `infra/platform/database.tf`;
+  la nueva columna y el JSONB definitivo quedan cubiertos por ese cifrado en reposo.
+- `sanitizar` y el enmascarado de texto redactan `lat`, `lon` y sus nombres
+  alternativos en logs. Los errores de validacion incluyen campos, nunca valores.
+  Android tampoco debe registrar coordenadas en logs, analitica o reportes de errores.
+- Desplegar **siniestros,bff-movil**, alcance **microservicios** del workflow
+  **Infra - Desplegar**, con pruebas habilitadas. Incluye la configuracion de apps.
+  La migracion **007** se aplica al arrancar: agrega `borradores.ubicacion` y reutiliza
+  el JSONB definitivo; no requiere recrear RDS ni desplegar bases/plataforma.
+  La reversa rechaza eliminar metadatos ya guardados.
+- **Cambio de comportamiento intencional:** un borrador abierto anterior sin ubicacion
+  debe completarse antes de enviarse mientras su causa sea obligatoria. Coordinar
+  este despliegue con Android. Los siniestros ya enviados no se invalidan.
+- Fuera de este repositorio quedan Play Services Location y su dependencia en
+  `libs.versions.toml`, permisos y explicacion segun mockups, boton y reintento,
+  visores de precision/fecha y ausencia, Robolectric/WireMock, Compose/Espresso,
+  pruebas fisicas exterior/interior, TalkBack, fuente al 200 %, es-CO y en-US.
+  No se verificaron esos criterios de UI en el backend.
+
 ### Descargar evidencias desde Android
 
 `POST /v1/siniestros/{siniestroId}/evidencias/{evidenciaId}/enlace`,

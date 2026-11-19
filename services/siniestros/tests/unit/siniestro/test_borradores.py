@@ -162,6 +162,9 @@ async def test_limites_publica_la_configuracion_de_evidencias() -> None:
         "tamanoMaximoVideoBytes": 50 * 1024 * 1024,
         "duracionMaximaVideoSegundos": 60,
         "urlCargaExpiraSegundos": 300,
+        "ubicacionObligatoria": True,
+        "ubicacionTiposOpcionales": [],
+        "ubicacionPrecisionMaxM": 100.0,
     }
 
 

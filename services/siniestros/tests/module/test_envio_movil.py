@@ -48,6 +48,13 @@ COPIA = {
     "periodicidad": "MENSUAL",
     "coberturas": [{"codigo": "COLISION", "nombre": "Colision", "obligatoria": True}],
 }
+UBICACION = {
+    "permiso": "PRECISO",
+    "lat": 4.60971,
+    "lon": -74.08175,
+    "precisionM": 100.0,
+    "capturadaEn": "2026-11-17T10:00:00-05:00",
+}
 
 
 class Reloj:
@@ -98,12 +105,18 @@ class Almacen:
 
 class Flujo:
     def __init__(
-        self, http: httpx.AsyncClient, repo: SiniestrosPg, almacen: Almacen, reloj: Reloj
+        self,
+        http: httpx.AsyncClient,
+        repo: SiniestrosPg,
+        almacen: Almacen,
+        reloj: Reloj,
+        settings: Settings,
     ) -> None:
         self.http, self.repo, self.almacen, self.reloj = http, repo, almacen, reloj
+        self.settings = settings
 
     async def crear(
-        self, con_evidencia: bool = True, cargar: bool = True
+        self, con_evidencia: bool = True, cargar: bool = True, con_ubicacion: bool = True
     ) -> tuple[str, str | None]:
         r = await self.http.post(
             "/v1/siniestros/borradores",
@@ -118,7 +131,11 @@ class Flujo:
         borrador = r.json()["borradorId"]
         r = await self.http.patch(
             f"/v1/siniestros/borradores/{borrador}",
-            json={"causa": "COLISION", "fechaEvento": "2026-11-17T10:00:00-05:00"},
+            json={
+                "causa": "COLISION",
+                "fechaEvento": "2026-11-17T10:00:00-05:00",
+                **({"ubicacion": UBICACION} if con_ubicacion else {}),
+            },
         )
         assert r.status_code == 200, r.text
         if not con_evidencia:
@@ -157,15 +174,18 @@ class Flujo:
 async def flujo(pool: Any) -> AsyncIterator[Flujo]:
     repo, almacen, reloj = SiniestrosPg(pool), Almacen(), Reloj()
     app = crear_app()
-    app.state.borradores = Borradores(repo, almacen, reloj, Settings())
-    app.state.enviar_borrador = EnviarBorrador(EnviosPg(pool), almacen, reloj, "AES256")
+    settings = Settings()
+    app.state.borradores = Borradores(repo, almacen, reloj, settings)
+    app.state.enviar_borrador = EnviarBorrador(
+        EnviosPg(pool, settings), almacen, reloj, "AES256", settings
+    )
     app.state.enlace_evidencia_cliente = EmitirEnlaceCliente(repo, almacen, reloj, 300)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="http://siniestros.test",
         headers={"X-Actor-Id": ACTOR, "X-Actor-Rol": "CLIENTE", "X-Correlation-Id": "corr-envio"},
     ) as http:
-        yield Flujo(http, repo, almacen, reloj)
+        yield Flujo(http, repo, almacen, reloj, settings)
 
 
 async def test_envio_completo_y_confirmacion_perdida(
@@ -196,6 +216,7 @@ async def test_envio_completo_y_confirmacion_perdida(
     )
     # La misma confirmacion se recupera incluso sin poliza y tras vencer su vigencia.
     flujo.reloj.instante = datetime(2027, 1, 2, tzinfo=UTC)
+    flujo.settings.ubicacion_precision_max_m = 1
     for repetida in (clave, uuid4()):
         r = await flujo.http.post(
             f"/v1/siniestros/borradores/{borrador}/envio",
@@ -214,6 +235,123 @@ async def test_envio_completo_y_confirmacion_perdida(
     propio = await flujo.http.get(f"/v1/clientes/{CLIENTE}/siniestros/{siniestro_id}")
     assert propio.json()["estado"] == "EN_EVALUACION"
     assert "claveObjeto" not in propio.text
+    assert propio.json()["ubicacion"] == {**UBICACION, "estado": "DISPONIBLE"}
+    assert detalle["ubicacion"] == propio.json()["ubicacion"]
+    assert leido.siniestro.ubicacion_declarada.lat == UBICACION["lat"]
+
+
+@pytest.mark.parametrize("permiso", ["DENEGADO", "DENEGADO_PERMANENTEMENTE", "APROXIMADO"])
+async def test_ubicacion_no_disponible_se_conserva_y_bloquea_envio_obligatorio(
+    flujo: Flujo,
+    conexion: psycopg.Connection[Any],
+    permiso: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    borrador, _ = await flujo.crear()
+    ruta = f"/v1/siniestros/borradores/{borrador}"
+    archivos = dict(flujo.almacen.archivos)
+    respuesta = await flujo.http.patch(ruta, json={"ubicacion": {"permiso": permiso}})
+    assert respuesta.status_code == 200, respuesta.text
+    ubicacion = respuesta.json()["ubicacion"]
+    assert ubicacion["estado"] == "NO_DISPONIBLE"
+    assert ubicacion["lat"] is None and ubicacion["lon"] is None
+    assert (await flujo.http.get(ruta)).json()["ubicacion"] == ubicacion
+    assert (await flujo.http.get("/v1/siniestros/borradores")).json()["items"][0][
+        "ubicacion"
+    ] == ubicacion
+    envio = await flujo.enviar(borrador)
+    assert (envio.status_code, envio.json()["codigo"]) == (422, "SOLICITUD_INVALIDA")
+    assert envio.json()["detalles"]["campos"] == ["ubicacion"]
+    assert envio.json()["correlationId"] == "corr-envio"
+    assert conexion.execute("SELECT count(*) FROM siniestros").fetchone() == (0,)
+    assert conexion.execute("SELECT count(*) FROM outbox").fetchone() == (0,)
+    assert flujo.almacen.archivos == archivos
+    assert "4.60971" not in caplog.text and "-74.08175" not in caplog.text
+    flujo.settings.ubicacion_tipos_opcionales = ("COLISION",)
+    enviado = await flujo.enviar(borrador)
+    assert enviado.status_code == 201, enviado.text
+    detalle = await flujo.http.get(
+        f"/v1/clientes/{CLIENTE}/siniestros/{enviado.json()['siniestroId']}"
+    )
+    assert detalle.json()["ubicacion"] == ubicacion
+
+
+async def test_precision_invalida_se_guarda_y_se_corrige_en_el_mismo_borrador(
+    flujo: Flujo,
+    conexion: psycopg.Connection[Any],
+) -> None:
+    borrador, _ = await flujo.crear()
+    ruta = f"/v1/siniestros/borradores/{borrador}"
+    imprecisa = {**UBICACION, "permiso": "APROXIMADO", "precisionM": 100.01}
+    r = await flujo.http.patch(ruta, json={"ubicacion": imprecisa})
+    assert r.status_code == 200 and r.json()["ubicacion"] == {**imprecisa, "estado": "NO_CONFIABLE"}
+    clave = uuid4()
+    assert (await flujo.enviar(borrador, clave)).status_code == 422
+    corregida = {**imprecisa, "precisionM": 100}
+    r = await flujo.http.patch(ruta, json={"ubicacion": corregida})
+    assert r.status_code == 200 and r.json()["ubicacion"]["estado"] == "DISPONIBLE"
+    enviado = await flujo.enviar(borrador, clave)
+    assert enviado.status_code == 201, enviado.text
+    assert (await flujo.enviar(borrador, clave)).json() == enviado.json()
+    assert conexion.execute("SELECT count(*) FROM siniestros").fetchone() == (1,)
+    payload = str(conexion.execute("SELECT payload FROM outbox").fetchone())
+    assert "4.60971" not in payload and "-74.08175" not in payload
+    assert (
+        await flujo.http.patch(ruta, json={"ubicacion": {"permiso": "DENEGADO"}})
+    ).status_code == 409
+
+
+async def test_ubicacion_ajena_o_sin_consentimiento_no_modifica_borrador(
+    flujo: Flujo,
+) -> None:
+    borrador, _ = await flujo.crear()
+    ruta = f"/v1/siniestros/borradores/{borrador}"
+    antes = (await flujo.http.get(ruta)).json()
+    ajeno = await flujo.http.patch(
+        ruta,
+        json={"ubicacion": {"permiso": "DENEGADO"}},
+        headers={"X-Actor-Id": str(uuid4())},
+    )
+    assert ajeno.status_code == 404
+    sin_permiso = await flujo.http.patch(
+        ruta,
+        json={"ubicacion": {**UBICACION, "permiso": "DENEGADO"}},
+    )
+    assert sin_permiso.status_code == 422
+    assert "4.60971" not in sin_permiso.text and "-74.08175" not in sin_permiso.text
+    assert (await flujo.http.get(ruta)).json() == antes
+
+
+async def test_envio_actualiza_confianza_si_cambio_el_umbral(flujo: Flujo) -> None:
+    borrador, _ = await flujo.crear()
+    ruta = f"/v1/siniestros/borradores/{borrador}"
+    r = await flujo.http.patch(ruta, json={"ubicacion": {**UBICACION, "precisionM": 150}})
+    assert r.json()["ubicacion"]["estado"] == "NO_CONFIABLE"
+    flujo.settings.ubicacion_precision_max_m = 200
+    enviado = await flujo.enviar(borrador)
+    assert enviado.status_code == 201, enviado.text
+    definitivo = await flujo.http.get(
+        f"/v1/clientes/{CLIENTE}/siniestros/{enviado.json()['siniestroId']}"
+    )
+    guardada = (await flujo.http.get(ruta)).json()["ubicacion"]
+    assert guardada == definitivo.json()["ubicacion"]
+    assert guardada["estado"] == "DISPONIBLE" and guardada["precisionM"] == 150
+
+
+async def test_borrador_anterior_sin_ubicacion_solo_se_envia_si_el_tipo_lo_admite(
+    flujo: Flujo,
+) -> None:
+    borrador, _ = await flujo.crear(con_ubicacion=False)
+    assert (await flujo.enviar(borrador)).status_code == 422
+    flujo.settings.ubicacion_tipos_opcionales = ("COLISION",)
+    enviado = await flujo.enviar(borrador)
+    assert enviado.status_code == 201, enviado.text
+    borrador_leido = await flujo.http.get(f"/v1/siniestros/borradores/{borrador}")
+    definitivo = await flujo.http.get(
+        f"/v1/clientes/{CLIENTE}/siniestros/{enviado.json()['siniestroId']}"
+    )
+    assert borrador_leido.json()["ubicacion"] is None
+    assert definitivo.json()["ubicacion"] is None
 
 
 @pytest.mark.parametrize("misma_clave", [True, False])
@@ -401,6 +539,27 @@ async def test_reversa_no_pierde_confirmaciones(
     with pytest.raises(psycopg.errors.RaiseException, match="existen borradores convertidos"):
         conexion.execute(reversa)
     assert (await flujo.enviar(borrador)).json() == resultado
+
+
+@pytest.mark.parametrize("convertido", [False, True])
+async def test_reversa_007_no_elimina_ubicacion_guardada(
+    flujo: Flujo,
+    conexion: psycopg.Connection[Any],
+    convertido: bool,
+) -> None:
+    borrador, _ = await flujo.crear()
+    if convertido:
+        assert (await flujo.enviar(borrador)).status_code == 201
+    ruta = f"/v1/siniestros/borradores/{borrador}"
+    antes = (await flujo.http.get(ruta)).json()
+    reversa = (
+        resources.files("siniestros.adapters.outbound")
+        .joinpath("migraciones", "down", "007_ubicacion_reporte.sql")
+        .read_text(encoding="utf-8")
+    )
+    with pytest.raises(psycopg.errors.RaiseException, match="existen metadatos de ubicacion"):
+        conexion.execute(reversa)
+    assert (await flujo.http.get(ruta)).json() == antes
 
 
 async def test_descarga_valida_titular_pertenencia_y_confirmacion(
