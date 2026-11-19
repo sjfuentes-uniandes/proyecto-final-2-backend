@@ -86,6 +86,7 @@ def esperar_metricas(
     tareas: dict[datetime, float],
     token: str | None = None,
     siguiente: str | None = None,
+    otros: list[dict[str, Any]] | None = None,
 ) -> None:
     parametros: dict[str, Any] = {
         "MetricDataQueries": CONSULTAS,
@@ -96,7 +97,11 @@ def esperar_metricas(
     if token:
         parametros["NextToken"] = token
     respuesta: dict[str, Any] = {
-        "MetricDataResults": [resultado("cotizaciones", cotizaciones), resultado("tareas", tareas)]
+        "MetricDataResults": [
+            resultado("cotizaciones", cotizaciones),
+            resultado("tareas", tareas),
+            *(otros or []),
+        ]
     }
     if siguiente:
         respuesta["NextToken"] = siguiente
@@ -171,9 +176,12 @@ def aws(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[Any, Any, Stubber, St
         yield cloudwatch, autoscaling, cw, aas
 
 
+def adaptador(cloudwatch: Any, autoscaling: Any) -> RepositorioCapacidad:
+    return RepositorioCapacidad(cloudwatch, autoscaling, NAMESPACE, "int", CLUSTER, SERVICIO)
+
+
 def caso(cloudwatch: Any, autoscaling: Any) -> ConsultarCapacidad:
-    repositorio = RepositorioCapacidad(cloudwatch, autoscaling, NAMESPACE, "int", CLUSTER, SERVICIO)
-    return ConsultarCapacidad(repositorio, ahora=lambda: AHORA)
+    return ConsultarCapacidad(adaptador(cloudwatch, autoscaling), ahora=lambda: AHORA)
 
 
 # --- Adaptador y caso de uso ---------------------------------------------------------------
@@ -228,6 +236,36 @@ def test_get_metric_data_paginado(aws: Any) -> None:
     cw.assert_no_pending_responses()
     assert [p.valor for p in panel.cotizaciones_por_minuto[:4]] == [0, 5, 6, 0]
     assert panel.tareas_activas == 3
+
+
+def test_get_metric_data_se_detiene_en_el_tope_de_20_paginas(aws: Any) -> None:
+    cloudwatch, autoscaling, cw, _aas = aws
+    # Cada página trae NextToken: se piden 20 y la 21 («p21») nunca sale. El Stubber falla si
+    # se pide una página más de las 20 sembradas.
+    for n in range(20):
+        esperar_metricas(
+            cw,
+            {minuto(n): float(n + 1)},
+            {minuto(n): 2.0},
+            token=f"p{n + 1}" if n else None,
+            siguiente=f"p{n + 2}",
+        )
+    cotizaciones, tareas = adaptador(cloudwatch, autoscaling).metricas(DESDE, FIN)
+    cw.assert_no_pending_responses()
+    # Devuelve lo acumulado en las 20 páginas, sin error ni aviso.
+    assert cotizaciones == {minuto(n): float(n + 1) for n in range(20)}
+    assert tareas == {minuto(n): 2.0 for n in range(20)}
+
+
+def test_get_metric_data_ignora_un_id_desconocido(aws: Any) -> None:
+    cloudwatch, autoscaling, cw, _aas = aws
+    # Mismo minuto que las series conocidas, otro valor y un minuto propio: si se mezclara con
+    # alguna, cambiaría su valor o le agregaría un punto.
+    desconocida = resultado("otra", {minuto(5): 99.0, minuto(6): 98.0})
+    esperar_metricas(cw, {minuto(5): 4.0}, {minuto(5): 2.0}, otros=[desconocida])
+    cotizaciones, tareas = adaptador(cloudwatch, autoscaling).metricas(DESDE, FIN)
+    cw.assert_no_pending_responses()
+    assert (cotizaciones, tareas) == ({minuto(5): 4.0}, {minuto(5): 2.0})
 
 
 def test_ultimo_escalado_es_la_actividad_mas_reciente_dentro_de_la_ventana(aws: Any) -> None:
@@ -303,6 +341,21 @@ def test_actividades_paginadas_hasta_salir_de_la_ventana(aws: Any) -> None:
     escalado = caso(cloudwatch, autoscaling).ejecutar().ultimo_escalado
     aas.assert_no_pending_responses()
     assert escalado is not None and escalado.inicio == minuto(50)
+
+
+def test_actividades_se_detienen_en_el_tope_de_20_paginas(aws: Any) -> None:
+    cloudwatch, autoscaling, _cw, aas = aws
+    # Todas dentro de la ventana y siempre con NextToken: ninguna página corta el recorrido, se
+    # piden 20 y la 21 («p21») nunca sale. El Stubber falla si se pide una más.
+    paginas = [
+        [actividad(minuto(59 - n), minuto(59 - n) + timedelta(seconds=20))] for n in range(20)
+    ]
+    for n, pagina in enumerate(paginas):
+        esperar_actividades(aas, pagina, token=f"p{n + 1}" if n else None, siguiente=f"p{n + 2}")
+    actividades = adaptador(cloudwatch, autoscaling).actividades(DESDE)
+    aas.assert_no_pending_responses()
+    # Devuelve las 20 páginas, en el orden de AWS, sin error ni aviso.
+    assert [a["StartTime"] for a in actividades] == [minuto(59 - n) for n in range(20)]
 
 
 def test_sin_objetivo_de_escalado_falla(aws: Any) -> None:
