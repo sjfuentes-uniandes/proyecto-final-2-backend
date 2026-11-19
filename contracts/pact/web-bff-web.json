@@ -1319,6 +1319,294 @@
       "type": "Synchronous/HTTP"
     },
     {
+      "description": "la consulta de la capacidad de cotizacion con un escalado terminado",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "la capacidad de cotizacion tiene un escalado terminado en la ventana"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": [
+            "application/json"
+          ]
+        },
+        "method": "GET",
+        "path": "/operacion/capacidad"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "ambiente": "int",
+            "cotizaciones_por_minuto": [
+              {
+                "instante": "2026-11-19T14:00:00.000Z",
+                "valor": 20000
+              }
+            ],
+            "maximo": 4,
+            "minimo": 2,
+            "servicio": "cotizacion",
+            "tareas_activas": 3,
+            "ultimo_escalado": {
+              "descripcion": "Setting desired count to 3.",
+              "duracion_s": 41,
+              "estado": "Successful",
+              "fin": "2026-11-19T14:41:26Z",
+              "inicio": "2026-11-19T14:40:45Z"
+            },
+            "ventana_min": 60
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.ambiente": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.cotizaciones_por_minuto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.cotizaciones_por_minuto[*].instante": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.cotizaciones_por_minuto[*].valor": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.maximo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.minimo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.servicio": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.tareas_activas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.ultimo_escalado.descripcion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.ultimo_escalado.duracion_s": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.ultimo_escalado.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.ultimo_escalado.fin": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.ultimo_escalado.inicio": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.ventana_min": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la consulta de la capacidad de cotizacion sin escalados ni dato de tareas",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "la capacidad de cotizacion no tiene escalados ni dato de tareas en la ventana"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": [
+            "application/json"
+          ]
+        },
+        "method": "GET",
+        "path": "/operacion/capacidad"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "ambiente": "int",
+            "cotizaciones_por_minuto": [
+              {
+                "instante": "2026-11-19T14:00:00.000Z",
+                "valor": 20000
+              }
+            ],
+            "maximo": 4,
+            "minimo": 2,
+            "servicio": "cotizacion",
+            "tareas_activas": null,
+            "ultimo_escalado": null,
+            "ventana_min": 60
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.ambiente": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.cotizaciones_por_minuto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.cotizaciones_por_minuto[*].instante": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
+            },
+            "$.cotizaciones_por_minuto[*].valor": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.maximo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.minimo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.servicio": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.ventana_min": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
       "description": "la consulta de la póliza de una cotización sin póliza",
       "pending": false,
       "providerStates": [
