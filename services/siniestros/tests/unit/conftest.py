@@ -5,13 +5,14 @@ comprueban que el de verdad se comporta igual.
 """
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
+from siniestros.application.siniestro.envio import BorradorEnvio, EvidenciaEnvio, PolizaReporte
 from siniestros.application.siniestro.errores import SolicitudInvalida
 from siniestros.application.siniestro.puertos import DecisionFinalDuplicada, RegistroIdempotencia
 from siniestros.application.siniestro.vistas import (
@@ -24,16 +25,64 @@ from siniestros.application.siniestro.vistas import (
     Plazos,
 )
 from siniestros.domain.siniestro.modelos import (
+    CopiaPoliza,
     EntradaHistorial,
     EstadoSiniestro,
     Evidencia,
     IntegridadEvidencia,
     Siniestro,
+    TipoEvidencia,
     TipoSoporte,
 )
 from siniestros.domain.siniestro.pago import EstadoPago, PagoSiniestro, ResultadoPago
 
 CURSOR_INVALIDO = "cursor-invalido"
+
+
+@pytest.fixture
+def borrador_envio(siniestro: Callable[..., Siniestro]) -> BorradorEnvio:
+    caso = siniestro()
+    borrador_id, evidencia_id = uuid4(), uuid4()
+    return BorradorEnvio(
+        id=borrador_id,
+        actor_id="actor-cliente",
+        cliente_id=caso.cliente_id,
+        poliza_id=caso.poliza_id,
+        descripcion="Impacto en la puerta.",
+        causa=caso.causa,
+        fecha_evento=caso.fecha_evento,
+        version=3,
+        evidencias=(
+            EvidenciaEnvio(
+                id=evidencia_id,
+                nombre_archivo="foto.jpg",
+                tipo=TipoEvidencia.FOTOGRAFIA,
+                clave_objeto=f"tmp/{borrador_id}/{evidencia_id}",
+                sha256="a" * 64,
+                capturada_en=caso.fecha_evento,
+                tamano_bytes=123,
+                tipo_contenido="image/jpeg",
+                duracion_segundos=None,
+                estado_carga="CARGADA",
+            ),
+        ),
+        resultado=None,
+        ubicacion={
+            "permiso": "PRECISO",
+            "lat": 4.65,
+            "lon": -74.05,
+            "precisionM": 100.0,
+            "capturadaEn": caso.fecha_evento.isoformat(),
+            "estado": "DISPONIBLE",
+        },
+    )
+
+
+@pytest.fixture
+def poliza_reporte(
+    borrador_envio: BorradorEnvio, copia: Callable[..., CopiaPoliza]
+) -> PolizaReporte:
+    return PolizaReporte(borrador_envio.poliza_id, "ACTIVA", True, copia())
 
 
 class RelojFijo:

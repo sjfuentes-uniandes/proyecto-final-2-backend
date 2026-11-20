@@ -475,3 +475,10 @@ el móvil recupera la confirmación o reintenta el mismo borrador.
 Todos los datos son **100 % sintéticos**: Solventa no usa datos reales de clientes ni proveedores reales. El simulador sustituye a Open Finance y a Datos Abiertos, y así las pruebas, los logs y las trazas nunca exponen información personal o financiera de nadie. Los identificadores de perfilamiento siguen el patrón `00000000-0000-4000-8000-0000000000NN`; los `consentimientoId` del stub, `00000000-0000-4000-9000-0000000000NN`.
 
 En `simulador.<FUENTE>.datos`, una clave con punto (`listasRestrictivas.coincidencias`) es una ruta anidada; con el comportamiento `incompleta`, las claves listadas se **eliminan** de la respuesta nominal.
+
+En C18 (HU-W12), la prueba de módulo comprueba que las cuatro ramas se solapan:
+todas deben comenzar antes de que termine la primera, con las cuatro llamadas reales
+al simulador y el resultado funcional esperado. Usa el presupuesto del arnés de módulo,
+sin cambiar los timeouts de producción ni los casos que prueban el corte de 300 ms.
+`esperado.duracionMsObjetivo = 350` se conserva como objetivo para mediciones de
+rendimiento en un ambiente controlado, no como condición bloqueante del módulo.
