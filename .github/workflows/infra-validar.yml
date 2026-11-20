@@ -15,6 +15,7 @@ on:
       - "libs/solventa-common/src/solventa_common/token_registro.py"
       - "infra/plataforma.mk"
       - "scripts/plataforma/**"
+      - "experiments/hu-w29/**"
       - ".github/workflows/infra-*.yml"
       - ".github/actions/preparar-infra/**"
       - ".github/actions/plan-terraform/**"
@@ -44,5 +45,11 @@ jobs:
       - name: Lambda pre sign-up (HU-M06)
         run: uv run pytest infra/lambdas libs/solventa-common/tests/unit/test_token_registro.py -q
 
+      # HU-W29: reconciliador del experimento multizona (sin dependencias fuera de la biblioteca estándar).
+      - name: Reconciliador HU-W29
+        run: uv run pytest experiments/hu-w29 -q
+
       - name: Shellcheck
-        run: shellcheck -x -P scripts/plataforma scripts/plataforma/*.sh
+        run: |
+          shellcheck -x -P scripts/plataforma scripts/plataforma/*.sh
+          shellcheck -x -P experiments/hu-w29:scripts/plataforma experiments/hu-w29/*.sh

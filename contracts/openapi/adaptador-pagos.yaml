@@ -129,6 +129,123 @@ paths:
                   type: string
                 type: object
                 title: Response Health Health Get
+  /v1/desembolsos:
+    post:
+      tags:
+      - desembolsos
+      summary: Ordenar
+      description: Ordena el desembolso con `referencia` como clave idempotente hacia
+        el proveedor.
+      operationId: ordenar_v1_desembolsos_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudDesembolso'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesembolsoDto'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '502':
+          description: RESPUESTA_INVALIDA (también un 404 o un estado no previsto
+            del proveedor)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: FUENTE_NO_DISPONIBLE (detalles.motivo y detalles.circuito)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '504':
+          description: TIEMPO_AGOTADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/desembolsos/{referencia}:
+    get:
+      tags:
+      - desembolsos
+      summary: Consultar
+      description: 'Consulta el estado del desembolso en el proveedor, para conciliar
+        una indemnización
+
+        pendiente.'
+      operationId: consultar_v1_desembolsos__referencia__get
+      parameters:
+      - name: referencia
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^IND-88-[0-9]{4}-[0-9]{4,}-[0-9]{2}$
+          title: Referencia
+      - name: beneficiarioRef
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+          title: Beneficiarioref
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesembolsoDto'
+        '404':
+          description: 'DESEMBOLSO_NO_ENCONTRADO: el proveedor no tiene esa orden
+            de desembolso'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '502':
+          description: RESPUESTA_INVALIDA (también un 404 o un estado no previsto
+            del proveedor)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: FUENTE_NO_DISPONIBLE (detalles.motivo y detalles.circuito)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '504':
+          description: TIEMPO_AGOTADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
 components:
   schemas:
     CobroDto:
@@ -215,3 +332,68 @@ components:
       - moneda
       - pagadorRef
       title: SolicitudCobro
+    DesembolsoDto:
+      properties:
+        referencia:
+          type: string
+          pattern: ^IND-88-[0-9]{4}-[0-9]{4,}-[0-9]{2}$
+          title: Referencia
+        estado:
+          $ref: '#/components/schemas/EstadoDesembolso'
+        transaccionId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transaccionid
+        motivo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Motivo
+      type: object
+      required:
+      - referencia
+      - estado
+      - transaccionId
+      - motivo
+      title: DesembolsoDto
+    EstadoDesembolso:
+      type: string
+      enum:
+      - CONFIRMADO
+      - RECHAZADO
+      title: EstadoDesembolso
+      description: 'Respuesta definitiva del proveedor: solo estas dos cambian la
+        indemnización en `dinero`.'
+    SolicitudDesembolso:
+      properties:
+        referencia:
+          type: string
+          pattern: ^IND-88-[0-9]{4}-[0-9]{4,}-[0-9]{2}$
+          title: Referencia
+          examples:
+          - IND-88-2026-0442-01
+        monto:
+          type: string
+          pattern: ^[0-9]+(\.[0-9]{1,2})?$
+          title: Monto
+          examples:
+          - '2500000.00'
+        moneda:
+          type: string
+          const: COP
+          title: Moneda
+        beneficiarioRef:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Beneficiarioref
+          examples:
+          - ben-sint-001
+      type: object
+      required:
+      - referencia
+      - monto
+      - moneda
+      - beneficiarioRef
+      title: SolicitudDesembolso

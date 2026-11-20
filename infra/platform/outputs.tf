@@ -85,6 +85,8 @@ output "platform" {
     usage_plans       = { for name, plan in aws_api_gateway_usage_plan.partner : name => plan.id }
     metrics_log_group = aws_cloudwatch_log_group.metrics.name
     events_log_group  = aws_cloudwatch_log_group.ecs_events.name
+    # Informes del experimento multizona (HU-W29): solo en exp; bff-web los lee.
+    experiments_bucket = var.experiments_enabled ? { name = aws_s3_bucket.experiments[0].id, arn = aws_s3_bucket.experiments[0].arn } : null
   }
 }
 
@@ -160,6 +162,28 @@ output "db_bootstrap_task" {
     security_group  = aws_security_group.db_bootstrap.id
     log_group       = aws_cloudwatch_log_group.db_bootstrap.name
   }
+}
+
+output "experiment" {
+  description = "Experimento multizona (HU-W29): lo usan experiments/hu-w29/*.sh para llenar fis.json y extraer las claves. null fuera de exp."
+  value = var.experiments_enabled ? {
+    zone               = local.experiment_zone
+    fis_role_arn       = aws_iam_role.fis[0].arn
+    zone_subnet_arns   = local.zone_a_subnets
+    db_instance_arn    = aws_db_instance.main.arn
+    db_multi_az        = aws_db_instance.main.multi_az
+    bucket             = aws_s3_bucket.experiments[0].id
+    bucket_sse         = local.audit_sse
+    timeline_log_group = aws_cloudwatch_log_group.ecs_events.name
+    reconciliation_task = {
+      cluster         = aws_ecs_cluster.main.arn
+      task_definition = aws_ecs_task_definition.reconciliation[0].arn
+      subnets         = aws_subnet.private[*].id
+      security_group  = aws_security_group.reconciliation[0].id
+      log_group       = aws_cloudwatch_log_group.reconciliation[0].name
+      databases       = { for name in local.reconciliation_services : name => local.db_names[name] }
+    }
+  } : null
 }
 
 output "alerts_topic_arn" {

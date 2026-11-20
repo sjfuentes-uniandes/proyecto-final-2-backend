@@ -68,6 +68,15 @@ run "minimo_costo" {
     condition     = aws_instance.nat[0].instance_type == "t3.micro" && aws_instance.nat[0].source_dest_check == false
     error_message = "La NAT instance debe ser elegible para la capa gratuita y reenviar tráfico."
   }
+  # HU-W29: el rol de FIS, el bucket de informes y la tarea de reconciliación solo existen en exp.
+  assert {
+    condition = (
+      length(aws_iam_role.fis) == 0 && length(aws_s3_bucket.experiments) == 0 && length(aws_ecs_task_definition.reconciliation) == 0 &&
+      sort(keys(aws_cloudwatch_event_target.ecs_events)) == tolist(["ecs-events", "rds-events"]) &&
+      output.platform.experiments_bucket == null && output.experiment == null
+    )
+    error_message = "Sin experiments_enabled no hay recursos de FIS; la cronología guarda los eventos de ECS y RDS."
+  }
   assert {
     condition     = length(aws_kms_key.platform) == 0 && aws_sqs_queue.main["auditoria"].sqs_managed_sse_enabled && aws_sns_topic.business_events.kms_master_key_id == "alias/aws/sns"
     error_message = "Sin clave propia se usan claves administradas por AWS."

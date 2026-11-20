@@ -55,14 +55,26 @@ variable "max_replicas" {
 }
 
 variable "service_overrides" {
-  description = "Ajustes por servicio: cpu, memory, min, max."
+  description = "Ajustes por servicio: cpu, memory, min, max y, para la política de CPU (HU-W08), cpu_target (%), scale_out_cooldown y scale_in_cooldown (s). Un campo sin valor toma el global del ambiente."
   type = map(object({
-    cpu    = optional(number)
-    memory = optional(number)
-    min    = optional(number)
-    max    = optional(number)
+    cpu                = optional(number)
+    memory             = optional(number)
+    min                = optional(number)
+    max                = optional(number)
+    cpu_target         = optional(number)
+    scale_out_cooldown = optional(number)
+    scale_in_cooldown  = optional(number)
   }))
   default = {}
+  validation {
+    condition = alltrue([
+      for override in values(var.service_overrides) :
+      (override.cpu_target == null ? true : override.cpu_target >= 1 && override.cpu_target <= 100) &&
+      (override.scale_out_cooldown == null ? true : override.scale_out_cooldown >= 0 && floor(override.scale_out_cooldown) == override.scale_out_cooldown) &&
+      (override.scale_in_cooldown == null ? true : override.scale_in_cooldown >= 0 && floor(override.scale_in_cooldown) == override.scale_in_cooldown)
+    ])
+    error_message = "En service_overrides, cpu_target va de 1 a 100 y los enfriamientos son enteros mayores o iguales a 0."
+  }
 }
 
 variable "use_fargate_spot" {
@@ -72,8 +84,33 @@ variable "use_fargate_spot" {
 }
 
 variable "cpu_target" {
-  type    = number
-  default = 60
+  description = "Objetivo de CPU promedio (%) de la política de autoescalado de los servicios que no son workers. service_overrides lo ajusta por servicio."
+  type        = number
+  default     = 60
+  validation {
+    condition     = var.cpu_target >= 1 && var.cpu_target <= 100
+    error_message = "Use un porcentaje entre 1 y 100."
+  }
+}
+
+variable "scale_out_cooldown_seconds" {
+  description = "Enfriamiento (s) tras escalar hacia fuera por CPU, antes de volver a escalar hacia fuera. service_overrides lo ajusta por servicio."
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.scale_out_cooldown_seconds >= 0 && floor(var.scale_out_cooldown_seconds) == var.scale_out_cooldown_seconds
+    error_message = "Use un entero mayor o igual a 0."
+  }
+}
+
+variable "scale_in_cooldown_seconds" {
+  description = "Enfriamiento (s) tras escalar hacia dentro por CPU, antes de volver a retirar tareas. service_overrides lo ajusta por servicio."
+  type        = number
+  default     = 300
+  validation {
+    condition     = var.scale_in_cooldown_seconds >= 0 && floor(var.scale_in_cooldown_seconds) == var.scale_in_cooldown_seconds
+    error_message = "Use un entero mayor o igual a 0."
+  }
 }
 
 variable "queue_backlog_target" {
@@ -336,4 +373,51 @@ variable "push_failure_count" {
   description = "Envíos push fallidos de avisos (operación aviso.push) en 5 minutos que abren la alerta."
   type        = number
   default     = 5
+}
+
+# --- Experimento de carga (HU-W09): tarea k6 de carga.tf, apagada fuera de exp ---------
+variable "load_test_enabled" {
+  description = "true crea la tarea k6 del experimento de carga (carga.tf): definición, rol de ejecución, log group, SG y la entrada al ALB en el puerto de api-socios. Solo se enciende en envs/exp/apps.tfvars."
+  type        = bool
+  default     = false
+}
+
+variable "load_test_image" {
+  description = "Imagen pública de k6 con versión fija (nunca latest) y el digest de su variante linux/amd64. Se descarga por el NAT, sin permisos de ECR."
+  type        = string
+  default     = "grafana/k6:1.8.2@sha256:cbdf083a01e5245b2fdb3e4bb0cbcea5d52519b9aa66abd1f63b3f0249d18af9"
+  validation {
+    condition     = can(regex(":v?[0-9]+\\.[0-9]+\\.[0-9]+(@sha256:[0-9a-f]{64})?$", var.load_test_image))
+    error_message = "Use una etiqueta de versión fija (por ejemplo, grafana/k6:1.8.2), opcionalmente con su digest; latest no se admite."
+  }
+}
+
+variable "load_test_cpu" {
+  description = "CPU de la tarea k6 (unidades de Fargate). Holgada para que k6 no sea el cuello de botella (HU-W09, decisión 15)."
+  type        = number
+  default     = 2048
+  validation {
+    condition     = contains([1024, 2048, 4096], var.load_test_cpu)
+    error_message = "Use 1024, 2048 o 4096."
+  }
+}
+
+variable "load_test_memory" {
+  description = "Memoria de la tarea k6 (MiB). Fargate admite de 2 a 8 veces la CPU, en múltiplos de 1024."
+  type        = number
+  default     = 4096
+  validation {
+    condition     = var.load_test_memory % 1024 == 0 && var.load_test_memory >= 2 * var.load_test_cpu && var.load_test_memory <= 8 * var.load_test_cpu
+    error_message = "La memoria es múltiplo de 1024 y está entre 2 y 8 veces load_test_cpu."
+  }
+}
+
+variable "load_test_log_retention_days" {
+  description = "Retención (días) del log de k6. Corta: los resultados se copian del log del job de E2E (N3) al recogerlos."
+  type        = number
+  default     = 7
+  validation {
+    condition     = contains([1, 3, 5, 7, 14], var.load_test_log_retention_days)
+    error_message = "Use una retención corta admitida por CloudWatch Logs: 1, 3, 5, 7 o 14 días."
+  }
 }

@@ -1,5 +1,21 @@
-from pydantic import AliasChoices, Field
+from uuid import UUID
+
+from pydantic import AliasChoices, Field, model_validator
+from solventa_common import outbox
 from solventa_common.settings import ServiceSettings
+
+from siniestros.domain.siniestro.coherencia import DISTANCIA_MAX_M
+from siniestros.domain.siniestro.plazos import (
+    COMPROMISO_HORAS,
+    UMBRAL_ALTA_MIN,
+    UMBRAL_MEDIA_MIN,
+)
+
+# DS3-08: una URL prefirmada de evidencia vive 5 minutos como máximo.
+URL_EVIDENCIA_TTL_MAX_S = 300
+FOTO_MAX_BYTES = 10 * 1024 * 1024
+VIDEO_MAX_BYTES = 50 * 1024 * 1024
+VIDEO_MAX_DURACION_S = 60
 
 
 def _env(nombre: str) -> AliasChoices:
@@ -19,6 +35,111 @@ class Settings(ServiceSettings):
     sqs_siniestros_indemnizaciones_url: str | None = Field(
         None, validation_alias=_env("SQS_SINIESTROS_INDEMNIZACIONES_URL")
     )
+
+    # HU-W23 (DS3-25): consumidor de `siniestros-indemnizaciones` (visibilidad de 30 s en infra). Cada
+    # mensaje es una transacción corta (sin llamadas a otros servicios): un lote de 5 y una espera
+    # larga de 10 s caben de sobra en la visibilidad y en la parada de ECS.
+    consumidor_max_mensajes: int = Field(5, ge=1, le=10)
+    consumidor_espera_larga_s: int = Field(10, ge=1, le=10)
+
+    # Solo local (LocalStack): el *endpoint* con el que se firman las URL, alcanzable desde el
+    # navegador del analista (http://localhost:4566); el de la red de compose no lo es. En AWS no se
+    # define y se firma con el regional.
+    evidencias_endpoint_publico: str | None = Field(
+        None, validation_alias=_env("EVIDENCIAS_ENDPOINT_PUBLICO")
+    )
+
+    # HU-W19 (DS3-08): URL prefirmada de lectura. Nunca más de 300 s; no se guarda ni se registra.
+    evidencia_url_ttl_s: int = Field(
+        URL_EVIDENCIA_TTL_MAX_S,
+        ge=1,
+        le=URL_EVIDENCIA_TTL_MAX_S,
+        validation_alias=_env("EVIDENCIA_URL_TTL_S"),
+    )
+    evidencia_url_carga_ttl_s: int = Field(
+        URL_EVIDENCIA_TTL_MAX_S,
+        ge=1,
+        le=URL_EVIDENCIA_TTL_MAX_S,
+        validation_alias=_env("EVIDENCIA_URL_CARGA_TTL_S"),
+    )
+    evidencias_max_por_borrador: int = Field(
+        10, ge=1, validation_alias=_env("EVIDENCIAS_MAX_POR_BORRADOR")
+    )
+    evidencia_foto_max_bytes: int = Field(
+        FOTO_MAX_BYTES, ge=1, validation_alias=_env("EVIDENCIA_FOTO_MAX_BYTES")
+    )
+    evidencia_video_max_bytes: int = Field(
+        VIDEO_MAX_BYTES, ge=1, validation_alias=_env("EVIDENCIA_VIDEO_MAX_BYTES")
+    )
+    evidencia_video_max_duracion_s: int = Field(
+        VIDEO_MAX_DURACION_S, ge=1, validation_alias=_env("EVIDENCIA_VIDEO_MAX_DURACION_S")
+    )
+    evidencia_formatos_foto: tuple[str, ...] = Field(
+        ("image/jpeg", "image/png"), min_length=1, validation_alias=_env("EVIDENCIA_FORMATOS_FOTO")
+    )
+    evidencia_formatos_video: tuple[str, ...] = Field(
+        ("video/mp4",), min_length=1, validation_alias=_env("EVIDENCIA_FORMATOS_VIDEO")
+    )
+    ubicacion_obligatoria: bool = Field(True, validation_alias=_env("UBICACION_OBLIGATORIA"))
+    ubicacion_tipos_opcionales: tuple[str, ...] = Field(
+        ("AUXILIO_FUNERARIO", "ENFERMEDADES_GRAVES"),
+        validation_alias=_env("UBICACION_TIPOS_OPCIONALES"),
+    )
+    ubicacion_precision_max_m: float = Field(
+        100.0, gt=0, allow_inf_nan=False, validation_alias=_env("UBICACION_PRECISION_MAX_M")
+    )
+    # Corte de cada HeadObject al verificar la integridad (DS3-06). Si vence, la evidencia queda
+    # NO_VERIFICABLE y el detalle responde igual.
+    s3_timeout_ms: int = Field(300, ge=1, le=5000, validation_alias=_env("S3_TIMEOUT_MS"))
+    s3_conservacion_timeout_ms: int = Field(
+        2000, ge=1, le=10000, validation_alias=_env("S3_CONSERVACION_TIMEOUT_MS")
+    )
+
+    # HU-W19 (DS3-04): compromiso de 48 h y umbrales de la prioridad derivada (ALTA < 8 h,
+    # MEDIA < 24 h de tiempo restante).
+    compromiso_horas: int = Field(COMPROMISO_HORAS, ge=1, validation_alias=_env("COMPROMISO_HORAS"))
+    prioridad_alta_min: int = Field(
+        UMBRAL_ALTA_MIN, ge=1, validation_alias=_env("PRIORIDAD_ALTA_MIN")
+    )
+    prioridad_media_min: int = Field(
+        UMBRAL_MEDIA_MIN, ge=1, validation_alias=_env("PRIORIDAD_MEDIA_MIN")
+    )
+    # HU-W19 (DS3-06): distancia máxima entre la ubicación declarada y la de la primera captura.
+    coherencia_distancia_max_m: int = Field(
+        DISTANCIA_MAX_M, ge=1, validation_alias=_env("COHERENCIA_DISTANCIA_MAX_M")
+    )
+
+    # HU-W19 (DS3-07): semilla sintética de QA (R7). Apagada por omisión; solo local e INT la
+    # encienden, nunca producción.
+    semilla_qa: bool = Field(False, validation_alias=_env("SEMILLA_SINIESTROS_QA"))
+    # En INT, el `sub` real del usuario de prueba que será el analista de los casos sembrados; sin él
+    # se usa el del archivo de la semilla.
+    semilla_analista_id: UUID | None = Field(
+        None, validation_alias=_env("SEMILLA_SINIESTROS_ANALISTA_ID")
+    )
+
+    # HU-W20 (DS3-13): tarea que devuelve a evaluación los casos cuyo plazo de soporte venció. Se apaga
+    # con PLAZOS_HABILITADOS=false; sin base no arranca (se registra y la app sirve igual).
+    plazos_habilitados: bool = Field(True, validation_alias=_env("PLAZOS_HABILITADOS"))
+    plazos_intervalo_s: float = Field(60.0, gt=0, validation_alias=_env("PLAZOS_INTERVALO_S"))
+    plazos_lote: int = Field(50, ge=1, validation_alias=_env("PLAZOS_LOTE"))
+
+    # Outbox (como dinero y polizas): la infraestructura pone OUTBOX_ENABLED="true" y el tópico a
+    # todo servicio que publica (`publishes`); sin la variable el relay no arranca.
+    outbox_enabled: bool = Field(False, validation_alias=_env("OUTBOX_ENABLED"))
+    events_topic_arn: str | None = Field(None, validation_alias=_env("EVENTS_TOPIC_ARN"))
+    outbox_lote: int = Field(outbox.LOTE, ge=1)
+    outbox_intervalo_s: float = Field(outbox.INTERVALO_S, gt=0)
+    outbox_max_intentos: int = Field(outbox.MAX_INTENTOS, ge=1)
+    aws_region: str = Field("us-east-1", validation_alias=_env("AWS_REGION"))
+    # Solo local y pruebas (LocalStack); en AWS no se define.
+    aws_endpoint_url: str | None = Field(None, validation_alias=_env("AWS_ENDPOINT_URL"))
+
+    @model_validator(mode="after")
+    def _umbrales_ordenados(self) -> "Settings":
+        if self.prioridad_alta_min >= self.prioridad_media_min:
+            raise ValueError("prioridad_alta_min debe ser menor que prioridad_media_min")
+        return self
 
 
 settings = Settings()

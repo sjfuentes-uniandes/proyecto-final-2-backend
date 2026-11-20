@@ -108,3 +108,13 @@ class DlqSqs:
         )
         segundos = int(respuesta["Attributes"]["MessageRetentionPeriod"])
         return segundos // SEGUNDOS_POR_DIA
+
+    async def profundidad(self) -> int:
+        """Mensajes en la DLQ (`ApproximateNumberOfMessages`), para H09 (HU-W22). Lanza si el rol no
+        permite `sqs:GetQueueAttributes`: quien llama lo traduce a null."""
+        respuesta = await asyncio.to_thread(
+            self._cliente.get_queue_attributes,
+            QueueUrl=self._dlq_url,
+            AttributeNames=["ApproximateNumberOfMessages"],
+        )
+        return int(respuesta["Attributes"]["ApproximateNumberOfMessages"])

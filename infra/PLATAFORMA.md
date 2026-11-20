@@ -45,6 +45,7 @@ Socio ──HTTPS (+mTLS opc.)──► WAF ─► API Gateway "socios" ──�
 | **HU-W12** Consulta fuentes en paralelo | Un adaptador por grupo de aliados (*bulkhead*). `ALLY_*_TIMEOUT_MS` por dependencia. Trazas padre/hijas en X-Ray a través de ADOT. |
 | **HU-W27** Correlación de métricas y trazas | API Gateway con X-Ray y logs de acceso JSON (`requestId`, `xrayTraceId`). Encabezado `X-Request-Id` inyectado en cada solicitud. Colector ADOT por tarea (OTLP → X-Ray + EMF). Tablero por ambiente. |
 | **HU-W28** Generación de alertas | Tópico SNS `alertas` con correo (`alert_emails`). Cada meta tiene una alarma crítica en la meta (y una advertencia en `warning_ratio`, 90 %, solo con `warning_alarms = true`): p95 del perfilamiento (400 ms) y de otras operaciones (`latency_targets`), tasa de error técnico por servicio (`OperationErrors / SampleCount(OperationDuration)`), disponibilidad por API y cuota de socio (`PartnerQuotaUsage`). Además: 5XX y p95 del API, destinos saludables, CPU/memoria, atraso de colas, DLQ (informativa) y RDS. Las alarmas no tienen acciones: dos reglas de EventBridge envían un correo en español al pasar a `ALARM` y al volver a `OK` desde `ALARM`. `bff-web` expone las alertas abiertas, los umbrales y el resumen del mes. Los umbrales se configuran en `apps.tfvars`. Guía: [docs/hu-w28-alertas.md](../docs/hu-w28-alertas.md). |
+| **HU-W29** Soporte multizona | `exp` en dos zonas (RDS Multi-AZ, NAT Gateway por zona, réplicas en A y B sin Spot), rol de AWS FIS limitado a la zona A y a la base, bucket de informes de `exp`, tarea de reconciliación en solo lectura y cronología con eventos de ECS, RDS y FIS. Detalle en la [sección HU-W29](#hu-w29-soporte-multizona). |
 | **HU-W03** Cálculo de prima | `catalogo` (base propia: `productos` y `reglas_prima` versionadas) y `cotizacion` (tabla `cotizaciones`). Caché Valkey de HU-S02: `catalogo` la llena e invalida, `cotizacion` solo la lee. `bff-web` → `cotizacion` → `catalogo` y `clientes` (llamadas existentes). Meta p95 de la operación `cotizacion` en `latency_targets`. Sin recursos nuevos (sección [HU-W03](#hu-w03-cálculo-de-prima)). |
 | **HU-W05** Límite de tiempo por dependencia | Sin recursos nuevos. `LATENCY_BUDGET_MS` llega también a `api-socios` y `bff-web` (`latency_budget_readers`). `latency_budget_ms` de `int`: `cotizacion` 700 (deadline del recorrido), `socio.cotizar` y `portal.cotizar` 1600 (inician el encabezado `X-Deadline-Ms`). Cada timeout de dependencia debe ser menor que su presupuesto o el servicio no arranca. El timeout queda en un WARNING con proveedor, operación y correlación, y en X-Ray con `solventa.presupuesto_ms`, `solventa.restante_ms` y `solventa.timeout_ms` (metadatos del segmento). Contrato del encabezado: [contracts/encabezados.md](../contracts/encabezados.md). Guía: [docs/hu-w05-limite-tiempo.md](../docs/hu-w05-limite-tiempo.md). |
 | **HU-W30** Verificación de identidad | Servicios `clientes` (base propia) y `adaptador-identidad` (secreto `kyc`, timeout propio para distinguir PENDIENTE de RECHAZADO). |
@@ -308,7 +309,8 @@ Ningún BFF accede al bucket, nadie tiene `DeleteObject` ni `ListBucket`, y no h
 
 | Ajuste | Valor |
 | --- | --- |
-| `high_availability` | `false` por ahora. `true` activa RDS Multi-AZ y un NAT Gateway por zona: es el requisito de AC4 y debe activarse antes de HU-W29 |
+| `high_availability` | `true` desde HU-W29: RDS Multi-AZ y un NAT Gateway por zona (AC4) |
+| `experiments_enabled` | `true` (HU-W29): rol de AWS FIS, bucket de informes y tarea de reconciliación ([HU-W29](#hu-w29-soporte-multizona)) |
 | `egress_mode` | `nat_gateway` (1 con una zona, 2 con dos) |
 | RDS | `db.t4g.small`, sin protección contra borrado ni snapshot final |
 | Tareas | FARGATE, sin Spot; `min_replicas = 2` (una por zona), `max_replicas = 6`; `pagos-parametricos` hasta 10 |
@@ -334,7 +336,7 @@ Pausado (`paused = true`), el delta baja a ≈ 5 USD/mes: solo quedan secretos, 
 
 Son 19 servicios × 2 réplicas en FARGATE. Precios de `us-east-1`, sin capa gratuita.
 
-| Componente | Una zona (actual) | Dos zonas (`high_availability = true`) |
+| Componente | Una zona (HU-S03) | Dos zonas (`high_availability = true`, actual) |
 | --- | --- | --- |
 | Fargate: 38 tareas (13 de 0,25 vCPU/1 GB; 5 de 0,5/1 GB; `simulador-aliados` de 1/2 GB) | 0,72 USD/h | 0,72 USD/h |
 | RDS `db.t4g.small` + 20 GB | 0,035 USD/h | 0,07 USD/h (Multi-AZ) |
@@ -392,6 +394,47 @@ Las colas, las DLQ, la retención de 4 días de `parametricos-eventos` y sus ala
 **Costo del delta:** una base más en el RDS existente y unos KB por lote en S3 (Object Lock). Las lecturas de la DLQ son de pocas solicitudes SQS por consulta. Sin tareas ni alarmas nuevas.
 
 **Seguridad:** solo `pagos-parametricos` opera una DLQ, y solo la suya (lo verifica `apps.tftest.hcl`). Los cuerpos de la DLQ (telemetría, sin datos personales) solo salen al portal por `bff-web`, para el grupo `analistas-siniestros`. Cada resolución queda en `resoluciones_descarte` y en `auditoria`.
+
+## HU-W29: soporte multizona
+
+Experimento de ARQ-001 en `exp` (D4): pérdida controlada de la zona A con AWS FIS mientras R1, R3 y R5 siguen por la zona B. Diseño, procedimiento y pruebas: [docs/hu-w29-multizona.md](../docs/hu-w29-multizona.md). Experimento: [experiments/hu-w29/](../experiments/hu-w29/).
+
+| Pieza | Qué cambia | Diagrama que lo respalda |
+| --- | --- | --- |
+| `exp` en dos zonas | `high_availability = true`: RDS Multi-AZ con standby en B, un NAT Gateway por zona (cada subred privada sale por el de su zona) | "operación activa-activa entre dos zonas de una región" (`modelo_despliegue.puml`); "El standby atiende fallas de instancia o zona" (`diagrama_estrategia_replicacion_recuperacion.puml`) |
+| Réplicas por zona | Sin cambios de código: `min_replicas = 2`, `availability_zone_rebalancing = "ENABLED"` y FARGATE sin Spot ya estaban. `modules/ecs-service` expone `placement` para que N1 lo verifique en los 8 servicios críticos | "[2 o más réplicas entre A y B]" (`modelo_despliegue.puml`); "Los servicios críticos mantienen réplicas activas distribuidas entre A y B" (`diagrama_despliegue_ecs_fargate.puml`) |
+| Cronología del incidente | La regla de HU-W27 (`ECS Task State Change`, `ECS Service Action`, `ECS Deployment State Change`) se completa con `RDS DB Instance Event` de la base del ambiente y, en `exp`, `FIS Experiment State Change`, en el mismo grupo `/ecs/<prefijo>/events`. `moved` conserva el target existente en `int` | `ECS ..> Observability` y `RDS ..> Observability` (`diagrama_despliegue_ecs_fargate.puml`) |
+| Rol de AWS FIS (`solventa-exp-fis`) | `experiments.tf`, solo con `experiments_enabled`. Ver [Mínimo privilegio](#mínimo-privilegio-de-hu-w29) | "Monitor de salud y retiro de réplicas fallidas" (`modelo_concurrencia.puml`): la falla lo ejercita |
+| Bucket `solventa-exp-experimentos-<cuenta>` | Privado, solo TLS, cifrado (`audit_sse`) y `force_destroy`. Guarda `hu-w29/<experimento>/informe.json` y `hu-w29/informe.json` (el último) | Decisión 3 de HU-W29 (bucket propio de `exp`): ningún bucket de la plataforma se abre a los BFF |
+| Tarea `solventa-exp-reconciliacion` | Como `db-bootstrap`: `postgres:16-alpine`, psql con `default_transaction_read_only=on` y el usuario de cada servicio (`cotizacion`, `polizas`, `dinero`, `adaptador-telemetria`, `pagos-parametricos`, `siniestros`), nunca el maestro. Extrae R1, R3 y R5: del evento recibido al pago del siniestro paramétrico. El comando lo pasa `experiments/hu-w29/extraer.sh` | Decisión 4 de HU-W29 (reconciliar en la VPC) |
+| `bff-web` (Continuidad y Conciliación) | `continuity_readers`: `CONTINUIDAD_EVENTOS`, `CONTINUIDAD_ALB`, `CONTINUIDAD_RECORRIDOS` (recorridos y sus alarmas de HU-W28, solo las que existen) y `CONTINUIDAD_BUCKET` (vacío fuera de `exp`) | "Métricas, trazas, registros y alertas" (`modelo_despliegue.puml`), como HU-W27 y HU-W28 |
+
+**Colas y eventos:** ninguno nuevo. La cronología solo lee eventos de AWS (ECS, RDS y FIS).
+
+### Mínimo privilegio de HU-W29
+
+| Principal | Permisos | Límite |
+| --- | --- | --- |
+| `solventa-exp-fis` (confía en `fis.amazonaws.com` con `aws:SourceAccount` y `aws:SourceArn` de experimentos de la cuenta) | `ec2:CreateNetworkAcl` (solo con la etiqueta `managedByFIS=true` y en la VPC del ambiente), `CreateTags` (solo al crear esa ACL), `CreateNetworkAclEntry` y `DeleteNetworkAcl` (solo ACL con `managedByFIS`), `ReplaceNetworkAclAssociation` (solo las subredes **privada y de datos de la zona A**); `rds:RebootDBInstance` (solo la base del ambiente) | `Describe*`, `GetManagedPrefixListEntries` y `rds:DescribeDBInstances` no admiten ARN. Sin `ec2:*`, sin otras subredes ni otras bases (`tests/exp`) |
+| `solventa-exp-reconciliacion` (rol de ejecución) | Logs de su grupo; `GetSecretValue` de los 6 secretos de base de la tabla | Lectura por `default_transaction_read_only` |
+| `bff-web` | `logs:StartQuery` y `FilterLogEvents` sobre el grupo de la cronología; `logs:GetQueryResults` (sin ARN); en `exp`, `s3:GetObject` sobre `experimentos/hu-w29/*` | Sin escritura. Ningún otro servicio lee la cronología ni el bucket (`apps.tftest.hcl` y `tests/exp`) |
+
+### Caché Valkey (sin cambios; propuesta pendiente de aprobación)
+
+La caché es descartable (Cache-Aside, `solventa_common/cache.py`): cada operación tiene `timeout_ms` y un circuito que, tras fallas seguidas, la omite y lee de RDS. Si el nodo único queda en la zona A, la falla sube la latencia de `catalogo`, `cotizacion` y `consulta`, pero no pierde datos. El informe registra la zona del nodo.
+
+**Propuesta (no aplicada):** en `exp`, `num_cache_clusters = 2` con `automatic_failover_enabled = true` y `multi_az_enabled = true` (réplica en la zona B). Cuesta ~0,017 USD/h más (otro `cache.t3.micro`), es decir, ~0,05 USD por corrida de 3 h. Midiría la latencia sin el efecto de perder la caché. Requiere una variable nueva (`cache_replicas`, 0 por omisión) y la aprobación del responsable.
+
+### Costo del delta de HU-W29
+
+- **`int`:** dos reglas de EventBridge (RDS y su target) y más eventos en el grupo de la cronología: < 0,1 USD/mes.
+- **`exp` encendido:** ≈ 0,98 USD/h (tabla de arriba, dos zonas) + AWS FIS ≈ 1,1 USD por ejecución (0,10 USD por acción-minuto: 10 min de red y ~1 min de RDS). El bucket, el rol y la definición de la tarea no cuestan; cada corrida de la reconciliación es una tarea de 0,25 vCPU de pocos minutos (< 0,01 USD). Estimado de una corrida completa en el manifiesto: ≈ 4–5 USD.
+
+### Seguridad de HU-W29
+
+- FIS solo puede cambiar la red de dos subredes y reiniciar una base, y solo en `exp`: el rol no existe en `int` (run `minimo_costo`). La condición de parada (alarma `api-canales-5xx`) restaura las ACL si la zona sana no absorbe la carga.
+- La reconciliación no escribe en ninguna base y no usa el usuario maestro. `extraer.sh` valida el formato de `DESDE` y `HASTA` antes de usarlos en el SQL.
+- El informe no tiene datos personales: claves idempotentes, identificadores y conteos. `resultados/fis.json` contiene ARN con el número de cuenta; se versiona como evidencia, como los demás informes de experimentos.
 
 ## Despliegue
 

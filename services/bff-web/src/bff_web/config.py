@@ -32,7 +32,7 @@ class Settings(ServiceSettings):
     grupo_asesores: str = "asesores"
     # HU-W13 (DS2-12): bandeja de suscripción (E01) y revisión asistida (E04).
     grupo_suscriptores: str = "suscriptores"
-    # HU-W24: cola de descarte de los eventos paramétricos (H10 y H11).
+    # HU-W19 (bandeja, detalle y evidencias) y HU-W24 (cola de descarte, H10 y H11).
     grupo_analistas_siniestros: str = "analistas-siniestros"
     api_socios_url: str = Field(
         "http://localhost:8082",
@@ -71,6 +71,15 @@ class Settings(ServiceSettings):
         validation_alias=AliasChoices("CONSULTA_URL", "SOLVENTA_CONSULTA_URL"),
     )
     consulta_timeout_ms: int = 700
+    # HU-W19: siniestros del analista (DS3-09 y DS3-10). El aviso de un acceso denegado no espera
+    # respuesta: corte de 300 ms y sin reintento. El nombre del cliente y la póliza del encabezado
+    # se componen con `nombre_cliente_timeout_ms` y `consulta_timeout_ms`.
+    siniestros_url: str = Field(
+        "http://localhost:8091",
+        validation_alias=AliasChoices("SINIESTROS_URL", "SOLVENTA_SINIESTROS_URL"),
+    )
+    siniestros_timeout_ms: int = 1500
+    acceso_denegado_timeout_ms: int = 300
     # HU-W24: cola de descarte en pagos-parametricos (decisión B1). Listar lee hasta 100 mensajes
     # de la DLQ en lotes de 10; las acciones, uno o varios reenvíos.
     pagos_parametricos_url: str = Field(
@@ -78,6 +87,31 @@ class Settings(ServiceSettings):
         validation_alias=AliasChoices("PAGOS_PARAMETRICOS_URL", "SOLVENTA_PAGOS_PARAMETRICOS_URL"),
     )
     pagos_parametricos_timeout_ms: int = 3000
+    # HU-W22 (DS3-26, H09): lo que se lee de CloudWatch y de siniestros es secundario: cada fuente
+    # tiene su corte y, si falla, su campo va en null (nunca un 503). Los nombres son los de la
+    # infraestructura (`solventa-<ambiente>-…`); sin cluster y servicio no se pregunta por las tareas
+    # activas. `consumidores_maximos` es el máximo del escalado de `pagos-parametricos`.
+    parametricos_secundario_timeout_ms: int = 700
+    parametricos_cola_eventos: str | None = Field(
+        None,
+        validation_alias=AliasChoices(
+            "PARAMETRICOS_COLA_EVENTOS", "SOLVENTA_PARAMETRICOS_COLA_EVENTOS"
+        ),
+    )
+    parametricos_cluster: str | None = Field(
+        None, validation_alias=AliasChoices("PARAMETRICOS_CLUSTER", "SOLVENTA_PARAMETRICOS_CLUSTER")
+    )
+    parametricos_servicio: str | None = Field(
+        None,
+        validation_alias=AliasChoices("PARAMETRICOS_SERVICIO", "SOLVENTA_PARAMETRICOS_SERVICIO"),
+    )
+    parametricos_consumidores_maximos: int | None = Field(
+        None,
+        ge=1,
+        validation_alias=AliasChoices(
+            "PARAMETRICOS_CONSUMIDORES_MAXIMOS", "SOLVENTA_PARAMETRICOS_CONSUMIDORES_MAXIMOS"
+        ),
+    )
     # Pool de Cognito del back-office (infra/apps/ecs.tf): Administración › Usuarios.
     backoffice_user_pool_id: str | None = Field(
         None,
@@ -89,6 +123,12 @@ class Settings(ServiceSettings):
     cors_origins: list[str] = Field(
         ["http://localhost:4200"],
         validation_alias=AliasChoices("CORS_ORIGINS", "SOLVENTA_CORS_ORIGINS"),
+    )
+    # HU-W23 (DS3-04, R-106): el compromiso del trámite que H08 compara con el tiempo total. El detalle
+    # de siniestros no lo trae; es el mismo valor (48 h) y el mismo nombre de variable que usa
+    # `siniestros`, así un ambiente que lo cambie lo cambia en los dos.
+    compromiso_siniestros_horas: int = Field(
+        48, ge=1, validation_alias=AliasChoices("COMPROMISO_HORAS", "SOLVENTA_COMPROMISO_HORAS")
     )
     # HU-W27: límite del recorrido que usa la interpretación de la traza (mockup: 1,5 s).
     umbral_recorrido_ms: int = 1500
@@ -119,6 +159,35 @@ class Settings(ServiceSettings):
         validation_alias=AliasChoices(
             "ALERTAS_FALSO_POSITIVO_MIN", "SOLVENTA_ALERTAS_FALSO_POSITIVO_MIN"
         ),
+    )
+
+    # HU-W29: Operación › Continuidad y Conciliación (infra/apps/ecs.tf, continuity_readers).
+    continuidad_eventos: str = Field(
+        "/ecs/solventa-local/events",
+        validation_alias=AliasChoices("CONTINUIDAD_EVENTOS", "SOLVENTA_CONTINUIDAD_EVENTOS"),
+    )
+    continuidad_alb: str = Field(
+        "", validation_alias=AliasChoices("CONTINUIDAD_ALB", "SOLVENTA_CONTINUIDAD_ALB")
+    )
+    continuidad_recorridos: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices("CONTINUIDAD_RECORRIDOS", "SOLVENTA_CONTINUIDAD_RECORRIDOS"),
+    )
+    # Bucket de experimentos de exp; vacío en los demás ambientes (sin informe de conciliación).
+    continuidad_bucket: str = Field(
+        "", validation_alias=AliasChoices("CONTINUIDAD_BUCKET", "SOLVENTA_CONTINUIDAD_BUCKET")
+    )
+    # HU-W08: capacidad de cotizacion para Operación › Tablero (infra/apps/ecs.tf, todo o nada).
+    # Sin las dos, GET /operacion/capacidad responde 503. El namespace es el de las métricas EMF
+    # (METRICS_NAMESPACE, que la infraestructura entrega a todos; var.metrics_namespace).
+    capacidad_cluster: str | None = Field(
+        None, validation_alias=AliasChoices("CAPACIDAD_CLUSTER", "SOLVENTA_CAPACIDAD_CLUSTER")
+    )
+    capacidad_servicio: str | None = Field(
+        None, validation_alias=AliasChoices("CAPACIDAD_SERVICIO", "SOLVENTA_CAPACIDAD_SERVICIO")
+    )
+    metrics_namespace: str = Field(
+        "Solventa", validation_alias=AliasChoices("METRICS_NAMESPACE", "SOLVENTA_METRICS_NAMESPACE")
     )
 
     @property

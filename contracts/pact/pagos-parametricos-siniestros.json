@@ -1,0 +1,378 @@
+{
+  "consumer": {
+    "name": "pagos-parametricos"
+  },
+  "interactions": [
+    {
+      "description": "la creación del siniestro paramétrico de un evento y una póliza",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "no existe un siniestro para ese evento y esa póliza"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "clienteId": "00000000-0000-4000-8000-000000000002",
+            "evento": {
+              "eventoOrigen": "EVT-2026-0913",
+              "fuente": "IDEAM-SIM",
+              "observadoEn": "2026-11-10T14:00:00Z",
+              "tipoEvento": "LLUVIA_ACUMULADA",
+              "umbral": "120",
+              "unidad": "mm",
+              "valorObservado": "135",
+              "zona": "11001"
+            },
+            "eventoId": "bafc2b26-7c88-5ae3-b5ac-26fdf5427a09",
+            "moneda": "COP",
+            "poliza": {
+              "moneda": "COP",
+              "numero": "250-2026-000101",
+              "ramo": "Paramétrico",
+              "vigencia": {
+                "desde": "2026-09-01",
+                "hasta": "2027-08-31"
+              }
+            },
+            "polizaId": "b2100000-0000-4000-8000-000000000101",
+            "regla": "VALOR_IGUAL_O_SUPERIOR_AL_UMBRAL",
+            "valor": "1400000.00",
+            "versionRegla": "1"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotency-Key": [
+            "bafc2b26-7c88-5ae3-b5ac-26fdf5427a09:b2100000-0000-4000-8000-000000000101"
+          ],
+          "X-Actor-Id": [
+            "pagos-parametricos"
+          ],
+          "X-Actor-Rol": [
+            "SISTEMA_PARAMETRICO"
+          ],
+          "X-Correlation-Id": [
+            "corr-pacto-parametricos"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/siniestros/parametricos"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "analistaId": null,
+            "clienteId": "00000000-0000-4000-8000-000000000002",
+            "codigo": "88-2026-1001",
+            "estado": "APROBADO",
+            "id": "5a000000-0000-4000-8000-000000000022",
+            "origen": "PARAMETRICO",
+            "polizaId": "b2100000-0000-4000-8000-000000000101",
+            "polizaNumero": "250-2026-000101",
+            "prioridad": "BAJA",
+            "ramo": "Paramétrico",
+            "relojPausado": false,
+            "reportadoEn": "2026-11-10T14:05:00Z",
+            "tiempoRestanteMin": 2880
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.codigo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^88-[0-9]{4}-[0-9]{4,}$"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^([0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12})$"
+                }
+              ]
+            },
+            "$.prioridad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(ALTA|MEDIA|BAJA)$"
+                }
+              ]
+            },
+            "$.reportadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+                }
+              ]
+            },
+            "$.tiempoRestanteMin": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la misma Idempotency-Key con otro cuerpo",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "ya existe el siniestro paramétrico de ese evento y esa póliza"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "clienteId": "00000000-0000-4000-8000-000000000002",
+            "evento": {
+              "eventoOrigen": "EVT-2026-0913",
+              "fuente": "IDEAM-SIM",
+              "observadoEn": "2026-11-10T14:00:00Z",
+              "tipoEvento": "LLUVIA_ACUMULADA",
+              "umbral": "120",
+              "unidad": "mm",
+              "valorObservado": "135",
+              "zona": "11001"
+            },
+            "eventoId": "bafc2b26-7c88-5ae3-b5ac-26fdf5427a09",
+            "moneda": "COP",
+            "poliza": {
+              "moneda": "COP",
+              "numero": "250-2026-000101",
+              "ramo": "Paramétrico",
+              "vigencia": {
+                "desde": "2026-09-01",
+                "hasta": "2027-08-31"
+              }
+            },
+            "polizaId": "b2100000-0000-4000-8000-000000000101",
+            "regla": "VALOR_IGUAL_O_SUPERIOR_AL_UMBRAL",
+            "valor": "620000.00",
+            "versionRegla": "1"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotency-Key": [
+            "bafc2b26-7c88-5ae3-b5ac-26fdf5427a09:b2100000-0000-4000-8000-000000000101"
+          ],
+          "X-Actor-Id": [
+            "pagos-parametricos"
+          ],
+          "X-Actor-Rol": [
+            "SISTEMA_PARAMETRICO"
+          ],
+          "X-Correlation-Id": [
+            "corr-pacto-parametricos"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/siniestros/parametricos"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "IDEMPOTENCIA_CONFLICTO",
+            "correlationId": "corr-pacto-parametricos",
+            "detalles": {},
+            "mensaje": "La Idempotency-Key ya se usó con otra solicitud"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.correlationId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 422
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la repetición de la misma solicitud",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "ya existe el siniestro paramétrico de ese evento y esa póliza"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "clienteId": "00000000-0000-4000-8000-000000000002",
+            "evento": {
+              "eventoOrigen": "EVT-2026-0913",
+              "fuente": "IDEAM-SIM",
+              "observadoEn": "2026-11-10T14:00:00Z",
+              "tipoEvento": "LLUVIA_ACUMULADA",
+              "umbral": "120",
+              "unidad": "mm",
+              "valorObservado": "135",
+              "zona": "11001"
+            },
+            "eventoId": "bafc2b26-7c88-5ae3-b5ac-26fdf5427a09",
+            "moneda": "COP",
+            "poliza": {
+              "moneda": "COP",
+              "numero": "250-2026-000101",
+              "ramo": "Paramétrico",
+              "vigencia": {
+                "desde": "2026-09-01",
+                "hasta": "2027-08-31"
+              }
+            },
+            "polizaId": "b2100000-0000-4000-8000-000000000101",
+            "regla": "VALOR_IGUAL_O_SUPERIOR_AL_UMBRAL",
+            "valor": "1400000.00",
+            "versionRegla": "1"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "Idempotency-Key": [
+            "bafc2b26-7c88-5ae3-b5ac-26fdf5427a09:b2100000-0000-4000-8000-000000000101"
+          ],
+          "X-Actor-Id": [
+            "pagos-parametricos"
+          ],
+          "X-Actor-Rol": [
+            "SISTEMA_PARAMETRICO"
+          ],
+          "X-Correlation-Id": [
+            "corr-pacto-parametricos"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/siniestros/parametricos"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "analistaId": null,
+            "clienteId": "00000000-0000-4000-8000-000000000002",
+            "codigo": "88-2026-1001",
+            "estado": "APROBADO",
+            "id": "5a000000-0000-4000-8000-000000000022",
+            "origen": "PARAMETRICO",
+            "polizaId": "b2100000-0000-4000-8000-000000000101",
+            "polizaNumero": "250-2026-000101",
+            "prioridad": "BAJA",
+            "ramo": "Paramétrico",
+            "relojPausado": false,
+            "reportadoEn": "2026-11-10T14:05:00Z",
+            "tiempoRestanteMin": 2880
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.prioridad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(ALTA|MEDIA|BAJA)$"
+                }
+              ]
+            },
+            "$.reportadoEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+                }
+              ]
+            },
+            "$.tiempoRestanteMin": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactRust": {
+      "ffi": "0.5.8",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    }
+  },
+  "provider": {
+    "name": "siniestros"
+  }
+}

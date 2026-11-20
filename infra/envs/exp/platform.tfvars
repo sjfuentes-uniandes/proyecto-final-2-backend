@@ -7,12 +7,15 @@ name        = "solventa"
 environment = "exp"
 vpc_cidr    = "10.61.0.0/16"
 
-# Dos zonas reales (D4, HU-W29): true = RDS Multi-AZ y un NAT Gateway por zona. Por ahora una
-# sola zona activa para la base y la salida; las tareas ECS se reparten igual entre A y B.
-# Cambiar a true antes del experimento de disponibilidad (AC4 de HU-S03).
-high_availability        = false
+# Dos zonas reales (D4, HU-W29): RDS Multi-AZ con standby en la zona B y un NAT Gateway por
+# zona; las tareas ECS se reparten entre A y B. Ningún punto único de falla en la zona A,
+# salvo la caché (descartable, Cache-Aside: docs/hu-w29-multizona.md).
+high_availability        = true
 egress_mode              = "nat_gateway" # administrado (1 con high_availability = false, 2 con true)
 use_customer_managed_key = false
+
+# Rol de AWS FIS, bucket de informes y tarea de reconciliación del experimento (HU-W29).
+experiments_enabled = true
 
 # Base de mayor capacidad que int (db.t3.micro) para la carga de HU-W26.
 db_instance_class      = "db.t4g.small"

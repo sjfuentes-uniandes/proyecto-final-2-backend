@@ -19,6 +19,13 @@ La consulta responde igual que el cobro, con una respuesta más: `404 COBRO_NO_E
 código en el cuerpo) es `CobroNoEncontrado`, que la conciliación reintenta con la misma clave. Un
 404 sin ese código es incierto, como en el cobro.
 
+HU-W23: la misma clase implementa `DesembolsosPuerto` sobre `POST /v1/desembolsos` y `GET
+/v1/desembolsos/{referencia}?beneficiarioRef` (ADR 0015), con el mismo criterio: solo un 200 con el
+`DesembolsoDto` de la misma `referencia` (`CONFIRMADO` con `transaccionId`, o `RECHAZADO`) es
+definitivo; todo lo demás es un `DesembolsoIncierto`. `404 DESEMBOLSO_NO_ENCONTRADO` en la consulta
+es `DesembolsoNoEncontrado`, que la conciliación reintenta con la misma `referencia`. El
+`beneficiarioRef` nunca se registra.
+
 El monto viaja como texto decimal (`format(monto, "f")`, sin notación científica ni `float`).
 Propaga `X-Correlation-Id` del movimiento. Nunca registra el pagador ni los cuerpos.
 """
@@ -33,6 +40,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from pydantic.alias_generators import to_camel
 from solventa_common.correlation import CORRELATION_HEADER
 
+from dinero.application.indemnizacion import puertos as desembolsos
 from dinero.application.recaudo.puertos import (
     CobroAprobado,
     CobroIncierto,
@@ -50,6 +58,7 @@ NO_DISPONIBLE = "ADAPTADOR_NO_DISPONIBLE"
 RESPUESTA_INVALIDA = "ADAPTADOR_RESPUESTA_INVALIDA"
 # El código del catálogo que adaptador-pagos responde con 404 en la consulta.
 COBRO_NO_ENCONTRADO = "COBRO_NO_ENCONTRADO"
+DESEMBOLSO_NO_ENCONTRADO = "DESEMBOLSO_NO_ENCONTRADO"
 
 Transaccion = Annotated[str, Field(min_length=1, max_length=LARGO_TRANSACCION)]
 
@@ -61,6 +70,24 @@ class _CobroDto(BaseModel):
 
     clave_recaudo: Annotated[UUID, Field(strict=False)]
     estado: Literal["APROBADO", "RECHAZADO"]
+    transaccion_id: Transaccion | None
+    motivo: str | None
+
+    @field_validator("transaccion_id")
+    @classmethod
+    def _no_en_blanco(cls, valor: str | None) -> str | None:
+        if valor is not None and not valor.strip():
+            raise ValueError("transaccionId en blanco")
+        return valor
+
+
+class _DesembolsoDto(BaseModel):
+    """`DesembolsoDto` del contrato, estricto: lo que no cumple es un incierto, no un rechazo."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, strict=True)
+
+    referencia: str
+    estado: Literal["CONFIRMADO", "RECHAZADO"]
     transaccion_id: Transaccion | None
     motivo: str | None
 
@@ -122,6 +149,43 @@ class AdaptadorPagosHttp:
             return CobroNoEncontrado()
         return _resultado(respuesta, consulta.clave_recaudo)
 
+    async def desembolsar(
+        self, solicitud: desembolsos.SolicitudDesembolso
+    ) -> desembolsos.ResultadoDesembolso:
+        respuesta = await self._llamar(
+            self._cliente.post(
+                f"{self._base_url}/v1/desembolsos",
+                json={
+                    "referencia": solicitud.referencia,
+                    "monto": format(solicitud.monto, "f"),
+                    "moneda": solicitud.moneda,
+                    "beneficiarioRef": solicitud.beneficiario_ref,
+                },
+                headers={CORRELATION_HEADER: solicitud.correlation_id},
+                timeout=self._timeout_s,
+            )
+        )
+        if isinstance(respuesta, CobroIncierto):
+            return desembolsos.DesembolsoIncierto(respuesta.codigo)
+        return _resultado_desembolso(respuesta, solicitud.referencia)
+
+    async def consultar_desembolso(
+        self, consulta: desembolsos.ConsultaDesembolso
+    ) -> desembolsos.ResultadoConsulta:
+        respuesta = await self._llamar(
+            self._cliente.get(
+                f"{self._base_url}/v1/desembolsos/{consulta.referencia}",
+                params={"beneficiarioRef": consulta.beneficiario_ref},
+                headers={CORRELATION_HEADER: consulta.correlation_id},
+                timeout=self._timeout_s,
+            )
+        )
+        if isinstance(respuesta, CobroIncierto):
+            return desembolsos.DesembolsoIncierto(respuesta.codigo)
+        if respuesta.status_code == 404 and _codigo_de(respuesta) == DESEMBOLSO_NO_ENCONTRADO:
+            return desembolsos.DesembolsoNoEncontrado()
+        return _resultado_desembolso(respuesta, consulta.referencia)
+
     async def _llamar(
         self, peticion: Coroutine[Any, Any, httpx.Response]
     ) -> httpx.Response | CobroIncierto:
@@ -150,3 +214,24 @@ def _resultado(respuesta: httpx.Response, clave_recaudo: UUID) -> ResultadoCobro
     if cobro.transaccion_id is None:
         return CobroIncierto(RESPUESTA_INVALIDA)
     return CobroAprobado(cobro.transaccion_id)
+
+
+def _resultado_desembolso(
+    respuesta: httpx.Response, referencia: str
+) -> desembolsos.ResultadoDesembolso:
+    """Solo un 200 con el `DesembolsoDto` de la misma referencia es definitivo."""
+    if respuesta.status_code != 200:
+        return desembolsos.DesembolsoIncierto(_codigo_de(respuesta))
+    try:
+        desembolso = _DesembolsoDto.model_validate_json(respuesta.content)
+    except ValidationError:
+        return desembolsos.DesembolsoIncierto(RESPUESTA_INVALIDA)
+    if desembolso.referencia != referencia:
+        return desembolsos.DesembolsoIncierto(RESPUESTA_INVALIDA)
+    if desembolso.estado == "RECHAZADO":
+        return desembolsos.DesembolsoRechazado(
+            motivo=desembolso.motivo, transaccion_id=desembolso.transaccion_id
+        )
+    if desembolso.transaccion_id is None:
+        return desembolsos.DesembolsoIncierto(RESPUESTA_INVALIDA)
+    return desembolsos.DesembolsoConfirmado(desembolso.transaccion_id)

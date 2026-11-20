@@ -1,0 +1,99 @@
+{
+  "$defs": {
+    "IndemnizacionRechazadaV1": {
+      "description": "La pasarela rechaz\u00f3 la indemnizaci\u00f3n; `motivo` es un c\u00f3digo. Sin datos de la cuenta.",
+      "properties": {
+        "duplicadosDescartados": {
+          "minimum": 0,
+          "title": "Duplicadosdescartados",
+          "type": "integer"
+        },
+        "indemnizacionId": {
+          "format": "uuid",
+          "title": "Indemnizacionid",
+          "type": "string"
+        },
+        "intentos": {
+          "minimum": 1,
+          "title": "Intentos",
+          "type": "integer"
+        },
+        "motivo": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "title": "Motivo",
+          "type": "string"
+        },
+        "rechazadaEn": {
+          "format": "date-time",
+          "title": "Rechazadaen",
+          "type": "string"
+        },
+        "referencia": {
+          "pattern": "^IND-88-[0-9]{4}-[0-9]{4,}-[0-9]{2}$",
+          "title": "Referencia",
+          "type": "string"
+        },
+        "siniestroId": {
+          "format": "uuid",
+          "title": "Siniestroid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "indemnizacionId",
+        "siniestroId",
+        "referencia",
+        "motivo",
+        "intentos",
+        "duplicadosDescartados",
+        "rechazadaEn"
+      ],
+      "title": "IndemnizacionRechazadaV1",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/IndemnizacionRechazadaV1"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreEvento[IndemnizacionRechazadaV1]",
+  "type": "object"
+}

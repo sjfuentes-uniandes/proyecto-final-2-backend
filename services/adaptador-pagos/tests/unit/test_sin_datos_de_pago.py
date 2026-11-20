@@ -18,9 +18,11 @@ from uuid import UUID
 import httpx
 import pytest
 import yaml
-from adaptador_pagos.adapters.inbound.http import cobros
+from adaptador_pagos.adapters.inbound.http import cobros, desembolsos
+from adaptador_pagos.adapters.outbound.desembolsos_http import DesembolsosHttp
 from adaptador_pagos.adapters.outbound.pagos_http import PagosHttp
 from adaptador_pagos.domain.cobros import modelos
+from adaptador_pagos.domain.desembolsos import modelos as modelos_desembolsos
 from adaptador_pagos.main import app
 from pydantic import BaseModel, SecretStr
 
@@ -69,14 +71,14 @@ def _nombres_openapi(nodo: Any) -> Iterator[str]:
 
 
 def _nombres_dominio() -> Iterator[str]:
-    for objeto in vars(modelos).values():
+    for objeto in (*vars(modelos).values(), *vars(modelos_desembolsos).values()):
         if dataclasses.is_dataclass(objeto) and isinstance(objeto, type):
             yield objeto.__name__
             yield from (campo.name for campo in dataclasses.fields(objeto))
 
 
 def _nombres_dto() -> Iterator[str]:
-    for objeto in vars(cobros).values():
+    for objeto in (*vars(cobros).values(), *vars(desembolsos).values()):
         if isinstance(objeto, type) and issubclass(objeto, BaseModel) and objeto is not BaseModel:
             yield objeto.__name__
             for nombre, campo in objeto.model_fields.items():
@@ -109,6 +111,34 @@ def _nombres_hacia_el_proveedor() -> list[str]:
     return list(enviados[0])
 
 
+def _nombres_hacia_el_proveedor_de_desembolsos() -> list[str]:
+    enviados: list[dict[str, Any]] = []
+
+    def manejador(request: httpx.Request) -> httpx.Response:
+        enviados.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "referencia": enviados[-1]["referencia"],
+                "estado": "CONFIRMADO",
+                "transaccionId": "TRX",
+                "motivo": None,
+            },
+        )
+
+    proveedor = DesembolsosHttp(
+        httpx.AsyncClient(transport=httpx.MockTransport(manejador)), "http://sim", SecretStr("k")
+    )
+    solicitud = modelos_desembolsos.SolicitudDesembolso(
+        referencia="IND-88-2026-0442-01",
+        monto=Decimal("1.00"),
+        moneda="COP",
+        beneficiario_ref="ben-sint-001",
+    )
+    asyncio.run(proveedor.desembolsar(solicitud, 1.0))
+    return list(enviados[0])
+
+
 FUENTES = {
     "openapi-servido": lambda: list(_nombres_openapi(app.openapi())),
     "openapi-publicado": lambda: list(
@@ -117,6 +147,7 @@ FUENTES = {
     "dominio": lambda: list(_nombres_dominio()),
     "dto": lambda: list(_nombres_dto()),
     "proveedor": _nombres_hacia_el_proveedor,
+    "proveedor-desembolsos": _nombres_hacia_el_proveedor_de_desembolsos,
 }
 
 
@@ -145,7 +176,17 @@ def test_el_detector_reconoce_los_nombres_prohibidos(nombre: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "nombre", ["claveRecaudo", "monto", "moneda", "pagadorRef", "transaccionId", "referencia"]
+    "nombre",
+    [
+        "claveRecaudo",
+        "monto",
+        "moneda",
+        "pagadorRef",
+        "transaccionId",
+        "referencia",
+        "beneficiarioRef",
+        "beneficiario",
+    ],
 )
 def test_el_detector_acepta_los_campos_del_contrato(nombre: str) -> None:
     assert not _prohibido(nombre)

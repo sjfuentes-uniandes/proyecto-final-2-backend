@@ -202,18 +202,20 @@ async def test_el_cliente_dado_de_alta_se_liga_al_registro_sin_crear_otro(
     assert registro.token is not None
 
 
-async def test_con_correo_del_asesor_solo_se_registra_con_ese_correo(repositorio: Any) -> None:
+async def test_el_correo_del_asesor_no_condiciona_pero_el_primer_intento_lo_liga(
+    repositorio: Any,
+) -> None:
     repositorio.dar_de_alta("asesor@ejemplo.co")
     verificacion = VerificacionFalsa(Veredicto(ResultadoKyc.APROBADO))
     caso = _verificar(repositorio, verificacion)
 
-    with pytest.raises(RegistroConCorreoDistinto):
-        await caso.ejecutar(REGISTRO, "otro@ejemplo.co", "selfie", {})
-    assert verificacion.llamadas == 0
-    assert repositorio.por_registro(REGISTRO) is None
+    registro = await caso.ejecutar(REGISTRO, "otro@ejemplo.co", "selfie", {})
 
-    registro = await caso.ejecutar(REGISTRO, " Asesor@Ejemplo.co ", "selfie", {})
     assert registro.token is not None
+    ligado = repositorio.por_registro(REGISTRO)
+    assert ligado is not None and ligado.correo == "otro@ejemplo.co"
+    with pytest.raises(RegistroConCorreoDistinto):
+        await caso.ejecutar(REGISTRO, "asesor@ejemplo.co", "selfie", {})
 
 
 async def test_un_cliente_con_cuenta_no_se_registra_de_nuevo_con_otro_registro(

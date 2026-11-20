@@ -1,0 +1,51 @@
+{
+  "name": "pagos desembolso por beneficiario, rechaza (ben-sint-008 y ben-sint-rechaza)",
+  "request": {
+    "method": "POST",
+    "urlPath": "/pagos/v1/desembolsos",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.beneficiario",
+          "matches": "^(ben-sint-008|ben-sint-rechaza)$"
+        }
+      },
+      {
+        "matchesJsonPath": {
+          "expression": "$.referencia",
+          "matches": "IND-88-[0-9]{4}-[0-9]{4,}-[0-9]{2}"
+        }
+      },
+      {
+        "matchesJsonPath": "$.monto"
+      },
+      {
+        "matchesJsonPath": "$.moneda"
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      },
+      "Idempotency-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "referencia": "{{jsonPath request.body '$.referencia'}}",
+      "estado": "RECHAZADO",
+      "transaccionId": null,
+      "motivo": "BENEFICIARIO_NO_HABILITADO"
+    },
+    "transformers": [
+      "response-template"
+    ],
+    "fixedDelayMilliseconds": 50
+  }
+}

@@ -78,3 +78,4 @@ push_failure_count             = 5
 
 alert_attention_minutes = 30
 false_positive_minutes  = 5
+load_test_enabled       = true # HU-W09: tarea k6 del experimento de carga (infra/apps/carga.tf)

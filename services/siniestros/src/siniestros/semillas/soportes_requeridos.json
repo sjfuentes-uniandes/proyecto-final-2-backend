@@ -1,0 +1,22 @@
+{
+  "descripcion": "Soportes que exige cada amparo (DS3-05). Fuente de la verificación SOPORTES; puede migrar a catalogo más adelante.",
+  "amparos": {
+    "DANO_ACCIDENTAL": [
+      "FACTURA_COMPRA",
+      "DOCUMENTO_IDENTIDAD",
+      "CERTIFICADO_REPARACION"
+    ],
+    "ROBO": [
+      "DOCUMENTO_IDENTIDAD",
+      "DENUNCIA_AUTORIDAD"
+    ],
+    "PERDIDA_EQUIPAJE": [
+      "DOCUMENTO_IDENTIDAD",
+      "DENUNCIA_AUTORIDAD"
+    ],
+    "INCAPACIDAD_TOTAL": [
+      "DOCUMENTO_IDENTIDAD",
+      "PERITAJE"
+    ]
+  }
+}

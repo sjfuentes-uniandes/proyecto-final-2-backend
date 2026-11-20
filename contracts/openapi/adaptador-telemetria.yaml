@@ -1,0 +1,270 @@
+openapi: 3.1.0
+info:
+  title: adaptador-telemetria
+  version: 0.1.0
+paths:
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Health Get
+  /v1/eventos:
+    post:
+      tags:
+      - eventos
+      summary: Recibir
+      description: 'Valida y publica un evento externo firmado (HU-W21, DS3-16).
+
+
+        Orden: (1) fuente y firma, comparada en tiempo constante sobre el cuerpo crudo;
+        (2) desfase de
+
+        la marca de tiempo (± 300 s); (3) contrato; (4) archivo del original en
+
+        `telemetria/<AAAA>/<MM>/<DD>/<eventoId>.json`; (5) en una transacción, el
+        registro del evento
+
+        y su `EventoParametricoObservado` en el Outbox. Un rechazo (401 o 422) no
+        archiva ni escribe
+
+        nada. Sin JWT: la autenticidad es la firma.'
+      operationId: recibir_v1_eventos_post
+      parameters:
+      - name: X-Telemetria-Fuente
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Fuente de la telemetría; debe estar en `TELEMETRIA_FUENTES`
+          examples:
+          - IDEAM-SIM
+          title: X-Telemetria-Fuente
+        description: Fuente de la telemetría; debe estar en `TELEMETRIA_FUENTES`
+      - name: X-Telemetria-Marca-Tiempo
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Instante UTC ISO 8601 con Z en que la fuente firmó el envío;
+            entra tal cual en la firma
+          examples:
+          - '2026-11-10T14:00:05Z'
+          title: X-Telemetria-Marca-Tiempo
+        description: Instante UTC ISO 8601 con Z en que la fuente firmó el envío;
+          entra tal cual en la firma
+      - name: X-Telemetria-Firma
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: '`sha256=<hex>` de HMAC-SHA256 sobre `<marca-tiempo>.<cuerpo
+            crudo>` con el secreto del aliado `telemetria`'
+          title: X-Telemetria-Firma
+        description: '`sha256=<hex>` de HMAC-SHA256 sobre `<marca-tiempo>.<cuerpo
+          crudo>` con el secreto del aliado `telemetria`'
+      responses:
+        '202':
+          description: 'Evento nuevo: archivado y publicado en el Outbox'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecepcionEvento'
+        '200':
+          description: 'Reenvío de un evento ya recibido: mismo `eventoId`, sin otra
+            fila en el Outbox'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecepcionEvento'
+        '401':
+          description: 'FIRMA_INVALIDA: firma ausente o inválida, o fuente fuera de
+            la lista configurada. MARCA_TIEMPO_FUERA_DE_RANGO: la marca de tiempo
+            se aparta más de 5 minutos (en cualquier sentido) del reloj del servicio.
+            La firma se verifica primero'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: 'CONTRATO_INVALIDO: el cuerpo no es JSON, no cumple `EventoExterno`
+            o su `versionContrato` no está soportada. `detalles.campos` lista los
+            campos inválidos, nunca sus valores'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'DEPENDENCIA_NO_DISPONIBLE: no se pudo archivar el original
+            ni registrar el evento; la fuente puede reenviar el mismo evento (es idempotente)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventoExterno'
+components:
+  schemas:
+    ErrorDto:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        mensaje:
+          type: string
+          title: Mensaje
+        correlationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlationid
+        detalles:
+          additionalProperties: true
+          type: object
+          title: Detalles
+      type: object
+      required:
+      - codigo
+      - mensaje
+      - correlationId
+      - detalles
+      title: ErrorDto
+    RecepcionEvento:
+      properties:
+        eventoId:
+          type: string
+          format: uuid
+          title: Eventoid
+          description: UUIDv5 de (fuente, idExterno)
+        recibidoEn:
+          type: string
+          format: date-time
+          title: Recibidoen
+      type: object
+      required:
+      - eventoId
+      - recibidoEn
+      title: RecepcionEvento
+      description: 202 si el evento es nuevo; 200 si es un reenvío (el mismo `eventoId`
+        y `recibidoEn`).
+    Ubicacion:
+      additionalProperties: false
+      description: Coordenadas del punto de medición; opcional. La evaluación no la
+        usa (minimización).
+      properties:
+        lat:
+          examples:
+          - 4.711
+          maximum: 90
+          minimum: -90
+          title: Lat
+          type: number
+        lon:
+          examples:
+          - -74.0721
+          maximum: 180
+          minimum: -180
+          title: Lon
+          type: number
+      required:
+      - lat
+      - lon
+      title: Ubicacion
+      type: object
+    EventoExterno:
+      additionalProperties: false
+      description: 'Contrato v1 del evento externo. El cuerpo no admite campos de
+        más (422 CONTRATO_INVALIDO).
+
+
+        `LLUVIA_ACUMULADA` va en `mm` y `RETRASO_VUELO` en `min`; otra combinación
+        es un contrato
+
+        inválido. `zona` es un código de municipio DANE sintético o un código de vuelo.'
+      properties:
+        versionContrato:
+          const: '1'
+          description: Única versión soportada
+          title: Versioncontrato
+          type: string
+        idExterno:
+          description: Identificador del evento en la fuente; con la fuente fija el
+            eventoId
+          examples:
+          - IDEAM-2026-1110-0001
+          pattern: ^[A-Za-z0-9._:-]{1,64}$
+          title: Idexterno
+          type: string
+        eventoOrigen:
+          description: Fenómeno o incidente al que pertenece la medición
+          examples:
+          - EVT-2026-0913
+          pattern: ^[A-Za-z0-9._:-]{1,64}$
+          title: Eventoorigen
+          type: string
+        tipoEvento:
+          enum:
+          - LLUVIA_ACUMULADA
+          - RETRASO_VUELO
+          title: Tipoevento
+          type: string
+        valorObservado:
+          description: Texto decimal
+          examples:
+          - '120'
+          - '135.5'
+          pattern: ^[0-9]{1,9}(\.[0-9]{1,3})?$
+          title: Valorobservado
+          type: string
+        unidad:
+          enum:
+          - mm
+          - min
+          title: Unidad
+          type: string
+        zona:
+          examples:
+          - '11001'
+          - AV204
+          pattern: ^[A-Z0-9]{2,16}$
+          title: Zona
+          type: string
+        observadoEn:
+          description: Instante de la medición, UTC (ISO 8601 con Z)
+          format: date-time
+          title: Observadoen
+          type: string
+        ubicacion:
+          anyOf:
+          - $ref: '#/components/schemas/Ubicacion'
+          - type: 'null'
+          default: null
+      required:
+      - versionContrato
+      - idExterno
+      - eventoOrigen
+      - tipoEvento
+      - valorObservado
+      - unidad
+      - zona
+      - observadoEn
+      title: EventoExterno
+      type: object

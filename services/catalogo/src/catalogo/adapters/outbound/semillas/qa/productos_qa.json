@@ -14,5 +14,27 @@
       {"codigo": "INCAPACIDAD_TOTAL_PERMANENTE", "nombre": "Incapacidad total y permanente", "obligatoria": true}
     ],
     "reglas": [{"version": "2026.10.1", "vigenteDesde": "2026-10-01T00:00:00Z", "archivo": "qa/reglas_prima_qa_oferta_corta.json"}]
+  },
+  {
+    "id": "clima-lluvia",
+    "version": "2026.11.1",
+    "nombre": "Seguro paramétrico de lluvia (QA)",
+    "ramo": "PARAMETRICO",
+    "pais": "CO",
+    "moneda": "COP",
+    "estado": "ACTIVO",
+    "vigenteDesde": "2026-11-01T00:00:00Z",
+    "vigenteHasta": null,
+    "coberturas": [
+      {"codigo": "LLUVIA_ACUMULADA", "nombre": "Lluvia acumulada", "obligatoria": true}
+    ],
+    "parametrico": {
+      "tipoEvento": "LLUVIA_ACUMULADA",
+      "unidad": "mm",
+      "umbral": "120",
+      "valorPago": "1400000.00",
+      "versionRegla": "1"
+    },
+    "reglas": [{"version": "2026.11.1", "vigenteDesde": "2026-11-01T00:00:00Z", "archivo": "qa/reglas_prima_qa_clima_lluvia.json"}]
   }
 ]

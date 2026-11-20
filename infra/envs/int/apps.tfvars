@@ -19,7 +19,7 @@ cpu_target = 60
 service_overrides = {
   simulador-aliados = { cpu = 1024, memory = 2048 }
   adaptador-datos   = { cpu = 512, memory = 1024 }
-  cotizacion        = { cpu = 512, memory = 1024 }
+  cotizacion        = { cpu = 512, memory = 1024, min = 2, max = 4 }
 }
 
 enable_tracing = true
@@ -44,6 +44,10 @@ service_environment = {
   cotizacion = {
     SOLVENTA_FUENTE_TIMEOUT_MS      = "600"
     SOLVENTA_DEPENDENCIA_TIMEOUT_MS = "300"
+  }
+  siniestros = {
+    SEMILLA_SINIESTROS_QA          = "true"
+    SEMILLA_SINIESTROS_ANALISTA_ID = "14d824a8-20e1-709e-a1d8-0dd77cf8efde"
   }
 }
 

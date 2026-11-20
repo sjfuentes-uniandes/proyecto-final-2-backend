@@ -114,11 +114,11 @@ async def test_con_la_bandera_en_false_no_siembra_nada(base: str) -> None:
 
 async def test_el_arranque_siembra_y_es_idempotente(base: str) -> None:
     await _arrancar_y_detener(semilla=True)
-    assert _conteos(base) == (27, 26)  # C10 no tiene consentimiento
+    assert _conteos(base) == (33, 32)  # C10 no tiene consentimiento
 
     await _arrancar_y_detener(semilla=True)
 
-    assert _conteos(base) == (27, 26)
+    assert _conteos(base) == (33, 32)
     assert sembrar(base) == 0
     assert _sql(base, "SELECT count(*) FROM outbox") == [(0,)]
 
@@ -127,8 +127,8 @@ def test_dos_replicas_a_la_vez_dejan_una_sola_semilla(base: str) -> None:
     with ThreadPoolExecutor(max_workers=2) as hilos:
         creados = list(hilos.map(sembrar, [base, base]))
 
-    assert sorted(creados) == [0, 27]
-    assert _conteos(base) == (27, 26)
+    assert sorted(creados) == [0, 33]
+    assert _conteos(base) == (33, 32)
 
 
 async def test_no_pisa_lo_que_cambio_en_el_ambiente(base: str) -> None:

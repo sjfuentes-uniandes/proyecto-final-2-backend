@@ -10,10 +10,13 @@ from solventa_common.errors import registrar_manejadores
 from solventa_common.resiliencia import SinProteccion
 from solventa_common.telemetry import instrumentar
 
-from adaptador_pagos.adapters.inbound.http import cobros
+from adaptador_pagos.adapters.inbound.http import cobros, desembolsos
+from adaptador_pagos.adapters.outbound.desembolsos_http import DesembolsosHttp
 from adaptador_pagos.adapters.outbound.pagos_http import PagosHttp
 from adaptador_pagos.application.cobros.cobrar import Cobrar
 from adaptador_pagos.application.cobros.consultar_cobro import ConsultarCobro
+from adaptador_pagos.application.desembolsos.consultar_desembolso import ConsultarDesembolso
+from adaptador_pagos.application.desembolsos.desembolsar import Desembolsar
 from adaptador_pagos.config import Settings
 
 
@@ -53,6 +56,22 @@ def crear_app(
                 proteccion=proteccion,
                 timeout_ms=settings.ally_pagos_timeout_ms,
             )
+            # HU-W23: los desembolsos, con el mismo cliente, la misma credencial y el mismo corte.
+            desembolsos_http = DesembolsosHttp(
+                cliente_pagos,
+                settings.ally_pagos_url,
+                settings.ally_pagos_credentials.client_secret,
+            )
+            app.state.desembolsar = Desembolsar(
+                proveedor=desembolsos_http,
+                proteccion=proteccion,
+                timeout_ms=settings.ally_pagos_timeout_ms,
+            )
+            app.state.consultar_desembolso = ConsultarDesembolso(
+                proveedor=desembolsos_http,
+                proteccion=proteccion,
+                timeout_ms=settings.ally_pagos_timeout_ms,
+            )
             yield
 
     app = instrumentar(
@@ -63,6 +82,7 @@ def crear_app(
     )
     registrar_manejadores(app)
     app.include_router(cobros.router)
+    app.include_router(desembolsos.router)
 
     @app.get("/health")
     async def health() -> dict[str, str]:

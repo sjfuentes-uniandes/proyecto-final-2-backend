@@ -1,0 +1,45 @@
+{
+  "name": "pagos desembolso por beneficiario, caído",
+  "request": {
+    "method": "POST",
+    "urlPath": "/pagos/v1/desembolsos",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.beneficiario",
+          "matches": "^ben-sint-caido$"
+        }
+      },
+      {
+        "matchesJsonPath": {
+          "expression": "$.referencia",
+          "matches": "IND-88-[0-9]{4}-[0-9]{4,}-[0-9]{2}"
+        }
+      },
+      {
+        "matchesJsonPath": "$.monto"
+      },
+      {
+        "matchesJsonPath": "$.moneda"
+      }
+    ],
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      },
+      "Idempotency-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "error": "unavailable"
+    },
+    "fixedDelayMilliseconds": 50
+  }
+}

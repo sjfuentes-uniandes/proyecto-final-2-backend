@@ -1,0 +1,30 @@
+{
+  "name": "pagos consulta de desembolso, caído: la orden nunca llegó",
+  "request": {
+    "method": "GET",
+    "urlPath": "/pagos/v1/desembolsos",
+    "queryParameters": {
+      "beneficiario": {
+        "matches": "^ben-sint-caido$"
+      },
+      "referencia": {
+        "matches": "IND-88-[0-9]{4}-[0-9]{4,}-[0-9]{2}"
+      }
+    },
+    "headers": {
+      "X-Api-Key": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "error": "desembolso_no_encontrado"
+    },
+    "fixedDelayMilliseconds": 50
+  }
+}

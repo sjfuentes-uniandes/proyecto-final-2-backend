@@ -44,6 +44,10 @@ services:
     environment:
       SERVICES: sns,sqs,s3
     ports: ["4566:4566"]
+    volumes:
+      # HU-W19: tópico de negocio, bucket de evidencias y colas. Archivo compartido: cada HU agrega
+      # sus colas al final (scripts/dev/localstack-init.sh).
+      - ./scripts/dev/localstack-init.sh:/etc/localstack/init/ready.d/10-recursos.sh:ro
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.111.0
@@ -73,6 +77,10 @@ services:
       POLIZAS_URL: http://polizas:8080
       # HU-W18: estado y listado de pólizas.
       CONSULTA_URL: http://consulta:8080
+      # HU-W19: siniestros del analista (grupo analistas-siniestros).
+      SINIESTROS_URL: http://siniestros:8080
+      # HU-W22 (H09) y HU-W24 (H10 y H11): el seguimiento y la cola de descarte de pagos-parametricos.
+      PAGOS_PARAMETRICOS_URL: http://pagos-parametricos:8080
 
   bff-movil:
     <<: *servicio
@@ -84,6 +92,7 @@ services:
       localstack: { condition: service_started }
       otel-collector: { condition: service_started }
       clientes: { condition: service_healthy }
+      siniestros: { condition: service_healthy }
     # El ancla define environment: se repiten sus variables junto con las propias.
     environment:
       SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
@@ -91,6 +100,8 @@ services:
       OTEL_PROPAGATORS: tracecontext,baggage,xray
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
       CLIENTES_URL: http://clientes:8080
+      CONSULTA_URL: http://consulta:8080
+      SINIESTROS_URL: http://siniestros:8080
 
   clientes:
     <<: *servicio
@@ -224,6 +235,56 @@ services:
       ALLY_OPEN_FINANCE_CREDENTIALS: '{"client_id":"local-sintetico","client_secret":"local-sintetico"}'
       ALLY_DATOS_ABIERTOS_CREDENTIALS: '{"client_id":"local-sintetico","client_secret":"local-sintetico"}'
 
+  # HU-W23 (EXT-S3-10): pagos de la indemnización (desembolsos) y, desde HU-W16, cobros. Solo lo llama
+  # `dinero`; el aliado `pagos` es siempre el simulador.
+  adaptador-pagos:
+    <<: *servicio
+    build: { context: ., dockerfile: services/adaptador-pagos/Dockerfile }
+    ports: ["8095:8080"]
+    depends_on:
+      localstack: { condition: service_started }
+      otel-collector: { condition: service_started }
+      simulador-aliados: { condition: service_healthy }
+    # El ancla define environment: se repiten sus variables junto con las propias.
+    environment:
+      SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_PROPAGATORS: tracecontext,baggage,xray
+      OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
+      ALLY_PAGOS_URL: http://simulador-aliados:8080/pagos
+      ALLY_PAGOS_TIMEOUT_MS: "5000"
+      # Credencial sintética solo para el ambiente local (en AWS viene de Secrets Manager).
+      ALLY_PAGOS_CREDENTIALS: '{"client_id":"local-sintetico","client_secret":"local-sintetico"}'
+
+  # HU-W23 (EXT-S3-10): pago único de la indemnización. Consume `SiniestroAprobado` de
+  # `dinero-indemnizaciones` (scripts/dev/localstack-init.sh), paga por `adaptador-pagos` y publica
+  # `Indemnizacion*` por el Outbox. `ADAPTADOR_PAGOS_URL` se fija aquí: el valor por omisión
+  # (http://localhost:8091) es el puerto de `siniestros`. Sin cola de OfertaAceptada en local (R3 de
+  # HU-W16 corre solo en pruebas): el consumidor de recaudos queda apagado y lo avisa en el log.
+  dinero:
+    <<: *servicio
+    build: { context: ., dockerfile: services/dinero/Dockerfile }
+    ports: ["8094:8080"]
+    depends_on:
+      postgres: { condition: service_started }
+      localstack: { condition: service_started }
+      otel-collector: { condition: service_started }
+      adaptador-pagos: { condition: service_started }
+    # El ancla define environment: se repiten sus variables junto con las propias.
+    environment:
+      SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_PROPAGATORS: tracecontext,baggage,xray
+      OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
+      DB_HOST: postgres
+      ADAPTADOR_PAGOS_URL: http://adaptador-pagos:8080
+      SQS_DINERO_INDEMNIZACIONES_URL: http://localstack:4566/000000000000/solventa-local-dinero-indemnizaciones
+      OUTBOX_ENABLED: "true"
+      EVENTS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:solventa-local-eventos-negocio
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+
   # HU-S03: esqueletos del Sprint 3 (HU-W19 a HU-W23 completan su lógica). Sin las colas SQS_* los
   # consumidores no arrancan (en local se alimentan desde las pruebas).
   siniestros:
@@ -237,6 +298,20 @@ services:
       OTEL_PROPAGATORS: tracecontext,baggage,xray
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
       DB_HOST: postgres
+      # HU-W19: evidencias en S3 (LocalStack), Outbox hacia el tópico local y semilla sintética de
+      # QA (DS3-07; apagada por omisión y nunca en producción). Los recursos los crea
+      # scripts/dev/localstack-init.sh. Las credenciales son las ficticias de LocalStack.
+      EVIDENCIAS_BUCKET: solventa-local-evidencias
+      EVIDENCIAS_BUCKET_SSE: AES256
+      # Las URL prefirmadas se firman con el endpoint que alcanza el navegador del analista.
+      SOLVENTA_EVIDENCIAS_ENDPOINT_PUBLICO: http://localhost:4566
+      SOLVENTA_SEMILLA_SINIESTROS_QA: "true"
+      SQS_SINIESTROS_INDEMNIZACIONES_URL: http://localstack:4566/000000000000/solventa-local-siniestros-indemnizaciones
+      OUTBOX_ENABLED: "true"
+      EVENTS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:solventa-local-eventos-negocio
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
 
   # PagosParametricos --> AtencionSiniestros (modelo_concurrencia.puml (9)).
   pagos-parametricos:
@@ -256,6 +331,19 @@ services:
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
       DB_HOST: postgres
       SINIESTROS_URL: http://siniestros:8080
+      # HU-W21: las dos colas de entrada (con su DLQ, la de eventos la lee la cola de descarte H10),
+      # el Outbox hacia el tópico local y las credenciales ficticias de LocalStack. Los recursos los
+      # crea scripts/dev/localstack-init.sh. SQS_CONCURRENCIA dimensiona también el pool de
+      # conexiones (DB_POOL_SIZE solo puede subirlo).
+      SQS_PARAMETRICOS_EVENTOS_URL: http://localstack:4566/000000000000/solventa-local-parametricos-eventos
+      SQS_PARAMETRICOS_EVENTOS_DLQ_URL: http://localstack:4566/000000000000/solventa-local-parametricos-eventos-dlq
+      SQS_PARAMETRICOS_POLIZAS_URL: http://localstack:4566/000000000000/solventa-local-parametricos-polizas
+      SQS_CONCURRENCIA: "10"
+      OUTBOX_ENABLED: "true"
+      EVENTS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:solventa-local-eventos-negocio
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
 
   # Entrada de telemetría con firma HMAC (D5) y Outbox propio (ConexionTelemetria --> PublicadoresOutbox).
   adaptador-telemetria:
@@ -271,6 +359,18 @@ services:
       DB_HOST: postgres
       # Secreto sintético solo para el ambiente local (en AWS viene de Secrets Manager).
       ALLY_TELEMETRIA_CREDENTIALS: '{"hmac_secret":"local-sintetico"}'
+      # HU-W21: el original de cada evento va al bucket de evidencias (LocalStack), bajo
+      # telemetria/, y el Outbox publica en el tópico local. Los recursos los crea
+      # scripts/dev/localstack-init.sh; las credenciales son las ficticias de LocalStack.
+      EVIDENCIAS_BUCKET: solventa-local-evidencias
+      EVIDENCIAS_BUCKET_SSE: AES256
+      TELEMETRIA_ARCHIVO_PREFIJO: telemetria/
+      TELEMETRIA_FUENTES: IDEAM-SIM,AEROCIVIL-SIM
+      OUTBOX_ENABLED: "true"
+      EVENTS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:solventa-local-eventos-negocio
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
 
 volumes:
   pgdata:

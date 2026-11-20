@@ -1,0 +1,101 @@
+{
+  "$defs": {
+    "SiniestroRechazadoV1": {
+      "description": "El analista rechaz\u00f3 el caso: no habilita pago. Sin la explicaci\u00f3n al cliente.\n`aggregateId` = `siniestroId`.",
+      "properties": {
+        "causal": {
+          "enum": [
+            "POLIZA_NO_VIGENTE",
+            "EVENTO_NO_CUBIERTO",
+            "PERIODO_DE_CARENCIA",
+            "AVISO_EXTEMPORANEO",
+            "PRIMAS_EN_MORA",
+            "EVIDENCIA_INCONSISTENTE",
+            "EXCLUSION_CONTRACTUAL"
+          ],
+          "title": "Causal",
+          "type": "string"
+        },
+        "codigo": {
+          "pattern": "^88-[0-9]{4}-[0-9]{4,}$",
+          "title": "Codigo",
+          "type": "string"
+        },
+        "decididoEn": {
+          "format": "date-time",
+          "title": "Decididoen",
+          "type": "string"
+        },
+        "decididoPor": {
+          "format": "uuid",
+          "title": "Decididopor",
+          "type": "string"
+        },
+        "polizaId": {
+          "format": "uuid",
+          "title": "Polizaid",
+          "type": "string"
+        },
+        "siniestroId": {
+          "format": "uuid",
+          "title": "Siniestroid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "siniestroId",
+        "codigo",
+        "polizaId",
+        "causal",
+        "decididoPor",
+        "decididoEn"
+      ],
+      "title": "SiniestroRechazadoV1",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/SiniestroRechazadoV1"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreEvento[SiniestroRechazadoV1]",
+  "type": "object"
+}

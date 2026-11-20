@@ -123,14 +123,14 @@ def test_404_un_documento_sin_alta_no_puede_registrarse(api: Any, repositorio: A
     assert not repositorio.clientes
 
 
-def test_409_el_correo_debe_ser_el_que_informo_el_asesor(api: Any, repositorio: Any) -> None:
+def test_el_correo_del_asesor_no_condiciona_el_registro(api: Any, repositorio: Any) -> None:
     cliente = api(_veredicto("APROBADO"), dar_de_alta=False)
     repositorio.dar_de_alta("asesor@ejemplo.co")
 
-    _error(cliente.post(VERIFICAR, json=CUERPO), 409, "REGISTRO_CORREO_DISTINTO")
-    correcto = cliente.post(VERIFICAR, json={**CUERPO, "correo": "ASESOR@ejemplo.co"})
+    registro = cliente.post(VERIFICAR, json=CUERPO)
 
-    assert correcto.status_code == 200, correcto.text
+    assert registro.status_code == 200, registro.text
+    assert registro.json()["tokenRegistro"] is not None
 
 
 def test_reintento_tras_interrupcion_no_crea_otro_cliente(api: Any, repositorio: Any) -> None:

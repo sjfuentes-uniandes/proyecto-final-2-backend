@@ -1,0 +1,145 @@
+{
+  "$defs": {
+    "DecisionEvento": {
+      "enum": [
+        "ACTIVA",
+        "NO_ACTIVA",
+        "SIN_POLIZAS"
+      ],
+      "title": "DecisionEvento",
+      "type": "string"
+    },
+    "EventoParametricoEvaluadoV1": {
+      "additionalProperties": false,
+      "description": "El resultado de evaluar un evento observado contra las coberturas candidatas.",
+      "properties": {
+        "activaciones": {
+          "description": "P\u00f3lizas que activaron la cobertura",
+          "minimum": 0,
+          "title": "Activaciones",
+          "type": "integer"
+        },
+        "decision": {
+          "$ref": "#/$defs/DecisionEvento"
+        },
+        "evaluadas": {
+          "description": "P\u00f3lizas candidatas evaluadas",
+          "minimum": 0,
+          "title": "Evaluadas",
+          "type": "integer"
+        },
+        "evaluadoEn": {
+          "format": "date-time",
+          "title": "Evaluadoen",
+          "type": "string"
+        },
+        "eventoId": {
+          "format": "uuid",
+          "title": "Eventoid",
+          "type": "string"
+        },
+        "eventoOrigen": {
+          "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+          "title": "Eventoorigen",
+          "type": "string"
+        },
+        "fuente": {
+          "pattern": "^[A-Z][A-Z0-9-]{1,31}$",
+          "title": "Fuente",
+          "type": "string"
+        },
+        "idExterno": {
+          "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+          "title": "Idexterno",
+          "type": "string"
+        },
+        "razon": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RazonEvento"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "SIN_POLIZAS_EN_ZONA cuando la decisi\u00f3n es SIN_POLIZAS; si no, null"
+        },
+        "versionRegla": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Versionregla",
+          "type": "string"
+        }
+      },
+      "required": [
+        "eventoId",
+        "fuente",
+        "idExterno",
+        "eventoOrigen",
+        "decision",
+        "razon",
+        "activaciones",
+        "evaluadas",
+        "versionRegla",
+        "evaluadoEn"
+      ],
+      "title": "EventoParametricoEvaluadoV1",
+      "type": "object"
+    },
+    "RazonEvento": {
+      "description": "Raz\u00f3n a nivel de evento; las de cada p\u00f3liza est\u00e1n en `evaluaciones` (DS3-21).",
+      "enum": [
+        "SIN_POLIZAS_EN_ZONA"
+      ],
+      "title": "RazonEvento",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Sobre versionado con `type` fijo: es el atributo `eventType` del mensaje.",
+  "properties": {
+    "aggregateId": {
+      "format": "uuid",
+      "title": "Aggregateid",
+      "type": "string"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/EventoParametricoEvaluadoV1"
+    },
+    "type": {
+      "const": "EventoParametricoEvaluado",
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "aggregateId",
+    "type",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "payload"
+  ],
+  "title": "SobreEventoParametricoEvaluadoV1",
+  "type": "object"
+}

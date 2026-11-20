@@ -63,7 +63,7 @@ def _ejecutar(url: str, sql: str) -> None:
 @pytest.fixture
 def limpia(base: str) -> str:
     # TRUNCATE no dispara el disparador de protección (es por fila): solo para las pruebas.
-    _ejecutar(base, "TRUNCATE recaudos, outbox, inbox")
+    _ejecutar(base, "TRUNCATE recaudos, indemnizaciones, outbox, inbox")
     return base
 
 
@@ -187,6 +187,119 @@ STUBS = [
 ]
 
 
+# --- HU-W23: desembolsos de la indemnización --------------------------------------------------------
+# DesembolsoDto de contracts/openapi/adaptador-pagos.yaml, con la `referencia` recibida. El caso lo
+# elige el `beneficiarioRef` sintético del cuerpo (la consulta, el de su query).
+BEN_OK = "ben-ok"  # confirma, con TRX-<referencia>
+BEN_RECHAZA = "ben-rechaza"  # rechaza: BENEFICIARIO_NO_HABILITADO
+BEN_LENTO = (
+    "ben-lento"  # el desembolso tarda 1,5 s (la prueba corta a 300 ms) y la consulta confirma
+)
+BEN_CAIDO = "ben-caido"  # 503 al pagar; la consulta, también 503 (incierto)
+BEN_REINTENTO = "ben-reintento"  # 1.º POST 503; la consulta 404; el reintento confirma
+BEN_CONSULTA_LENTA = "ben-consulta-lenta"  # POST 503; la consulta tarda 200 ms y confirma
+BEN_INCIERTO_CONSULTA = "ben-incierto-consulta"  # POST 503; la consulta 503
+RETARDO_LENTO_MS = 1500
+RETARDO_CONSULTA_MS = 200
+_REF = "{{jsonPath request.body '$.referencia'}}"
+_REF_EN_RUTA = "{{request.pathSegments.[2]}}"
+NO_ENCONTRADO_DESEMBOLSO = json.dumps(
+    {
+        "codigo": "DESEMBOLSO_NO_ENCONTRADO",
+        "mensaje": "El proveedor no tiene una orden de desembolso con esa referencia",
+        "correlationId": None,
+        "detalles": {},
+    }
+)
+
+
+def _desembolso(
+    estado: str, transaccion: str | None, motivo: str | None, referencia: str = _REF
+) -> str:
+    return json.dumps(
+        {
+            "referencia": referencia,
+            "estado": estado,
+            "transaccionId": transaccion,
+            "motivo": motivo,
+        }
+    )
+
+
+def _stub_desembolso(
+    beneficiario: str,
+    estado: int,
+    cuerpo: str,
+    retardo_ms: int = 0,
+    escenario: tuple[str, str, str] | None = None,
+) -> dict[str, Any]:
+    stub: dict[str, Any] = {
+        "request": {
+            "method": "POST",
+            "url": "/v1/desembolsos",
+            "bodyPatterns": [
+                {"matchesJsonPath": {"expression": "$.beneficiarioRef", "equalTo": beneficiario}}
+            ],
+        },
+        "response": _respuesta(estado, cuerpo, retardo_ms),
+    }
+    if escenario is not None:
+        nombre, requerido, nuevo = escenario
+        stub["scenarioName"] = nombre
+        stub["requiredScenarioState"] = requerido
+        stub["newScenarioState"] = nuevo
+    return stub
+
+
+def _stub_consulta_desembolso(
+    beneficiario: str, estado: int, cuerpo: str, retardo_ms: int = 0
+) -> dict[str, Any]:
+    return {
+        "request": {
+            "method": "GET",
+            "urlPathPattern": "/v1/desembolsos/IND-[0-9A-Za-z-]+",
+            "queryParameters": {"beneficiarioRef": {"equalTo": beneficiario}},
+        },
+        "response": _respuesta(estado, cuerpo, retardo_ms),
+    }
+
+
+def _confirmado_trx(referencia: str = _REF) -> str:
+    return _desembolso("CONFIRMADO", f"TRX-{referencia}", None, referencia)
+
+
+STUBS_DESEMBOLSOS = [
+    _stub_desembolso(BEN_OK, 200, _confirmado_trx()),
+    _stub_desembolso(
+        BEN_RECHAZA, 200, _desembolso("RECHAZADO", None, "BENEFICIARIO_NO_HABILITADO")
+    ),
+    _stub_desembolso(BEN_LENTO, 200, _confirmado_trx(), retardo_ms=RETARDO_LENTO_MS),
+    _stub_desembolso(BEN_CAIDO, 503, NO_DISPONIBLE),
+    _stub_desembolso(
+        BEN_REINTENTO, 503, NO_DISPONIBLE, escenario=("reintento", "Started", "Reintentado")
+    ),
+    _stub_desembolso(
+        BEN_REINTENTO,
+        200,
+        _confirmado_trx(),
+        escenario=("reintento", "Reintentado", "Reintentado"),
+    ),
+    _stub_desembolso(BEN_CONSULTA_LENTA, 503, NO_DISPONIBLE),
+    _stub_desembolso(BEN_INCIERTO_CONSULTA, 503, NO_DISPONIBLE),
+    _stub_consulta_desembolso(BEN_OK, 200, _confirmado_trx(_REF_EN_RUTA)),
+    _stub_consulta_desembolso(
+        BEN_RECHAZA, 200, _desembolso("RECHAZADO", None, "BENEFICIARIO_NO_HABILITADO", _REF_EN_RUTA)
+    ),
+    _stub_consulta_desembolso(BEN_LENTO, 200, _confirmado_trx(_REF_EN_RUTA)),
+    _stub_consulta_desembolso(BEN_CAIDO, 503, NO_DISPONIBLE),
+    _stub_consulta_desembolso(BEN_REINTENTO, 404, NO_ENCONTRADO_DESEMBOLSO),
+    _stub_consulta_desembolso(
+        BEN_CONSULTA_LENTA, 200, _confirmado_trx(_REF_EN_RUTA), retardo_ms=RETARDO_CONSULTA_MS
+    ),
+    _stub_consulta_desembolso(BEN_INCIERTO_CONSULTA, 503, NO_DISPONIBLE),
+]
+
+
 class WireMock:
     """adaptador-pagos sustituido: la cadena real es la R3 de la 16.12."""
 
@@ -221,6 +334,29 @@ class WireMock:
             if s["request"]["method"] == "POST" and s["request"]["url"] == "/v1/cobros"
         ]
 
+    def desembolsos(self) -> list[dict[str, Any]]:
+        """Las solicitudes a POST /v1/desembolsos (HU-W23): el journal que prueba que no hubo un
+        segundo pago efectivo."""
+        solicitudes = self._admin.get("/requests").json()["requests"]
+        return [
+            s["request"]
+            for s in reversed(solicitudes)
+            if s["request"]["method"] == "POST" and s["request"]["url"] == "/v1/desembolsos"
+        ]
+
+    def consultas_desembolso(self) -> list[dict[str, Any]]:
+        """Las solicitudes a GET /v1/desembolsos/{referencia} (HU-W23), en orden de llegada."""
+        solicitudes = self._admin.get("/requests").json()["requests"]
+        return [
+            s["request"]
+            for s in reversed(solicitudes)
+            if s["request"]["method"] == "GET"
+            and s["request"]["url"].startswith("/v1/desembolsos/")
+        ]
+
+    def reiniciar_escenarios(self) -> None:
+        self._admin.post("/scenarios/reset").raise_for_status()
+
     def consultas(self) -> list[dict[str, Any]]:
         """Las solicitudes a GET /v1/cobros/{claveRecaudo} (16.11), en orden de llegada."""
         solicitudes = self._admin.get("/requests").json()["requests"]
@@ -245,12 +381,14 @@ def wiremock() -> Iterator[WireMock]:
         )
         servidor.esperar_listo()
         servidor.registrar(STUBS)
+        servidor.registrar(STUBS_DESEMBOLSOS)
         yield servidor
 
 
 @pytest.fixture
 def adaptador(wiremock: WireMock) -> WireMock:
     wiremock.limpiar_journal()
+    wiremock.reiniciar_escenarios()
     return wiremock
 
 

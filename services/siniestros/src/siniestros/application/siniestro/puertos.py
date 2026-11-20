@@ -1,0 +1,236 @@
+"""Puertos de la aplicación de siniestros (HU-W19). Los implementan los adaptadores de salida."""
+
+from collections.abc import Sequence
+from contextlib import AbstractAsyncContextManager
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Protocol
+from uuid import UUID
+
+from siniestros.application.siniestro.vistas import (
+    AccesoDenegado,
+    DecisionRegistrada,
+    DetalleLeido,
+    FiltroBandeja,
+    Indicadores,
+    PaginaSiniestros,
+    PagoParametrico,
+)
+from siniestros.domain.siniestro.modelos import (
+    CanalSoporte,
+    CausalRechazo,
+    EntradaHistorial,
+    Evidencia,
+    IntegridadEvidencia,
+    Siniestro,
+    SoporteSolicitable,
+    TipoSoporte,
+)
+from siniestros.domain.siniestro.pago import EstadoPago, ResultadoPago
+
+
+class DecisionFinalDuplicada(Exception):
+    """La base rechazó una segunda decisión final del mismo siniestro (restricción única, AC4). Deshace
+    la transacción: no queda nada escrito."""
+
+
+class Reloj(Protocol):
+    def ahora(self) -> datetime: ...
+
+
+class Codigos(Protocol):
+    """El consecutivo del código `88-AAAA-NNNN` (DS3-11): una transacción corta por código."""
+
+    async def siguiente(self, anio: int) -> str: ...
+
+
+class SoportesRequeridos(Protocol):
+    def para(self, amparo: str) -> tuple[TipoSoporte, ...]:
+        """Los soportes que exige el amparo; vacío si no se conoce."""
+        ...
+
+
+class AlmacenEvidencias(Protocol):
+    async def firmar_descarga(
+        self, clave: str, sha256: str, ttl_s: int, tipo_contenido: str, nombre_archivo: str
+    ) -> str:
+        """Comprueba el objeto y firma una descarga HTTPS con nombre y MIME, por hasta 300 s."""
+        ...
+
+    async def conservar(
+        self,
+        origen: str,
+        destino: str,
+        sha256: str,
+        tamano_bytes: int,
+        tipo_contenido: str,
+        cifrado: str,
+    ) -> None:
+        """Verifica y conserva el archivo fuera de tmp; repetir recupera la misma copia."""
+        ...
+
+    async def verificar(self, clave: str, sha256: str) -> IntegridadEvidencia:
+        """Compara el checksum del objeto con `sha256` sin descargarlo. Nunca lanza: un objeto
+        ausente es `NO_DISPONIBLE`; un fallo o un corte por tiempo, `NO_VERIFICABLE`."""
+        ...
+
+    async def firmar_lectura(self, clave: str, ttl_s: int, tipo_contenido: str) -> str:
+        """URL prefirmada de lectura. Lanza `DependenciaNoDisponible` si no se puede firmar."""
+        ...
+
+    async def firmar_carga(
+        self,
+        clave: str,
+        tipo_contenido: str,
+        tamano_bytes: int,
+        sha256: str,
+        ttl_s: int,
+        cifrado: str,
+    ) -> tuple[str, dict[str, str]]:
+        """POST prefirmado con tipo, tamaño, checksum y cifrado inmutables."""
+        ...
+
+
+@dataclass(frozen=True)
+class RegistroIdempotencia:
+    huella: str
+    respuesta: dict[str, Any]
+
+
+class TxSiniestros(Protocol):
+    """Una transacción corta: ningún método espera a otro servicio ni a S3."""
+
+    async def adquirir_idempotencia(self, clave: str) -> RegistroIdempotencia | None:
+        """Serializa las solicitudes con la misma clave y devuelve lo que ya se guardó."""
+        ...
+
+    async def guardar_idempotencia(
+        self, clave: str, huella: str, respuesta: dict[str, Any], creada_en: datetime
+    ) -> None: ...
+
+    async def siniestro(self, siniestro_id: UUID) -> Siniestro | None: ...
+
+    async def reservar_siguiente(self) -> Siniestro | None:
+        """El REPORTADO sin analista más antiguo, bloqueado (`FOR UPDATE SKIP LOCKED`)."""
+        ...
+
+    async def bloquear_siniestro(self, siniestro_id: UUID) -> Siniestro | None:
+        """El siniestro, bloqueado (`FOR UPDATE`): dos decisiones sobre el mismo caso se serializan."""
+        ...
+
+    async def ids_evidencias(self, siniestro_id: UUID) -> frozenset[UUID]: ...
+
+    # HU-W22 (DS3-23): el siniestro paramétrico, una sola vez por evento y póliza.
+    async def siniestro_parametrico(self, evento_id: UUID, poliza_id: UUID) -> Siniestro | None:
+        """El siniestro PARAMETRICO de ese evento y esa póliza, si ya existe."""
+        ...
+
+    async def insertar_parametrico(self, siniestro: Siniestro) -> bool:
+        """`INSERT ... ON CONFLICT (evento_id, poliza_id) DO NOTHING`: False si otra transacción ya
+        había creado el de ese evento y esa póliza (la barrera de negocio contra el duplicado)."""
+        ...
+
+    async def reservar_plazos_vencidos(self, ahora: datetime, lote: int) -> list[Siniestro]:
+        """Hasta `lote` casos FALTA_SOPORTE con el plazo vencido, bloqueados con `FOR UPDATE SKIP
+        LOCKED` (varias réplicas nunca toman el mismo), el más antiguo primero."""
+        ...
+
+    async def guardar_transicion(self, siniestro: Siniestro, version_anterior: int) -> None:
+        """Escribe el estado, el reloj, el plazo y la liquidación; falla si la versión cambió."""
+        ...
+
+    async def registrar_decision(self, decision: DecisionRegistrada) -> None:
+        """Lanza `DecisionFinalDuplicada` si el siniestro ya tiene una decisión final."""
+        ...
+
+    async def guardar_asignacion(self, siniestro: Siniestro, version_anterior: int) -> None: ...
+
+    async def agregar_historial(self, entrada: EntradaHistorial) -> None: ...
+
+    # HU-W23 (DS3-25): el resultado del pago que informó `dinero`, en las columnas `pago_*` que
+    # existen desde W19 (sin migración).
+    async def estado_pago(self, siniestro_id: UUID) -> EstadoPago | None:
+        """`pago_estado` del siniestro; nulo si `dinero` aún no informó."""
+        ...
+
+    async def guardar_pago(self, resultado: ResultadoPago) -> None:
+        """Escribe `pago_*`. La transacción ya tiene el siniestro bloqueado (`FOR UPDATE`)."""
+        ...
+
+    # Outbox: el evento se escribe en la misma transacción que el cambio o la consulta.
+    async def evento_en_evaluacion(
+        self, siniestro: Siniestro, ocurrido_en: datetime, motivo: str = "ASIGNACION"
+    ) -> None: ...
+
+    async def evento_aprobado(
+        self,
+        siniestro: Siniestro,
+        referencia_pago: str,
+        decidido_por: UUID | None,
+        aprobado_en: datetime,
+    ) -> None:
+        """`decidido_por` es null en un paramétrico (R-65)."""
+        ...
+
+    async def evento_rechazado(
+        self, siniestro: Siniestro, causal: CausalRechazo, decidido_por: UUID, decidido_en: datetime
+    ) -> None: ...
+
+    async def evento_soporte_solicitado(
+        self,
+        siniestro: Siniestro,
+        documentos: tuple[SoporteSolicitable, ...],
+        canal: CanalSoporte,
+        decidido_por: UUID,
+        ocurrido_en: datetime,
+    ) -> None: ...
+
+    async def evento_consultado(
+        self, siniestro: Siniestro, actor_id: str, ocurrido_en: datetime
+    ) -> None: ...
+
+    async def evento_evidencia_consultada(
+        self, evidencia: Evidencia, actor_id: str, expira_en: datetime, ocurrido_en: datetime
+    ) -> None: ...
+
+    async def evento_acceso_denegado(
+        self, acceso: AccesoDenegado, ocurrido_en: datetime
+    ) -> None: ...
+
+
+class SiniestrosRepositorio(Protocol):
+    async def evidencia_cliente(
+        self, cliente_id: UUID, siniestro_id: UUID, evidencia_id: UUID
+    ) -> tuple[bool, Evidencia | None, bool]:
+        """(¿siniestro propio?, evidencia de ese siniestro, ¿confirmada?)."""
+        ...
+
+    def transaccion(self) -> AbstractAsyncContextManager[TxSiniestros]: ...
+
+    async def bandeja(self, filtro: FiltroBandeja) -> PaginaSiniestros:
+        """Lanza `SolicitudInvalida` si el cursor no es válido."""
+        ...
+
+    async def indicadores(
+        self,
+        actor_id: UUID,
+        desde: datetime,
+        hasta: datetime,
+        corte: datetime,
+        compromiso_horas: int,
+    ) -> Indicadores: ...
+
+    async def detalle(self, siniestro_id: UUID) -> DetalleLeido | None: ...
+
+    async def evidencia(
+        self, siniestro_id: UUID, evidencia_id: UUID
+    ) -> tuple[bool, Evidencia | None]:
+        """(¿existe el siniestro?, la evidencia si es de ese siniestro)."""
+        ...
+
+    async def pagos_parametricos(
+        self, siniestro_ids: Sequence[UUID]
+    ) -> tuple[PagoParametrico, ...]:
+        """El estado de pago de los siniestros PARAMETRICO pedidos (HU-W22, H09), en una consulta.
+        Los ids inexistentes o de otro origen no aparecen."""
+        ...

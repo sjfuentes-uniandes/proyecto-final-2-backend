@@ -120,9 +120,10 @@ class VerificarRegistro:
         """Solo puede registrarse quien un asesor dio de alta: el cliente se resuelve por su
         documento y se le liga el `registro_id` y el correo (AC3: reintentar no crea otro).
 
-        Si el asesor informó un correo, es el único con el que puede registrarse. Solo una
-        verificación exitosa devuelve el token que exige el pre sign-up de Cognito, y va ligado
-        al correo: no sirve para crear la cuenta con otro.
+        El correo que pudo informar el asesor no condiciona el registro: basta el documento. Una
+        vez que un primer intento liga un correo, ese es el único con el que se puede seguir.
+        Solo una verificación exitosa devuelve el token que exige el pre sign-up de Cognito, y va
+        ligado al correo: no sirve para crear la cuenta con otro.
         """
         correo = token_registro.normalizar_correo(correo)
         cliente = await asyncio.to_thread(
@@ -132,7 +133,7 @@ class VerificarRegistro:
             raise ClienteNoRegistrado()
         if cliente.sub is not None:
             raise RegistroYaVinculado()
-        if cliente.correo is not None and cliente.correo != correo:
+        if cliente.registro_id is not None and cliente.correo != correo:
             raise RegistroConCorreoDistinto()
         if cliente.registro_id != registro_id or cliente.correo != correo:
             cliente = await asyncio.to_thread(

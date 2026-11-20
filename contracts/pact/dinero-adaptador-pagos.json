@@ -273,6 +273,277 @@
         "status": 404
       },
       "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una consulta de un desembolso que el proveedor confirmó",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el proveedor de pagos tiene el desembolso confirmado"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Correlation-Id": [
+            "corr-pacto-dinero"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/desembolsos/IND-88-2026-0444-01",
+        "query": {
+          "beneficiarioRef": [
+            "ben-sint-001"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "content": {
+            "estado": "CONFIRMADO",
+            "motivo": null,
+            "referencia": "IND-88-2026-0444-01",
+            "transaccionId": "TRX-SINT-1"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.transaccionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una consulta de un desembolso que el proveedor rechazó",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el proveedor de pagos tiene el desembolso rechazado"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Correlation-Id": [
+            "corr-pacto-dinero"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/desembolsos/IND-88-2026-0445-01",
+        "query": {
+          "beneficiarioRef": [
+            "ben-sint-rechaza"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "content": {
+            "estado": "RECHAZADO",
+            "motivo": "BENEFICIARIO_NO_HABILITADO",
+            "referencia": "IND-88-2026-0445-01",
+            "transaccionId": null
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.motivo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una consulta de un desembolso que nunca llegó al proveedor",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el proveedor de pagos no tiene el desembolso"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-Correlation-Id": [
+            "corr-pacto-dinero"
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/desembolsos/IND-88-2026-0446-01",
+        "query": {
+          "beneficiarioRef": [
+            "ben-sint-caido"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "content": {
+            "codigo": "DESEMBOLSO_NO_ENCONTRADO"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "status": 404
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una orden de desembolso que el proveedor confirma",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el proveedor de pagos confirma el desembolso"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "beneficiarioRef": "ben-sint-001",
+            "moneda": "COP",
+            "monto": "2500000.00",
+            "referencia": "IND-88-2026-0442-01"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "X-Correlation-Id": [
+            "corr-pacto-dinero"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/desembolsos"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "estado": "CONFIRMADO",
+            "motivo": null,
+            "referencia": "IND-88-2026-0442-01",
+            "transaccionId": "TRX-SINT-1"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.transaccionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "una orden de desembolso que el proveedor rechaza",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "el proveedor de pagos rechaza el desembolso"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "beneficiarioRef": "ben-sint-rechaza",
+            "moneda": "COP",
+            "monto": "2500000.00",
+            "referencia": "IND-88-2026-0443-01"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "X-Correlation-Id": [
+            "corr-pacto-dinero"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/desembolsos"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "estado": "RECHAZADO",
+            "motivo": "BENEFICIARIO_NO_HABILITADO",
+            "referencia": "IND-88-2026-0443-01",
+            "transaccionId": null
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.motivo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
     }
   ],
   "metadata": {

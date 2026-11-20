@@ -35,6 +35,13 @@ UMBRALES: dict[str, Umbral] = {
     "adaptador-firma": Umbral(90, 0),
     # HU-M10: la proyección de pólizas es negocio asegurador, como polizas.
     "consulta": Umbral(90, 85),
+    # HU-W19: negocio asegurador (§12.2), como polizas y dinero.
+    "siniestros": Umbral(90, 85),
+    # HU-W21: adaptador-telemetria conecta con un aliado (§12.2), como adaptador-pagos.
+    "adaptador-telemetria": Umbral(90, 0),
+    # HU-W21: pagos-parametricos es automatización (§12.2: activación paramétrica, deduplicación y
+    # contrapresión), ≥ 85 % de líneas.
+    "pagos-parametricos": Umbral(85, 0),
 }
 SIN_UMBRAL = Umbral(0, 0)
 

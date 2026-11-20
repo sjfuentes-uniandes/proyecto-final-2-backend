@@ -17,10 +17,15 @@ def _nominal(request: httpx.Request) -> httpx.Response:
         referencia = json.loads(request.content)["referencia"]
     else:
         referencia = parse_qs(request.url.query.decode())["referencia"][0]
+    estado, transaccion = (
+        ("CONFIRMADO", "TRX-SINT-1")
+        if request.url.path.endswith("/desembolsos")
+        else ("APROBADO", "TX-SINT-C01")
+    )
     cuerpo = {
         "referencia": referencia,
-        "estado": "APROBADO",
-        "transaccionId": "TX-SINT-C01",
+        "estado": estado,
+        "transaccionId": transaccion,
         "motivo": None,
     }
     return httpx.Response(200, json=cuerpo)

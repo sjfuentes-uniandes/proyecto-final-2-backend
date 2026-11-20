@@ -75,6 +75,7 @@ igual y no se solapan: estos exigen una `referencia` uuid.
 | Caso | Cliente (`pagador`) | Cobro | Consulta de estado |
 | --- | --- | --- | --- |
 | Aprobado | C01 `00000000-0000-4000-8000-000000000001` | 200 `{"referencia", "estado": "APROBADO", "transaccionId": "TX-SINT-C01", "motivo": null}`, 50 ms | 200, el mismo cuerpo |
+| Aprobado | C28–C33 `…00000000001c` a `…000000000021` (clones de C01) | Igual, con `TX-SINT-C28` … `TX-SINT-C33` | 200, el mismo cuerpo |
 | Rechazado | C02 `00000000-0000-4000-8000-000000000002` | 200 `{"referencia", "estado": "RECHAZADO", "transaccionId": null, "motivo": "FONDOS_INSUFICIENTES"}`, 50 ms | 200, el mismo cuerpo |
 | Malformado | C05 `00000000-0000-4000-8000-000000000005` | 200 con el cuerpo `{"estado": ` (JSON inválido) | 404 `referencia_no_reconocida` (respaldo) |
 | Lento (incierto) | C06 `00000000-0000-4000-8000-000000000006` | 200 `APROBADO` (`TX-SINT-C06`) en 8000 ms, por encima del timeout de 5 s | 200 `APROBADO` (`TX-SINT-C06`): el cobro sí ocurrió |
@@ -92,6 +93,31 @@ omiten (también las incluye `pytest services/simulador-aliados/tests`):
 uv run pytest services/simulador-aliados/tests/module
 ```
 
+## Desembolsos por beneficiario sintético (`/pagos`), HU-W23
+
+`adaptador-pagos` ordena el pago de la indemnización con `referencia` = `IND-<codigo>-NN` (la clave idempotente) y
+`beneficiario` = el `beneficiarioRef` sintético de `SiniestroAprobado` (ADR 0015: nunca una cuenta). El caso lo elige
+el `beneficiario`; las referencias de la semilla de R7 (`ben-sint-001` a `ben-sint-008`) caen en confirmado salvo la
+última, que rechaza. Mismas reglas que los cobros: `X-Api-Key` e `Idempotency-Key` (cualquier valor) y respaldo de
+prioridad 10 (404) para cualquier otra solicitud.
+
+**Desembolso:** `POST /pagos/v1/desembolsos` con el cuerpo `{"referencia": "IND-88-2026-0442-01", "monto": "2500000.00",
+"moneda": "COP", "beneficiario": "ben-sint-001"}`. La respuesta devuelve la `referencia` recibida y un `transaccionId`
+`TRX-SINT-<referencia>` (el mismo para la misma referencia).
+
+**Consulta de estado** (conciliación de `dinero`): `GET /pagos/v1/desembolsos?referencia=<IND-…>&beneficiario=<ref>` con
+`X-Api-Key`. Sin memoria: responde por el beneficiario.
+
+| Caso | Beneficiario | Desembolso | Consulta de estado |
+| --- | --- | --- | --- |
+| Confirmado | `ben-sint-001` a `ben-sint-007` | 200 `{"referencia", "estado": "CONFIRMADO", "transaccionId": "TRX-SINT-<referencia>", "motivo": null}`, 50 ms | 200, el mismo cuerpo |
+| Confirmado (paramétrico, HU-W22) | `ben-par-<clienteId>` (UUID del cliente): el titular de un siniestro paramétrico | 200 `{"referencia", "estado": "CONFIRMADO", "transaccionId": "TRX-SINT-<referencia>", "motivo": null}`, 50 ms | 200, el mismo cuerpo |
+| Rechazado | `ben-sint-008` (VEN-01 de la semilla) y `ben-sint-rechaza` | 200 `{"referencia", "estado": "RECHAZADO", "transaccionId": null, "motivo": "BENEFICIARIO_NO_HABILITADO"}`, 50 ms | 200, el mismo cuerpo |
+| Lento (incierto) | `ben-sint-lento` | 200 `CONFIRMADO` en 8000 ms, por encima del timeout de 5 s: el desembolso sí ocurre | 200 `CONFIRMADO` |
+| Caído | `ben-sint-caido` | 503 `{"error": "unavailable"}` | 404 `{"error": "desembolso_no_encontrado"}`: la orden nunca llegó |
+| Duplicado | `ben-sint-duplicado` | 200 `CONFIRMADO` con `transaccionId` fijo `TRX-SINT-DUPLICADO`: la misma referencia devuelve el mismo | 200, el mismo cuerpo |
+| Otro beneficiario, sin encabezados, referencia que no es `IND-…` o sin `monto` ni `moneda` | — | 404 `referencia_no_reconocida` (respaldo) | 404 `referencia_no_reconocida` (respaldo) |
+
 ## Firma por cliente sintético (`/firma`), HU-W17
 
 `adaptador-firma` firma la huella sha256 del PDF de la póliza (ADR 0014, decisión 3: se firma la huella, no el PDF).
@@ -108,6 +134,7 @@ emitirse, y sin consulta de estado, porque reintentar con la misma `Idempotency-
 | Caso | Cliente (`firmante`) | Respuesta |
 | --- | --- | --- |
 | Firmado | C01 `00000000-0000-4000-8000-000000000001` | 200 `{"documentoId", "estado": "FIRMADO", "firmaId": "FIR-SINT-C01", "selloTiempo": "2026-01-01T00:00:00Z", "huella"}`, 50 ms |
+| Firmado | C28–C33 `…00000000001c` a `…000000000021` (clones de C01) | Igual, con `FIR-SINT-C28` … `FIR-SINT-C33` |
 | Malformado | C05 `00000000-0000-4000-8000-000000000005` | 200 con el cuerpo `{"estado": ` (JSON inválido) |
 | Lento (incierto) | C06 `00000000-0000-4000-8000-000000000006` | 200 `FIRMADO` (`FIR-SINT-C06`) en 8000 ms, por encima del timeout de 5 s: la firma sí ocurre |
 | Caído | C07 `00000000-0000-4000-8000-000000000007` | 503 `{"error": "unavailable"}` |

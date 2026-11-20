@@ -83,3 +83,5 @@ async def test_escribe_poliza_emitida_en_la_transaccion_recibida() -> None:
         {"codigo": "ITP", "nombre": "Incapacidad total y permanente", "obligatoria": False},
     ]
     assert payload.obj["ramo"] == {"codigo": "100", "nombre": "Vida hipotecario"}
+    # HU-W21 (DS3-20, opción A): el campo existe en el evento, pero `polizas` todavía no lo llena.
+    assert payload.obj["coberturaParametrica"] is None

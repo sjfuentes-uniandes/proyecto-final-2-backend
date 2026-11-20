@@ -12,3 +12,6 @@ CREATE DATABASE pagos_parametricos;
 CREATE DATABASE adaptador_telemetria;
 -- HU-W24: auditoria (Inbox y cabeza de la cadena de lotes).
 CREATE DATABASE auditoria;
+-- HU-W23: dinero (recaudos e indemnizaciones, Outbox e Inbox). Un volumen que ya existe no la tiene:
+-- `docker compose down -v` una vez, o `CREATE DATABASE dinero;` a mano.
+CREATE DATABASE dinero;

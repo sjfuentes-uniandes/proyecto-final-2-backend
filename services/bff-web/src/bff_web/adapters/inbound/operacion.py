@@ -1,4 +1,5 @@
-"""GET /operacion/trazas y /operacion/alertas para el back-office (grupo operacion).
+"""GET /operacion/trazas, /operacion/alertas, /operacion/capacidad, /operacion/continuidad y
+/operacion/continuidad/conciliacion para el back-office (grupo operacion).
 
 API Gateway publica la ruta como /web/operacion/trazas, valida el token con el
 autorizador de Cognito y sobrescribe X-Authenticated-Issuer y
@@ -9,21 +10,26 @@ import asyncio
 import logging
 from datetime import datetime
 from functools import lru_cache
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from solventa_common.correlation import es_valido
+from solventa_common.errors import ErrorNegocio, RutaB2
 
 from bff_web.adapters.inbound.autorizacion import requerir_grupo
-from bff_web.adapters.inbound.socios import api_socios
-from bff_web.adapters.outbound import cloudwatch
+from bff_web.adapters.inbound.socios import ErrorDto, api_socios
+from bff_web.adapters.outbound import capacidad, cloudwatch, continuidad_aws
 from bff_web.adapters.outbound.api_socios import ApiSocios
 from bff_web.adapters.outbound.xray import crear_repositorio
 from bff_web.application.consultar_alertas import ConsultarAlertas
+from bff_web.application.consultar_capacidad import ConsultarCapacidad
+from bff_web.application.consultar_continuidad import ConsultarConciliacion, ConsultarContinuidad
 from bff_web.application.consultar_traza import ConsultarTraza
 from bff_web.config import settings
 from bff_web.domain.alertas import AlertaAbierta, PanelAlertas, leer_catalogo, leer_umbrales
+from bff_web.domain.capacidad import PanelCapacidad
+from bff_web.domain.continuidad import Continuidad
 from bff_web.domain.trazas import DetalleTraza, FiltroTrazas
 
 router = APIRouter(prefix="/operacion", tags=["operacion"])
@@ -239,3 +245,300 @@ async def obtener_alertas(
         logger.error("no se pudieron leer las alarmas", extra={"error_type": type(error).__name__})
         raise HTTPException(502, "No se pudieron leer las alarmas del ambiente") from error
     return await _respuesta_alertas(panel, socios)
+
+
+# --- HU-W29: Operación › Continuidad y Conciliación ---------------------------------------
+class ZonaRespuesta(BaseModel):
+    zona: str
+    tareas_saludables: int
+    tareas_esperadas: int
+    trafico_pct: float | None
+    estado: Literal["SALUDABLE", "DEGRADADA", "RETIRADA", "NO_DISPONIBLE"]
+
+
+class BaseRespuesta(BaseModel):
+    estado: Literal["MULTI_AZ", "FAILOVER_EN_CURSO", "STANDBY_PROMOVIDO"]
+    desde: datetime | None
+
+
+class RecorridoRespuesta(BaseModel):
+    id: str
+    nombre: str
+    estado: Literal["OPERANDO", "DEGRADADO"]
+    alarmas_abiertas: list[str]
+
+
+class HitoRespuesta(BaseModel):
+    instante: datetime
+    fuente: Literal["FIS", "ECS", "RDS", "ALARMA"]
+    tipo: Literal[
+        "INYECCION",
+        "FIN_INYECCION",
+        "TAREAS_DETENIDAS",
+        "TAREAS_INICIADAS",
+        "FAILOVER_INICIADO",
+        "FAILOVER_COMPLETADO",
+        "EVENTO_BASE",
+        "ALARMA",
+        "RECUPERADA",
+    ]
+    descripcion: str
+    zona: str | None
+    cantidad: int | None
+
+
+class IndicadoresRespuesta(BaseModel):
+    experimento: str
+    estado_conciliacion: str
+    transacciones_perdidas: int
+    cobros_duplicados: int
+    redireccion_s: int | None
+    objetivo_redireccion_s: int | None
+    porcentaje_error: float
+
+
+class ContinuidadRespuesta(BaseModel):
+    ambiente: str
+    estado: Literal["DOS_ZONAS", "UNA_ZONA", "SIN_DATOS"]
+    zonas: list[ZonaRespuesta]
+    base: BaseRespuesta
+    recorridos: list[RecorridoRespuesta]
+    cronologia: list[HitoRespuesta]
+    incidente_desde: datetime | None
+    indicadores: IndicadoresRespuesta | None
+
+
+# El informe se devuelve tal como lo genera experiments/hu-w29/reconciliar.py (camelCase): el
+# botón "Exportar informe" de I05 descarga ese mismo JSON.
+class VerificacionInforme(BaseModel):
+    id: str
+    descripcion: str
+    esperado: int
+    observado: int
+    resultado: Literal["COINCIDE", "DIFERENCIA", "PENDIENTE"]
+    detalle: list[dict[str, Any]]
+
+
+class VentanaInforme(BaseModel):
+    desde: str
+    hasta: str
+
+
+class ResumenInforme(BaseModel):
+    # Nombres del informe (camelCase), como los escribe reconciliar.py.
+    confirmadas: int
+    perdidas: int
+    duplicadas: int
+    cobrosDuplicados: int
+    dlqSinExplicacion: int
+    pendientesOutbox: int
+    solicitudes: int
+    solicitudesConError: int
+    porcentajeError: float
+
+
+class InformeConciliacion(BaseModel):
+    version: Literal[1]
+    experimento: str
+    generado: str
+    ventana: VentanaInforme
+    estado: Literal["SIN_DIFERENCIAS", "CON_DIFERENCIAS", "PENDIENTE"]
+    resumen: ResumenInforme
+    verificaciones: list[VerificacionInforme]
+    recorridos: dict[str, dict[str, Any]]
+    continuidad: dict[str, Any] | None = None
+    dlq: dict[str, Any]
+
+
+@lru_cache
+def _repositorios_continuidad() -> tuple[Any, Any, Any]:
+    return continuidad_aws.crear_repositorios(
+        settings.aws_region,
+        settings.continuidad_eventos,
+        settings.continuidad_alb,
+        settings.continuidad_bucket,
+    )
+
+
+@lru_cache
+def consultar_continuidad() -> ConsultarContinuidad:
+    eventos, trafico, informes = _repositorios_continuidad()
+    return ConsultarContinuidad(
+        eventos,
+        trafico,
+        cloudwatch.crear_repositorio(settings.aws_region, settings.environment),
+        informes,
+        settings.alertas_prefijo,
+        settings.continuidad_recorridos,
+        {nombre: str(e.get("titulo", nombre)) for nombre, e in settings.alertas_catalogo.items()},
+    )
+
+
+@lru_cache
+def consultar_conciliacion() -> ConsultarConciliacion:
+    return ConsultarConciliacion(_repositorios_continuidad()[2])
+
+
+def _respuesta_continuidad(c: Continuidad) -> ContinuidadRespuesta:
+    return ContinuidadRespuesta(
+        ambiente=settings.environment,
+        estado=c.estado,
+        zonas=[ZonaRespuesta(**vars(z)) for z in c.zonas],
+        base=BaseRespuesta(**vars(c.base)),
+        recorridos=[RecorridoRespuesta(**vars(r)) for r in c.recorridos],
+        cronologia=[HitoRespuesta(**vars(h)) for h in c.cronologia],
+        incidente_desde=c.incidente_desde,
+        indicadores=IndicadoresRespuesta(**vars(c.indicadores)) if c.indicadores else None,
+    )
+
+
+@router.get(
+    "/continuidad",
+    response_model=ContinuidadRespuesta,
+    dependencies=[Depends(requerir_grupo(settings.grupo_operacion))],
+)
+async def obtener_continuidad(
+    caso: Annotated[ConsultarContinuidad, Depends(consultar_continuidad)],
+    horas: Annotated[int, Query(ge=1, le=24)] = 6,
+) -> ContinuidadRespuesta:
+    try:
+        continuidad = await asyncio.to_thread(caso.ejecutar, horas)
+    except Exception as error:  # CloudWatch no disponible, sin permisos o consulta vencida
+        logger.error("no se pudo leer la continuidad", extra={"error_type": type(error).__name__})
+        raise HTTPException(502, "No se pudo leer el estado de continuidad del ambiente") from error
+    return _respuesta_continuidad(continuidad)
+
+
+@router.get(
+    "/continuidad/conciliacion",
+    response_model=InformeConciliacion,
+    dependencies=[Depends(requerir_grupo(settings.grupo_operacion))],
+)
+async def obtener_conciliacion(
+    caso: Annotated[ConsultarConciliacion, Depends(consultar_conciliacion)],
+) -> Any:
+    try:
+        informe = await asyncio.to_thread(caso.ejecutar)
+    except Exception as error:  # S3 no disponible, sin permisos o JSON ilegible
+        logger.error(
+            "no se pudo leer el informe de conciliación",
+            extra={"error_type": type(error).__name__},
+        )
+        raise HTTPException(502, "No se pudo leer el informe de conciliación") from error
+    if informe is None:
+        raise HTTPException(404, "No hay informe de conciliación publicado en este ambiente")
+    try:
+        return InformeConciliacion.model_validate(informe)
+    except ValidationError as error:
+        logger.error(
+            "informe de conciliación con otro formato", extra={"error_type": "ValidationError"}
+        )
+        raise HTTPException(
+            502, "El informe de conciliación no tiene el formato esperado"
+        ) from error
+
+
+# --- HU-W08: Operación › Tablero, cotizaciones por minuto y capacidad -----------------------
+# Errores en formato B2 ({codigo, mensaje, correlationId, detalles}) solo en esta ruta: /trazas
+# y /alertas conservan {"detail"}. Si falla AWS o falta la configuración, 503
+# SERVICIO_NO_DISPONIBLE sin detalles (contracts/codigos-error.md).
+def _error(descripcion: str) -> dict[str, Any]:
+    return {"model": ErrorDto, "description": descripcion}
+
+
+router_capacidad = APIRouter(
+    route_class=RutaB2,
+    responses={
+        403: _error("ROL_NO_AUTORIZADO: falta el grupo operacion o no es del back-office"),
+        503: _error(
+            "SERVICIO_NO_DISPONIBLE: CloudWatch o Application Auto Scaling no respondieron, "
+            "o el ambiente no tiene configurada la capacidad (sin detalles)"
+        ),
+    },
+)
+
+
+class PuntoCapacidadRespuesta(BaseModel):
+    instante: datetime
+    valor: int
+
+
+class EscaladoRespuesta(BaseModel):
+    inicio: datetime
+    fin: datetime | None
+    duracion_s: int | None
+    descripcion: str
+    estado: str
+
+
+class CapacidadRespuesta(BaseModel):
+    ambiente: str
+    servicio: str
+    ventana_min: int
+    cotizaciones_por_minuto: list[PuntoCapacidadRespuesta]
+    tareas_activas: int | None  # null sin puntos de CPUUtilization en la ventana
+    minimo: int
+    maximo: int
+    ultimo_escalado: EscaladoRespuesta | None
+
+
+class CapacidadNoConfigurada(Exception):
+    """El ambiente no entrega CAPACIDAD_CLUSTER y CAPACIDAD_SERVICIO (infra/apps/ecs.tf)."""
+
+
+@lru_cache
+def consultar_capacidad() -> ConsultarCapacidad | None:
+    if not (settings.capacidad_cluster and settings.capacidad_servicio):
+        return None
+    return ConsultarCapacidad(
+        capacidad.crear_repositorio(
+            settings.aws_region,
+            settings.metrics_namespace,
+            settings.environment,
+            settings.capacidad_cluster,
+            settings.capacidad_servicio,
+        )
+    )
+
+
+def _respuesta_capacidad(panel: PanelCapacidad) -> CapacidadRespuesta:
+    escalado = panel.ultimo_escalado
+    return CapacidadRespuesta(
+        ambiente=settings.environment,
+        servicio=panel.servicio,
+        ventana_min=panel.ventana_min,
+        cotizaciones_por_minuto=[
+            PuntoCapacidadRespuesta(instante=p.instante, valor=p.valor)
+            for p in panel.cotizaciones_por_minuto
+        ],
+        tareas_activas=panel.tareas_activas,
+        minimo=panel.minimo,
+        maximo=panel.maximo,
+        ultimo_escalado=EscaladoRespuesta(**vars(escalado)) if escalado else None,
+    )
+
+
+@router_capacidad.get(
+    "/capacidad",
+    response_model=CapacidadRespuesta,
+    dependencies=[Depends(requerir_grupo(settings.grupo_operacion))],
+)
+async def obtener_capacidad(
+    caso: Annotated[ConsultarCapacidad | None, Depends(consultar_capacidad)],
+) -> CapacidadRespuesta:
+    try:
+        if caso is None:
+            raise CapacidadNoConfigurada
+        # boto3 es bloqueante: se ejecuta fuera del event loop.
+        panel = await asyncio.to_thread(caso.ejecutar)
+    except Exception as error:  # sin configuración, CloudWatch o Auto Scaling no disponibles
+        # Solo el tipo: el mensaje de AWS puede traer cuentas, ARN o nombres de recursos.
+        logger.error("no se pudo leer la capacidad", extra={"error_type": type(error).__name__})
+        raise ErrorNegocio(
+            "SERVICIO_NO_DISPONIBLE", "No se pudo leer la capacidad del servicio", 503
+        ) from error
+    return _respuesta_capacidad(panel)
+
+
+# Después de declarar sus rutas: include_router copia las que existen (y conserva RutaB2).
+router.include_router(router_capacidad)

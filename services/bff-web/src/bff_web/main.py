@@ -13,9 +13,11 @@ from bff_web.adapters.inbound import (
     descartes,
     estado_polizas,
     operacion,
+    parametricos,
     perfilamiento,
     polizas,
     recaudos,
+    siniestros,
     socios,
     suscripciones,
     usuarios,
@@ -62,6 +64,13 @@ app.include_router(recaudos.router)
 app.include_router(polizas.router)
 # HU-W18: estado y listado de pólizas (consulta).
 app.include_router(estado_polizas.router)
+# HU-W19: siniestros del analista (siniestros).
+# La decisión primero: `/catalogos-decision` va antes de `/{siniestroId}`.
+# HU-W22 (H09): `/v1/siniestros/parametricos/…` va antes que `/{siniestroId}` y que las demás rutas
+# de siniestros, para que `parametricos` nunca se lea como un identificador.
+app.include_router(parametricos.router)
+app.include_router(siniestros.router_decision)
+app.include_router(siniestros.router)
 # HU-W24: cola de descarte de los eventos paramétricos (pagos-parametricos).
 app.include_router(descartes.router)
 

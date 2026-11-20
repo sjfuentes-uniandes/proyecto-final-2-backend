@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "3.1",
+  "confidenceScore": 0.93,
+  "data": {
+    "estimatedMonthlyIncome": {
+      "amount": "6500000.00",
+      "currency": "COP"
+    }
+  }
+}

@@ -60,6 +60,13 @@ TOKEN = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjMifQ.firma-del-token"
         "fechaNacimiento",
         "suma_asegurada",
         "sumaAsegurada",
+        "lat",
+        "lon",
+        "lng",
+        "latitud",
+        "longitud",
+        "latitude",
+        "longitude",
     ],
 )
 def test_claves_sensibles(clave: str) -> None:
@@ -78,6 +85,7 @@ def test_claves_sensibles(clave: str) -> None:
         "opinion",
         "cotizacion_id",
         "version_reglas",
+        "latency_ms",
     ],
 )
 def test_claves_normales(clave: str) -> None:
@@ -143,6 +151,24 @@ def test_enmascara_texto_libre() -> None:
     )
     assert SECRETO not in texto and TOKEN not in texto
     assert enmascarar(f"Bearer {TOKEN}") == "Bearer [REDACTADO]"
+
+
+def test_ubicacion_no_aparece_en_logs_estructurados_ni_texto() -> None:
+    ubicacion = {"permiso": "PRECISO", "lat": 4.60971, "lon": -74.08175}
+    salida = sanitizar({"reporte": {"ubicacion": ubicacion}})
+    assert salida["reporte"]["ubicacion"] == {
+        "permiso": "PRECISO",
+        "lat": REDACTADO,
+        "lon": REDACTADO,
+    }
+    for texto in (
+        json.dumps(ubicacion),
+        str(ubicacion),
+        "latitude=4.60971 longitude=-74.08175",
+        "lat=4.60971&lon=-74.08175",
+    ):
+        seguro = enmascarar(texto)
+        assert "4.60971" not in seguro and "-74.08175" not in seguro
 
 
 def test_modelos_pydantic() -> None:

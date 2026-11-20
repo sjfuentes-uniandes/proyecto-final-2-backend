@@ -66,8 +66,7 @@ class SolicitudVinculacion(Dto):
         400: error("ERROR_HTTP: el cuerpo no se puede leer como JSON"),
         404: error("CLIENTE_NO_REGISTRADO: ningún asesor dio de alta ese documento"),
         409: error(
-            "REGISTRO_CORREO_DISTINTO (el correo no es el que el asesor o el primer intento "
-            "ligaron) o "
+            "REGISTRO_CORREO_DISTINTO (el correo no es el que ligó el primer intento) o "
             "REGISTRO_YA_VINCULADO (la cuenta de este registro ya existe)"
         ),
         422: error("SOLICITUD_INVALIDA"),

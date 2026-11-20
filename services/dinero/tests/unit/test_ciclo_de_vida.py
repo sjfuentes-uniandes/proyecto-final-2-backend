@@ -291,11 +291,22 @@ def crear(
     monkeypatch.setattr(psycopg_pool, "AsyncConnectionPool", PoolFalso)
 
     def _crear(con_base: bool = True, **cambios: Any) -> tuple[FastAPI, Any]:
+        # La conciliación de indemnizaciones (HU-W23) va apagada aquí: estas pruebas son de las
+        # tareas de HU-W16; las de W23 están en `test_ciclo_de_vida_indemnizaciones.py`.
+        cambios.setdefault("indemnizacion_conciliacion_habilitada", False)
         settings = Settings(DB_HOST="rds.interno" if con_base else None, **cambios)
         app = main.crear_app(settings)
         return app, capturar_logs()
 
     return _crear
+
+
+def _avisos(logs: Any) -> list[dict[str, Any]]:
+    """Los WARNING de las tareas de HU-W16: sin el aviso de que el consumidor de indemnizaciones
+    (HU-W23) no tiene cola, que estas pruebas no fijan (ver `test_indemnizaciones_*` más abajo)."""
+    return [
+        r for r in logs.de_nivel("WARNING") if r["message"] != main.MENSAJE_INDEMNIZACIONES_SIN_COLA
+    ]
 
 
 def _esperar(condicion: Callable[[], bool], limite_s: float = 5) -> None:
@@ -315,7 +326,7 @@ def test_sin_cola_no_hay_consumidor_y_se_avisa(
         assert cliente.get("/health").json() == {"status": "ok"}
         assert getattr(app.state, "consumidor_ofertas", None) is None
     assert ConsumidorFalso.creados == [] and aws["sqs"] == []
-    [aviso] = logs.de_nivel("WARNING")
+    [aviso] = _avisos(logs)
     assert (aviso["message"], aviso["missing"]) == (
         main.MENSAJE_CONSUMIDOR_SIN_COLA,
         "SQS_DINERO_ACEPTACIONES_URL",
@@ -352,7 +363,7 @@ def test_con_cola_consume_con_lote_2_y_espera_10_y_se_detiene_antes_del_pool(
     assert tarea.done() and not tarea.cancelled()
     assert Bitacora.eventos == ["consumidor parado", "pool cerrado"]
     assert cliente_pagos.is_closed
-    assert logs.de_nivel("ERROR") == [] and logs.de_nivel("WARNING") == []
+    assert logs.de_nivel("ERROR") == [] and _avisos(logs) == []
 
 
 @pytest.mark.usefixtures("tareas")
@@ -453,7 +464,7 @@ def test_la_parada_del_consumidor_espera_con_limite_y_luego_cancela(
         tarea = app.state.consumidor_ofertas
     assert time.monotonic() - inicio < 5
     assert tarea.cancelled()
-    [aviso] = logs.de_nivel("WARNING")
+    [aviso] = _avisos(logs)
     assert (aviso["message"], aviso["limit_s"]) == (main.MENSAJE_CONSUMIDOR_SIN_PARAR, 0.05)
     assert Bitacora.eventos == ["pool cerrado"]
 
@@ -577,7 +588,7 @@ def test_la_parada_del_relay_espera_con_limite_y_luego_cancela(
         tarea = app.state.relay_outbox
     assert tarea.cancelled()
     # El otro WARNING es el del consumidor sin cola (no la hay en esta prueba).
-    [aviso] = [r for r in logs.de_nivel("WARNING") if r["message"] == main.MENSAJE_RELAY_SIN_PARAR]
+    [aviso] = [r for r in _avisos(logs) if r["message"] == main.MENSAJE_RELAY_SIN_PARAR]
     assert aviso["limit_s"] == 0.05
 
 
@@ -648,7 +659,7 @@ def test_la_conciliacion_arranca_por_defecto_con_el_pool_y_el_cliente_del_adapta
     assert tarea.done() and not tarea.cancelled()
     assert Bitacora.eventos == ["conciliacion parado", "pool cerrado"]
     # Sin cola solo avisa el consumidor; la conciliación no depende de ella.
-    assert [r["message"] for r in logs.de_nivel("WARNING")] == [main.MENSAJE_CONSUMIDOR_SIN_COLA]
+    assert [r["message"] for r in _avisos(logs)] == [main.MENSAJE_CONSUMIDOR_SIN_COLA]
     assert logs.de_nivel("ERROR") == []
 
 
@@ -672,9 +683,7 @@ def test_sin_base_la_conciliacion_no_arranca_y_se_avisa(
         assert cliente.get("/health").json() == {"status": "ok"}
         assert getattr(app.state, "conciliacion", None) is None
     assert ConciliacionFalsa.creados == []
-    [aviso] = [
-        r for r in logs.de_nivel("WARNING") if r["message"] == main.MENSAJE_CONCILIACION_SIN_BASE
-    ]
+    [aviso] = [r for r in _avisos(logs) if r["message"] == main.MENSAJE_CONCILIACION_SIN_BASE]
     assert aviso["missing"] == "base"
 
 
@@ -708,9 +717,7 @@ def test_la_parada_de_la_conciliacion_espera_con_limite_y_luego_cancela(
     with TestClient(app):
         tarea = app.state.conciliacion
     assert tarea.cancelled()
-    [aviso] = [
-        r for r in logs.de_nivel("WARNING") if r["message"] == main.MENSAJE_CONCILIACION_SIN_PARAR
-    ]
+    [aviso] = [r for r in _avisos(logs) if r["message"] == main.MENSAJE_CONCILIACION_SIN_PARAR]
     assert aviso["limit_s"] == 0.05
     assert Bitacora.eventos == ["pool cerrado"]
 
@@ -754,5 +761,5 @@ def test_los_limites_de_la_primera_fase_corren_en_paralelo(
         inicio = time.monotonic()
     assert time.monotonic() - inicio < 0.9  # en serie serían 1,0 s o más
     assert consumidor.cancelled() and conciliacion.cancelled()
-    avisos = {r["message"] for r in logs.de_nivel("WARNING")}
+    avisos = {r["message"] for r in _avisos(logs)}
     assert {main.MENSAJE_CONSUMIDOR_SIN_PARAR, main.MENSAJE_CONCILIACION_SIN_PARAR} <= avisos

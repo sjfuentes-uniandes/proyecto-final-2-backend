@@ -95,6 +95,11 @@ locals {
         EVIDENCIAS_BUCKET_SSE = local.p.evidence_bucket.sse
       } : {},
       contains(local.telemetria_archivers, name) ? { TELEMETRIA_ARCHIVO_PREFIJO = local.p.evidence_bucket.telemetry_prefix } : {},
+      name == "siniestros" ? {
+        UBICACION_OBLIGATORIA      = "true"
+        UBICACION_TIPOS_OPCIONALES = jsonencode(["AUXILIO_FUNERARIO", "ENFERMEDADES_GRAVES"])
+        UBICACION_PRECISION_MAX_M  = "100"
+      } : {},
       # Cache-Aside: vacía con cache_enabled = false; el servicio lee de RDS.
       service.cache ? { CACHE_URL = local.p.cache.url } : {},
       contains(local.latency_budget_readers, name) ? { LATENCY_BUDGET_MS = jsonencode(var.latency_budget_ms) } : {},
@@ -118,6 +123,18 @@ locals {
         ALERTAS_ADVERTENCIA_PCT    = var.warning_alarms ? tostring(var.warning_ratio * 100) : "100"
         ALERTAS_ATENCION_MIN       = tostring(var.alert_attention_minutes)
         ALERTAS_FALSO_POSITIVO_MIN = tostring(var.false_positive_minutes)
+      } : {},
+      contains(local.continuity_readers, name) ? {
+        CONTINUIDAD_EVENTOS    = local.p.events_log_group
+        CONTINUIDAD_ALB        = local.p.alb.arn_suffix
+        CONTINUIDAD_RECORRIDOS = jsonencode(local.continuity_routes)
+        CONTINUIDAD_BUCKET     = local.experiments_bucket == null ? "" : local.experiments_bucket.name
+      } : {},
+      # HU-W08: todo o nada; sin capacity_service desplegado no hay panel que leer. Las métricas
+      # salen de METRICS_NAMESPACE, que ya reciben todos los servicios.
+      contains(local.capacity_readers, name) && contains(keys(local.deployed), local.capacity_service) ? {
+        CAPACIDAD_CLUSTER  = local.p.cluster.name
+        CAPACIDAD_SERVICIO = local.capacity_service
       } : {},
       # Último: las variables de QA del ambiente (service_environment) tienen prioridad.
       lookup(var.service_environment, name, {}),

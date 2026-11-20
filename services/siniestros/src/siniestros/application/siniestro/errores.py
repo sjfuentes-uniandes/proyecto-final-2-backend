@@ -1,0 +1,184 @@
+"""Errores funcionales de siniestros (HU-W19). Cada uno lleva su código estable de
+`contracts/codigos-error.md`; `RutaB2` los responde como {codigo, mensaje, correlationId, detalles}.
+Los mensajes no incluyen datos del caso."""
+
+from collections.abc import Sequence
+from typing import Any
+
+from solventa_common.errors import ErrorNegocio
+
+
+class ActorRequerido(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("ACTOR_REQUERIDO", "Falta el actor autenticado (X-Actor-Id)", 401)
+
+
+class RolNoAutorizado(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("ROL_NO_AUTORIZADO", "El rol no puede usar este recurso", 403)
+
+
+class SiniestroNoEncontrado(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("SINIESTRO_NO_ENCONTRADO", "El siniestro no existe", 404)
+
+
+class EvidenciaNoEncontrada(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("EVIDENCIA_NO_ENCONTRADA", "La evidencia no existe en este siniestro", 404)
+
+
+class EvidenciaNoDisponible(ErrorNegocio):
+    """El registro existe pero el objeto no está en el almacén: no se emite la URL."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "EVIDENCIA_NO_DISPONIBLE", "El archivo de la evidencia no está disponible", 404
+        )
+
+
+class BorradorNoEncontrado(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("BORRADOR_NO_ENCONTRADO", "El borrador no existe", 404)
+
+
+class EvidenciaNoCargada(ErrorNegocio):
+    def __init__(self, evidencias: Sequence[str] = ()) -> None:
+        super().__init__(
+            "EVIDENCIA_NO_CARGADA",
+            "El archivo no está disponible para confirmar",
+            409,
+            {"evidencias": list(evidencias)} if evidencias else {},
+        )
+
+
+class BorradorConvertido(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("BORRADOR_CONVERTIDO", "El borrador ya fue enviado", 409)
+
+
+class BorradorModificado(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__(
+            "BORRADOR_MODIFICADO", "El borrador cambió durante el envío; consulte y reintente", 409
+        )
+
+
+class EvidenciaYaConfirmada(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("EVIDENCIA_YA_CONFIRMADA", "La evidencia ya fue confirmada", 409)
+
+
+class IntegridadEvidenciaInvalida(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__(
+            "INTEGRIDAD_EVIDENCIA_INVALIDA",
+            "El archivo no coincide con la evidencia declarada",
+            422,
+        )
+
+
+class PolizaNoVigente(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("POLIZA_NO_VIGENTE", "La póliza no está vigente", 409)
+
+
+class TipoEvidenciaNoAdmitido(ErrorNegocio):
+    def __init__(self, tipos_admitidos: Sequence[str]) -> None:
+        super().__init__(
+            "TIPO_EVIDENCIA_NO_ADMITIDO",
+            "El formato de archivo no está admitido",
+            422,
+            {"tiposAdmitidos": list(tipos_admitidos)},
+        )
+
+
+class TamanoEvidenciaExcedido(ErrorNegocio):
+    def __init__(self, limite_bytes: int) -> None:
+        super().__init__(
+            "TAMANO_EVIDENCIA_EXCEDIDO",
+            "El archivo supera el tamaño máximo permitido",
+            422,
+            {"limiteBytes": limite_bytes},
+        )
+
+
+class DuracionVideoExcedida(ErrorNegocio):
+    def __init__(self, limite_segundos: int) -> None:
+        super().__init__(
+            "DURACION_VIDEO_EXCEDIDA",
+            "El video supera la duración máxima permitida",
+            422,
+            {"limiteSegundos": limite_segundos},
+        )
+
+
+class LimiteEvidenciasAlcanzado(ErrorNegocio):
+    def __init__(self, maximo: int) -> None:
+        super().__init__(
+            "LIMITE_EVIDENCIAS_ALCANZADO",
+            "El borrador alcanzó la cantidad máxima de archivos",
+            422,
+            {"maxArchivos": maximo},
+        )
+
+
+class ColaSinCasos(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("COLA_SIN_CASOS", "No hay siniestros sin asignar", 404)
+
+
+class IdempotenciaConflicto(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__(
+            "IDEMPOTENCIA_CONFLICTO", "La Idempotency-Key ya se usó con otra solicitud", 422
+        )
+
+
+class SolicitudInvalida(ErrorNegocio):
+    def __init__(self, campos: Sequence[str]) -> None:
+        detalles: dict[str, Any] = {"campos": list(campos)}
+        super().__init__("SOLICITUD_INVALIDA", "Solicitud inválida", 422, detalles)
+
+
+class DependenciaNoDisponible(ErrorNegocio):
+    def __init__(self, dependencia: str) -> None:
+        super().__init__(
+            "DEPENDENCIA_NO_DISPONIBLE",
+            "Una dependencia no responde",
+            503,
+            {"dependencia": dependencia},
+        )
+
+
+class TransicionNoPermitida(ErrorNegocio):
+    """El estado vigente no admite la decisión (DS3-02); `estadoActual` lo informa."""
+
+    def __init__(self, estado_actual: str) -> None:
+        super().__init__(
+            "TRANSICION_NO_PERMITIDA",
+            "El estado del siniestro no admite esta decisión",
+            409,
+            {"estadoActual": estado_actual},
+        )
+
+
+class CasoAsignadoAOtro(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("CASO_ASIGNADO_A_OTRO", "El caso está asignado a otro analista", 409)
+
+
+class JustificacionRequerida(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("JUSTIFICACION_REQUERIDA", "La justificación es obligatoria", 422)
+
+
+class CausalInvalida(ErrorNegocio):
+    def __init__(self) -> None:
+        super().__init__("CAUSAL_INVALIDA", "La causal no es válida", 422)
+
+
+class ValorFueraDeRango(ErrorNegocio):
+    def __init__(self, campos: Sequence[str]) -> None:
+        detalles: dict[str, Any] = {"campos": list(campos)}
+        super().__init__("VALOR_FUERA_DE_RANGO", "El valor está fuera de rango", 422, detalles)
