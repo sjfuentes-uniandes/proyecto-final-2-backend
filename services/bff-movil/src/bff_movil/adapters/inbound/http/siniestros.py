@@ -289,6 +289,7 @@ def _error_no_disponible() -> ErrorNegocio:
     "/borradores/{borradorId}",
     response_model=BorradorDetalleDto,
     responses={
+        400: error("ERROR_HTTP: el cuerpo no se puede leer como JSON"),
         401: _NO_AUTENTICADO,
         403: _ROL,
         404: _BORRADOR_NO_ENCONTRADO,
@@ -321,6 +322,7 @@ async def actualizar_borrador(
     status_code=201,
     response_model=EnvioDto,
     responses={
+        400: error("ERROR_HTTP: el cuerpo no se puede leer como JSON"),
         401: _NO_AUTENTICADO,
         403: error("ROL_NO_AUTORIZADO o POLIZA_NO_AUTORIZADA"),
         404: error("BORRADOR_NO_ENCONTRADO, CLIENTE_NO_ENCONTRADO o POLIZA_NO_ENCONTRADA"),
