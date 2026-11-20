@@ -88,7 +88,7 @@ Con esto, una `PolizaCancelada` (versión 2) que llega antes que la `PolizaEmiti
    - su ramo en `polizas` (`RAMOS`: `250` "Paramétrico", el de los datos sintéticos de HU-W21);
    - sus reglas de suscripción en la semilla QA del catálogo (`qa/reglas_suscripcion_qa_clima_lluvia.json`, las mismas de `vida-hipotecario` sin alternativas). Se publican con `CATALOGO_PRODUCTOS_QA`.
 
-Pruebas: `services/cotizacion/tests/unit/cotizacion/test_hu_w24_cobertura_parametrica.py`, `services/polizas/tests/unit/poliza/test_hu_w24_cobertura_parametrica.py`, `test_hu_w24_*` en `services/api-socios/tests/unit/test_ofertas.py` y `services/bff-web/tests/unit/test_cotizaciones.py`, y `ZONA_REQUERIDA` en `contracts/codigos-error.md`. El portal no pide la zona todavía: el formulario de contratación no cambió, y un producto paramétrico solo se cotiza por API.
+Pruebas: `services/cotizacion/tests/unit/cotizacion/test_hu_w24_cobertura_parametrica.py`, `services/polizas/tests/unit/poliza/test_hu_w24_cobertura_parametrica.py`, `test_hu_w24_*` en `services/api-socios/tests/unit/test_ofertas.py` y `services/bff-web/tests/unit/test_cotizaciones.py`, y `ZONA_REQUERIDA` en `contracts/codigos-error.md`. Las condiciones del producto (`GET /v1/productos/{id}/condiciones` en `cotizacion` y `bff-web`) traen `parametrico`, la regla del catálogo, o `null`. Con ella, el formulario «Nueva cotización» del portal ofrece el ramo paramétrico, pide la zona del riesgo, muestra la regla y deja solo «Cotizar sin perfilar», porque el producto no tiene modelo de riesgo.
 
 **`PolizaCancelada`:** ninguna historia del tablero cubre la cancelación de pólizas, así que `polizas` no la publica. Sigue siendo sintética (`contracts/datos-sinteticos/eventos-parametricos.json`, `cancelaciones` y `ordenCoberturas`): llegará con `aggregateVersion` = 2 cuando exista esa historia. Con eso, una cancelación atrasada no reactiva la cobertura ni una emisión atrasada reactiva una cancelada.
 
@@ -188,7 +188,6 @@ Necesita credenciales de AWS con `sns:Publish` y lectura del bucket de auditorí
 
 - La flecha `ServiciosWeb --> PagosParametricos` en `modelo_componentes.puml` y `modelo_despliegue.puml` (decisión B1).
 - `PolizaCancelada` publicada por `polizas` (con `aggregateVersion` = 2): no hay historia de cancelación en el tablero; hoy es sintética. `PolizaEmitida` ya publica `aggregateVersion` = 1.
-- Campo «Zona» en el formulario de contratación del portal para productos paramétricos (la API ya la acepta: `datosAsegurado.zona`).
 - Ejecutar en `int` el paso 13 del humo y la N3 (sección 10).
 - Pacto del portal (`web-bff-web.json`) para H10 y H11: el contrato del BFF se cubre hoy con la igualdad de DTO frente a `pagos-parametricos.yaml` (`test_openapi.py`).
 - Las E2E del portal solo corrieron en Chromium (Firefox y WebKit no están instalados en esta Mac).

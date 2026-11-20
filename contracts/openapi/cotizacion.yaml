@@ -941,6 +941,12 @@ components:
           title: Coberturas
         limites:
           $ref: '#/components/schemas/LimitesDto'
+        parametrico:
+          anyOf:
+          - $ref: '#/components/schemas/ReglaParametricaDto'
+          - type: 'null'
+          description: 'HU-W24: la regla del producto paramétrico (HU-W21); null si
+            no lo es. Con regla, la cotización exige datosAsegurado.zona (ZONA_REQUERIDA)'
       type: object
       required:
       - productoId
@@ -2256,3 +2262,32 @@ components:
         tal como se cotizaron.
 
         `polizas` la publica en `PolizaEmitida.coberturaParametrica`.'
+    ReglaParametricaDto:
+      properties:
+        tipoEvento:
+          type: string
+          title: Tipoevento
+        unidad:
+          type: string
+          title: Unidad
+        umbral:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Umbral
+        valorPago:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Valorpago
+        versionRegla:
+          type: string
+          title: Versionregla
+      type: object
+      required:
+      - tipoEvento
+      - unidad
+      - umbral
+      - valorPago
+      - versionRegla
+      title: ReglaParametricaDto
+      description: 'Regla del producto paramétrico (HU-W21): paga `valorPago` si `tipoEvento`
+        llega a `umbral`.'

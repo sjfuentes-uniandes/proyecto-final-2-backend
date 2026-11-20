@@ -91,13 +91,14 @@ class CotizacionFalsa:
     def __init__(self) -> None:
         self.solicitudes: list[httpx.Request] = []
         self.respuesta: httpx.Response | Exception = httpx.Response(201, json=COTIZACION)
+        self.condiciones: dict[str, Any] = CONDICIONES
 
     def __call__(self, solicitud: httpx.Request) -> httpx.Response:
         self.solicitudes.append(solicitud)
         if isinstance(self.respuesta, Exception):
             raise self.respuesta
         if solicitud.url.path.endswith("/condiciones"):
-            return httpx.Response(200, json=CONDICIONES)
+            return httpx.Response(200, json=self.condiciones)
         if solicitud.method == "GET":
             return httpx.Response(200, json=COTIZACION)
         return self.respuesta
@@ -156,11 +157,25 @@ def test_lectura_y_condiciones(cotizacion: CotizacionFalsa) -> None:
     leida = cliente.get(f"/v1/cotizaciones/{COTIZACION_ID}", headers=ASESOR)
     condiciones = cliente.get("/v1/productos/vida-hipotecario/condiciones", headers=ASESOR)
     assert leida.json()["primaTotal"] == "97460"
-    assert condiciones.json() == CONDICIONES
+    # HU-W24: un producto que no es paramétrico llega con `parametrico: null`.
+    assert condiciones.json() == CONDICIONES | {"parametrico": None}
     assert [s.url.path for s in cotizacion.solicitudes] == [
         f"/v1/cotizaciones/{COTIZACION_ID}",
         "/v1/productos/vida-hipotecario/condiciones",
     ]
+
+
+def test_hu_w24_las_condiciones_traen_la_regla_parametrica(cotizacion: CotizacionFalsa) -> None:
+    regla = {
+        "tipoEvento": "LLUVIA_ACUMULADA",
+        "unidad": "mm",
+        "umbral": "120",
+        "valorPago": "1400000.00",
+        "versionRegla": "2026.11.1",
+    }
+    cotizacion.condiciones = CONDICIONES | {"productoId": "clima-lluvia", "parametrico": regla}
+    respuesta = TestClient(app).get("/v1/productos/clima-lluvia/condiciones", headers=ASESOR)
+    assert respuesta.json()["parametrico"] == regla
 
 
 @pytest.mark.parametrize(

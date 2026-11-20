@@ -321,6 +321,16 @@ class LimitesDto(_Dto):
     edad: RangoDto
 
 
+class ReglaParametricaDto(_Dto):
+    """Regla del producto paramétrico (HU-W21): paga `valorPago` si `tipoEvento` llega a `umbral`."""
+
+    tipo_evento: str
+    unidad: str
+    umbral: TextoDecimal
+    valor_pago: TextoDecimal
+    version_regla: str
+
+
 class CondicionesProducto(_Dto):
     producto_id: str
     nombre: str
@@ -333,6 +343,14 @@ class CondicionesProducto(_Dto):
     vigente_hasta: datetime | None
     coberturas: list[CoberturaProductoDto]
     limites: LimitesDto
+    # HU-W24: aditivo; el portal pide `datosAsegurado.zona` solo si el producto es paramétrico.
+    parametrico: ReglaParametricaDto | None = Field(
+        default=None,
+        description=(
+            "HU-W24: la regla del producto paramétrico (HU-W21); null si no lo es. Con regla, la "
+            "cotización exige datosAsegurado.zona (ZONA_REQUERIDA)"
+        ),
+    )
 
 
 class ResumenCotizacionDto(_Dto):
@@ -538,6 +556,15 @@ def condiciones_de(condiciones: Condiciones) -> CondicionesProducto:
                 maximo=texto(limites.plazo_credito_meses.maximo),
             ),
             edad=RangoDto(minimo=texto(limites.edad.minimo), maximo=texto(limites.edad.maximo)),
+        ),
+        parametrico=None
+        if producto.parametrico is None
+        else ReglaParametricaDto(
+            tipo_evento=producto.parametrico.tipo_evento,
+            unidad=producto.parametrico.unidad,
+            umbral=producto.parametrico.umbral,
+            valor_pago=producto.parametrico.valor_pago,
+            version_regla=producto.parametrico.version_regla,
         ),
     )
 

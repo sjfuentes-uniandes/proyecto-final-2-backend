@@ -10,11 +10,12 @@ from dataclasses import replace
 from typing import Any
 
 import pytest
-from cotizacion.adapters.inbound.http.cotizaciones import error_cotizacion
+from cotizacion.adapters.inbound.http.cotizaciones import condiciones_de, error_cotizacion
 from cotizacion.adapters.inbound.http.suscripcion import _parametrica
 from cotizacion.adapters.outbound.cotizaciones_pg import COLUMNAS, cotizacion_de, fila_cotizacion
 from cotizacion.adapters.outbound.productos_catalogo import ProductoDto, a_producto
 from cotizacion.application.cotizacion.calcular_prima import huella_solicitud
+from cotizacion.application.cotizacion.consultar import Condiciones
 from cotizacion.domain.cotizacion.errores import ZonaRequerida
 from cotizacion.domain.cotizacion.modelos import CoberturaParametrica, ReglaParametrica
 from cotizacion.domain.cotizacion.parametrico import CAMPO_ZONA, cobertura_parametrica
@@ -178,3 +179,16 @@ def test_los_insumos_entregan_la_cobertura_a_polizas() -> None:
         "versionRegla": "2026.11.1",
     }
     assert _parametrica(None) is None
+
+
+def test_las_condiciones_le_dicen_al_portal_si_pedir_la_zona(semilla_w03: Any) -> None:
+    producto, reglas = semilla_w03[0]("vida-hipotecario"), semilla_w03[1]("vida-hipotecario")
+    assert condiciones_de(Condiciones(producto, reglas)).parametrico is None
+    con_regla = condiciones_de(Condiciones(replace(producto, parametrico=REGLA), reglas))
+    assert con_regla.model_dump(by_alias=True)["parametrico"] == {
+        "tipoEvento": "LLUVIA_ACUMULADA",
+        "unidad": "mm",
+        "umbral": "120",
+        "valorPago": "1400000.00",
+        "versionRegla": "2026.11.1",
+    }
