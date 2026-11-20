@@ -1,13 +1,15 @@
 """Conversión entre el dominio y las columnas `jsonb` de siniestros (HU-W19). La copia de la póliza
 usa las claves de `CopiaPolizaDto` (camelCase) para que la semilla y los datos reales coincidan."""
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any
+from uuid import UUID
 
 from siniestros.domain.siniestro.modelos import (
     Amparo,
     Beneficiario,
     CopiaPoliza,
+    EventoParametrico,
     Ubicacion,
     Vigencia,
 )
@@ -74,4 +76,44 @@ def copia_de_json(datos: dict[str, Any]) -> CopiaPoliza:
             if beneficiario
             else None
         ),
+    )
+
+
+def regla_a_json(evento: EventoParametrico) -> dict[str, Any]:
+    """La regla aplicada (DS3-21): su código y su versión."""
+    return {"codigo": evento.regla, "version": evento.version_regla}
+
+
+def medicion_a_json(evento: EventoParametrico) -> dict[str, Any]:
+    """La medición del evento (HU-W22); el `eventoId` va en su propia columna."""
+    return {
+        "fuente": evento.fuente,
+        "tipoEvento": evento.tipo_evento,
+        "valorObservado": evento.valor_observado,
+        "umbral": evento.umbral,
+        "unidad": evento.unidad,
+        "zona": evento.zona,
+        "observadoEn": evento.observado_en.isoformat(),
+        "eventoOrigen": evento.evento_origen,
+    }
+
+
+def evento_de_json(
+    evento_id: UUID | None, regla: dict[str, Any] | None, medicion: dict[str, Any] | None
+) -> EventoParametrico | None:
+    """Null si el siniestro no tiene medición (otro origen, o un paramétrico anterior a W22)."""
+    if evento_id is None or regla is None or medicion is None:
+        return None
+    return EventoParametrico(
+        evento_id=evento_id,
+        fuente=medicion["fuente"],
+        tipo_evento=medicion["tipoEvento"],
+        valor_observado=medicion["valorObservado"],
+        umbral=medicion["umbral"],
+        unidad=medicion["unidad"],
+        zona=medicion["zona"],
+        observado_en=datetime.fromisoformat(medicion["observadoEn"]),
+        evento_origen=medicion["eventoOrigen"],
+        regla=regla["codigo"],
+        version_regla=regla["version"],
     )

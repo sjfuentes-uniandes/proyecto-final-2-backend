@@ -5,13 +5,14 @@ comprueban que el de verdad se comporta igual.
 """
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
+from siniestros.application.siniestro.envio import BorradorEnvio, EvidenciaEnvio, PolizaReporte
 from siniestros.application.siniestro.errores import SolicitudInvalida
 from siniestros.application.siniestro.puertos import DecisionFinalDuplicada, RegistroIdempotencia
 from siniestros.application.siniestro.vistas import (
@@ -21,19 +22,69 @@ from siniestros.application.siniestro.vistas import (
     FiltroBandeja,
     Indicadores,
     PaginaSiniestros,
+    PagoParametrico,
     Plazos,
 )
 from siniestros.domain.siniestro.modelos import (
+    CopiaPoliza,
     EntradaHistorial,
     EstadoSiniestro,
     Evidencia,
     IntegridadEvidencia,
+    OrigenSiniestro,
     Siniestro,
+    TipoEvidencia,
     TipoSoporte,
 )
 from siniestros.domain.siniestro.pago import EstadoPago, PagoSiniestro, ResultadoPago
 
 CURSOR_INVALIDO = "cursor-invalido"
+
+
+@pytest.fixture
+def borrador_envio(siniestro: Callable[..., Siniestro]) -> BorradorEnvio:
+    caso = siniestro()
+    borrador_id, evidencia_id = uuid4(), uuid4()
+    return BorradorEnvio(
+        id=borrador_id,
+        actor_id="actor-cliente",
+        cliente_id=caso.cliente_id,
+        poliza_id=caso.poliza_id,
+        descripcion="Impacto en la puerta.",
+        causa=caso.causa,
+        fecha_evento=caso.fecha_evento,
+        version=3,
+        evidencias=(
+            EvidenciaEnvio(
+                id=evidencia_id,
+                nombre_archivo="foto.jpg",
+                tipo=TipoEvidencia.FOTOGRAFIA,
+                clave_objeto=f"tmp/{borrador_id}/{evidencia_id}",
+                sha256="a" * 64,
+                capturada_en=caso.fecha_evento,
+                tamano_bytes=123,
+                tipo_contenido="image/jpeg",
+                duracion_segundos=None,
+                estado_carga="CARGADA",
+            ),
+        ),
+        resultado=None,
+        ubicacion={
+            "permiso": "PRECISO",
+            "lat": 4.65,
+            "lon": -74.05,
+            "precisionM": 100.0,
+            "capturadaEn": caso.fecha_evento.isoformat(),
+            "estado": "DISPONIBLE",
+        },
+    )
+
+
+@pytest.fixture
+def poliza_reporte(
+    borrador_envio: BorradorEnvio, copia: Callable[..., CopiaPoliza]
+) -> PolizaReporte:
+    return PolizaReporte(borrador_envio.poliza_id, "ACTIVA", True, copia())
 
 
 class RelojFijo:
@@ -126,8 +177,31 @@ class TxFalsa:
     ) -> None:
         self._repo.eventos.append(("SiniestroEnEvaluacion", siniestro.id, ocurrido_en, motivo))
 
+    async def siniestro_parametrico(self, evento_id: UUID, poliza_id: UUID) -> Siniestro | None:
+        return next(
+            (
+                s
+                for s in self._repo.siniestros.values()
+                if s.evento is not None
+                and s.evento.evento_id == evento_id
+                and s.poliza_id == poliza_id
+            ),
+            None,
+        )
+
+    async def insertar_parametrico(self, siniestro: Siniestro) -> bool:
+        assert siniestro.evento is not None
+        if await self.siniestro_parametrico(siniestro.evento.evento_id, siniestro.poliza_id):
+            return False
+        self._repo.siniestros[siniestro.id] = siniestro
+        return True
+
     async def evento_aprobado(
-        self, siniestro: Siniestro, referencia_pago: str, decidido_por: UUID, aprobado_en: datetime
+        self,
+        siniestro: Siniestro,
+        referencia_pago: str,
+        decidido_por: UUID | None,
+        aprobado_en: datetime,
     ) -> None:
         self._repo.eventos.append(
             ("SiniestroAprobado", siniestro.id, referencia_pago, decidido_por, aprobado_en)
@@ -169,6 +243,19 @@ class TxFalsa:
 
     async def evento_acceso_denegado(self, acceso: AccesoDenegado, ocurrido_en: datetime) -> None:
         self._repo.eventos.append(("AccesoSiniestroDenegado", acceso))
+
+
+class CodigosFalsos:
+    """El consecutivo del código `88-AAAA-NNNN` en memoria (como `CodigosPg`, desde 1000)."""
+
+    def __init__(self) -> None:
+        self.ultimo = 999
+        self.anios: list[int] = []
+
+    async def siguiente(self, anio: int) -> str:
+        self.ultimo += 1
+        self.anios.append(anio)
+        return f"88-{anio:04d}-{self.ultimo:04d}"
 
 
 class RepoFalso:
@@ -224,6 +311,19 @@ class RepoFalso:
             raise
         finally:
             self.tx_abierta = False
+
+    async def pagos_parametricos(
+        self, siniestro_ids: Sequence[UUID]
+    ) -> tuple[PagoParametrico, ...]:
+        return tuple(
+            PagoParametrico(
+                s.id,
+                s.codigo,
+                self.pagos[s.id].estado if s.id in self.pagos else EstadoPago.PENDIENTE,
+            )
+            for i in siniestro_ids
+            if (s := self.siniestros.get(i)) is not None and s.origen is OrigenSiniestro.PARAMETRICO
+        )
 
     async def bandeja(self, filtro: FiltroBandeja) -> PaginaSiniestros:
         self.filtros.append(filtro)
@@ -325,6 +425,11 @@ class SoportesFalsos:
 
     def para(self, amparo: str) -> tuple[TipoSoporte, ...]:
         return self.requeridos.get(amparo, ())
+
+
+@pytest.fixture
+def codigos() -> CodigosFalsos:
+    return CodigosFalsos()
 
 
 @pytest.fixture

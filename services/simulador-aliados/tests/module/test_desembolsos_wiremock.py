@@ -4,7 +4,9 @@ beneficiario sintético.
 El `beneficiarioRef` sintético de `SiniestroAprobado` llega al aliado como `beneficiario` y elige
 el escenario; la `referencia` es `IND-<codigo>-NN` y vuelve en la respuesta. Las referencias de la
 semilla de R7 (`ben-sint-001` a `ben-sint-008`) caen en confirmado, salvo la última, que rechaza
-(AC4 y R7-01). Cualquier otro beneficiario cae en el respaldo de prioridad 10 (404).
+(AC4 y R7-01). Desde HU-W22, el titular de un siniestro paramétrico (`ben-par-<clienteId>`) también
+confirma, para que R5 llegue al pago. Cualquier otro beneficiario cae en el respaldo de prioridad 10
+(404).
 """
 
 import json
@@ -99,6 +101,39 @@ def test_la_semilla_de_r7_cae_en_confirmado_salvo_un_caso_que_rechaza(
     assert sorted(set(estados.values())) == ["CONFIRMADO", "RECHAZADO"]
     assert [r for r, e in estados.items() if e == "RECHAZADO"] == ["ben-sint-008"]
     assert json.loads(texto)  # la semilla es JSON válido
+
+
+@pytest.mark.parametrize(
+    "beneficiario",
+    [
+        "ben-par-00000000-0000-4000-8000-000000000002",
+        "ben-par-3f2a9c1e-7b64-4d0a-9e51-0c8d2f6a1b77",
+    ],
+)
+def test_el_titular_de_un_siniestro_parametrico_confirma(
+    simulador: httpx.Client, beneficiario: str
+) -> None:
+    """HU-W22: `ben-par-<clienteId>` es el beneficiario de un paramétrico (R-178)."""
+    referencia = "IND-88-2026-1001-01"
+    respuesta, duracion = _desembolsar(simulador, _cuerpo(beneficiario, referencia))
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json() == _confirmado(referencia)
+    assert duracion < RAPIDO_S
+    consulta = _consultar(simulador, beneficiario, referencia)
+    assert consulta.status_code == 200, consulta.text
+    assert consulta.json() == _confirmado(referencia)
+
+
+@pytest.mark.parametrize(
+    "beneficiario",
+    ["ben-par-", "ben-par-no-es-un-uuid", "ben-par-00000000-0000-4000-8000-00000000000G"],
+)
+def test_un_beneficiario_paramétrico_sin_cliente_valido_cae_en_el_respaldo(
+    simulador: httpx.Client, beneficiario: str
+) -> None:
+    respuesta, _ = _desembolsar(simulador, _cuerpo(beneficiario))
+    assert (respuesta.status_code, respuesta.json()) == (404, NO_RECONOCIDA)
+    assert _consultar(simulador, beneficiario).json() == NO_RECONOCIDA
 
 
 @pytest.mark.parametrize("beneficiario", ["ben-sint-008", "ben-sint-rechaza"])

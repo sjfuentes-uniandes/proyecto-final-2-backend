@@ -1,0 +1,9 @@
+ALTER TABLE IF EXISTS borrador_evidencias
+  DROP CONSTRAINT IF EXISTS borrador_evidencias_confirmacion_coherente;
+ALTER TABLE IF EXISTS borrador_evidencias
+  DROP CONSTRAINT IF EXISTS borrador_evidencias_estado_carga_valido;
+ALTER TABLE IF EXISTS borrador_evidencias
+  DROP COLUMN IF EXISTS carga_confirmada_en;
+ALTER TABLE IF EXISTS borrador_evidencias
+  DROP COLUMN IF EXISTS estado_carga;
+DROP INDEX IF EXISTS borradores_por_actor;

@@ -1,8 +1,10 @@
 """Pruebas de módulo de HU-W12 (MT-W12-05 a 12): consulta en paralelo, timeout por rama,
 recálculo y telemetría, con PostgreSQL, WireMock y las apps reales (arnés de W11-P14).
 
-Todas usan el presupuesto por defecto de DT-10 (`fuente_timeout_ms = 300`): el adaptador
-recibe `X-Deadline-Ms = 290` y corta al aliado en 270 ms.
+Los casos de timeout usan el presupuesto por defecto de DT-10 (`fuente_timeout_ms = 300`):
+el adaptador recibe `X-Deadline-Ms = 290` y corta al aliado en 270 ms. C18 usa la holgura
+del arnés para comprobar solapamiento real; los 350 ms son un objetivo de rendimiento,
+no una condición del módulo.
 """
 
 import json
@@ -41,16 +43,26 @@ def _clasificacion(perfil: dict[str, Any]) -> tuple[Any, ...]:
 
 
 def test_mt_w12_05_c18_las_cuatro_ramas_en_paralelo(cotizacion: Any) -> None:
-    svc = cotizacion(**PRESUPUESTO)
-    respuesta = svc.enviar("12")
+    svc = cotizacion()
+    correlation_id = "corr-mt-w12-05"
+    respuesta = svc.enviar("12", correlation_id=correlation_id)
     assert respuesta.status_code == 201, respuesta.text
     perfil = respuesta.json()
-    assert (perfil["estado"], perfil["puntaje"]) == ("CALCULADO", 75.9)
-    assert perfil["duracionMs"] < 350, perfil["duracionMs"]  # en serie serían ≥ 600
+    assert (perfil["estado"], perfil["puntaje"]) == ("CALCULADO", 75.9), perfil
     solicitudes = svc.wiremock.a_aliados(cliente_id("12"))
     assert len(solicitudes) == 4
-    llegadas = [s["loggedDate"] for s in solicitudes]
-    assert max(llegadas) - min(llegadas) < 100, llegadas
+    ramas = [
+        s
+        for s in svc.lista_spans()
+        if s.name in RAMAS and s.attributes.get("correlation_id") == correlation_id
+    ]
+    assert len(ramas) == 4 and {s.name for s in ramas} == RAMAS
+    intervalos = []
+    for rama in ramas:
+        inicio, fin = rama.start_time, rama.end_time
+        assert inicio is not None and fin is not None
+        intervalos.append((inicio, fin))
+    assert max(inicio for inicio, _ in intervalos) < min(fin for _, fin in intervalos), intervalos
 
 
 def test_mt_w12_06_c06_fuente_lenta_degradada(cotizacion: Any) -> None:

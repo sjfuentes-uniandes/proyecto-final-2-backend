@@ -13,6 +13,9 @@ from siniestros.domain.siniestro.plazos import (
 
 # DS3-08: una URL prefirmada de evidencia vive 5 minutos como máximo.
 URL_EVIDENCIA_TTL_MAX_S = 300
+FOTO_MAX_BYTES = 10 * 1024 * 1024
+VIDEO_MAX_BYTES = 50 * 1024 * 1024
+VIDEO_MAX_DURACION_S = 60
 
 
 def _env(nombre: str) -> AliasChoices:
@@ -53,9 +56,44 @@ class Settings(ServiceSettings):
         le=URL_EVIDENCIA_TTL_MAX_S,
         validation_alias=_env("EVIDENCIA_URL_TTL_S"),
     )
+    evidencia_url_carga_ttl_s: int = Field(
+        URL_EVIDENCIA_TTL_MAX_S,
+        ge=1,
+        le=URL_EVIDENCIA_TTL_MAX_S,
+        validation_alias=_env("EVIDENCIA_URL_CARGA_TTL_S"),
+    )
+    evidencias_max_por_borrador: int = Field(
+        10, ge=1, validation_alias=_env("EVIDENCIAS_MAX_POR_BORRADOR")
+    )
+    evidencia_foto_max_bytes: int = Field(
+        FOTO_MAX_BYTES, ge=1, validation_alias=_env("EVIDENCIA_FOTO_MAX_BYTES")
+    )
+    evidencia_video_max_bytes: int = Field(
+        VIDEO_MAX_BYTES, ge=1, validation_alias=_env("EVIDENCIA_VIDEO_MAX_BYTES")
+    )
+    evidencia_video_max_duracion_s: int = Field(
+        VIDEO_MAX_DURACION_S, ge=1, validation_alias=_env("EVIDENCIA_VIDEO_MAX_DURACION_S")
+    )
+    evidencia_formatos_foto: tuple[str, ...] = Field(
+        ("image/jpeg", "image/png"), min_length=1, validation_alias=_env("EVIDENCIA_FORMATOS_FOTO")
+    )
+    evidencia_formatos_video: tuple[str, ...] = Field(
+        ("video/mp4",), min_length=1, validation_alias=_env("EVIDENCIA_FORMATOS_VIDEO")
+    )
+    ubicacion_obligatoria: bool = Field(True, validation_alias=_env("UBICACION_OBLIGATORIA"))
+    ubicacion_tipos_opcionales: tuple[str, ...] = Field(
+        ("AUXILIO_FUNERARIO", "ENFERMEDADES_GRAVES"),
+        validation_alias=_env("UBICACION_TIPOS_OPCIONALES"),
+    )
+    ubicacion_precision_max_m: float = Field(
+        100.0, gt=0, allow_inf_nan=False, validation_alias=_env("UBICACION_PRECISION_MAX_M")
+    )
     # Corte de cada HeadObject al verificar la integridad (DS3-06). Si vence, la evidencia queda
     # NO_VERIFICABLE y el detalle responde igual.
     s3_timeout_ms: int = Field(300, ge=1, le=5000, validation_alias=_env("S3_TIMEOUT_MS"))
+    s3_conservacion_timeout_ms: int = Field(
+        2000, ge=1, le=10000, validation_alias=_env("S3_CONSERVACION_TIMEOUT_MS")
+    )
 
     # HU-W19 (DS3-04): compromiso de 48 h y umbrales de la prioridad derivada (ALTA < 8 h,
     # MEDIA < 24 h de tiempo restante).

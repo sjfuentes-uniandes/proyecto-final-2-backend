@@ -371,6 +371,143 @@ paths:
           content:
             application/json:
               schema: {}
+  /v1/parametricos/resumen:
+    get:
+      tags:
+      - resumen
+      summary: Resumen
+      description: 'Indicadores, ritmo y últimos pagos de un episodio paramétrico
+        (H09). Lectura con los índices
+
+        por `evento_origen` y `evaluado_en`; una consulta no recorre el resto de la
+        tabla (DS3-19).'
+      operationId: resumen_v1_parametricos_resumen_get
+      parameters:
+      - name: eventoOrigen
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^[A-Za-z0-9._:-]{1,64}$
+          - type: 'null'
+          description: Sin valor, el origen de la evaluación más reciente
+          title: Eventoorigen
+        description: Sin valor, el origen de la evaluación más reciente
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumenParametricos'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol no es ANALISTA_SINIESTROS'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'DEPENDENCIA_NO_DISPONIBLE: la base no está configurada o no
+            responde'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+  /v1/parametricos/eventos-origen:
+    get:
+      tags:
+      - resumen
+      summary: Eventos Origen
+      description: Los `eventoOrigen` recientes, para el selector de H09 cuando hay
+        varios episodios.
+      operationId: eventos_origen_v1_parametricos_eventos_origen_get
+      parameters:
+      - name: limite
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 10
+          title: Limite
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Id
+      - name: X-Actor-Rol
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Actor-Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrigenesRecientes'
+        '401':
+          description: 'ACTOR_REQUERIDO: faltan X-Actor-Id o X-Actor-Rol'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '403':
+          description: 'ROL_NO_AUTORIZADO: X-Actor-Rol no es ANALISTA_SINIESTROS'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '503':
+          description: 'DEPENDENCIA_NO_DISPONIBLE: la base no está configurada o no
+            responde'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
+        '422':
+          description: SOLICITUD_INVALIDA (detalles.campos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
 components:
   schemas:
     Accion:
@@ -706,3 +843,204 @@ components:
       - msg
       - type
       title: ValidationError
+    Disparador:
+      properties:
+        tipoEvento:
+          type: string
+          title: Tipoevento
+        valorObservado:
+          type: string
+          pattern: ^[0-9]+(\.[0-9]{1,3})?$
+          title: Valorobservado
+        umbral:
+          type: string
+          pattern: ^[0-9]+(\.[0-9]{1,3})?$
+          title: Umbral
+        unidad:
+          type: string
+          title: Unidad
+      type: object
+      required:
+      - tipoEvento
+      - valorObservado
+      - umbral
+      - unidad
+      title: Disparador
+      description: 'Lo que activó el pago: la medición contra el umbral contratado.'
+    EstadoActivacion:
+      type: string
+      enum:
+      - SINIESTRO_CREADO
+      title: EstadoActivacion
+      description: '`PENDIENTE` es el estado inicial de W21 y no sale en la lista:
+        solo se listan las activaciones
+
+        con siniestro. W22 define `SINIESTRO_CREADO`.'
+    OrigenReciente:
+      properties:
+        eventoOrigen:
+          type: string
+          pattern: ^[A-Za-z0-9._:-]{1,64}$
+          title: Eventoorigen
+        desde:
+          type: string
+          format: date-time
+          title: Desde
+          description: Primera evaluación del origen (UTC)
+        hasta:
+          type: string
+          format: date-time
+          title: Hasta
+          description: Última evaluación del origen (UTC)
+        eventos:
+          type: integer
+          title: Eventos
+          description: Eventos distintos evaluados
+      type: object
+      required:
+      - eventoOrigen
+      - desde
+      - hasta
+      - eventos
+      title: OrigenReciente
+    OrigenesRecientes:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/OrigenReciente'
+          type: array
+          title: Items
+          description: El de la evaluación más reciente primero
+      type: object
+      required:
+      - items
+      title: OrigenesRecientes
+    PagoActivado:
+      properties:
+        siniestroId:
+          type: string
+          format: uuid
+          title: Siniestroid
+        siniestroCodigo:
+          type: string
+          pattern: ^88-[0-9]{4}-[0-9]{4,}$
+          title: Siniestrocodigo
+        polizaId:
+          type: string
+          format: uuid
+          title: Polizaid
+        polizaNumero:
+          anyOf:
+          - type: string
+            pattern: ^[0-9]{3}-[0-9]{4}-[0-9]{6}$
+          - type: 'null'
+          title: Polizanumero
+          description: Null si la cobertura no conserva el número de la póliza
+        disparador:
+          $ref: '#/components/schemas/Disparador'
+        valor:
+          type: string
+          pattern: ^[0-9]+(\.[0-9]{1,2})?$
+          title: Valor
+        moneda:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Moneda
+        estadoActivacion:
+          $ref: '#/components/schemas/EstadoActivacion'
+      type: object
+      required:
+      - siniestroId
+      - siniestroCodigo
+      - polizaId
+      - polizaNumero
+      - disparador
+      - valor
+      - moneda
+      - estadoActivacion
+      title: PagoActivado
+    ResumenParametricos:
+      properties:
+        eventoOrigen:
+          anyOf:
+          - type: string
+            pattern: ^[A-Za-z0-9._:-]{1,64}$
+          - type: 'null'
+          title: Eventoorigen
+        desde:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Desde
+          description: Primera evaluación del origen (UTC)
+        recibidos:
+          type: integer
+          title: Recibidos
+          description: 'Entregas que llegaron al evaluador: `procesados` más `duplicados`'
+        procesados:
+          type: integer
+          title: Procesados
+          description: Eventos distintos ya evaluados, cada uno una sola vez
+        activados:
+          type: integer
+          title: Activados
+          description: Activaciones (una por evento y póliza que superó el umbral),
+            con o sin siniestro todavía
+        duplicados:
+          type: integer
+          title: Duplicados
+          description: Entregas repetidas que se descartaron sin cambiar la decisión
+            ni crear otro siniestro (clave de negocio y reentregas reanudadas, DS3-15)
+        enDlq:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Endlq
+          description: Mensajes en la DLQ de `parametricos-eventos` (toda la cola,
+            no solo el origen); null si no se puede leer
+        ritmoPorMinuto:
+          items:
+            $ref: '#/components/schemas/RitmoMinuto'
+          type: array
+          title: Ritmoporminuto
+          description: Los últimos 15 minutos, del más antiguo al más reciente, completos
+            (con ceros)
+        ultimosPagos:
+          items:
+            $ref: '#/components/schemas/PagoActivado'
+          type: array
+          title: Ultimospagos
+          description: Hasta 10 activaciones con siniestro, la más reciente primero
+      type: object
+      required:
+      - eventoOrigen
+      - desde
+      - recibidos
+      - procesados
+      - activados
+      - duplicados
+      - enDlq
+      - ritmoPorMinuto
+      - ultimosPagos
+      title: ResumenParametricos
+      description: 'Seguimiento del procesamiento de un `eventoOrigen` (H09). Sin
+        eventos todavía, `eventoOrigen`
+
+        y `desde` son null y todo lo demás va en cero o vacío.'
+    RitmoMinuto:
+      properties:
+        minuto:
+          type: string
+          format: date-time
+          title: Minuto
+          description: Inicio del minuto (UTC)
+        procesados:
+          type: integer
+          title: Procesados
+          description: Eventos evaluados en ese minuto
+      type: object
+      required:
+      - minuto
+      - procesados
+      title: RitmoMinuto

@@ -185,6 +185,10 @@ run "ambiente_exp" {
     condition     = local.prefix == "solventa-exp" && aws_cloudwatch_dashboard.main.dashboard_name == "solventa-exp"
     error_message = "exp tiene su tablero y sus alarmas con su propio prefijo."
   }
+  assert {
+    condition     = var.load_test_enabled && toset([for definicion in aws_ecs_task_definition.load_test : definicion.family]) == toset(["solventa-exp-carga", "solventa-exp-carga-alta"])
+    error_message = "HU-W09: en exp existen las dos tareas k6 del experimento de carga (solventa-exp-carga y solventa-exp-carga-alta)."
+  }
 }
 
 # HU-W29 (N1): los servicios críticos mantienen al menos una réplica activa en cada zona.

@@ -20,7 +20,7 @@ from siniestros.domain.siniestro.modelos import (
     PrioridadSiniestro,
     Siniestro,
 )
-from siniestros.domain.siniestro.pago import PagoSiniestro
+from siniestros.domain.siniestro.pago import EstadoPago, PagoSiniestro
 from siniestros.domain.siniestro.plazos import prioridad, tiempo_restante
 from siniestros.domain.siniestro.tramite import PasoDeTramite
 
@@ -152,6 +152,16 @@ class DetalleLeido:
 
 
 @dataclass(frozen=True)
+class PagoParametrico:
+    """El estado de pago de un siniestro paramétrico (H09): el derivado de `pago_de` (PENDIENTE
+    mientras `dinero` no informa un resultado)."""
+
+    siniestro_id: UUID
+    codigo: str
+    estado_pago: EstadoPago
+
+
+@dataclass(frozen=True)
 class EvidenciaVerificada:
     evidencia: Evidencia
     integridad: IntegridadEvidencia
@@ -176,6 +186,11 @@ class EnlaceEmitido:
     url: str
     expira_en: datetime
     tipo_contenido: str
+
+
+@dataclass(frozen=True)
+class EnlaceDescargaEmitido(EnlaceEmitido):
+    nombre_archivo: str
 
 
 @dataclass(frozen=True)

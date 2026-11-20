@@ -87,6 +87,31 @@ class Settings(ServiceSettings):
         validation_alias=AliasChoices("PAGOS_PARAMETRICOS_URL", "SOLVENTA_PAGOS_PARAMETRICOS_URL"),
     )
     pagos_parametricos_timeout_ms: int = 3000
+    # HU-W22 (DS3-26, H09): lo que se lee de CloudWatch y de siniestros es secundario: cada fuente
+    # tiene su corte y, si falla, su campo va en null (nunca un 503). Los nombres son los de la
+    # infraestructura (`solventa-<ambiente>-…`); sin cluster y servicio no se pregunta por las tareas
+    # activas. `consumidores_maximos` es el máximo del escalado de `pagos-parametricos`.
+    parametricos_secundario_timeout_ms: int = 700
+    parametricos_cola_eventos: str | None = Field(
+        None,
+        validation_alias=AliasChoices(
+            "PARAMETRICOS_COLA_EVENTOS", "SOLVENTA_PARAMETRICOS_COLA_EVENTOS"
+        ),
+    )
+    parametricos_cluster: str | None = Field(
+        None, validation_alias=AliasChoices("PARAMETRICOS_CLUSTER", "SOLVENTA_PARAMETRICOS_CLUSTER")
+    )
+    parametricos_servicio: str | None = Field(
+        None,
+        validation_alias=AliasChoices("PARAMETRICOS_SERVICIO", "SOLVENTA_PARAMETRICOS_SERVICIO"),
+    )
+    parametricos_consumidores_maximos: int | None = Field(
+        None,
+        ge=1,
+        validation_alias=AliasChoices(
+            "PARAMETRICOS_CONSUMIDORES_MAXIMOS", "SOLVENTA_PARAMETRICOS_CONSUMIDORES_MAXIMOS"
+        ),
+    )
     # Pool de Cognito del back-office (infra/apps/ecs.tf): Administración › Usuarios.
     backoffice_user_pool_id: str | None = Field(
         None,
@@ -151,6 +176,18 @@ class Settings(ServiceSettings):
     # Bucket de experimentos de exp; vacío en los demás ambientes (sin informe de conciliación).
     continuidad_bucket: str = Field(
         "", validation_alias=AliasChoices("CONTINUIDAD_BUCKET", "SOLVENTA_CONTINUIDAD_BUCKET")
+    )
+    # HU-W08: capacidad de cotizacion para Operación › Tablero (infra/apps/ecs.tf, todo o nada).
+    # Sin las dos, GET /operacion/capacidad responde 503. El namespace es el de las métricas EMF
+    # (METRICS_NAMESPACE, que la infraestructura entrega a todos; var.metrics_namespace).
+    capacidad_cluster: str | None = Field(
+        None, validation_alias=AliasChoices("CAPACIDAD_CLUSTER", "SOLVENTA_CAPACIDAD_CLUSTER")
+    )
+    capacidad_servicio: str | None = Field(
+        None, validation_alias=AliasChoices("CAPACIDAD_SERVICIO", "SOLVENTA_CAPACIDAD_SERVICIO")
+    )
+    metrics_namespace: str = Field(
+        "Solventa", validation_alias=AliasChoices("METRICS_NAMESPACE", "SOLVENTA_METRICS_NAMESPACE")
     )
 
     @property

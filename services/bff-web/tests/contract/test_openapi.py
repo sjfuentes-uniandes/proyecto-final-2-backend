@@ -137,6 +137,47 @@ def test_el_informe_de_reconciliar_cumple_el_contrato_de_conciliacion() -> None:
     assert InformeConciliacion.model_validate(informe).model_dump() == informe
 
 
+def test_contrato_de_capacidad() -> None:
+    """HU-W08: nombres en snake_case, como /operacion/alertas; errores 403 y 503 en formato B2."""
+    operacion = app.openapi()["paths"]["/operacion/capacidad"]["get"]
+    esquemas = app.openapi()["components"]["schemas"]
+    assert set(operacion["responses"]) >= {"200", "403", "503"}
+    for estado in ("403", "503"):
+        esquema = operacion["responses"][estado]["content"]["application/json"]["schema"]
+        assert esquema == {"$ref": "#/components/schemas/ErrorDto"}
+    assert set(esquemas["CapacidadRespuesta"]["properties"]) == {
+        "ambiente",
+        "servicio",
+        "ventana_min",
+        "cotizaciones_por_minuto",
+        "tareas_activas",
+        "minimo",
+        "maximo",
+        "ultimo_escalado",
+    }
+    # Sin puntos de CPUUtilization, tareas_activas es null (sigue siendo obligatorio).
+    assert esquemas["CapacidadRespuesta"]["properties"]["tareas_activas"]["anyOf"] == [
+        {"type": "integer"},
+        {"type": "null"},
+    ]
+    assert "tareas_activas" in esquemas["CapacidadRespuesta"]["required"]
+    assert set(esquemas["PuntoCapacidadRespuesta"]["properties"]) == {"instante", "valor"}
+    assert set(esquemas["EscaladoRespuesta"]["properties"]) == {
+        "inicio",
+        "fin",
+        "duracion_s",
+        "descripcion",
+        "estado",
+    }
+    assert set(esquemas["EscaladoRespuesta"]["required"]) == {
+        "inicio",
+        "fin",
+        "duracion_s",
+        "descripcion",
+        "estado",
+    }
+
+
 COTIZACION = CONTRATO.parent / "cotizacion.yaml"
 # HU-W11: el BFF publica los mismos esquemas que cotizacion para /v1/perfiles (04 W11-P15).
 ESQUEMAS_PERFILAMIENTO = (

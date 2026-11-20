@@ -4,6 +4,7 @@ reservado a la semilla de QA. Una transacción corta por código."""
 
 from typing import Any
 
+from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
 from siniestros.domain.siniestro.transiciones import codigo_siniestro
@@ -15,13 +16,17 @@ _AVANZAR = (
 )
 
 
+async def siguiente_en_transaccion(conexion: AsyncConnection[Any], anio: int) -> str:
+    cursor = await conexion.execute(_AVANZAR, (anio, PRIMER_CONSECUTIVO))
+    fila = await cursor.fetchone()
+    assert fila is not None
+    return codigo_siniestro(anio, int(fila[0]))
+
+
 class CodigosPg:
     def __init__(self, pool: "AsyncConnectionPool[Any]") -> None:
         self._pool = pool
 
     async def siguiente(self, anio: int) -> str:
         async with self._pool.connection() as conexion:
-            cursor = await conexion.execute(_AVANZAR, (anio, PRIMER_CONSECUTIVO))
-            fila = await cursor.fetchone()
-        assert fila is not None
-        return codigo_siniestro(anio, int(fila[0]))
+            return await siguiente_en_transaccion(conexion, anio)

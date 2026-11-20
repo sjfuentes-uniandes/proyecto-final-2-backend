@@ -9,6 +9,11 @@ import anyio
 import httpx
 import pytest
 from siniestros.adapters.outbound.evidencias_s3 import EvidenciasS3, cliente_s3
+from siniestros.application.siniestro.errores import (
+    DependenciaNoDisponible,
+    EvidenciaNoCargada,
+    IntegridadEvidenciaInvalida,
+)
 from siniestros.domain.siniestro.modelos import IntegridadEvidencia
 
 pytestmark = pytest.mark.anyio
@@ -41,6 +46,71 @@ async def test_un_objeto_con_su_checksum_es_verificada(
 ) -> None:
     clave = subir(s3, bucket, ChecksumSHA256=sha256_base64(CONTENIDO))
     assert await almacen.verificar(clave, SHA) is IntegridadEvidencia.VERIFICADA
+
+
+async def test_conservar_sobrevive_al_temporal_y_reutiliza_la_copia(
+    s3: Any, bucket: str, almacen: EvidenciasS3
+) -> None:
+    s3.put_bucket_versioning(Bucket=bucket, VersioningConfiguration={"Status": "Enabled"})
+    origen, destino = f"tmp/{uuid4()}/{uuid4()}", f"siniestros/{uuid4()}/{uuid4()}"
+    s3.put_object(
+        Bucket=bucket,
+        Key=origen,
+        Body=CONTENIDO,
+        ContentType="image/png",
+        ChecksumSHA256=sha256_base64(CONTENIDO),
+        ServerSideEncryption=SSE,
+    )
+    await almacen.conservar(origen, destino, SHA, len(CONTENIDO), "image/png", SSE)
+    copia = s3.head_object(Bucket=bucket, Key=destino, ChecksumMode="ENABLED")
+    assert copia["ChecksumSHA256"] == sha256_base64(CONTENIDO)
+    assert copia["ServerSideEncryption"] == SSE
+    s3.delete_object(Bucket=bucket, Key=origen)
+    assert await almacen.verificar(origen, SHA) is IntegridadEvidencia.NO_DISPONIBLE
+    await almacen.conservar(origen, destino, SHA, len(CONTENIDO), "image/png", SSE)
+    assert s3.head_object(Bucket=bucket, Key=destino)["VersionId"] == copia["VersionId"]
+    url = await almacen.firmar_lectura(destino, 300, "image/png")
+    async with httpx.AsyncClient() as http:
+        assert (await http.get(url)).content == CONTENIDO
+
+
+@pytest.mark.parametrize(
+    ("sha", "tamano", "tipo"),
+    [
+        (SHA, len(CONTENIDO) + 1, "image/png"),
+        ("b" * 64, len(CONTENIDO), "image/png"),
+        (SHA, len(CONTENIDO), "image/jpeg"),
+    ],
+)
+async def test_conservar_rechaza_metadatos_incompatibles(
+    s3: Any, bucket: str, almacen: EvidenciasS3, sha: str, tamano: int, tipo: str
+) -> None:
+    origen = subir(s3, bucket, ChecksumSHA256=sha256_base64(CONTENIDO), ContentType="image/png")
+    destino = f"siniestros/{uuid4()}/{uuid4()}"
+    with pytest.raises(IntegridadEvidenciaInvalida):
+        await almacen.conservar(origen, destino, sha, tamano, tipo, SSE)
+    assert await almacen.verificar(destino, SHA) is IntegridadEvidencia.NO_DISPONIBLE
+
+
+async def test_conservar_no_oculta_ausencia_ni_falla_de_copia(
+    s3: Any, bucket: str, almacen: EvidenciasS3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from botocore.exceptions import ClientError
+
+    with pytest.raises(EvidenciaNoCargada):
+        await almacen.conservar(
+            "tmp/ausente", "siniestros/ausente", SHA, len(CONTENIDO), "image/png", SSE
+        )
+    origen = subir(s3, bucket, ChecksumSHA256=sha256_base64(CONTENIDO), ContentType="image/png")
+    destino = f"siniestros/{uuid4()}/{uuid4()}"
+
+    def falla(**kwargs: Any) -> None:
+        raise ClientError({"Error": {"Code": "AccessDenied", "Message": "denegado"}}, "CopyObject")
+
+    monkeypatch.setattr(almacen._cliente, "copy_object", falla)
+    with pytest.raises(DependenciaNoDisponible):
+        await almacen.conservar(origen, destino, SHA, len(CONTENIDO), "image/png", SSE)
+    assert await almacen.verificar(destino, SHA) is IntegridadEvidencia.NO_DISPONIBLE
 
 
 async def test_un_objeto_con_otro_contenido_es_alterada(
@@ -91,6 +161,42 @@ async def test_la_url_prefirmada_descarga_el_objeto_y_expira_en_300_s(
     assert respuesta.headers["content-type"] == "image/png"
 
 
+async def test_el_post_prefirmado_acepta_el_tamano_fijado_y_registra_su_hash(
+    s3: Any, bucket: str, almacen: EvidenciasS3
+) -> None:
+    clave = f"tmp/{uuid4()}/{uuid4()}"
+    url, campos = await almacen.firmar_carga(clave, "image/png", len(CONTENIDO), SHA, 300, SSE)
+
+    async with httpx.AsyncClient() as http:
+        respuesta = await http.post(
+            url,
+            data=campos,
+            files={"file": ("foto.png", CONTENIDO, "image/png")},
+        )
+
+    assert respuesta.status_code == 204
+    assert await almacen.verificar(clave, SHA) is IntegridadEvidencia.VERIFICADA, s3.head_object(
+        Bucket=bucket, Key=clave, ChecksumMode="ENABLED"
+    )
+
+
+async def test_el_post_prefirmado_rechaza_un_archivo_mayor_al_tamano_fijado(
+    bucket: str, almacen: EvidenciasS3
+) -> None:
+    clave = f"tmp/{uuid4()}/{uuid4()}"
+    url, campos = await almacen.firmar_carga(clave, "image/png", len(CONTENIDO), SHA, 300, SSE)
+
+    async with httpx.AsyncClient() as http:
+        respuesta = await http.post(
+            url,
+            data=campos,
+            files={"file": ("foto.png", CONTENIDO + b"x", "image/png")},
+        )
+
+    assert respuesta.status_code != 204
+    assert await almacen.verificar(clave, SHA) is IntegridadEvidencia.NO_DISPONIBLE
+
+
 async def test_la_url_se_firma_con_el_endpoint_publico(
     s3: Any, localstack: str, bucket: str, credenciales: None
 ) -> None:
@@ -107,10 +213,10 @@ async def test_mt_w19_01_el_enlace_vencido_ya_no_descarga_el_objeto(
 ) -> None:
     """MT-W19-01: tras la caducidad S3 rechaza la URL (403); el analista pide un enlace nuevo."""
     clave = subir(s3, bucket, ChecksumSHA256=sha256_base64(CONTENIDO))
-    url = await almacen.firmar_lectura(clave, 1, "image/png")
+    url = await almacen.firmar_lectura(clave, 5, "image/png")
     async with httpx.AsyncClient() as http:
         assert (await http.get(url)).status_code == 200
-        await anyio.sleep(2.5)
+        await anyio.sleep(6.5)
         vencido = await http.get(url)
         assert vencido.status_code == 403
         assert "expired" in vencido.text.lower()

@@ -70,5 +70,6 @@ async def test_el_valor_en_cache_es_la_respuesta_de_la_api(
     assert json.loads(cache.valores[clave_reglas_vigentes("vida-hipotecario")]) == reglas
     # Y lo publica el OpenAPI de catalogo.
     esquemas = app.openapi()["components"]["schemas"]
-    assert set(esquemas["ProductoRespuesta"]["properties"]) == set(producto)
+    # HU-W21: `parametrico` es opcional y no se serializa si es nulo (solo lo trae `clima-lluvia`).
+    assert set(esquemas["ProductoRespuesta"]["properties"]) == set(producto) | {"parametrico"}
     assert set(esquemas["ReglasPrimaRespuesta"]["properties"]) == set(reglas)

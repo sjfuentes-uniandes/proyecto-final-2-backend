@@ -2,6 +2,11 @@
 
 Las APIs devuelven las alarmas de toda la cuenta y región: se filtra por el prefijo
 del ambiente (ALERTAS_PREFIJO).
+
+HU-W22 (H09, DS3-26): `MetricasParametricos` lee con **un** `GetMetricData` la profundidad de la cola
+`parametricos-eventos`, la de su DLQ y las tareas activas de `pagos-parametricos`. Cualquier campo que
+no se pueda leer (sin métrica, sin permiso o un error) es `None`: H09 lo muestra «no disponible» y
+nunca falla por eso.
 """
 
 import json
@@ -87,3 +92,90 @@ def crear_repositorio(region: str, ambiente: str) -> RepositorioAlarmas:
     import boto3
 
     return RepositorioAlarmas(boto3.client("cloudwatch", region_name=region), ambiente)
+
+
+# --- HU-W22: cola y consumidores de H09 -------------------------------------------------------------
+VENTANA_PARAMETRICOS = timedelta(minutes=10)
+PERIODO_PARAMETRICOS_S = 60
+
+
+def _ultimo(resultado: Mapping[str, Any]) -> int | None:
+    """El último valor de una serie, como entero; `None` si no hay puntos."""
+    puntos = list(zip(resultado.get("Timestamps", []), resultado.get("Values", []), strict=False))
+    if not puntos:
+        return None
+    return round(float(max(puntos, key=lambda punto: punto[0])[1]))
+
+
+class MetricasParametricos:
+    """La cola `parametricos-eventos` y quienes la consumen (DS3-26, patrón de HU-W28)."""
+
+    def __init__(
+        self, cliente: Any, ahora: Callable[[], datetime] = lambda: datetime.now(UTC)
+    ) -> None:
+        self.cliente = cliente
+        self.ahora = ahora
+
+    def leer(
+        self, cola: str, dlq: str, cluster: str | None, servicio: str | None
+    ) -> dict[str, int | None]:
+        """`profundidad` (mensajes visibles de la cola), `dlq` (los de su DLQ) y `tareas`
+        (`RunningTaskCount` del servicio, si hay cluster y servicio). Lanza si CloudWatch falla."""
+        consultas: list[dict[str, Any]] = [
+            self._sqs("profundidad", cola),
+            self._sqs("dlq", dlq),
+        ]
+        if cluster and servicio:
+            consultas.append(
+                {
+                    "Id": "tareas",
+                    "MetricStat": {
+                        "Metric": {
+                            "Namespace": "ECS/ContainerInsights",
+                            "MetricName": "RunningTaskCount",
+                            "Dimensions": [
+                                {"Name": "ClusterName", "Value": cluster},
+                                {"Name": "ServiceName", "Value": servicio},
+                            ],
+                        },
+                        "Period": PERIODO_PARAMETRICOS_S,
+                        "Stat": "Maximum",
+                    },
+                    "ReturnData": True,
+                }
+            )
+        fin = self.ahora()
+        respuesta = self.cliente.get_metric_data(
+            MetricDataQueries=consultas, StartTime=fin - VENTANA_PARAMETRICOS, EndTime=fin
+        )
+        leidas = {r["Id"]: _ultimo(r) for r in respuesta.get("MetricDataResults", [])}
+        return {
+            "profundidad": leidas.get("profundidad"),
+            "dlq": leidas.get("dlq"),
+            "tareas": leidas.get("tareas"),
+        }
+
+    @staticmethod
+    def _sqs(identificador: str, cola: str) -> dict[str, Any]:
+        return {
+            "Id": identificador,
+            "MetricStat": {
+                "Metric": {
+                    "Namespace": "AWS/SQS",
+                    "MetricName": "ApproximateNumberOfMessagesVisible",
+                    "Dimensions": [{"Name": "QueueName", "Value": cola}],
+                },
+                "Period": PERIODO_PARAMETRICOS_S,
+                "Stat": "Maximum",
+            },
+            "ReturnData": True,
+        }
+
+
+def crear_metricas_parametricos(region: str) -> MetricasParametricos:
+    import boto3
+    from botocore.config import Config
+
+    # Sin reintentos y con corte corto: H09 no espera a una fuente secundaria.
+    config = Config(retries={"max_attempts": 1}, connect_timeout=1, read_timeout=1)
+    return MetricasParametricos(boto3.client("cloudwatch", region_name=region, config=config))

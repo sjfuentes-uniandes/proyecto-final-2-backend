@@ -12,6 +12,7 @@ from solventa_common.telemetry import RESULTADO_RECHAZADO, operacion
 
 from siniestros.application.siniestro.errores import (
     DependenciaNoDisponible,
+    EvidenciaNoCargada,
     EvidenciaNoDisponible,
     EvidenciaNoEncontrada,
     SiniestroNoEncontrado,
@@ -21,11 +22,52 @@ from siniestros.application.siniestro.puertos import (
     Reloj,
     SiniestrosRepositorio,
 )
-from siniestros.application.siniestro.vistas import Actor, EnlaceEmitido
+from siniestros.application.siniestro.vistas import Actor, EnlaceDescargaEmitido, EnlaceEmitido
 from siniestros.domain.siniestro.modelos import IntegridadEvidencia
 
 TIPO_CONTENIDO_GENERICO = "application/octet-stream"
 RESULTADO_NO_DISPONIBLE = "no_disponible"
+
+
+class EmitirEnlaceCliente:
+    def __init__(
+        self, repo: SiniestrosRepositorio, almacen: AlmacenEvidencias, reloj: Reloj, ttl_s: int
+    ) -> None:
+        if not 1 <= ttl_s <= 300:
+            raise ValueError("La vigencia del enlace debe estar entre 1 y 300 segundos")
+        self._repo, self._almacen, self._reloj, self._ttl_s = repo, almacen, reloj, ttl_s
+
+    async def ejecutar(
+        self, cliente_id: UUID, siniestro_id: UUID, evidencia_id: UUID, actor: Actor
+    ) -> EnlaceDescargaEmitido:
+        with operacion("evidencia.enlace.cliente"):
+            propio, evidencia, confirmada = await self._repo.evidencia_cliente(
+                cliente_id, siniestro_id, evidencia_id
+            )
+            if not propio:
+                raise SiniestroNoEncontrado
+            if evidencia is None:
+                raise EvidenciaNoEncontrada
+            if not confirmada:
+                raise EvidenciaNoCargada
+            tipo = evidencia.tipo_contenido or TIPO_CONTENIDO_GENERICO
+            ahora = self._reloj.ahora()
+            url = await self._almacen.firmar_descarga(
+                evidencia.clave_objeto,
+                evidencia.sha256,
+                self._ttl_s,
+                tipo,
+                evidencia.nombre_archivo,
+            )
+            expira_en = ahora + timedelta(seconds=self._ttl_s)
+            async with self._repo.transaccion() as tx:
+                await tx.evento_evidencia_consultada(evidencia, actor.id, expira_en, ahora)
+            return EnlaceDescargaEmitido(
+                url=url,
+                expira_en=expira_en,
+                tipo_contenido=tipo,
+                nombre_archivo=evidencia.nombre_archivo,
+            )
 
 
 class EmitirEnlace:

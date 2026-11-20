@@ -1,4 +1,4 @@
-"""SiniestrosRepositorio en PostgreSQL (HU-W19). `siniestros` es el único escritor de su base.
+"""SiniestrosRepositorio en PostgreSQL (HU-W19; HU-W22: el siniestro paramétrico). `siniestros` es el único escritor de su base.
 
 - **Lecturas** (`bandeja`, `indicadores`, `detalle`, `evidencia`): cada una toma una conexión del pool
   solo mientras dura su consulta y la devuelve antes de que nadie espere a S3 u a otro servicio.
@@ -16,7 +16,7 @@
 import base64
 import binascii
 import json
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime
 from decimal import Decimal
@@ -31,11 +31,21 @@ from psycopg_pool import AsyncConnectionPool
 
 from siniestros.adapters.outbound import outbox_pg
 from siniestros.adapters.outbound.mapeo import (
-    copia_a_json,  # noqa: F401 - la semilla y las pruebas arman filas con el mismo mapeo
+    copia_a_json,
     copia_de_json,
+    evento_de_json,
+    medicion_a_json,
+    regla_a_json,
+    ubicacion_a_json,
     ubicacion_de_json,
 )
-from siniestros.application.siniestro.errores import SolicitudInvalida
+from siniestros.application.siniestro.errores import (
+    BorradorConvertido,
+    BorradorNoEncontrado,
+    IdempotenciaConflicto,
+    LimiteEvidenciasAlcanzado,
+    SolicitudInvalida,
+)
 from siniestros.application.siniestro.puertos import DecisionFinalDuplicada, RegistroIdempotencia
 from siniestros.application.siniestro.vistas import (
     AccesoDenegado,
@@ -45,6 +55,7 @@ from siniestros.application.siniestro.vistas import (
     Indicadores,
     LiquidacionAprobada,
     PaginaSiniestros,
+    PagoParametrico,
     TipoBandeja,
 )
 from siniestros.domain.siniestro.modelos import (
@@ -68,7 +79,7 @@ COLUMNAS = (
     "id, codigo, origen, estado, poliza_id, cliente_id, copia_poliza, causa, fecha_evento, "
     "ubicacion_declarada, reportado_en, analista_id, asignado_en, pausado_desde, "
     "pausa_acumulada_s, plazo_soporte_vence_en, decidido_en, version, correlation_id, "
-    "valor_reclamado, moneda, deducible, valor_indemnizar"
+    "valor_reclamado, moneda, deducible, valor_indemnizar, evento_id, regla, evento"
 )
 _COLUMNAS_EVIDENCIA = (
     "id, siniestro_id, nombre_archivo, tipo, soporte_tipo, clave_objeto, sha256, capturada_en, "
@@ -105,6 +116,19 @@ class _ConDict:
         return cursor
 
 
+async def _bloquear_borrador_abierto(conexion: _ConDict, actor_id: str, borrador_id: UUID) -> None:
+    fila = await (
+        await conexion.execute(
+            "SELECT estado FROM borradores WHERE id = %s AND actor_id = %s FOR UPDATE",
+            (borrador_id, actor_id),
+        )
+    ).fetchone()
+    if fila is None:
+        raise BorradorNoEncontrado
+    if fila["estado"] != "ABIERTO":
+        raise BorradorConvertido
+
+
 def siniestro_de(fila: Mapping[str, Any]) -> Siniestro:
     return Siniestro(
         id=fila["id"],
@@ -130,6 +154,7 @@ def siniestro_de(fila: Mapping[str, Any]) -> Siniestro:
         moneda=fila["moneda"].strip() if fila["moneda"] else None,
         deducible=fila["deducible"],
         valor_indemnizar=fila["valor_indemnizar"],
+        evento=evento_de_json(fila["evento_id"], fila["regla"], fila["evento"]),
     )
 
 
@@ -274,6 +299,298 @@ class SiniestrosPg:
     async def transaccion(self) -> AsyncIterator["TxSiniestrosPg"]:
         async with self._pool.connection() as conexion, conexion.transaction():
             yield TxSiniestrosPg(conexion)
+
+    async def listar_siniestros_cliente(
+        self, cliente_id: UUID, limite: int, cursor: str | None, corte: datetime
+    ) -> dict[str, Any]:
+        condiciones = ["cliente_id = %s", "reportado_en <= %s"]
+        parametros: list[Any] = [cliente_id, corte]
+        if cursor is not None:
+            clave, identificador, corte = decodificar_cursor(cursor)
+            try:
+                fecha = datetime.fromisoformat(str(clave))
+                if fecha.utcoffset() is None:
+                    raise ValueError
+            except ValueError as error:
+                raise SolicitudInvalida(["cursor"]) from error
+            parametros[1] = corte
+            condiciones.append("(reportado_en, id) < (%s, %s)")
+            parametros.extend((fecha, identificador))
+        parametros.append(limite + 1)
+        consulta = (
+            'SELECT id AS "siniestroId", codigo, origen, estado, poliza_id AS "polizaId", '
+            'reportado_en AS "reportadoEn" FROM siniestros '
+            f"WHERE {' AND '.join(condiciones)} ORDER BY reportado_en DESC, id DESC LIMIT %s"
+        )
+        async with self._pool.connection() as conexion:
+            filas = await (await _ConDict(conexion).execute(consulta, parametros)).fetchall()
+        items = list(filas[:limite])
+        siguiente = None
+        if len(filas) > limite:
+            ultimo = items[-1]
+            siguiente = codificar_cursor(
+                ultimo["reportadoEn"].isoformat(), ultimo["siniestroId"], corte
+            )
+        return {"items": items, "siguienteCursor": siguiente}
+
+    async def consultar_siniestro_cliente(
+        self, cliente_id: UUID, siniestro_id: UUID
+    ) -> dict[str, Any] | None:
+        async with self._pool.connection() as conexion:
+            sql = _ConDict(conexion)
+            caso = await (
+                await sql.execute(
+                    'SELECT id AS "siniestroId", codigo, origen, estado, poliza_id AS "polizaId", '
+                    'reportado_en AS "reportadoEn", descripcion, causa, fecha_evento AS "fechaEvento", '
+                    "CASE WHEN ubicacion_declarada ? 'permiso' THEN ubicacion_declarada "
+                    "ELSE NULL END AS ubicacion "
+                    "FROM siniestros WHERE id = %s AND cliente_id = %s",
+                    (siniestro_id, cliente_id),
+                )
+            ).fetchone()
+            if caso is None:
+                return None
+            evidencias = await (
+                await sql.execute(
+                    'SELECT id AS "evidenciaId", nombre_archivo AS "nombreArchivo", tipo, '
+                    'tipo_contenido AS "tipoContenido", tamano_bytes AS "tamanoBytes", '
+                    'capturada_en AS "capturadaEn" FROM evidencias WHERE siniestro_id = %s ORDER BY id',
+                    (siniestro_id,),
+                )
+            ).fetchall()
+            historial = await (
+                await sql.execute(
+                    'SELECT accion, estado_anterior AS "estadoAnterior", estado_nuevo AS "estadoNuevo", '
+                    'ocurrido_en AS "ocurridoEn" FROM historial_siniestro '
+                    "WHERE siniestro_id = %s ORDER BY ocurrido_en, id",
+                    (siniestro_id,),
+                )
+            ).fetchall()
+        return {**caso, "evidencias": list(evidencias), "historial": list(historial)}
+
+    async def listar_borradores(self, actor_id: str) -> list[dict[str, Any]]:
+        consulta = (
+            'SELECT b.id AS "borradorId", b.poliza_id AS "polizaId", '
+            'b.descripcion AS descripcion, b.creado_en AS "creadoEn", '
+            'b.estado, b.causa, b.fecha_evento AS "fechaEvento", b.version, '
+            "b.envio_resultado AS envio, b.ubicacion, "
+            'count(e.id)::int AS "cantidadEvidencias", '
+            "count(e.id) FILTER (WHERE e.estado_carga = 'PENDIENTE')::int "
+            'AS "evidenciasPendientes" '
+            "FROM borradores b LEFT JOIN borrador_evidencias e ON e.borrador_id = b.id "
+            "WHERE b.actor_id = %s AND b.estado = 'ABIERTO' "
+            "GROUP BY b.id ORDER BY b.creado_en DESC, b.id DESC"
+        )
+        async with self._pool.connection() as bruta:
+            filas = await (await _ConDict(bruta).execute(consulta, (actor_id,))).fetchall()
+        return list(filas)
+
+    async def consultar_borrador(self, actor_id: str, borrador_id: UUID) -> dict[str, Any] | None:
+        consulta = (
+            'SELECT b.id AS "borradorId", b.poliza_id AS "polizaId", '
+            'b.descripcion AS descripcion, b.creado_en AS "creadoEn", '
+            'b.estado, b.causa, b.fecha_evento AS "fechaEvento", b.version, '
+            "b.envio_resultado AS envio, b.ubicacion, "
+            'count(e.id)::int AS "cantidadEvidencias", '
+            "count(e.id) FILTER (WHERE e.estado_carga = 'PENDIENTE')::int "
+            'AS "evidenciasPendientes" '
+            "FROM borradores b LEFT JOIN borrador_evidencias e ON e.borrador_id = b.id "
+            "WHERE b.id = %s AND b.actor_id = %s GROUP BY b.id"
+        )
+        consulta_evidencias = (
+            'SELECT id AS "evidenciaId", nombre_archivo AS "nombreArchivo", tipo, '
+            'tipo_contenido AS "tipoContenido", tamano_bytes AS "tamanoBytes", sha256, '
+            'capturada_en AS "capturadaEn", duracion_segundos AS "duracionSegundos", '
+            'estado_carga AS "estadoCarga", carga_confirmada_en AS "cargaConfirmadaEn" '
+            "FROM borrador_evidencias WHERE borrador_id = %s "
+            "ORDER BY capturada_en NULLS LAST, id"
+        )
+        async with self._pool.connection() as bruta:
+            conexion = _ConDict(bruta)
+            fila = await (await conexion.execute(consulta, (borrador_id, actor_id))).fetchone()
+            if fila is None:
+                return None
+            evidencias = await (
+                await conexion.execute(consulta_evidencias, (borrador_id,))
+            ).fetchall()
+        return {**fila, "evidencias": list(evidencias)}
+
+    async def crear_borrador(
+        self,
+        clave: str,
+        huella: str,
+        borrador_id: UUID,
+        actor_id: str,
+        cliente_id: UUID,
+        poliza_id: UUID,
+        descripcion: str,
+        copia_poliza: dict[str, Any],
+        creado_en: datetime,
+        correlation_id: str,
+    ) -> UUID:
+        async with self._pool.connection() as conexion, conexion.transaction():
+            tx = TxSiniestrosPg(conexion)
+            previo = await tx.adquirir_idempotencia(clave)
+            if previo is not None:
+                if previo.huella != huella:
+                    raise IdempotenciaConflicto
+                repetido = await tx.borrador(UUID(previo.respuesta["borradorId"]), actor_id)
+                if repetido is None:
+                    raise RuntimeError("La idempotencia apunta a un borrador inexistente")
+                return repetido
+            await tx.crear_borrador(
+                borrador_id,
+                actor_id,
+                cliente_id,
+                poliza_id,
+                descripcion,
+                copia_poliza,
+                creado_en,
+                correlation_id,
+            )
+            await tx.guardar_idempotencia(
+                clave, huella, {"borradorId": str(borrador_id)}, creado_en
+            )
+        return borrador_id
+
+    async def agregar_evidencia_borrador(
+        self,
+        actor_id: str,
+        borrador_id: UUID,
+        evidencia_id: UUID,
+        nombre_archivo: str,
+        tipo: TipoEvidencia,
+        clave_objeto: str,
+        sha256: str,
+        capturada_en: datetime | None,
+        tamano_bytes: int,
+        tipo_contenido: str,
+        duracion_segundos: int | None,
+        maximo: int,
+    ) -> None:
+        async with self._pool.connection() as conexion, conexion.transaction():
+            tx = _ConDict(conexion)
+            await _bloquear_borrador_abierto(tx, actor_id, borrador_id)
+            fila = await (
+                await tx.execute(
+                    "SELECT count(*) AS total FROM borrador_evidencias WHERE borrador_id = %s",
+                    (borrador_id,),
+                )
+            ).fetchone()
+            assert fila is not None
+            if fila["total"] >= maximo:
+                raise LimiteEvidenciasAlcanzado(maximo)
+            await tx.execute(
+                "INSERT INTO borrador_evidencias "
+                "(id, borrador_id, nombre_archivo, tipo, clave_objeto, sha256, capturada_en, "
+                "tamano_bytes, tipo_contenido, duracion_segundos) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (
+                    evidencia_id,
+                    borrador_id,
+                    nombre_archivo,
+                    tipo.value,
+                    clave_objeto,
+                    sha256,
+                    capturada_en,
+                    tamano_bytes,
+                    tipo_contenido,
+                    duracion_segundos,
+                ),
+            )
+            await tx.execute(
+                "UPDATE borradores SET version = version + 1 WHERE id = %s", (borrador_id,)
+            )
+
+    async def evidencia_borrador(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID
+    ) -> dict[str, Any] | None:
+        consulta = (
+            'SELECT b.estado, e.estado_carga AS "estadoCarga", e.carga_confirmada_en AS "cargaConfirmadaEn", '
+            'e.clave_objeto AS "claveObjeto", e.sha256, '
+            'e.tipo_contenido AS "tipoContenido", e.tamano_bytes AS "tamanoBytes" '
+            "FROM borrador_evidencias e JOIN borradores b ON b.id = e.borrador_id "
+            "WHERE b.actor_id = %s AND b.id = %s AND e.id = %s"
+        )
+        async with self._pool.connection() as bruta:
+            fila = await (
+                await _ConDict(bruta).execute(consulta, (actor_id, borrador_id, evidencia_id))
+            ).fetchone()
+        if fila is not None and fila["estado"] != "ABIERTO":
+            raise BorradorConvertido
+        return fila
+
+    async def confirmar_evidencia_borrador(
+        self,
+        actor_id: str,
+        borrador_id: UUID,
+        evidencia_id: UUID,
+        confirmada_en: datetime,
+        clave_objeto: str | None = None,
+    ) -> datetime | None:
+        consulta = (
+            "UPDATE borrador_evidencias AS e "
+            "SET estado_carga = 'CARGADA', "
+            "clave_objeto = COALESCE(%s, e.clave_objeto), "
+            "carga_confirmada_en = COALESCE(e.carga_confirmada_en, %s) "
+            "FROM borradores b "
+            "WHERE e.borrador_id = b.id AND b.actor_id = %s AND b.id = %s AND e.id = %s "
+            "RETURNING e.carga_confirmada_en"
+        )
+        async with self._pool.connection() as conexion, conexion.transaction():
+            sql = _ConDict(conexion)
+            await _bloquear_borrador_abierto(sql, actor_id, borrador_id)
+            fila = await (
+                await sql.execute(
+                    consulta, (clave_objeto, confirmada_en, actor_id, borrador_id, evidencia_id)
+                )
+            ).fetchone()
+            if fila is not None:
+                await sql.execute(
+                    "UPDATE borradores SET version = version + 1 WHERE id = %s", (borrador_id,)
+                )
+        return fila["carga_confirmada_en"] if fila is not None else None
+
+    async def actualizar_borrador(
+        self, actor_id: str, borrador_id: UUID, cambios: dict[str, Any]
+    ) -> None:
+        columnas = {
+            "descripcion": "descripcion",
+            "causa": "causa",
+            "fechaEvento": "fecha_evento",
+            "ubicacion": "ubicacion",
+        }
+        if not cambios or any(campo not in columnas for campo in cambios):
+            raise SolicitudInvalida(list(cambios) or ["body"])
+        if "descripcion" in cambios and cambios["descripcion"] is None:
+            raise SolicitudInvalida(["descripcion"])
+        asignaciones = ", ".join(f"{columnas[campo]} = %s" for campo in cambios)
+        async with self._pool.connection() as conexion, conexion.transaction():
+            sql = _ConDict(conexion)
+            await _bloquear_borrador_abierto(sql, actor_id, borrador_id)
+            await sql.execute(
+                f"UPDATE borradores SET {asignaciones}, version = version + 1 WHERE id = %s",
+                (
+                    *(Jsonb(v) if k == "ubicacion" else v for k, v in cambios.items()),
+                    borrador_id,
+                ),
+            )
+
+    async def eliminar_evidencia_borrador(
+        self, actor_id: str, borrador_id: UUID, evidencia_id: UUID
+    ) -> None:
+        async with self._pool.connection() as conexion, conexion.transaction():
+            sql = _ConDict(conexion)
+            await _bloquear_borrador_abierto(sql, actor_id, borrador_id)
+            cursor = await sql.execute(
+                "DELETE FROM borrador_evidencias WHERE borrador_id = %s AND id = %s",
+                (borrador_id, evidencia_id),
+            )
+            if cursor.rowcount != 1:
+                raise BorradorNoEncontrado
+            await sql.execute(
+                "UPDATE borradores SET version = version + 1 WHERE id = %s", (borrador_id,)
+            )
 
     async def bandeja(self, filtro: FiltroBandeja) -> PaginaSiniestros:
         corte = filtro.corte
@@ -434,6 +751,33 @@ class SiniestrosPg:
             pago=pago,
         )
 
+    async def evidencia_cliente(
+        self, cliente_id: UUID, siniestro_id: UUID, evidencia_id: UUID
+    ) -> tuple[bool, Evidencia | None, bool]:
+        async with self._pool.connection() as bruta, bruta.transaction():
+            sql = _ConDict(bruta)
+            propio = await (
+                await sql.execute(
+                    "SELECT 1 FROM siniestros WHERE id = %s AND cliente_id = %s",
+                    (siniestro_id, cliente_id),
+                )
+            ).fetchone()
+            if propio is None:
+                return False, None, False
+            fila = await (
+                await sql.execute(
+                    "SELECT e.*, CASE WHEN b.id IS NULL THEN true "
+                    "ELSE be.estado_carga = 'CARGADA' END AS confirmada "
+                    "FROM evidencias e "
+                    "JOIN siniestros s ON s.id = e.siniestro_id "
+                    "LEFT JOIN borradores b ON b.siniestro_id = s.id "
+                    "LEFT JOIN borrador_evidencias be ON be.borrador_id = b.id AND be.id = e.id "
+                    "WHERE s.id = %s AND s.cliente_id = %s AND e.id = %s",
+                    (siniestro_id, cliente_id, evidencia_id),
+                )
+            ).fetchone()
+        return True, evidencia_de(fila) if fila else None, bool(fila and fila["confirmada"])
+
     async def evidencia(
         self, siniestro_id: UUID, evidencia_id: UUID
     ) -> tuple[bool, Evidencia | None]:
@@ -454,6 +798,27 @@ class SiniestrosPg:
             ).fetchone()
         return True, evidencia_de(fila) if fila else None
 
+    async def pagos_parametricos(
+        self, siniestro_ids: Sequence[UUID]
+    ) -> tuple[PagoParametrico, ...]:
+        async with self._pool.connection() as bruta:
+            filas = await (
+                await _ConDict(bruta).execute(
+                    "SELECT id, codigo, pago_estado FROM siniestros "
+                    "WHERE id = ANY(%s) AND origen = 'PARAMETRICO' ORDER BY codigo",
+                    (list(siniestro_ids),),
+                )
+            ).fetchall()
+        # Un paramétrico nace APROBADO: sin resultado de `dinero`, el pago está PENDIENTE (R-105).
+        return tuple(
+            PagoParametrico(
+                f["id"],
+                f["codigo"],
+                EstadoPago(f["pago_estado"]) if f["pago_estado"] else EstadoPago.PENDIENTE,
+            )
+            for f in filas
+        )
+
 
 class TxSiniestrosPg:
     """Implementa `TxSiniestros` sobre la transacción abierta de `SiniestrosPg.transaccion`."""
@@ -473,6 +838,42 @@ class TxSiniestrosPg:
         if fila is None:
             return None
         return RegistroIdempotencia(fila["huella_solicitud"], fila["respuesta"])
+
+    async def borrador(self, borrador_id: UUID, actor_id: str) -> UUID | None:
+        fila = await (
+            await self._conexion.execute(
+                "SELECT id FROM borradores WHERE id = %s AND actor_id = %s",
+                (borrador_id, actor_id),
+            )
+        ).fetchone()
+        return fila["id"] if fila else None
+
+    async def crear_borrador(
+        self,
+        borrador_id: UUID,
+        actor_id: str,
+        cliente_id: UUID,
+        poliza_id: UUID,
+        descripcion: str,
+        copia_poliza: dict[str, Any],
+        creado_en: datetime,
+        correlation_id: str,
+    ) -> None:
+        await self._conexion.execute(
+            "INSERT INTO borradores "
+            "(id, actor_id, cliente_id, poliza_id, descripcion, copia_poliza, creado_en, "
+            "correlation_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            (
+                borrador_id,
+                actor_id,
+                cliente_id,
+                poliza_id,
+                descripcion,
+                Jsonb(copia_poliza),
+                creado_en,
+                correlation_id,
+            ),
+        )
 
     async def guardar_idempotencia(
         self, clave: str, huella: str, respuesta: dict[str, Any], creada_en: datetime
@@ -583,6 +984,52 @@ class TxSiniestrosPg:
         ).fetchall()
         return frozenset(f["id"] for f in filas)
 
+    async def siniestro_parametrico(self, evento_id: UUID, poliza_id: UUID) -> Siniestro | None:
+        fila = await (
+            await self._conexion.execute(
+                f"SELECT {COLUMNAS} FROM siniestros "
+                "WHERE evento_id = %s AND poliza_id = %s AND origen = 'PARAMETRICO'",
+                (evento_id, poliza_id),
+            )
+        ).fetchone()
+        return siniestro_de(fila) if fila else None
+
+    async def insertar_parametrico(self, siniestro: Siniestro) -> bool:
+        evento = siniestro.evento
+        assert evento is not None and siniestro.origen.value == "PARAMETRICO"
+        cursor = await self._conexion.execute(
+            "INSERT INTO siniestros (id, codigo, origen, estado, poliza_id, cliente_id, "
+            "copia_poliza, causa, fecha_evento, ubicacion_declarada, reportado_en, decidido_en, "
+            "moneda, deducible, valor_indemnizar, evento_id, regla, evento, version, "
+            "correlation_id) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+            "ON CONFLICT (evento_id, poliza_id) WHERE origen = 'PARAMETRICO' DO NOTHING "
+            "RETURNING id",
+            (
+                siniestro.id,
+                siniestro.codigo,
+                siniestro.origen.value,
+                siniestro.estado.value,
+                siniestro.poliza_id,
+                siniestro.cliente_id,
+                Jsonb(copia_a_json(siniestro.copia_poliza)),
+                siniestro.causa,
+                siniestro.fecha_evento,
+                Jsonb(ubicacion_a_json(siniestro.ubicacion_declarada)),
+                siniestro.reportado_en,
+                siniestro.decidido_en,
+                siniestro.moneda,
+                siniestro.deducible,
+                siniestro.valor_indemnizar,
+                evento.evento_id,
+                Jsonb(regla_a_json(evento)),
+                Jsonb(medicion_a_json(evento)),
+                siniestro.version,
+                siniestro.correlation_id,
+            ),
+        )
+        return await cursor.fetchone() is not None
+
     async def reservar_plazos_vencidos(self, ahora: datetime, lote: int) -> list[Siniestro]:
         filas = await (
             await self._conexion.execute(
@@ -645,7 +1092,11 @@ class TxSiniestrosPg:
         )
 
     async def evento_aprobado(
-        self, siniestro: Siniestro, referencia_pago: str, decidido_por: UUID, aprobado_en: datetime
+        self,
+        siniestro: Siniestro,
+        referencia_pago: str,
+        decidido_por: UUID | None,
+        aprobado_en: datetime,
     ) -> None:
         await outbox_pg.insertar(
             self._bruta, outbox_pg.aprobado(siniestro, referencia_pago, decidido_por, aprobado_en)

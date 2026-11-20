@@ -79,6 +79,9 @@ RECURSOS = {
     "decidir": "SINIESTRO",
     "catalogos_decision": "SINIESTRO",
     "pago": "SINIESTRO",
+    # HU-W22: H09 (resumen de siniestros paramétricos y selector de orígenes).
+    "resumen_parametricos": "RESUMEN",
+    "eventos_origen": "RESUMEN",
 }
 
 # Las tareas de aviso en curso: el bucle solo guarda referencias débiles.

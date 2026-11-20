@@ -1,4 +1,5 @@
-"""Inbox y consumidor SQS (HU-W16, 16.5; ADR 0013, decisiones 2, 4 y 8; HU-W24, contrapresión).
+"""Inbox y consumidor SQS (HU-W16, 16.5; ADR 0013, decisiones 2, 4 y 8; HU-W24, contrapresión;
+HU-W22, reanudación).
 
 Consume una cola SQS suscrita al tópico de negocio con entrega en crudo: el cuerpo es el sobre de
 `contracts/events/` y el atributo `eventType` (= `type`) es el que filtra la suscripción. Deduplica
@@ -14,10 +15,21 @@ por `eventId` con una tabla de inbox en la base del servicio.
   - (b) Primero el commit y después el efecto externo: el manejador escribe su parte transaccional
     con `tx` y devuelve una función asíncrona sin argumentos. El consumidor la ejecuta **después**
     del commit y **antes** de borrar el mensaje. Si falla, el mensaje no se borra; la reentrega
-    encuentra el `eventId` en el inbox y se trata como duplicado: la continuación **no se repite**.
-    Recuperar un efecto externo que no terminó (por ejemplo, un cobro `PENDIENTE`) es cosa del
-    servicio (la conciliación de la ADR 0013, decisión 5), no del consumidor.
-- **Duplicado** (`eventId` ya en el inbox): no se llama al manejador; se hace commit y se borra.
+    encuentra el `eventId` en el inbox y se trata como duplicado: **sin `reanudar` la continuación
+    no se repite**. Recuperar un efecto externo que no terminó (por ejemplo, un cobro `PENDIENTE`)
+    es cosa del servicio (la conciliación de la ADR 0013, decisión 5) o de `reanudar`.
+- **Reanudación (HU-W22, DS3-15):** `reanudar(evento) -> Continuacion | None`, opcional (por omisión
+  `None`: el comportamiento de arriba no cambia). Se llama cuando el `eventId` **ya estaba** en el
+  inbox, **fuera de la transacción del inbox** (la del `INSERT` ya terminó), y el servicio decide
+  qué quedó pendiente. Si devuelve una continuación, se ejecuta **antes de borrar** el mensaje y el
+  desenlace es `reanudado`; si devuelve `None`, no hay nada pendiente y es un `duplicado`. Si la
+  continuación (o `reanudar`) falla, es `fallo_continuacion` y **no** se borra: el mensaje vuelve
+  tras la visibilidad y, tras `max_receive_count`, SQS lo manda a la DLQ. Sirve al camino
+  secuencial y al concurrente, porque ambos pasan por `_aplicar`; la continuación reanudada tiene
+  el latido, la parada con plazo y `al_fallar` de cualquier otra. Dos consumidores con el mismo
+  mensaje pueden reanudar a la vez: la continuación debe ser idempotente.
+- **Duplicado** (`eventId` ya en el inbox, sin `reanudar` o sin nada pendiente): no se llama al
+  manejador; se hace commit y se borra.
 - **Fallo** del manejador o de la transacción: rollback (sin fila en el inbox) y el mensaje no se
   borra. Vuelve tras la visibilidad de la cola; tras `max_receive_count` recepciones (5 en
   `infra/`), SQS lo manda a la DLQ.
@@ -125,6 +137,7 @@ MOTIVO_ESQUEMA = "esquema"
 
 NUEVO = "nuevo"
 DUPLICADO = "duplicado"
+REANUDADO = "reanudado"
 ENVENENADO = "envenenado"
 FALLO_TRANSACCION = "fallo_transaccion"
 FALLO_CONTINUACION = "fallo_continuacion"
@@ -220,6 +233,8 @@ class TransaccionInbox(Protocol):
 Continuacion = Callable[[], Awaitable[None]]
 # Recibe la transacción del inbox (`T`) para escribir su efecto en ella.
 type Manejador[T: TransaccionInbox] = Callable[[EventoRecibido, T], Awaitable[Continuacion | None]]
+# HU-W22 (DS3-15): qué quedó pendiente de un evento que ya estaba en el inbox; `None` = nada.
+Reanudar = Callable[[EventoRecibido], Awaitable[Continuacion | None]]
 
 
 class RepositorioInbox[T: TransaccionInbox](Protocol):
@@ -421,7 +436,7 @@ class Desenlace:
 
     @property
     def procesado(self) -> bool:
-        return self.outcome in (NUEVO, DUPLICADO)
+        return self.outcome in (NUEVO, DUPLICADO, REANUDADO)
 
 
 # Se llama tras un desenlace que no borra; `evento` es None si el sobre no se pudo leer.
@@ -439,7 +454,8 @@ class ConsumidorInbox[T: TransaccionInbox]:
     """Consume una cola con inbox: un ciclo (`ejecutar_una_vez`) o en bucle (`ejecutar`).
 
     `concurrencia` activa la contrapresión y `visibilidad_s` el latido; los dos piden un
-    `ReceptorControlado` (como `ReceptorSqs`).
+    `ReceptorControlado` (como `ReceptorSqs`). `reanudar` (HU-W22) retoma lo pendiente de un evento
+    que ya estaba en el inbox; sin él, un duplicado solo se borra.
     """
 
     def __init__(
@@ -456,6 +472,7 @@ class ConsumidorInbox[T: TransaccionInbox]:
         latido_s: float | None = None,
         plazo_parada_s: float = PLAZO_PARADA_S,
         al_fallar: AlFallar | None = None,
+        reanudar: Reanudar | None = None,
     ) -> None:
         if concurrencia is not None and not 1 <= concurrencia <= CONCURRENCIA_MAX:
             raise ValueError(f"concurrencia debe estar entre 1 y {CONCURRENCIA_MAX}")
@@ -477,6 +494,7 @@ class ConsumidorInbox[T: TransaccionInbox]:
         self._latido_s = latido_s if latido_s is not None else (visibilidad_s or 0) / 2
         self._plazo_parada_s = plazo_parada_s
         self._al_fallar = al_fallar
+        self._reanudar = reanudar
         self._controlado = controlado
         self._semaforo = asyncio.Semaphore(concurrencia or 1)
         # Recibidos sin terminar (en curso o esperando turno): la medida de la contrapresión.
@@ -697,13 +715,27 @@ class ConsumidorInbox[T: TransaccionInbox]:
         except Exception as error:  # noqa: BLE001 - el mensaje vuelve tras la visibilidad
             return Desenlace(FALLO_TRANSACCION, error_type=describir_error(error))
         if not nuevo:
-            return Desenlace(DUPLICADO)
+            return await self._reanudar_pendiente(evento)
         if continuacion is not None:
             try:
                 await continuacion()
-            except Exception as error:  # noqa: BLE001 - la reentrega será un duplicado
+            except Exception as error:  # noqa: BLE001 - sin `reanudar`, la reentrega será un duplicado
                 return Desenlace(FALLO_CONTINUACION, error_type=describir_error(error))
         return Desenlace(NUEVO)
+
+    async def _reanudar_pendiente(self, evento: EventoRecibido) -> Desenlace:
+        """Duplicado: sin `reanudar` (o sin nada pendiente) no hay más que borrar; con una
+        continuación pendiente, se ejecuta fuera de la transacción del inbox y antes de borrar."""
+        if self._reanudar is None:
+            return Desenlace(DUPLICADO)
+        try:
+            continuacion = await self._reanudar(evento)
+            if continuacion is None:
+                return Desenlace(DUPLICADO)
+            await continuacion()
+        except Exception as error:  # noqa: BLE001 - no se borra: vuelve tras la visibilidad
+            return Desenlace(FALLO_CONTINUACION, error_type=describir_error(error))
+        return Desenlace(REANUDADO)
 
     async def _borrar(self, mensaje: MensajeSqs) -> None:
         try:

@@ -1,4 +1,4 @@
-"""DTO de `siniestros` (HU-W19 y HU-W20): fuente de los esquemas de `contracts/openapi/siniestros.yaml`.
+"""DTO de `siniestros` (HU-W19, HU-W20 y HU-W22): fuente de los esquemas de `contracts/openapi/siniestros.yaml`.
 
 Los enumerados son los del dominio y de la aplicación (mismos nombres que en el contrato), así que
 el esquema publicado no depende de una segunda copia. Los nombres, campos y descripciones de estas
@@ -125,7 +125,9 @@ class ResumenBandejaSiniestros(_Dto):
 class AmparoCopiaDto(_Dto):
     codigo: str
     nombre: str
-    suma_asegurada: TextoDecimal = Field(description="Suma asegurada del amparo (DS2-16)")
+    suma_asegurada: TextoDecimal | None = Field(
+        description="Suma asegurada del amparo (DS2-16); null si la fuente no la informa"
+    )
 
 
 class VigenciaCopiaDto(_Dto):
@@ -201,7 +203,8 @@ class PasoTramiteDto(_Dto):
 class EntradaHistorial(_Dto):
     """Historial inmutable. `accion` es un código en mayúsculas (REPORTADO, EVIDENCIAS_VALIDADAS,
     ASIGNADO, APROBADO, RECHAZADO, SOPORTE_SOLICITADO, PLAZO_SOPORTE_VENCIDO, PAGO_CONFIRMADO,
-    PAGO_RECHAZADO; W22 agrega los suyos)."""
+    PAGO_RECHAZADO y, desde HU-W22, CREADO_AUTOMATICAMENTE: el paramétrico nace APROBADO con
+    `actorRol = SISTEMA_PARAMETRICO`, sin actor ni nombre)."""
 
     id: UUID
     accion: str = Field(pattern=r"^[A-Z_]{3,40}$")
@@ -216,7 +219,7 @@ class EntradaHistorial(_Dto):
 
 class LiquidacionDto(_Dto):
     """La liquidación aprobada (HU-W20). Null mientras el caso no esté APROBADO. En un paramétrico
-    (W22) solo trae `valorIndemnizar`."""
+    (W22) `valorIndemnizar` es el valor de la cobertura, `deducible` es 0 y `valorReclamado` es null."""
 
     moneda: str = Field(pattern=r"^[A-Z]{3}$")
     valor_reclamado: TextoDecimal | None
@@ -229,7 +232,8 @@ class LiquidacionDto(_Dto):
 
 
 class EventoParametricoDto(_Dto):
-    """Null hasta HU-W22."""
+    """El evento externo y la regla que activaron un siniestro PARAMETRICO (HU-W22, AC3). Null en
+    los demás orígenes."""
 
     evento_id: UUID
     fuente: str
@@ -239,7 +243,10 @@ class EventoParametricoDto(_Dto):
     unidad: str
     zona: str
     observado_en: datetime
-    regla: str
+    evento_origen: str = Field(
+        description="Agrupa los eventos de un mismo episodio (p. ej. EVT-2026-0913); es el selector de H09"
+    )
+    regla: str = Field(description="Código de la regla aplicada (DS3-21); el portal lo traduce")
     version_regla: str
 
 
@@ -258,8 +265,8 @@ class PagoDto(_Dto):
 
 
 class DetalleSiniestro(ResumenSiniestro):
-    """Detalle (H03, H04, Cobertura e Historial). `liquidacion` la llena W20 al aprobar y `pago`, W23;
-    `evento` (W22) viene en null."""
+    """Detalle (H03, H04, Cobertura e Historial). `liquidacion` la llena W20 al aprobar, `pago` W23 y
+    `evento` (W22) solo existe en los siniestros de origen PARAMETRICO."""
 
     causa: str = Field(description="Código del amparo reclamado (uno de poliza.amparos)")
     fecha_evento: datetime
@@ -407,3 +414,80 @@ class CatalogosDecision(_Dto):
     documentos: list[SoporteSolicitable]
     canales: list[CanalSoporte]
     plazos_dias_habiles: list[int]
+
+
+# --- Siniestro paramétrico (HU-W22, DS3-23) -----------------------------------------------------
+
+ValorParametrico = Annotated[str, Field(pattern=r"^[0-9]+(\.[0-9]{1,2})?$")]
+MedidaParametrica = Annotated[str, Field(pattern=r"^[0-9]{1,9}(\.[0-9]{1,3})?$")]
+ClaveParametrica = Annotated[
+    str,
+    Field(
+        pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+        r":[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    ),
+]
+
+
+class PolizaParametricaDto(_Dto):
+    """La póliza de la cobertura que activó el evento, tal como la conoce `pagos-parametricos`
+    (copia de `PolizaEmitida`). `siniestros` completa el resto de la copia (amparo, carencia,
+    plazo de aviso, primas y beneficiario) con los valores del caso paramétrico."""
+
+    numero: NumeroPoliza
+    ramo: str = Field(min_length=1, max_length=64, description="Nombre del ramo")
+    vigencia: VigenciaCopiaDto
+    moneda: str = Field(pattern=r"^[A-Z]{3}$")
+
+
+class ObservacionParametricaDto(_Dto):
+    """La medición que superó el umbral (`EventoParametricoObservado`, ya autenticada y archivada)."""
+
+    fuente: str = Field(pattern=r"^[A-Z][A-Z0-9-]{1,31}$")
+    tipo_evento: str = Field(pattern=r"^[A-Z][A-Z_]{2,39}$")
+    valor_observado: MedidaParametrica
+    umbral: MedidaParametrica
+    unidad: str = Field(pattern=r"^[a-z]{1,8}$")
+    zona: str = Field(pattern=r"^[A-Z0-9]{2,16}$")
+    observado_en: datetime
+    evento_origen: str = Field(pattern=r"^[A-Za-z0-9._:-]{1,64}$")
+
+
+class SolicitudSiniestroParametrico(_Dto):
+    """Cuerpo de `POST /v1/siniestros/parametricos`, de uso interno de `pagos-parametricos` (DS3-23).
+    La clave del caso es `(eventoId, polizaId)`: la `Idempotency-Key` debe ser `<eventoId>:<polizaId>`
+    y, si no coincide con el cuerpo, 422 SOLICITUD_INVALIDA. `moneda` debe ser la de la póliza y
+    `valor` es lo que paga la cobertura (queda como `valorIndemnizar`, con `deducible = 0`)."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+    evento_id: UUID
+    poliza_id: UUID
+    cliente_id: UUID
+    poliza: PolizaParametricaDto
+    evento: ObservacionParametricaDto
+    regla: str = Field(
+        pattern=r"^[A-Z][A-Z0-9_]{2,63}$",
+        description="Código de la regla aplicada (DS3-21), p. ej. VALOR_IGUAL_O_SUPERIOR_AL_UMBRAL",
+    )
+    version_regla: str = Field(min_length=1, max_length=32)
+    valor: ValorParametrico = Field(
+        description="Valor de pago de la cobertura, texto decimal (DS2-16)"
+    )
+    moneda: str = Field(pattern=r"^[A-Z]{3}$")
+
+
+class PagoParametricoDto(_Dto):
+    """Estado del pago de un siniestro paramétrico (H09, «Últimos pagos activados»). `estadoPago` se
+    deriva como en `PagoDto`: PENDIENTE hasta que `dinero` informa un resultado."""
+
+    siniestro_id: UUID
+    codigo: CodigoSiniestro
+    estado_pago: EstadoPago
+
+
+class PagosParametricosRespuesta(_Dto):
+    items: list[PagoParametricoDto] = Field(
+        description="Un elemento por siniestro PARAMETRICO encontrado; los ids inexistentes o de otro "
+        "origen se omiten (no es un error)"
+    )

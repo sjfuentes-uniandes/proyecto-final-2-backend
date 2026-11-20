@@ -1,5 +1,6 @@
 """Puertos de la aplicación de siniestros (HU-W19). Los implementan los adaptadores de salida."""
 
+from collections.abc import Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,6 +14,7 @@ from siniestros.application.siniestro.vistas import (
     FiltroBandeja,
     Indicadores,
     PaginaSiniestros,
+    PagoParametrico,
 )
 from siniestros.domain.siniestro.modelos import (
     CanalSoporte,
@@ -36,6 +38,12 @@ class Reloj(Protocol):
     def ahora(self) -> datetime: ...
 
 
+class Codigos(Protocol):
+    """El consecutivo del código `88-AAAA-NNNN` (DS3-11): una transacción corta por código."""
+
+    async def siguiente(self, anio: int) -> str: ...
+
+
 class SoportesRequeridos(Protocol):
     def para(self, amparo: str) -> tuple[TipoSoporte, ...]:
         """Los soportes que exige el amparo; vacío si no se conoce."""
@@ -43,6 +51,24 @@ class SoportesRequeridos(Protocol):
 
 
 class AlmacenEvidencias(Protocol):
+    async def firmar_descarga(
+        self, clave: str, sha256: str, ttl_s: int, tipo_contenido: str, nombre_archivo: str
+    ) -> str:
+        """Comprueba el objeto y firma una descarga HTTPS con nombre y MIME, por hasta 300 s."""
+        ...
+
+    async def conservar(
+        self,
+        origen: str,
+        destino: str,
+        sha256: str,
+        tamano_bytes: int,
+        tipo_contenido: str,
+        cifrado: str,
+    ) -> None:
+        """Verifica y conserva el archivo fuera de tmp; repetir recupera la misma copia."""
+        ...
+
     async def verificar(self, clave: str, sha256: str) -> IntegridadEvidencia:
         """Compara el checksum del objeto con `sha256` sin descargarlo. Nunca lanza: un objeto
         ausente es `NO_DISPONIBLE`; un fallo o un corte por tiempo, `NO_VERIFICABLE`."""
@@ -50,6 +76,18 @@ class AlmacenEvidencias(Protocol):
 
     async def firmar_lectura(self, clave: str, ttl_s: int, tipo_contenido: str) -> str:
         """URL prefirmada de lectura. Lanza `DependenciaNoDisponible` si no se puede firmar."""
+        ...
+
+    async def firmar_carga(
+        self,
+        clave: str,
+        tipo_contenido: str,
+        tamano_bytes: int,
+        sha256: str,
+        ttl_s: int,
+        cifrado: str,
+    ) -> tuple[str, dict[str, str]]:
+        """POST prefirmado con tipo, tamaño, checksum y cifrado inmutables."""
         ...
 
 
@@ -81,6 +119,16 @@ class TxSiniestros(Protocol):
         ...
 
     async def ids_evidencias(self, siniestro_id: UUID) -> frozenset[UUID]: ...
+
+    # HU-W22 (DS3-23): el siniestro paramétrico, una sola vez por evento y póliza.
+    async def siniestro_parametrico(self, evento_id: UUID, poliza_id: UUID) -> Siniestro | None:
+        """El siniestro PARAMETRICO de ese evento y esa póliza, si ya existe."""
+        ...
+
+    async def insertar_parametrico(self, siniestro: Siniestro) -> bool:
+        """`INSERT ... ON CONFLICT (evento_id, poliza_id) DO NOTHING`: False si otra transacción ya
+        había creado el de ese evento y esa póliza (la barrera de negocio contra el duplicado)."""
+        ...
 
     async def reservar_plazos_vencidos(self, ahora: datetime, lote: int) -> list[Siniestro]:
         """Hasta `lote` casos FALTA_SOPORTE con el plazo vencido, bloqueados con `FOR UPDATE SKIP
@@ -115,8 +163,14 @@ class TxSiniestros(Protocol):
     ) -> None: ...
 
     async def evento_aprobado(
-        self, siniestro: Siniestro, referencia_pago: str, decidido_por: UUID, aprobado_en: datetime
-    ) -> None: ...
+        self,
+        siniestro: Siniestro,
+        referencia_pago: str,
+        decidido_por: UUID | None,
+        aprobado_en: datetime,
+    ) -> None:
+        """`decidido_por` es null en un paramétrico (R-65)."""
+        ...
 
     async def evento_rechazado(
         self, siniestro: Siniestro, causal: CausalRechazo, decidido_por: UUID, decidido_en: datetime
@@ -145,6 +199,12 @@ class TxSiniestros(Protocol):
 
 
 class SiniestrosRepositorio(Protocol):
+    async def evidencia_cliente(
+        self, cliente_id: UUID, siniestro_id: UUID, evidencia_id: UUID
+    ) -> tuple[bool, Evidencia | None, bool]:
+        """(¿siniestro propio?, evidencia de ese siniestro, ¿confirmada?)."""
+        ...
+
     def transaccion(self) -> AbstractAsyncContextManager[TxSiniestros]: ...
 
     async def bandeja(self, filtro: FiltroBandeja) -> PaginaSiniestros:
@@ -166,4 +226,11 @@ class SiniestrosRepositorio(Protocol):
         self, siniestro_id: UUID, evidencia_id: UUID
     ) -> tuple[bool, Evidencia | None]:
         """(¿existe el siniestro?, la evidencia si es de ese siniestro)."""
+        ...
+
+    async def pagos_parametricos(
+        self, siniestro_ids: Sequence[UUID]
+    ) -> tuple[PagoParametrico, ...]:
+        """El estado de pago de los siniestros PARAMETRICO pedidos (HU-W22, H09), en una consulta.
+        Los ids inexistentes o de otro origen no aparecen."""
         ...

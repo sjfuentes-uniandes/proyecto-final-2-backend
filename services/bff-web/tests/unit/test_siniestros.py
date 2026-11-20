@@ -563,6 +563,17 @@ def test_si_clientes_falla_el_nombre_es_null_y_el_detalle_sale(simulado: Simulad
     assert cuerpo["polizaVista"] is not None
 
 
+def test_detalle_movil_con_amparo_sin_monto_no_inventa_suma(simulado: Simulado) -> None:
+    import copy
+
+    detalle = copy.deepcopy(DETALLE)
+    detalle["poliza"]["amparos"][0]["sumaAsegurada"] = None
+    simulado.responder = _json(200, detalle)
+    respuesta = _pedir("GET", f"/v1/siniestros/{SINIESTRO_ID}")
+    assert respuesta.status_code == 200
+    assert respuesta.json()["poliza"]["amparos"][0]["sumaAsegurada"] is None
+
+
 def test_un_siniestro_inexistente_pasa_como_404(simulado: Simulado) -> None:
     simulado.responder = _json(404, NO_ENCONTRADO)
     respuesta = _pedir("GET", f"/v1/siniestros/{SINIESTRO_ID}")

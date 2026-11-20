@@ -79,6 +79,8 @@ services:
       CONSULTA_URL: http://consulta:8080
       # HU-W19: siniestros del analista (grupo analistas-siniestros).
       SINIESTROS_URL: http://siniestros:8080
+      # HU-W22 (H09) y HU-W24 (H10 y H11): el seguimiento y la cola de descarte de pagos-parametricos.
+      PAGOS_PARAMETRICOS_URL: http://pagos-parametricos:8080
 
   bff-movil:
     <<: *servicio
@@ -90,6 +92,7 @@ services:
       localstack: { condition: service_started }
       otel-collector: { condition: service_started }
       clientes: { condition: service_healthy }
+      siniestros: { condition: service_healthy }
     # El ancla define environment: se repiten sus variables junto con las propias.
     environment:
       SOLVENTA_AWS_ENDPOINT_URL: http://localstack:4566
@@ -97,6 +100,8 @@ services:
       OTEL_PROPAGATORS: tracecontext,baggage,xray
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
       CLIENTES_URL: http://clientes:8080
+      CONSULTA_URL: http://consulta:8080
+      SINIESTROS_URL: http://siniestros:8080
 
   clientes:
     <<: *servicio
@@ -326,6 +331,19 @@ services:
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: base2_exponential_bucket_histogram
       DB_HOST: postgres
       SINIESTROS_URL: http://siniestros:8080
+      # HU-W21: las dos colas de entrada (con su DLQ, la de eventos la lee la cola de descarte H10),
+      # el Outbox hacia el tópico local y las credenciales ficticias de LocalStack. Los recursos los
+      # crea scripts/dev/localstack-init.sh. SQS_CONCURRENCIA dimensiona también el pool de
+      # conexiones (DB_POOL_SIZE solo puede subirlo).
+      SQS_PARAMETRICOS_EVENTOS_URL: http://localstack:4566/000000000000/solventa-local-parametricos-eventos
+      SQS_PARAMETRICOS_EVENTOS_DLQ_URL: http://localstack:4566/000000000000/solventa-local-parametricos-eventos-dlq
+      SQS_PARAMETRICOS_POLIZAS_URL: http://localstack:4566/000000000000/solventa-local-parametricos-polizas
+      SQS_CONCURRENCIA: "10"
+      OUTBOX_ENABLED: "true"
+      EVENTS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:solventa-local-eventos-negocio
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
 
   # Entrada de telemetría con firma HMAC (D5) y Outbox propio (ConexionTelemetria --> PublicadoresOutbox).
   adaptador-telemetria:
@@ -341,6 +359,18 @@ services:
       DB_HOST: postgres
       # Secreto sintético solo para el ambiente local (en AWS viene de Secrets Manager).
       ALLY_TELEMETRIA_CREDENTIALS: '{"hmac_secret":"local-sintetico"}'
+      # HU-W21: el original de cada evento va al bucket de evidencias (LocalStack), bajo
+      # telemetria/, y el Outbox publica en el tópico local. Los recursos los crea
+      # scripts/dev/localstack-init.sh; las credenciales son las ficticias de LocalStack.
+      EVIDENCIAS_BUCKET: solventa-local-evidencias
+      EVIDENCIAS_BUCKET_SSE: AES256
+      TELEMETRIA_ARCHIVO_PREFIJO: telemetria/
+      TELEMETRIA_FUENTES: IDEAM-SIM,AEROCIVIL-SIM
+      OUTBOX_ENABLED: "true"
+      EVENTS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:solventa-local-eventos-negocio
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
 
 volumes:
   pgdata:

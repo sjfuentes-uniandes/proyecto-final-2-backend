@@ -547,6 +547,14 @@ run "sprint3" {
 
   assert {
     condition = (
+      local.environment["siniestros"]["UBICACION_OBLIGATORIA"] == "true" &&
+      toset(jsondecode(local.environment["siniestros"]["UBICACION_TIPOS_OPCIONALES"])) == toset(["AUXILIO_FUNERARIO", "ENFERMEDADES_GRAVES"])
+    )
+    error_message = "Solo auxilio funerario y enfermedades graves tienen ubicación opcional por defecto."
+  }
+
+  assert {
+    condition = (
       contains(local.task_statements["siniestros"], { Effect = "Allow", Action = ["s3:PutObject"], Resource = ["arn:aws:s3:::solventa-int-evidencias-123456789012/*"] }) &&
       contains(local.task_statements["siniestros"], { Effect = "Allow", Action = ["s3:GetObject", "s3:GetObjectVersion"], Resource = ["arn:aws:s3:::solventa-int-evidencias-123456789012/*"] }) &&
       contains(local.task_statements["siniestros"], { Effect = "Deny", Action = ["s3:*"], Resource = ["arn:aws:s3:::solventa-int-evidencias-123456789012/telemetria/*"] }) &&
@@ -565,9 +573,14 @@ run "sprint3" {
     condition = (
       !strcontains(jsonencode(local.task_statements["adaptador-telemetria"]), "s3:GetObject") &&
       !strcontains(jsonencode(local.task_statements), "s3:DeleteObject") &&
-      !strcontains(jsonencode(local.task_statements["siniestros"]), "s3:ListBucket")
+      contains(local.task_statements["siniestros"], {
+        Effect    = "Allow", Action = ["s3:ListBucket"],
+        Resource  = ["arn:aws:s3:::solventa-int-evidencias-123456789012"],
+        Condition = { StringLike = { "s3:prefix" = ["siniestros/*"] } }
+      }) &&
+      length([for statement in local.task_statements["siniestros"] : statement if contains(statement.Action, "s3:ListBucket")]) == 1
     )
-    error_message = "AC3: el adaptador no lee el archivo y nadie borra ni lista evidencias."
+    error_message = "AC3: nadie borra evidencias; solo siniestros comprueba existencia bajo siniestros/*, sin listar otros prefijos."
   }
   assert {
     condition = alltrue([
@@ -769,6 +782,10 @@ run "variables_de_qa_por_servicio" {
   variables {
     service_environment = {
       clientes = { CLIENTES_SEMILLA_SINTETICA = "true", ENVIRONMENT = "qa-sobrescrito" }
+      siniestros = {
+        UBICACION_PRECISION_MAX_M  = "50"
+        UBICACION_TIPOS_OPCIONALES = "[\"COLISION\"]"
+      }
     }
   }
 
@@ -782,6 +799,15 @@ run "variables_de_qa_por_servicio" {
   assert {
     condition     = local.environment["clientes"]["ENVIRONMENT"] == "qa-sobrescrito"
     error_message = "service_environment va al final del merge: tiene prioridad."
+  }
+  assert {
+    condition = (
+      local.environment["siniestros"]["UBICACION_PRECISION_MAX_M"] == "50" &&
+      local.environment["siniestros"]["UBICACION_TIPOS_OPCIONALES"] == "[\"COLISION\"]" &&
+      local.environment["siniestros"]["UBICACION_OBLIGATORIA"] == "true" &&
+      !contains(keys(local.environment["bff-movil"]), "UBICACION_PRECISION_MAX_M")
+    )
+    error_message = "La regla de ubicación llega a siniestros y admite excepciones por tipo sin duplicarse en el BFF."
   }
   assert {
     condition     = alltrue([for name, env in local.environment : !contains(keys(env), "CLIENTES_SEMILLA_SINTETICA") if name != "clientes"])
@@ -803,5 +829,320 @@ run "pausado" {
   assert {
     condition     = length(aws_cloudwatch_metric_alarm.healthy_targets) == 0
     error_message = "Pausado: no se alerta por falta de destinos."
+  }
+}
+
+run "politica_cpu_por_omision" {
+  command = plan
+
+  # HU-W08: sin valores por servicio ni globales nuevos, la política de CPU queda como antes
+  # de parametrizarla (objetivo 60, enfriamientos 30 y 300 s) en todos los servicios.
+  assert {
+    condition = length(aws_appautoscaling_policy.cpu) > 0 && alltrue([
+      for policy in aws_appautoscaling_policy.cpu :
+      policy.target_tracking_scaling_policy_configuration[0].target_value == 60 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 30 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 300
+    ])
+    error_message = "HU-W08: con los valores por omisión, cada política cpu queda en 60 % y 30/300 s."
+  }
+}
+
+run "politica_cpu_por_servicio" {
+  command = plan
+
+  variables {
+    service_overrides = {
+      cotizacion = { cpu_target = 45, scale_out_cooldown = 15, scale_in_cooldown = 600 }
+    }
+  }
+
+  assert {
+    condition = (
+      aws_appautoscaling_policy.cpu["cotizacion"].target_tracking_scaling_policy_configuration[0].target_value == 45 &&
+      aws_appautoscaling_policy.cpu["cotizacion"].target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 15 &&
+      aws_appautoscaling_policy.cpu["cotizacion"].target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 600
+    )
+    error_message = "HU-W08: el objetivo y los enfriamientos de service_overrides llegan a la política cpu de su servicio."
+  }
+  assert {
+    condition = alltrue([
+      for name, policy in aws_appautoscaling_policy.cpu :
+      policy.target_tracking_scaling_policy_configuration[0].target_value == 60 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 30 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 300
+      if name != "cotizacion"
+    ])
+    error_message = "HU-W08: el ajuste de un servicio no cambia la política cpu de los demás."
+  }
+  assert {
+    condition     = aws_appautoscaling_target.service["cotizacion"].min_capacity == 1 && aws_appautoscaling_target.service["cotizacion"].max_capacity == 3
+    error_message = "HU-W08: los campos de la política no cambian el mínimo ni el máximo del servicio."
+  }
+}
+
+run "politica_cpu_por_ambiente" {
+  command = plan
+
+  # Globales del ambiente más un servicio que fija solo uno de los tres campos: los otros dos
+  # salen de los globales.
+  variables {
+    cpu_target                 = 70
+    scale_out_cooldown_seconds = 45
+    scale_in_cooldown_seconds  = 120
+    service_overrides = {
+      polizas = { scale_in_cooldown = 900 }
+    }
+  }
+
+  assert {
+    condition = (
+      aws_appautoscaling_policy.cpu["polizas"].target_tracking_scaling_policy_configuration[0].target_value == 70 &&
+      aws_appautoscaling_policy.cpu["polizas"].target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 45 &&
+      aws_appautoscaling_policy.cpu["polizas"].target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 900
+    )
+    error_message = "HU-W08: un campo de service_overrides reemplaza solo ese campo; el resto sale de los globales."
+  }
+  assert {
+    condition = alltrue([
+      for name, policy in aws_appautoscaling_policy.cpu :
+      policy.target_tracking_scaling_policy_configuration[0].target_value == 70 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 45 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 120
+      if name != "polizas"
+    ])
+    error_message = "HU-W08: sin ajuste por servicio, la política cpu toma el objetivo y los enfriamientos del ambiente."
+  }
+  assert {
+    condition     = alltrue([for policy in aws_appautoscaling_policy.backlog : policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 60 && policy.target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 300])
+    error_message = "HU-W08: los enfriamientos de la política cpu no cambian la política backlog de los workers."
+  }
+}
+
+run "politica_cpu_invalida" {
+  command = plan
+
+  variables {
+    cpu_target                 = 0
+    scale_out_cooldown_seconds = -1
+    scale_in_cooldown_seconds  = 1.5
+    service_overrides = {
+      cotizacion = { cpu_target = 101 }
+    }
+  }
+
+  expect_failures = [var.cpu_target, var.scale_out_cooldown_seconds, var.scale_in_cooldown_seconds, var.service_overrides]
+}
+
+# HU-W08: panel «Cotizaciones por minuto y capacidad» de Operación › Tablero (bff-web).
+run "capacidad_bff_web" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for name, statements in local.task_statements :
+      strcontains(jsonencode(statements), "application-autoscaling:") == (name == "bff-web")
+    ])
+    error_message = "HU-W08: solo bff-web recibe permisos de Application Auto Scaling."
+  }
+  assert {
+    # Solo las dos lecturas, sin ARN de recurso (no lo admiten) y ninguna acción de escritura.
+    condition = (
+      toset(flatten([
+        for statement in local.task_statements["bff-web"] : [
+          for action in statement.Action : action if startswith(action, "application-autoscaling:")
+        ]
+      ])) == toset(["application-autoscaling:DescribeScalableTargets", "application-autoscaling:DescribeScalingActivities"]) &&
+      alltrue([
+        for statement in local.task_statements["bff-web"] :
+        statement.Resource == ["*"] if anytrue([for action in statement.Action : startswith(action, "application-autoscaling:")])
+      ])
+    )
+    error_message = "HU-W08: bff-web solo lee el scalable target y las actividades de escalado (Resource *)."
+  }
+  assert {
+    # El nombre del servicio ECS sale de la clave del catálogo; se ata a la salida real del módulo.
+    condition = (
+      local.environment["bff-web"]["CAPACIDAD_CLUSTER"] == "solventa-int" &&
+      local.environment["bff-web"]["CAPACIDAD_SERVICIO"] == module.layer_3["cotizacion"].service_name &&
+      contains(keys(local.environment["bff-web"]), "METRICS_NAMESPACE")
+    )
+    error_message = "HU-W08: bff-web recibe el clúster y el nombre del servicio ECS de cotizacion (y ya tiene METRICS_NAMESPACE)."
+  }
+  assert {
+    condition = alltrue([
+      for name, environment in local.environment :
+      length([for key in keys(environment) : key if startswith(key, "CAPACIDAD_")]) == (name == "bff-web" ? 2 : 0)
+    ])
+    error_message = "HU-W08: ningún servicio distinto de bff-web recibe variables CAPACIDAD_*."
+  }
+}
+
+run "capacidad_sin_cotizacion" {
+  command = plan
+
+  variables {
+    image_digests = {
+      "bff-web" = "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    }
+  }
+
+  assert {
+    # Todo o nada: sin cotizacion no hay CAPACIDAD_*, pero los permisos de lectura se conservan.
+    condition = (
+      length([for key in keys(local.environment["bff-web"]) : key if startswith(key, "CAPACIDAD_")]) == 0 &&
+      strcontains(jsonencode(local.task_statements["bff-web"]), "application-autoscaling:DescribeScalableTargets") &&
+      strcontains(jsonencode(local.task_statements["bff-web"]), "application-autoscaling:DescribeScalingActivities")
+    )
+    error_message = "HU-W08: sin cotizacion desplegado, bff-web no recibe CAPACIDAD_* y conserva la política de lectura."
+  }
+}
+
+# HU-W09: tarea k6 del experimento de carga (carga.tf), apagada fuera de exp.
+run "carga_apagada_por_omision" {
+  command = plan
+
+  assert {
+    condition = (
+      !var.load_test_enabled &&
+      length(aws_cloudwatch_log_group.load_test) == 0 &&
+      length(aws_iam_role.load_test_execution) == 0 &&
+      length(aws_iam_role_policy.load_test_execution) == 0 &&
+      length(aws_ecs_task_definition.load_test) == 0 &&
+      length(aws_security_group.load_test) == 0 &&
+      length(aws_vpc_security_group_egress_rule.load_test) == 0 &&
+      length(aws_vpc_security_group_ingress_rule.load_test_alb) == 0
+    )
+    error_message = "HU-W09: por omisión load_test_enabled es false y no existe ningún recurso de carga.tf."
+  }
+}
+
+run "carga_encendida" {
+  command = plan
+
+  variables {
+    load_test_enabled = true
+  }
+
+  # Con mocks, el id del SG y los ARN del rol y del log group se calculan en apply; aquí se fijan
+  # en el plan para poder comparar la regla del ALB, la política y la tarea con sus recursos.
+  override_resource {
+    target          = aws_security_group.load_test
+    override_during = plan
+    values          = { id = "sg-carga" }
+  }
+  override_resource {
+    target          = aws_iam_role.load_test_execution
+    override_during = plan
+    values          = { arn = "arn:aws:iam::123456789012:role/solventa-int-carga-exec" }
+  }
+  override_resource {
+    target          = aws_cloudwatch_log_group.load_test
+    override_during = plan
+    values          = { arn = "arn:aws:logs:us-east-1:123456789012:log-group:/ecs/solventa-int/carga" }
+  }
+
+  assert {
+    condition = (
+      length(aws_cloudwatch_log_group.load_test) == 1 &&
+      length(aws_iam_role.load_test_execution) == 1 &&
+      length(aws_iam_role_policy.load_test_execution) == 1 &&
+      length(aws_ecs_task_definition.load_test) == 2 &&
+      length(aws_security_group.load_test) == 1 &&
+      length(aws_vpc_security_group_egress_rule.load_test) == 1 &&
+      length(aws_vpc_security_group_ingress_rule.load_test_alb) == 1
+    )
+    error_message = "HU-W09: encendida, existen el log group, el rol de ejecución y su política, las dos definiciones de tarea (carga y alta), el SG, su salida y la entrada al ALB."
+  }
+  assert {
+    # Las pruebas de tests/e2e buscan las familias y el SG por nombre (no leen las salidas de apps).
+    condition = (
+      toset(keys(aws_ecs_task_definition.load_test)) == toset(["carga", "alta"]) &&
+      aws_ecs_task_definition.load_test["carga"].family == "solventa-int-carga" &&
+      aws_ecs_task_definition.load_test["alta"].family == "solventa-int-carga-alta" &&
+      aws_security_group.load_test[0].name == "solventa-int-carga" &&
+      aws_security_group.load_test[0].vpc_id == local.p.vpc_id &&
+      aws_cloudwatch_log_group.load_test[0].name == "/ecs/solventa-int/carga" &&
+      aws_cloudwatch_log_group.load_test[0].retention_in_days == var.load_test_log_retention_days
+    )
+    error_message = "HU-W09: las familias son <prefijo>-carga y <prefijo>-carga-alta, el SG se llama <prefijo>-carga y está en la VPC de platform, y el log group es /ecs/<prefijo>/carga con su retención."
+  }
+  assert {
+    condition = alltrue([for definicion in aws_ecs_task_definition.load_test : (
+      definicion.requires_compatibilities == toset(["FARGATE"]) &&
+      definicion.network_mode == "awsvpc" &&
+      definicion.cpu == tostring(var.load_test_cpu) &&
+      definicion.memory == tostring(var.load_test_memory) &&
+      definicion.execution_role_arn == aws_iam_role.load_test_execution[0].arn &&
+      definicion.task_role_arn == null
+    )])
+    error_message = "HU-W09: las dos tareas k6 son FARGATE, awsvpc, con CPU y memoria por variable, el mismo rol de ejecución y sin rol de tarea."
+  }
+  assert {
+    # Un solo contenedor k6, la imagen por variable y el log a su grupo, en las dos definiciones.
+    condition = alltrue([for definicion in aws_ecs_task_definition.load_test : (
+      length(jsondecode(definicion.container_definitions)) == 1 &&
+      jsondecode(definicion.container_definitions)[0].name == "k6" &&
+      jsondecode(definicion.container_definitions)[0].image == var.load_test_image &&
+      jsondecode(definicion.container_definitions)[0].logConfiguration.logDriver == "awslogs" &&
+      jsondecode(definicion.container_definitions)[0].logConfiguration.options["awslogs-group"] == aws_cloudwatch_log_group.load_test[0].name
+    )])
+    error_message = "HU-W09: el contenedor k6 usa load_test_image y escribe en /ecs/<prefijo>/carga, en las dos definiciones."
+  }
+  assert {
+    # El script viaja en la definición (no en una URL): sh -c lo decodifica a /tmp/s.js y k6 corre
+    # el archivo local, con -q (sin progreso ni encabezado). command y entryPoint son fijos.
+    condition = alltrue([for definicion in aws_ecs_task_definition.load_test : (
+      jsondecode(definicion.container_definitions)[0].entryPoint == ["sh", "-c"] &&
+      jsondecode(definicion.container_definitions)[0].command == ["echo \"$HU_W09_SCRIPT\" | base64 -d > /tmp/s.js && exec k6 run --log-format=raw -q /tmp/s.js"] &&
+      [for variable in jsondecode(definicion.container_definitions)[0].environment : variable.name] == ["HU_W09_SCRIPT"]
+    )])
+    error_message = "HU-W09: entryPoint [sh, -c] y el command fijo que decodifica HU_W09_SCRIPT a /tmp/s.js y corre k6 con --log-format=raw -q; HU_W09_SCRIPT es la única variable fija."
+  }
+  assert {
+    # Cada definición lleva su script, tal cual está en experiments/hu-w09/.
+    condition = alltrue([for nombre, definicion in aws_ecs_task_definition.load_test :
+      base64decode(one([for variable in jsondecode(definicion.container_definitions)[0].environment : variable.value if variable.name == "HU_W09_SCRIPT"])) == file("${path.module}/../../experiments/hu-w09/${nombre}.js")
+    ])
+    error_message = "HU-W09: HU_W09_SCRIPT de la definición carga es experiments/hu-w09/carga.js en base64, y el de alta, alta.js."
+  }
+  assert {
+    # Una definición de tarea admite 64 KiB (cuota de ECS no ajustable): la guarda es 48 KiB.
+    condition     = alltrue([for definicion in aws_ecs_task_definition.load_test : length(definicion.container_definitions) < 49152])
+    error_message = "HU-W09: container_definitions de cada tarea k6 mide menos de 48 KiB (la definición de tarea admite 64 KiB)."
+  }
+  assert {
+    # Solo escribir en su log group: ni ECR (imagen pública), ni secretos, ni KMS.
+    condition = (
+      aws_iam_role.load_test_execution[0].name == "solventa-int-carga-exec" &&
+      aws_iam_role.load_test_execution[0].assume_role_policy == local.task_trust &&
+      length(jsondecode(aws_iam_role_policy.load_test_execution[0].policy).Statement) == 1 &&
+      jsondecode(aws_iam_role_policy.load_test_execution[0].policy).Statement[0].Effect == "Allow" &&
+      toset(jsondecode(aws_iam_role_policy.load_test_execution[0].policy).Statement[0].Action) == toset(["logs:CreateLogStream", "logs:PutLogEvents"]) &&
+      jsondecode(aws_iam_role_policy.load_test_execution[0].policy).Statement[0].Resource == ["${aws_cloudwatch_log_group.load_test[0].arn}:*"]
+    )
+    error_message = "HU-W09: el rol de ejecución de k6 solo crea streams y escribe eventos en su log group."
+  }
+  assert {
+    condition = (
+      aws_vpc_security_group_egress_rule.load_test[0].security_group_id == aws_security_group.load_test[0].id &&
+      aws_vpc_security_group_egress_rule.load_test[0].cidr_ipv4 == "0.0.0.0/0" &&
+      aws_vpc_security_group_egress_rule.load_test[0].ip_protocol == "-1"
+    )
+    error_message = "HU-W09: el SG de k6 sale a todo (imagen por el NAT, CloudWatch Logs, ALB y API Gateway)."
+  }
+  assert {
+    # La entrada al ALB: solo desde el SG de k6 y solo en el listener de api-socios del catálogo.
+    condition = (
+      aws_vpc_security_group_ingress_rule.load_test_alb[0].security_group_id == local.p.alb.security_group_id &&
+      aws_vpc_security_group_ingress_rule.load_test_alb[0].referenced_security_group_id == aws_security_group.load_test[0].id &&
+      aws_vpc_security_group_ingress_rule.load_test_alb[0].cidr_ipv4 == null &&
+      aws_vpc_security_group_ingress_rule.load_test_alb[0].cidr_ipv6 == null &&
+      aws_vpc_security_group_ingress_rule.load_test_alb[0].prefix_list_id == null &&
+      aws_vpc_security_group_ingress_rule.load_test_alb[0].ip_protocol == "tcp" &&
+      aws_vpc_security_group_ingress_rule.load_test_alb[0].from_port == local.p.catalog["api-socios"].listener_port &&
+      aws_vpc_security_group_ingress_rule.load_test_alb[0].to_port == local.p.catalog["api-socios"].listener_port
+    )
+    error_message = "HU-W09: el ALB admite a k6 solo desde su SG, por TCP y en el listener_port de api-socios."
   }
 }

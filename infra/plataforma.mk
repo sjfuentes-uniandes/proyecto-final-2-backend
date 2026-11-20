@@ -89,5 +89,8 @@ infra-validar: ## fmt, validate, pruebas de Terraform (también con envs/exp) y 
 	  if [ -d infra/$$root/tests/exp ]; then \
 	    $(TF) -chdir=infra/$$root test -no-color -test-directory=tests/exp -var-file=../envs/exp/$$root.tfvars || exit 1; \
 	  fi; \
+	  if [ -d infra/$$root/tests/int ]; then \
+	    $(TF) -chdir=infra/$$root test -no-color -test-directory=tests/int -var-file=../envs/int/$$root.tfvars || exit 1; \
+	  fi; \
 	done
 	@$(PLATAFORMA_SCRIPTS)/seguridad.sh

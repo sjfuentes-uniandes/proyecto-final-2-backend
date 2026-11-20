@@ -17,7 +17,7 @@ from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Request
-from pydantic import AwareDatetime, BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 from solventa_common.errors import ErrorNegocio
 from solventa_common.resiliencia import TiempoAgotado, acotar
@@ -52,6 +52,16 @@ class CoberturaDto(_Dto):
     obligatoria: bool
 
 
+class ParametricoDto(_Dto):
+    """HU-W21: la regla de un producto paramétrico. La zona y la ventana son de cada póliza."""
+
+    tipo_evento: str
+    unidad: str
+    umbral: str
+    valor_pago: str
+    version_regla: str
+
+
 class ProductoRespuesta(_Dto):
     id: str
     version: str
@@ -63,6 +73,9 @@ class ProductoRespuesta(_Dto):
     vigente_desde: datetime
     vigente_hasta: datetime | None
     coberturas: list[CoberturaDto]
+    # HU-W21: opcional y aditivo. Sin él la clave no se serializa (ni en la API ni en la caché):
+    # la respuesta de los demás productos queda igual.
+    parametrico: ParametricoDto | None = Field(default=None, exclude_if=lambda v: v is None)
 
     @classmethod
     def desde(cls, producto: Producto) -> "ProductoRespuesta":
@@ -80,6 +93,17 @@ class ProductoRespuesta(_Dto):
                 CoberturaDto(codigo=c.codigo, nombre=c.nombre, obligatoria=c.obligatoria)
                 for c in producto.coberturas
             ],
+            parametrico=(
+                ParametricoDto(
+                    tipo_evento=producto.parametrico.tipo_evento,
+                    unidad=producto.parametrico.unidad,
+                    umbral=producto.parametrico.umbral,
+                    valor_pago=producto.parametrico.valor_pago,
+                    version_regla=producto.parametrico.version_regla,
+                )
+                if producto.parametrico
+                else None
+            ),
         )
 
 

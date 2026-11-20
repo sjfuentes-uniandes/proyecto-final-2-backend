@@ -1,8 +1,10 @@
 """SiniestrosPg con conexiones falsas (sin base): lo que consulta y con qué parámetros. La base real
 (y la equivalencia con el dominio) la prueban las de módulo."""
 
+import hashlib
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
@@ -12,13 +14,26 @@ from uuid import UUID, uuid4
 import psycopg
 import pytest
 from siniestros.adapters.outbound import siniestros_pg
+from siniestros.adapters.outbound.envios_pg import EnviosPg
 from siniestros.adapters.outbound.mapeo import copia_a_json, ubicacion_a_json
 from siniestros.adapters.outbound.siniestros_pg import (
     SiniestrosPg,
+    TxSiniestrosPg,
     codificar_cursor,
     decodificar_cursor,
 )
-from siniestros.application.siniestro.errores import SolicitudInvalida
+from siniestros.application.siniestro.envio import (
+    BorradorEnvio,
+    PolizaReporte,
+    clave_permanente,
+    id_siniestro_movil,
+)
+from siniestros.application.siniestro.errores import (
+    BorradorModificado,
+    BorradorNoEncontrado,
+    IdempotenciaConflicto,
+    SolicitudInvalida,
+)
 from siniestros.application.siniestro.puertos import DecisionFinalDuplicada
 from siniestros.application.siniestro.vistas import (
     AccesoDenegado,
@@ -31,6 +46,7 @@ from siniestros.application.siniestro.vistas import (
     RecursoSiniestro,
     TipoBandeja,
 )
+from siniestros.config import Settings
 from siniestros.domain.siniestro.modelos import (
     CanalSoporte,
     CausalRechazo,
@@ -134,6 +150,10 @@ def fila_siniestro(s: Siniestro, **extra: Any) -> dict[str, Any]:
         "moneda": s.moneda,
         "deducible": s.deducible,
         "valor_indemnizar": s.valor_indemnizar,
+        # HU-W22: la medición del paramétrico (null en los demás).
+        "evento_id": None,
+        "regla": None,
+        "evento": None,
         **extra,
     }
 
@@ -163,6 +183,200 @@ def filtro(ahora: datetime, **cambios: Any) -> FiltroBandeja:
     }
     datos.update(cambios)
     return FiltroBandeja(**datos)
+
+
+def conexion_envio(borrador: BorradorEnvio, previo: dict[str, Any] | None = None) -> ConexionFalsa:
+    fila = {
+        "id": borrador.id,
+        "actor_id": borrador.actor_id,
+        "cliente_id": borrador.cliente_id,
+        "poliza_id": borrador.poliza_id,
+        "descripcion": borrador.descripcion,
+        "causa": borrador.causa,
+        "fecha_evento": borrador.fecha_evento,
+        "version": borrador.version,
+        "envio_resultado": borrador.resultado,
+        "ubicacion": borrador.ubicacion,
+    }
+    return ConexionFalsa(
+        [],
+        [previo] if previo is not None else [],
+        [fila],
+        [{**vars(e), "tipo": e.tipo.value} for e in borrador.evidencias],
+    )
+
+
+async def test_preparar_envio_bloquea_el_borrador_del_actor_y_recupera_sus_evidencias(
+    borrador_envio: BorradorEnvio,
+) -> None:
+    conexion = conexion_envio(borrador_envio)
+    repo = EnviosPg(PoolFalso(conexion), Settings())  # type: ignore[arg-type]
+
+    leido = await repo.preparar(borrador_envio.actor_id, borrador_envio.id, uuid4())
+
+    assert leido == borrador_envio
+    sql, parametros = conexion.sentencias[2]
+    assert "FOR UPDATE" in sql and "actor_id = %s" in sql
+    assert parametros == (borrador_envio.id, borrador_envio.actor_id)
+    assert conexion.transacciones == 1
+
+
+async def test_preparar_envio_no_revela_un_borrador_que_no_pertenece_al_actor(
+    borrador_envio: BorradorEnvio,
+) -> None:
+    conexion = ConexionFalsa()
+    repo = EnviosPg(PoolFalso(conexion), Settings())  # type: ignore[arg-type]
+
+    with pytest.raises(BorradorNoEncontrado):
+        await repo.preparar("otro-actor", borrador_envio.id, uuid4())
+
+    assert conexion.sentencias[-1][1] == (borrador_envio.id, "otro-actor")
+
+
+@pytest.mark.parametrize("operacion", ["preparar", "convertir"])
+async def test_una_clave_de_envio_de_otro_actor_o_borrador_no_es_reutilizable(
+    borrador_envio: BorradorEnvio, ahora: datetime, operacion: str
+) -> None:
+    conexion = conexion_envio(borrador_envio, {"huella_solicitud": "otra-huella", "respuesta": {}})
+    repo = EnviosPg(PoolFalso(conexion), Settings())  # type: ignore[arg-type]
+    clave = uuid4()
+
+    with pytest.raises(IdempotenciaConflicto):
+        if operacion == "preparar":
+            await repo.preparar(borrador_envio.actor_id, borrador_envio.id, clave)
+        else:
+            await repo.convertir(borrador_envio, clave, None, ahora)
+
+    assert all(sql.startswith("SELECT") for sql, _ in conexion.sentencias)
+
+
+@pytest.mark.parametrize("clave_conocida", [False, True])
+async def test_reintentar_un_envio_confirmado_recupera_el_resultado_sin_recrear_el_siniestro(
+    borrador_envio: BorradorEnvio, ahora: datetime, clave_conocida: bool
+) -> None:
+    resultado = {"siniestroId": str(uuid4()), "estado": "REPORTADO"}
+    huella = hashlib.sha256(f"{borrador_envio.actor_id}:{borrador_envio.id}".encode()).hexdigest()
+    previo = {"huella_solicitud": huella, "respuesta": resultado} if clave_conocida else None
+    actual = replace(borrador_envio, resultado=resultado, version=borrador_envio.version + 1)
+    conexion = conexion_envio(actual, previo)
+    repo = EnviosPg(PoolFalso(conexion), Settings())  # type: ignore[arg-type]
+    clave = uuid4()
+
+    assert await repo.preparar(actual.actor_id, actual.id, clave) == actual
+    conexion.resultados = conexion_envio(actual, previo).resultados
+    conexion.sentencias.clear()
+    assert await repo.convertir(borrador_envio, clave, None, ahora) == resultado
+
+    escrituras = [(sql, p) for sql, p in conexion.sentencias if sql.startswith("INSERT")]
+    if clave_conocida:
+        assert escrituras == []
+    else:
+        [(sql, parametros)] = escrituras
+        assert sql.startswith("INSERT INTO idempotencia")
+        assert parametros[:2] == (f"envio:{clave}", huella)
+        assert parametros[2].obj == resultado
+    assert not any(sql.startswith("UPDATE") for sql, _ in conexion.sentencias)
+
+
+async def test_no_convierte_un_borrador_que_cambio_mientras_se_conservaban_los_archivos(
+    borrador_envio: BorradorEnvio, poliza_reporte: PolizaReporte, ahora: datetime
+) -> None:
+    actual = replace(borrador_envio, version=borrador_envio.version + 1)
+    conexion = conexion_envio(actual)
+    repo = EnviosPg(PoolFalso(conexion), Settings())  # type: ignore[arg-type]
+
+    with pytest.raises(BorradorModificado):
+        await repo.convertir(borrador_envio, uuid4(), poliza_reporte, ahora)
+
+    assert all(sql.startswith("SELECT") for sql, _ in conexion.sentencias)
+
+
+@pytest.mark.parametrize("con_ubicacion", [False, True])
+async def test_convertir_guarda_reporte_evidencias_historial_outbox_y_resultado_juntos(
+    borrador_envio: BorradorEnvio,
+    poliza_reporte: PolizaReporte,
+    ahora: datetime,
+    con_ubicacion: bool,
+) -> None:
+    assert borrador_envio.ubicacion is not None
+    ubicacion = {**borrador_envio.ubicacion, "estado": "NO_CONFIABLE"} if con_ubicacion else None
+    borrador = replace(borrador_envio, causa="AUXILIO_FUNERARIO", ubicacion=ubicacion)
+    amparo = replace(poliza_reporte.copia.amparos[0], codigo="AUXILIO_FUNERARIO")
+    poliza = replace(poliza_reporte, copia=replace(poliza_reporte.copia, amparos=(amparo,)))
+    conexion = conexion_envio(borrador)
+    conexion.resultados.append([(1000,)])
+    pool = PoolFalso(conexion)
+    repo = EnviosPg(pool, Settings())  # type: ignore[arg-type]
+    clave = uuid4()
+
+    resultado = await repo.convertir(borrador, clave, poliza, ahora)
+
+    siniestro_id = id_siniestro_movil(borrador.id)
+    assert resultado == {
+        "borradorId": str(borrador.id),
+        "siniestroId": str(siniestro_id),
+        "codigo": "88-2026-1000",
+        "estado": "REPORTADO",
+        "reportadoEn": ahora.isoformat(),
+    }
+    [(sql, reporte)] = [
+        (sql, p) for sql, p in conexion.sentencias if sql.startswith("INSERT INTO siniestros")
+    ]
+    assert "'MOVIL', 'REPORTADO'" in sql
+    assert reporte[:4] == (
+        siniestro_id,
+        resultado["codigo"],
+        borrador.poliza_id,
+        borrador.cliente_id,
+    )
+    assert reporte[-1] == borrador.descripcion
+    [(sql, archivo)] = [
+        (sql, p) for sql, p in conexion.sentencias if sql.startswith("INSERT INTO evidencias")
+    ]
+    foto = borrador.evidencias[0]
+    permanente = clave_permanente(borrador.id, foto.id)
+    assert archivo == (
+        foto.id,
+        siniestro_id,
+        foto.nombre_archivo,
+        "FOTOGRAFIA",
+        permanente,
+        foto.sha256,
+        foto.capturada_en,
+        foto.tamano_bytes,
+        foto.tipo_contenido,
+        None,
+    )
+    assert any(
+        sql.startswith("UPDATE borrador_evidencias") and p == (permanente, foto.id)
+        for sql, p in conexion.sentencias
+    )
+    historial = [p for sql, p in conexion.sentencias if sql.startswith("INSERT INTO historial")]
+    assert [(p[2], p[4], p[5], p[6]) for p in historial] == [
+        ("REPORTADO", "REPORTADO", borrador.actor_id, "CLIENTE"),
+        ("EVIDENCIAS_VALIDADAS", None, borrador.actor_id, "CLIENTE"),
+    ]
+    [evento] = [p for sql, p in conexion.sentencias if sql.startswith("INSERT INTO outbox")]
+    assert evento[1:3] == (siniestro_id, "SiniestroReportado")
+    assert evento[6].obj["siniestroId"] == str(siniestro_id)
+    [actualizacion] = [p for sql, p in conexion.sentencias if sql.startswith("UPDATE borradores")]
+    assert actualizacion[0] == siniestro_id and actualizacion[1].obj == resultado
+    assert actualizacion[3] == borrador.id
+    if con_ubicacion:
+        guardada = actualizacion[2].obj
+        assert guardada["estado"] == "DISPONIBLE"
+        assert guardada["precisionM"] == 100.0
+        assert (guardada["lat"], guardada["lon"]) == (4.65, -74.05)
+        assert datetime.fromisoformat(guardada["capturadaEn"]) == foto.capturada_en
+        assert reporte[7].obj == guardada
+    else:
+        assert actualizacion[2] is None
+        assert reporte[7].obj == {}
+    [(sql, idempotencia)] = [
+        (sql, p) for sql, p in conexion.sentencias if sql.startswith("INSERT INTO idempotencia")
+    ]
+    assert idempotencia[0] == f"envio:{clave}" and idempotencia[2].obj == resultado
+    assert pool.prestadas == conexion.transacciones == 1
 
 
 # --- Cursor ----------------------------------------------------------------------------------------
@@ -203,6 +417,27 @@ def test_un_cursor_con_clave_booleana_o_fecha_sin_zona_es_invalido(ahora: dateti
     for malo in (cursor(k=True), cursor(k=[1]), cursor(t="2026-11-05T01:00:00")):
         with pytest.raises(SolicitudInvalida):
             decodificar_cursor(malo)
+
+
+async def test_el_insert_del_borrador_persiste_la_descripcion() -> None:
+    conexion = ConexionFalsa()
+    tx = TxSiniestrosPg(conexion)  # type: ignore[arg-type]
+    descripcion = "El vehículo recibió un impacto."
+
+    await tx.crear_borrador(
+        uuid4(),
+        "actor-cliente",
+        uuid4(),
+        uuid4(),
+        descripcion,
+        {"numero": "900-2026-000001"},
+        datetime.now(UTC),
+        "corr",
+    )
+
+    sql, parametros = conexion.sentencias[0]
+    assert "descripcion" in sql
+    assert parametros[4] == descripcion
 
 
 # --- Bandeja ---------------------------------------------------------------------------------------
@@ -1034,3 +1269,131 @@ async def test_guardar_pago_solo_escribe_si_no_habia_resultado(filas: int) -> No
         2,
         resultado.siniestro_id,
     )
+
+
+# --- HU-W22: el siniestro paramétrico -----------------------------------------------------------
+def _parametrico(datos_parametrico: Callable[..., Any], ahora: datetime) -> Siniestro:
+    from siniestros.domain.siniestro.parametrico import nuevo_siniestro
+
+    return nuevo_siniestro(
+        datos_parametrico(),
+        siniestro_id=uuid4(),
+        codigo="88-2026-1001",
+        ahora=ahora,
+        correlation_id="corr-w22",
+    )
+
+
+def _fila_parametrica(s: Siniestro) -> dict[str, Any]:
+    from siniestros.adapters.outbound.mapeo import medicion_a_json, regla_a_json
+
+    assert s.evento is not None
+    return fila_siniestro(
+        s,
+        evento_id=s.evento.evento_id,
+        regla=regla_a_json(s.evento),
+        evento=medicion_a_json(s.evento),
+    )
+
+
+def test_el_mapeo_de_un_paramétrico_conserva_el_evento_y_la_regla(
+    datos_parametrico: Callable[..., Any], ahora: datetime
+) -> None:
+    caso = _parametrico(datos_parametrico, ahora)
+
+    leido = siniestros_pg.siniestro_de(_fila_parametrica(caso))
+
+    assert leido == caso
+    assert leido.evento is not None and leido.evento.regla == "VALOR_IGUAL_O_SUPERIOR_AL_UMBRAL"
+
+
+@pytest.mark.parametrize(
+    "faltante",
+    [{"evento_id": None}, {"regla": None}, {"evento": None}],
+    ids=["id", "regla", "medicion"],
+)
+def test_un_paramétrico_sin_medicion_completa_no_trae_evento(
+    datos_parametrico: Callable[..., Any], ahora: datetime, faltante: dict[str, Any]
+) -> None:
+    caso = _parametrico(datos_parametrico, ahora)
+
+    # Los paramétricos anteriores a W22 (sin medición) se leen igual, con `evento` nulo.
+    leido = siniestros_pg.siniestro_de({**_fila_parametrica(caso), **faltante})
+
+    assert leido.evento is None and leido.origen is OrigenSiniestro.PARAMETRICO
+
+
+async def test_siniestro_parametrico_busca_por_evento_y_poliza_solo_de_origen_parametrico(
+    datos_parametrico: Callable[..., Any], ahora: datetime
+) -> None:
+    caso = _parametrico(datos_parametrico, ahora)
+    conexion = ConexionFalsa([_fila_parametrica(caso)], [])
+    async with SiniestrosPg(PoolFalso(conexion)).transaccion() as tx:  # type: ignore[arg-type]
+        assert await tx.siniestro_parametrico(caso.evento.evento_id, caso.poliza_id) == caso  # type: ignore[union-attr]
+        assert await tx.siniestro_parametrico(uuid4(), uuid4()) is None
+    sql, parametros = conexion.sentencias[0]
+    assert "evento_id = %s AND poliza_id = %s AND origen = 'PARAMETRICO'" in sql
+    assert parametros == (caso.evento.evento_id, caso.poliza_id)  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize("filas", [[{"id": uuid4()}], []], ids=["inserta", "ya-existia"])
+async def test_insertar_parametrico_usa_on_conflict_y_dice_si_lo_inserto(
+    datos_parametrico: Callable[..., Any], ahora: datetime, filas: list[Any]
+) -> None:
+    caso = _parametrico(datos_parametrico, ahora)
+    conexion = ConexionFalsa(filas)
+    async with SiniestrosPg(PoolFalso(conexion)).transaccion() as tx:  # type: ignore[arg-type]
+        insertado = await tx.insertar_parametrico(caso)  # type: ignore[attr-defined]
+    assert insertado is bool(filas)
+    [(sql, parametros)] = conexion.sentencias
+    # La segunda barrera: el índice único parcial evento-póliza.
+    assert "ON CONFLICT (evento_id, poliza_id) WHERE origen = 'PARAMETRICO' DO NOTHING" in sql
+    assert "RETURNING id" in sql
+    assert len(parametros) == sql.count("%s") == 20
+    assert parametros[:4] == (caso.id, "88-2026-1001", "PARAMETRICO", "APROBADO")
+    assert caso.valor_indemnizar in parametros and caso.evento.evento_id in parametros  # type: ignore[union-attr]
+    # El `evento` y la `regla` van como jsonb, sin datos del cliente.
+    jsonb = [p.obj for p in parametros if hasattr(p, "obj")]
+    assert {"codigo": "VALOR_IGUAL_O_SUPERIOR_AL_UMBRAL", "version": "1"} in jsonb
+    regla, medicion = jsonb[-2:]
+    assert "fuente" in medicion and str(caso.cliente_id) not in repr([regla, medicion])
+
+
+async def test_pagos_parametricos_lee_el_lote_en_una_consulta_y_deriva_el_pendiente() -> None:
+    from siniestros.domain.siniestro.pago import EstadoPago
+
+    a, b = uuid4(), uuid4()
+    conexion = ConexionFalsa(
+        [
+            {"id": a, "codigo": "88-2026-1001", "pago_estado": None},
+            {"id": b, "codigo": "88-2026-1002", "pago_estado": "CONFIRMADO"},
+        ]
+    )
+    pool = PoolFalso(conexion)
+
+    pagos = await SiniestrosPg(pool).pagos_parametricos([a, b])  # type: ignore[arg-type]
+
+    assert [(p.siniestro_id, p.codigo, p.estado_pago) for p in pagos] == [
+        (a, "88-2026-1001", EstadoPago.PENDIENTE),
+        (b, "88-2026-1002", EstadoPago.CONFIRMADO),
+    ]
+    [(sql, parametros)] = conexion.sentencias
+    assert "id = ANY(%s) AND origen = 'PARAMETRICO'" in sql
+    assert parametros == ([a, b],) and pool.prestadas == 1
+
+
+async def test_el_evento_aprobado_de_un_paramétrico_no_trae_quien_decide(
+    datos_parametrico: Callable[..., Any], ahora: datetime
+) -> None:
+    caso = _parametrico(datos_parametrico, ahora)
+    conexion = ConexionFalsa()
+    async with SiniestrosPg(PoolFalso(conexion)).transaccion() as tx:  # type: ignore[arg-type]
+        await tx.evento_aprobado(caso, "IND-88-2026-1001-01", None, ahora)  # type: ignore[attr-defined]
+    [(_, parametros)] = conexion.sentencias
+    assert parametros[2] == "SiniestroAprobado"
+    payload = parametros[6].obj
+    assert payload["decididoPor"] is None and payload["origen"] == "PARAMETRICO"
+    assert payload["beneficiarioRef"] == f"ben-par-{caso.cliente_id}"
+    assert payload["valorIndemnizar"] == "1400000.00" and payload["referenciaPago"].endswith("-01")
+    # Ni la cuenta ni la medición viajan en el evento.
+    assert "****" not in repr(payload) and "IDEAM" not in repr(payload)

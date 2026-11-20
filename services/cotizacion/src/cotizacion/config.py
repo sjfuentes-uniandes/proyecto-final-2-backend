@@ -66,6 +66,11 @@ class Settings(ServiceSettings):
     # esperar) y no el pool (que haría esperar y consumiría el presupuesto).
     http_max_conexiones: int = Field(150, ge=1)
     http_max_keepalive: int = Field(40, ge=0)
+    # HU-W07: la inyecta Fargate en cada contenedor; sin prefijo, con su nombre exacto. Sin ella
+    # (local, pruebas) no hay solventa.task_id.
+    ecs_container_metadata_uri_v4: str | None = Field(
+        None, validation_alias="ECS_CONTAINER_METADATA_URI_V4", repr=False
+    )
 
     @property
     def presupuesto_recorrido_ms(self) -> int:

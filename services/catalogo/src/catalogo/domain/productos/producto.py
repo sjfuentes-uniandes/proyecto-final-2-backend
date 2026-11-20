@@ -28,6 +28,22 @@ class Cobertura:
 
 
 @dataclass(frozen=True, slots=True)
+class Parametrico:
+    """Regla de un producto paramétrico (HU-W21, W21-B04): paga `valor_pago` cuando un evento
+    externo de `tipo_evento` alcanza `umbral` (en `unidad`). Decimales como texto (DS2-16).
+
+    La zona y la ventana no son del producto: son de cada póliza (`coberturaParametrica.zona` y su
+    vigencia en `PolizaEmitida`).
+    """
+
+    tipo_evento: str
+    unidad: str
+    umbral: str
+    valor_pago: str
+    version_regla: str
+
+
+@dataclass(frozen=True, slots=True)
 class Producto:
     id: str
     version: str
@@ -39,6 +55,8 @@ class Producto:
     vigente_desde: datetime
     vigente_hasta: datetime | None
     coberturas: tuple[Cobertura, ...]
+    # HU-W21: solo los productos paramétricos lo traen.
+    parametrico: Parametrico | None = None
 
     @property
     def opcionales(self) -> frozenset[str]:

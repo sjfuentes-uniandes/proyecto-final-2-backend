@@ -52,7 +52,49 @@ def insertar_evidencia(conexion: psycopg.Connection[Any], siniestro_id: str, **c
     return identificador
 
 
-def test_crea_las_ocho_tablas_con_sus_indices(conexion: psycopg.Connection[Any]) -> None:
+def insertar_borrador(conexion: psycopg.Connection[Any], descripcion: str) -> str:
+    identificador = str(uuid4())
+    conexion.execute(
+        "INSERT INTO borradores "
+        "(id, actor_id, cliente_id, poliza_id, descripcion, copia_poliza, creado_en, "
+        "correlation_id) VALUES (%s, %s, %s, %s, %s, %s, now(), %s)",
+        (
+            identificador,
+            "actor-cliente",
+            str(uuid4()),
+            str(uuid4()),
+            descripcion,
+            Jsonb({"numero": "900-2026-000001"}),
+            "corr-descripcion",
+        ),
+    )
+    return identificador
+
+
+def insertar_evidencia_borrador(
+    conexion: psycopg.Connection[Any], borrador_id: str, **cambios: Any
+) -> str:
+    identificador = str(uuid4())
+    datos: dict[str, Any] = {
+        "id": identificador,
+        "borrador_id": borrador_id,
+        "nombre_archivo": "foto.jpg",
+        "tipo": "FOTOGRAFIA",
+        "clave_objeto": f"tmp/{borrador_id}/{identificador}",
+        "sha256": SHA,
+        "tamano_bytes": 100,
+        "tipo_contenido": "image/jpeg",
+    }
+    datos.update(cambios)
+    columnas = ", ".join(datos)
+    marcas = ", ".join(["%s"] * len(datos))
+    conexion.execute(
+        f"INSERT INTO borrador_evidencias ({columnas}) VALUES ({marcas})", list(datos.values())
+    )
+    return identificador
+
+
+def test_crea_las_diez_tablas_con_sus_indices(conexion: psycopg.Connection[Any]) -> None:
     tablas = {
         fila[0]
         for fila in conexion.execute(
@@ -68,6 +110,8 @@ def test_crea_las_ocho_tablas_con_sus_indices(conexion: psycopg.Connection[Any])
         "inbox",
         "idempotencia",
         "secuencia_codigo",
+        "borradores",
+        "borrador_evidencias",
     }
     indices = {
         fila[0]
@@ -85,6 +129,50 @@ def test_crea_las_ocho_tablas_con_sus_indices(conexion: psycopg.Connection[Any])
         "decisiones_una_final",
         "siniestros_plazo_soporte",
     } <= indices
+
+
+def test_persiste_la_descripcion_del_borrador(conexion: psycopg.Connection[Any]) -> None:
+    descripcion = "El vehículo recibió un impacto en la puerta."
+    borrador_id = insertar_borrador(conexion, descripcion)
+
+    assert conexion.execute(
+        "SELECT descripcion FROM borradores WHERE id = %s", (borrador_id,)
+    ).fetchone() == (descripcion,)
+
+
+def test_evidencia_temporal_inicia_pendiente_y_la_confirmacion_exige_fecha(
+    conexion: psycopg.Connection[Any],
+) -> None:
+    borrador_id = insertar_borrador(conexion, "Descripción válida")
+    evidencia_id = insertar_evidencia_borrador(conexion, borrador_id)
+    assert conexion.execute(
+        "SELECT estado_carga, carga_confirmada_en FROM borrador_evidencias WHERE id = %s",
+        (evidencia_id,),
+    ).fetchone() == ("PENDIENTE", None)
+
+    confirmada_en = "2026-01-01T00:00:00Z"
+    conexion.execute(
+        "UPDATE borrador_evidencias SET estado_carga = 'CARGADA', carga_confirmada_en = %s "
+        "WHERE id = %s",
+        (confirmada_en, evidencia_id),
+    )
+    cargada = conexion.execute(
+        "SELECT estado_carga, carga_confirmada_en FROM borrador_evidencias WHERE id = %s",
+        (evidencia_id,),
+    ).fetchone()
+    assert cargada is not None and cargada[0] == "CARGADA" and cargada[1] is not None
+    with pytest.raises(psycopg.errors.CheckViolation):
+        insertar_evidencia_borrador(
+            conexion, borrador_id, estado_carga="CARGADA", carga_confirmada_en=None
+        )
+
+
+@pytest.mark.parametrize("descripcion", ["", "   ", "x" * 2001])
+def test_la_base_rechaza_descripcion_vacia_o_mayor_a_2000(
+    conexion: psycopg.Connection[Any], descripcion: str
+) -> None:
+    with pytest.raises(psycopg.errors.CheckViolation):
+        insertar_borrador(conexion, descripcion)
 
 
 def test_migrar_es_idempotente(base: str, conexion: psycopg.Connection[Any]) -> None:
@@ -315,8 +403,17 @@ def _reversa(nombre: str) -> str:
 
 
 def test_la_reversa_borra_todo_y_se_puede_volver_a_migrar(base: str) -> None:
-    # La reversa de 002 va antes que la de 001 (decisiones_siniestro referencia a siniestros).
-    reversa = _reversa("002_decisiones.sql") + _reversa("001_siniestros.sql")
+    # Las reversas van en orden inverso: HU-W22 y HU-M01 antes de decisiones y siniestros.
+    reversa = (
+        _reversa("008_parametricos.sql")
+        + _reversa("007_ubicacion_reporte.sql")
+        + _reversa("006_envio_borrador.sql")
+        + _reversa("005_estado_carga_borrador.sql")
+        + _reversa("004_descripcion_borrador.sql")
+        + _reversa("003_borradores.sql")
+        + _reversa("002_decisiones.sql")
+        + _reversa("001_siniestros.sql")
+    )
     with psycopg.connect(base, autocommit=True) as conexion:
         conexion.execute(reversa)
         assert conexion.execute(
@@ -331,7 +428,7 @@ def test_la_reversa_borra_todo_y_se_puede_volver_a_migrar(base: str) -> None:
     with psycopg.connect(base, autocommit=True) as conexion:
         assert conexion.execute(
             "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'"
-        ).fetchone() == (8,)
+        ).fetchone() == (10,)
 
 
 # --- Migración 002: decisiones (HU-W20, W20-B05) ---------------------------------------------------
@@ -510,10 +607,106 @@ def test_la_reversa_de_002_deja_la_base_de_001(limpia: str) -> None:
             ).fetchall()
         }
         assert not {"deducible", "valor_indemnizar"} & columnas
-        # Con 001 solamente, la reversa se repite sin fallar y 002 se vuelve a aplicar.
+        # La reversa se repite sin fallar y las migraciones pueden reaplicarse.
         conexion.execute(_reversa("002_decisiones.sql"))
     migrar(base)
     with psycopg.connect(base, autocommit=True) as conexion:
         assert conexion.execute(
             "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'"
-        ).fetchone() == (8,)
+        ).fetchone() == (10,)
+
+
+# --- Migración 008: siniestros paramétricos (HU-W22, W22-B07) -------------------------------------
+
+
+def _parametrico(
+    conexion: psycopg.Connection[Any], evento_id: str | None, poliza: str, **c: Any
+) -> str:
+    estado = {
+        "estado": "APROBADO",
+        "valor_indemnizar": "1400000.00",
+        "deducible": "0.00",
+        "decidido_en": "2026-11-10T14:05:00Z",
+    }
+    return insertar_siniestro(
+        conexion, origen="PARAMETRICO", evento_id=evento_id, poliza_id=poliza, **(estado | c)
+    )
+
+
+def test_un_solo_siniestro_paramétrico_por_evento_y_poliza(
+    conexion: psycopg.Connection[Any],
+) -> None:
+    evento, poliza = str(uuid4()), str(uuid4())
+    _parametrico(conexion, evento, poliza)
+
+    with pytest.raises(psycopg.errors.UniqueViolation) as error:
+        _parametrico(conexion, evento, poliza)
+
+    assert error.value.diag.constraint_name == "siniestros_parametrico_evento_poliza"
+
+
+def test_el_indice_unico_es_parcial_y_solo_mira_los_paramétricos(
+    conexion: psycopg.Connection[Any],
+) -> None:
+    evento, poliza = str(uuid4()), str(uuid4())
+    _parametrico(conexion, evento, poliza)
+
+    # El mismo evento con otra póliza, y otro origen con los mismos ids, no chocan.
+    _parametrico(conexion, evento, str(uuid4()))
+    insertar_siniestro(conexion, origen="MOVIL", evento_id=evento, poliza_id=poliza)
+    insertar_siniestro(conexion, origen="MOVIL", evento_id=evento, poliza_id=poliza)
+    # Los paramétricos anteriores a W22 (sin `evento_id`) tampoco: NULL no choca con NULL.
+    _parametrico(conexion, None, poliza)
+    _parametrico(conexion, None, poliza)
+
+
+def test_el_siniestro_guarda_la_regla_y_la_medicion_como_jsonb(
+    conexion: psycopg.Connection[Any],
+) -> None:
+    identificador = _parametrico(
+        conexion,
+        str(uuid4()),
+        str(uuid4()),
+        regla=Jsonb({"codigo": "VALOR_IGUAL_O_SUPERIOR_AL_UMBRAL", "version": "1"}),
+        evento=Jsonb({"fuente": "IDEAM-SIM", "tipoEvento": "LLUVIA_ACUMULADA"}),
+    )
+
+    (regla, evento) = conexion.execute(
+        "SELECT regla, evento FROM siniestros WHERE id=%s", (identificador,)
+    ).fetchone()  # type: ignore[misc]
+
+    assert regla["version"] == "1" and evento["fuente"] == "IDEAM-SIM"
+
+
+def test_la_base_exige_la_liquidacion_de_un_paramétrico_aprobado(
+    conexion: psycopg.Connection[Any],
+) -> None:
+    # La CHECK de W20 también cubre a los paramétricos: APROBADO sin `valor_indemnizar` no existe.
+    with pytest.raises(psycopg.errors.CheckViolation):
+        insertar_siniestro(
+            conexion,
+            origen="PARAMETRICO",
+            estado="APROBADO",
+            decidido_en="2026-11-10T14:05:00Z",
+        )
+
+
+def test_la_reversa_de_008_deja_la_base_de_007_y_se_vuelve_a_migrar(limpia: str) -> None:
+    base = limpia
+    with psycopg.connect(base, autocommit=True) as conexion:
+        conexion.execute(_reversa("008_parametricos.sql"))
+        columnas = {
+            f[0]
+            for f in conexion.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='siniestros'"
+            ).fetchall()
+        }
+        indices = {f[0] for f in conexion.execute("SELECT indexname FROM pg_indexes").fetchall()}
+        assert "evento" not in columnas and {"evento_id", "regla"} <= columnas
+        assert "siniestros_parametrico_evento_poliza" not in indices
+        # Repetirla no falla.
+        conexion.execute(_reversa("008_parametricos.sql"))
+    migrar(base)
+    with psycopg.connect(base, autocommit=True) as conexion:
+        indices = {f[0] for f in conexion.execute("SELECT indexname FROM pg_indexes").fetchall()}
+        assert "siniestros_parametrico_evento_poliza" in indices

@@ -504,18 +504,22 @@ async def test_el_valor_reclamado_debe_coincidir_con_el_que_ya_consta(
     assert repo.siniestros[caso.id].estado is E.APROBADO
 
 
-async def test_la_copia_sin_el_amparo_reclamado_no_se_puede_aprobar(
+@pytest.mark.parametrize(
+    "amparo", [Amparo("ROBO", "Robo", "1000000.00"), Amparo("DANO_ACCIDENTAL", "Dano", None)]
+)
+async def test_la_copia_sin_amparo_o_suma_no_se_puede_aprobar(
     decidir: Decidir,
     repo,
     siniestro: Callable[..., Siniestro],
     copia,
+    amparo: Amparo,
     ahora: datetime,  # type: ignore[no-untyped-def]
 ) -> None:
     caso = siniestro(
         estado=E.EN_EVALUACION,
         analista_id=ANALISTA,
         asignado_en=ahora,
-        copia_poliza=copia(amparos=(Amparo("ROBO", "Robo", "1000000.00"),)),
+        copia_poliza=copia(amparos=(amparo,)),
     )
     repo.agregar(caso)
     with pytest.raises(ValorFueraDeRango):

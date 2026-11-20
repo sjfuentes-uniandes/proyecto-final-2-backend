@@ -5,7 +5,8 @@ y el mismo hash canónico que los modelos de riesgo: una semilla inválida impid
 idempotente: un producto existente no cambia y una versión de reglas existente tampoco.
 
 `semillas/qa/productos_qa.json` (HU-W04) solo se publica con CATALOGO_PRODUCTOS_QA: productos de
-prueba para los ambientes de QA, p. ej. una oferta de un minuto para probar OFERTA_VENCIDA en N3.
+prueba para los ambientes de QA, p. ej. una oferta de un minuto para probar OFERTA_VENCIDA en N3 y
+(HU-W21) el producto paramétrico `clima-lluvia`.
 """
 
 import json
@@ -20,8 +21,14 @@ from psycopg_pool import AsyncConnectionPool
 
 from catalogo.adapters.inbound.http.esquema_prima import DefinicionReglasPrima, a_dict
 from catalogo.domain.productos.errores import ReglasInvalidas
-from catalogo.domain.productos.producto import Cobertura, EstadoProducto, Producto, ReglasPrima
-from catalogo.domain.productos.validacion import validar_reglas
+from catalogo.domain.productos.producto import (
+    Cobertura,
+    EstadoProducto,
+    Parametrico,
+    Producto,
+    ReglasPrima,
+)
+from catalogo.domain.productos.validacion import validar_parametrico, validar_reglas
 from catalogo.domain.reglas.hash import hash_canonico
 
 _SEMILLAS = resources.files("catalogo.adapters.outbound").joinpath("semillas")
@@ -29,11 +36,12 @@ PRODUCTOS = "productos.json"
 PRODUCTOS_QA = "qa/productos_qa.json"
 
 _COLUMNAS_PRODUCTO = (
-    "id, version, nombre, ramo, pais, moneda, estado, vigente_desde, vigente_hasta, coberturas"
+    "id, version, nombre, ramo, pais, moneda, estado, vigente_desde, vigente_hasta, coberturas, "
+    "parametrico"
 )
 _COLUMNAS_REGLAS = "producto_id, version, vigente_desde, definicion, hash, publicado_por"
 _INSERTAR_PRODUCTO = (
-    f"INSERT INTO productos ({_COLUMNAS_PRODUCTO}) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+    f"INSERT INTO productos ({_COLUMNAS_PRODUCTO}) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
     "ON CONFLICT (id) DO NOTHING"
 )
 _INSERTAR_REGLAS = (
@@ -66,6 +74,34 @@ def producto_de(datos: dict[str, Any]) -> Producto:
         coberturas=tuple(
             Cobertura(c["codigo"], c["nombre"], c["obligatoria"]) for c in datos["coberturas"]
         ),
+        parametrico=_parametrico_de(datos.get("parametrico")),
+    )
+
+
+def _parametrico_de(datos: dict[str, Any] | None) -> Parametrico | None:
+    """El bloque paramétrico desde su forma JSON (la de la semilla, la API y la base)."""
+    if datos is None:
+        return None
+    return Parametrico(
+        tipo_evento=datos["tipoEvento"],
+        unidad=datos["unidad"],
+        umbral=datos["umbral"],
+        valor_pago=datos["valorPago"],
+        version_regla=datos["versionRegla"],
+    )
+
+
+def _parametrico_json(parametrico: Parametrico | None) -> Jsonb | None:
+    if parametrico is None:
+        return None
+    return Jsonb(
+        {
+            "tipoEvento": parametrico.tipo_evento,
+            "unidad": parametrico.unidad,
+            "umbral": parametrico.umbral,
+            "valorPago": parametrico.valor_pago,
+            "versionRegla": parametrico.version_regla,
+        }
     )
 
 
@@ -74,7 +110,8 @@ def semillas(
 ) -> list[tuple[Producto, list[tuple[str, datetime, dict[str, Any]]]]]:
     """Cada producto de la semilla con sus reglas (versión, vigente desde, definición).
 
-    Lanza ReglasInvalidas si una definición no cumple el esquema o sus validaciones.
+    Lanza ReglasInvalidas si una definición no cumple el esquema o sus validaciones, o si el bloque
+    paramétrico del producto (HU-W21) no es válido.
     """
     datos: list[dict[str, Any]] = json.loads(
         _SEMILLAS.joinpath(archivo).read_text(encoding="utf-8")
@@ -82,6 +119,9 @@ def semillas(
     resultado = []
     for entrada in datos:
         producto = producto_de(entrada)
+        errores_parametrico = validar_parametrico(producto)
+        if errores_parametrico:
+            raise ReglasInvalidas(errores_parametrico)
         reglas = []
         for regla in entrada["reglas"]:
             texto = _SEMILLAS.joinpath(regla["archivo"]).read_text(encoding="utf-8")
@@ -111,6 +151,7 @@ def sembrar(conexion: psycopg.Connection[Any], archivo: str = PRODUCTOS) -> None
                 producto.vigente_desde,
                 producto.vigente_hasta,
                 Jsonb([_cobertura_json(c) for c in producto.coberturas]),
+                _parametrico_json(producto.parametrico),
             ),
         )
         for version, vigente_desde, definicion in reglas:
@@ -155,6 +196,7 @@ def _producto(fila: dict[str, Any]) -> Producto:
         coberturas=tuple(
             Cobertura(c["codigo"], c["nombre"], c["obligatoria"]) for c in fila["coberturas"]
         ),
+        parametrico=_parametrico_de(fila.get("parametrico")),
     )
 
 
