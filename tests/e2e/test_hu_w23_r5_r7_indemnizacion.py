@@ -12,9 +12,14 @@ vez por `adaptador-pagos` (el simulador) y `siniestros` refleja el resultado, qu
   en el pago (cero pagos duplicados); otra clave sobre el caso ya aprobado es 409
   `TRANSICION_NO_PERMITIDA`.
 - C03: un siniestro que no está aprobado no tiene pago: 404 `INDEMNIZACION_NO_ENCONTRADA`.
+- C04 (R5 → R7, HU-W22): el siniestro que un evento paramétrico crea ya aprobado, sin que nadie decida,
+  llega por sí solo a `CONFIRMADO` con una sola transacción y el detalle muestra el pago. Es el último
+  tramo del recorrido R5: evento firmado → siniestro (`test_hu_w22_r5_siniestro.py`) → pago. Toma el
+  más reciente de H09 (`GET /web/v1/siniestros/parametricos/resumen`, sin origen) o el de
+  `E2E_W22_SINIESTRO_ID`; no aprueba ni consume nada de la semilla: **solo lee** y espera al pago.
+  Sin ningún siniestro paramétrico se omite con el motivo.
 
-El tramo R5 (el siniestro nace aprobado por un evento paramétrico) lo agrega HU-W22. El rechazo
-de la pasarela, la pasarela lenta con su conciliación y los eventos duplicados o concurrentes solo se
+El rechazo de la pasarela, la pasarela lenta con su conciliación y los eventos duplicados o concurrentes solo se
 verifican a nivel de módulo y en el recorrido local de B4: necesitan beneficiarios y escenarios del
 simulador que un ambiente compartido no debe consumir (cada caso solo se puede aprobar una vez) y ver
 las filas, la cola y el journal de WireMock, a los que esta prueba no tiene acceso.
@@ -31,6 +36,7 @@ import os
 import re
 import time
 import uuid
+from decimal import Decimal
 from typing import Any
 
 import httpx
@@ -182,3 +188,48 @@ def test_hu_w23_r7_c03_un_siniestro_sin_aprobar_no_tiene_pago(portal: Portal) ->
     pago = portal.get(f"/{items[0]['id']}/pago")
     assert pago.status_code == 404, pago.text
     assert pago.json()["codigo"] == "INDEMNIZACION_NO_ENCONTRADA"
+
+
+@pytest.fixture(scope="module")
+def siniestro_parametrico(portal: Portal) -> str:
+    """El siniestro paramétrico de `E2E_W22_SINIESTRO_ID` o, si falta, el más reciente de H09."""
+    elegido = os.getenv("E2E_W22_SINIESTRO_ID", "")
+    if elegido:
+        return elegido
+    respuesta = portal.get("/parametricos/resumen")
+    assert respuesta.status_code == 200, respuesta.text
+    pagos = respuesta.json()["ultimosPagos"]
+    if not pagos:
+        pytest.skip(
+            f"{HISTORIA}: no hay siniestros paramétricos (corra antes test_hu_w22_r5_siniestro.py)"
+        )
+    return str(pagos[0]["siniestroId"])
+
+
+def test_hu_w23_r5_c04_un_siniestro_parametrico_paga_una_vez_sin_decision(
+    portal: Portal, siniestro_parametrico: str
+) -> None:
+    vista = portal.pago_final(siniestro_parametrico)
+    indemnizacion = vista["indemnizacion"]
+    assert vista["estado"] == "APROBADO"
+    assert indemnizacion["estado"] == "CONFIRMADO", vista
+    assert indemnizacion["intentos"] == 1
+    assert indemnizacion["transaccionId"]
+    assert indemnizacion["confirmadaEn"]
+    # Nunca la cuenta completa: solo la enmascarada.
+    assert re.fullmatch(r"\*{4}\w{2,6}", vista["cuentaMascarada"])
+
+    detalle = portal.get(f"/{siniestro_parametrico}")
+    assert detalle.status_code == 200
+    cuerpo = detalle.json()
+    assert cuerpo["origen"] == "PARAMETRICO"
+    # El monto es el valor de la cobertura que fijó la liquidación automática.
+    assert Decimal(indemnizacion["monto"]) == Decimal(cuerpo["liquidacion"]["valorIndemnizar"])
+    assert indemnizacion["referencia"] == cuerpo["liquidacion"]["referenciaPago"]
+    # Nadie decidió: el historial es el alta automática y el resultado del pago.
+    acciones = [h["accion"] for h in cuerpo["historial"]]
+    assert acciones[0] == "CREADO_AUTOMATICAMENTE" and acciones[-1] == "PAGO_CONFIRMADO"
+    assert "APROBADO" not in acciones
+    pasos = {p["paso"]: p["estado"] for p in cuerpo["tramite"]}
+    assert pasos["PAGO_INDEMNIZACION"] == "COMPLETADO"
+    assert cuerpo["pago"]["estado"] == "CONFIRMADO"

@@ -2,7 +2,7 @@
 
 Documento de la historia [HU-W22](https://github.com/sjfuentes-uniandes/proyecto-final/issues/64) (Sprint 3, recorrido R5). Es la evidencia de contrato que pide el issue: cómo una activación de [HU-W21](hu-w21-evento-parametrico.md) se convierte en **un** siniestro `APROBADO`, qué pasa si `siniestros` no responde, el gancho `reanudar` del Inbox común (DS3-15) y la vista de H09. Cierra el recorrido R5 con el pago de [HU-W23](hu-w23-indemnizacion.md).
 
-Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (gancho del Inbox y creación en `siniestros`)** ✅ · **B3 (activaciones, resumen y `bff-web`)** ✅ · **F1 (portal)** ☐ · **C (cierre y pacto)** ☐.
+Estado por fase: **B1 (contratos y documentación)** ✅ · **B2 (gancho del Inbox y creación en `siniestros`)** ✅ · **B3 (activaciones, resumen y `bff-web`)** ✅ · **F1 (portal)** ✅ · **C (cierre y pacto)** ✅ (la E2E contra INT queda sin ejecutar: R-217).
 
 ## 1. Qué entrega la historia
 
@@ -152,8 +152,27 @@ reanudar: Callable[[EventoRecibido], Awaitable[Continuacion | None]] | None = No
 | E2E-W22-01 | N3 | Evento válido enviado dos veces: un siniestro y un `SiniestroAprobado`; el detalle aparece en el portal |
 | SEC-W22-01 | Seguridad | Auditoría de la creación automática |
 
+**Resultado del cierre (fase C).** Cada prueba corrió por separado y su salida está en `docs/sprint_3/evidencias/hu-w22/pruebas/c_*.txt`:
+
+| Id | Resultado |
+| --- | --- |
+| UT-W22-01 | ✅ 20 (`siniestros`, dominio) y 12 (`pagos-parametricos`, clave y solicitud) |
+| UT-W22-02 | ✅ 18 (`libs/solventa-common`, gancho `reanudar`) |
+| MT-W22-01 a 03 | ✅ 8 en `pagos-parametricos` (mismo mensaje cinco veces y dos consumidores; timeout tras el commit; `siniestros` caído → DLQ → recuperación) y 10 en `siniestros` (20 solicitudes a la vez: una fila, un `SiniestroAprobado`) |
+| CT-W22-01 | ✅ pacto consumidor (`pagos-parametricos`, 24 de contrato) y su verificación como proveedor en `siniestros` (1); todas las pruebas de contrato de los tres servicios (65 de `siniestros`, 24 de `pagos-parametricos` y 49 de `bff-web`, `test_openapi` incluido); pacto del portal con 43 interacciones |
+| WEB-W22-01 | ✅ Karma 1081 (`features/siniestros` 97,33 % líneas, 84,02 % ramas) y Playwright 60/60 de `r5-parametricos` (es-CO y en-US, con axe) |
+| SEC-W22-01 | ✅ 49 de `siniestros` (rol ajeno → 403 auditado; ni logs ni errores llevan el valor, la fuente, el cliente ni el `beneficiarioRef`) y la comprobación de historial y Outbox del módulo |
+| E2E-W22-01 | ◐ escrita (`tests/e2e/test_hu_w22_r5_siniestro.py`, y el tramo R5 → pago en `test_hu_w23_r5_r7_indemnizacion.py`), **sin ejecutar contra INT**; la parte local de punta a punta pasó en B3 y F1 |
+| MAN-W22-01 | ☐ guía lista (`docs/sprint_3/evidencias/hu-w22/man-w22-01.md`), la ejecuta otra persona |
+
 ## 9. Cómo se generaron los contratos de B1
 
 Los servicios ya existen pero aún no tienen el código de W22, y `test_openapi` compara cada YAML con `app.openapi()`. `docs/sprint_3/evidencias/hu-w22/prototipos/generar_contratos.py` arma una **copia temporal** de `siniestros`, `pagos_parametricos` y `bff_web` con los prototipos aplicados y escribe los YAML conservando su orden (R-176); no toca `services/`. `generar_pacto.py` escribe el pacto. Los prototipos son lo que B2 y B3 copian al código real.
 
 `test_openapi` de `siniestros`, `pagos-parametricos` y `bff-web` **quedan en rojo hasta B2 y B3** (precedente R-13, R-61, R-108 y R-145): el de `siniestros` lo cierra B2 y los de `pagos-parametricos` y `bff-web`, B3.
+
+## 10. Pacto del portal y E2E (fase C)
+
+- **Pacto del portal** (`contracts/pact/web-bff-web.json`): copia del que genera `web/pact/siniestros.pact.spec.ts` (43 interacciones; las 38 anteriores no cambian). Las cinco nuevas son el resumen de H09 con `eventoOrigen`, los orígenes recientes, el 403 sin el grupo, el 503 sin `pagos-parametricos` y el detalle de un siniestro paramétrico. Como Pact no puede expresar «null o texto» (R-53), `p95VentaConsultaMs` y `valorReclamado` van pactados como `null` en su propia interacción.
+- **Estados del proveedor** (`services/bff-web/tests/contract/test_pact_web.py`): «hay eventos paramétricos procesados con pagos activados» (`pagos-parametricos` responde el resumen, CloudWatch informa 576 mensajes y 24 tareas y `siniestros` informa el pago de cada fila), «existen eventos paramétricos recientes», «pagos-parametricos no responde» (503), «existe el siniestro paramétrico aprobado con el pago pendiente» (el detalle de `siniestros`) y el 403 con el estado de HU-W19. La prueba comprueba además que H09 pidió a `pagos-parametricos` el origen del portal con el analista y el rol `ANALISTA_SINIESTROS`, y que el aviso de acceso denegado a `siniestros` (DS3-09) también sale en el 403 de H09 (tres avisos).
+- **E2E (N3)**: `tests/e2e/test_hu_w22_r5_siniestro.py` envía el evento válido firmado **dos veces** y comprueba por el portal que hay un solo siniestro (también unos segundos después), su detalle (evento, regla, historial automático, liquidación sin reclamo, pago) y su ausencia en las bandejas, el resumen de H09 y, con AWS, un solo `SiniestroAprobado` en `auditoria`. El tramo siniestro → pago es `test_hu_w23_r5_r7_indemnizacion.py::…c04…`. Requisitos y variables en el docstring de cada archivo (`E2E_TELEMETRIA_SECRETO`, el usuario E2E del back-office, `E2E_PUBLICAR_COBERTURAS=1` y, para la auditoría, credenciales de AWS). Sin ellos se omiten.
