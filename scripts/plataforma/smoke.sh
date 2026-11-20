@@ -28,11 +28,11 @@
 #  12. POST /telemetria/v1/eventos llega a adaptador-telemetria sin JWT (el borde no
 #      responde 401/403; la firma HMAC la valida el adaptador, D5).
 #   HU-W24 (humo R5; SMOKE_W24=0 lo omite):
-#  13. SMOKE_W24_EVENTOS (5) EventoParametricoObservado sintéticos en el tópico: auditoria los
+#  13. SMOKE_W24_EVENTOS (5) eventos sintéticos HumoAuditoria en el tópico: auditoria los
 #      escribe en objetos de lote cadena/*.json del bucket de auditoría (cada uno con su
 #      eventId una sola vez y el previousHash del anterior) y la cola auditoria queda vacía.
-#      Los eventos también llegan a parametricos-eventos; sin el consumidor de HU-W21 se quedan
-#      ahí y vencen a los 4 días (llevan "sintetico": true).
+#      Ningún otro filtro admite ese tipo: no quedan en parametricos-eventos (que hasta HU-W21
+#      no tiene consumidor).
 #   El mensaje envenenado del paso 8 se prueba en una cola nueva con
 #   SMOKE_DLQ_COLA=dinero-indemnizaciones.
 # Variables: SMOKE_DLQ_COLA, SMOKE_ESPERA_RUTA_S (60), SMOKE_ESPERA_ALARMA_S (600).
@@ -330,9 +330,9 @@ if [ "${SMOKE_W24:-1}" = "1" ]; then
       id=$(uuidgen | tr '[:upper:]' '[:lower:]')
       ids+=("${id}")
       event=$(jq -nc --arg id "${id}" --arg at "${desde}" \
-        '{eventId: $id, aggregateId: $id, type: "EventoParametricoObservado", version: 1, occurredAt: $at, correlationId: ("humo-w24-" + $id), sintetico: true, payload: {}}')
+        '{eventId: $id, aggregateId: $id, type: "HumoAuditoria", version: 1, occurredAt: $at, correlationId: ("humo-w24-" + $id), sintetico: true, payload: {}}')
       aws sns publish --topic-arn "$(jq -r '.events_topic_arn' <<<"${platform}")" --message "${event}" \
-        --message-attributes '{"eventType": {"DataType": "String", "StringValue": "EventoParametricoObservado"}}' >/dev/null
+        --message-attributes '{"eventType": {"DataType": "String", "StringValue": "HumoAuditoria"}}' >/dev/null
     done
     deadline=$((SECONDS + SMOKE_ESPERA_RUTA_S))
     encontrados=""

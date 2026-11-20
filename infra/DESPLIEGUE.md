@@ -79,7 +79,7 @@ make infra-destruir ENV=exp      # todo, sin pasos manuales (escribir "exp" para
 
 | Ajuste | `int` | `exp` |
 | --- | --- | --- |
-| Zonas de la base y la salida (`high_availability`) | Una | Una por ahora; `true` = RDS Multi-AZ y un NAT Gateway por zona (D4, antes de HU-W29) |
+| Zonas de la base y la salida (`high_availability`) | Una | Dos (HU-W29): RDS Multi-AZ y un NAT Gateway por zona (D4) |
 | Salida a Internet (`egress_mode`) | NAT instance `t3.micro` | NAT Gateway administrado |
 | RDS (`db_instance_class`) | `db.t3.micro` | `db.t4g.small`, sin protección contra borrado |
 | Tareas | FARGATE_SPOT, 1 réplica | FARGATE (sin Spot), 2 réplicas (una por zona), hasta 6; más CPU para el recorrido paramétrico |

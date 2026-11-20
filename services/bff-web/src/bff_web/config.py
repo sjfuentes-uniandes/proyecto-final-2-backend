@@ -161,6 +161,22 @@ class Settings(ServiceSettings):
         ),
     )
 
+    # HU-W29: Operación › Continuidad y Conciliación (infra/apps/ecs.tf, continuity_readers).
+    continuidad_eventos: str = Field(
+        "/ecs/solventa-local/events",
+        validation_alias=AliasChoices("CONTINUIDAD_EVENTOS", "SOLVENTA_CONTINUIDAD_EVENTOS"),
+    )
+    continuidad_alb: str = Field(
+        "", validation_alias=AliasChoices("CONTINUIDAD_ALB", "SOLVENTA_CONTINUIDAD_ALB")
+    )
+    continuidad_recorridos: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices("CONTINUIDAD_RECORRIDOS", "SOLVENTA_CONTINUIDAD_RECORRIDOS"),
+    )
+    # Bucket de experimentos de exp; vacío en los demás ambientes (sin informe de conciliación).
+    continuidad_bucket: str = Field(
+        "", validation_alias=AliasChoices("CONTINUIDAD_BUCKET", "SOLVENTA_CONTINUIDAD_BUCKET")
+    )
     # HU-W08: capacidad de cotizacion para Operación › Tablero (infra/apps/ecs.tf, todo o nada).
     # Sin las dos, GET /operacion/capacidad responde 503. El namespace es el de las métricas EMF
     # (METRICS_NAMESPACE, que la infraestructura entrega a todos; var.metrics_namespace).
