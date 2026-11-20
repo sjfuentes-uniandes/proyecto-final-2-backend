@@ -102,9 +102,10 @@ def reportado(siniestro: Siniestro) -> SobreEvento[SiniestroReportadoV1]:
 
 
 def aprobado(
-    siniestro: Siniestro, referencia_pago: str, decidido_por: UUID, aprobado_en: datetime
+    siniestro: Siniestro, referencia_pago: str, decidido_por: UUID | None, aprobado_en: datetime
 ) -> SobreEvento[SiniestroAprobadoV1]:
-    """DS3-24. Solo el identificador opaco del beneficiario: nunca la cuenta."""
+    """DS3-24. Solo el identificador opaco del beneficiario: nunca la cuenta. `decidido_por` es null
+    en un paramétrico (R-65, HU-W22)."""
     beneficiario = siniestro.copia_poliza.beneficiario
     assert beneficiario is not None and siniestro.valor_indemnizar is not None
     return _sobre(

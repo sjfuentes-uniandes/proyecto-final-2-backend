@@ -1,4 +1,4 @@
-"""SiniestrosRepositorio en PostgreSQL (HU-W19). `siniestros` es el único escritor de su base.
+"""SiniestrosRepositorio en PostgreSQL (HU-W19; HU-W22: el siniestro paramétrico). `siniestros` es el único escritor de su base.
 
 - **Lecturas** (`bandeja`, `indicadores`, `detalle`, `evidencia`): cada una toma una conexión del pool
   solo mientras dura su consulta y la devuelve antes de que nadie espere a S3 u a otro servicio.
@@ -16,7 +16,7 @@
 import base64
 import binascii
 import json
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime
 from decimal import Decimal
@@ -31,8 +31,12 @@ from psycopg_pool import AsyncConnectionPool
 
 from siniestros.adapters.outbound import outbox_pg
 from siniestros.adapters.outbound.mapeo import (
-    copia_a_json,  # noqa: F401 - la semilla y las pruebas arman filas con el mismo mapeo
+    copia_a_json,
     copia_de_json,
+    evento_de_json,
+    medicion_a_json,
+    regla_a_json,
+    ubicacion_a_json,
     ubicacion_de_json,
 )
 from siniestros.application.siniestro.errores import (
@@ -51,6 +55,7 @@ from siniestros.application.siniestro.vistas import (
     Indicadores,
     LiquidacionAprobada,
     PaginaSiniestros,
+    PagoParametrico,
     TipoBandeja,
 )
 from siniestros.domain.siniestro.modelos import (
@@ -74,7 +79,7 @@ COLUMNAS = (
     "id, codigo, origen, estado, poliza_id, cliente_id, copia_poliza, causa, fecha_evento, "
     "ubicacion_declarada, reportado_en, analista_id, asignado_en, pausado_desde, "
     "pausa_acumulada_s, plazo_soporte_vence_en, decidido_en, version, correlation_id, "
-    "valor_reclamado, moneda, deducible, valor_indemnizar"
+    "valor_reclamado, moneda, deducible, valor_indemnizar, evento_id, regla, evento"
 )
 _COLUMNAS_EVIDENCIA = (
     "id, siniestro_id, nombre_archivo, tipo, soporte_tipo, clave_objeto, sha256, capturada_en, "
@@ -149,6 +154,7 @@ def siniestro_de(fila: Mapping[str, Any]) -> Siniestro:
         moneda=fila["moneda"].strip() if fila["moneda"] else None,
         deducible=fila["deducible"],
         valor_indemnizar=fila["valor_indemnizar"],
+        evento=evento_de_json(fila["evento_id"], fila["regla"], fila["evento"]),
     )
 
 
@@ -792,6 +798,27 @@ class SiniestrosPg:
             ).fetchone()
         return True, evidencia_de(fila) if fila else None
 
+    async def pagos_parametricos(
+        self, siniestro_ids: Sequence[UUID]
+    ) -> tuple[PagoParametrico, ...]:
+        async with self._pool.connection() as bruta:
+            filas = await (
+                await _ConDict(bruta).execute(
+                    "SELECT id, codigo, pago_estado FROM siniestros "
+                    "WHERE id = ANY(%s) AND origen = 'PARAMETRICO' ORDER BY codigo",
+                    (list(siniestro_ids),),
+                )
+            ).fetchall()
+        # Un paramétrico nace APROBADO: sin resultado de `dinero`, el pago está PENDIENTE (R-105).
+        return tuple(
+            PagoParametrico(
+                f["id"],
+                f["codigo"],
+                EstadoPago(f["pago_estado"]) if f["pago_estado"] else EstadoPago.PENDIENTE,
+            )
+            for f in filas
+        )
+
 
 class TxSiniestrosPg:
     """Implementa `TxSiniestros` sobre la transacción abierta de `SiniestrosPg.transaccion`."""
@@ -957,6 +984,52 @@ class TxSiniestrosPg:
         ).fetchall()
         return frozenset(f["id"] for f in filas)
 
+    async def siniestro_parametrico(self, evento_id: UUID, poliza_id: UUID) -> Siniestro | None:
+        fila = await (
+            await self._conexion.execute(
+                f"SELECT {COLUMNAS} FROM siniestros "
+                "WHERE evento_id = %s AND poliza_id = %s AND origen = 'PARAMETRICO'",
+                (evento_id, poliza_id),
+            )
+        ).fetchone()
+        return siniestro_de(fila) if fila else None
+
+    async def insertar_parametrico(self, siniestro: Siniestro) -> bool:
+        evento = siniestro.evento
+        assert evento is not None and siniestro.origen.value == "PARAMETRICO"
+        cursor = await self._conexion.execute(
+            "INSERT INTO siniestros (id, codigo, origen, estado, poliza_id, cliente_id, "
+            "copia_poliza, causa, fecha_evento, ubicacion_declarada, reportado_en, decidido_en, "
+            "moneda, deducible, valor_indemnizar, evento_id, regla, evento, version, "
+            "correlation_id) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+            "ON CONFLICT (evento_id, poliza_id) WHERE origen = 'PARAMETRICO' DO NOTHING "
+            "RETURNING id",
+            (
+                siniestro.id,
+                siniestro.codigo,
+                siniestro.origen.value,
+                siniestro.estado.value,
+                siniestro.poliza_id,
+                siniestro.cliente_id,
+                Jsonb(copia_a_json(siniestro.copia_poliza)),
+                siniestro.causa,
+                siniestro.fecha_evento,
+                Jsonb(ubicacion_a_json(siniestro.ubicacion_declarada)),
+                siniestro.reportado_en,
+                siniestro.decidido_en,
+                siniestro.moneda,
+                siniestro.deducible,
+                siniestro.valor_indemnizar,
+                evento.evento_id,
+                Jsonb(regla_a_json(evento)),
+                Jsonb(medicion_a_json(evento)),
+                siniestro.version,
+                siniestro.correlation_id,
+            ),
+        )
+        return await cursor.fetchone() is not None
+
     async def reservar_plazos_vencidos(self, ahora: datetime, lote: int) -> list[Siniestro]:
         filas = await (
             await self._conexion.execute(
@@ -1019,7 +1092,11 @@ class TxSiniestrosPg:
         )
 
     async def evento_aprobado(
-        self, siniestro: Siniestro, referencia_pago: str, decidido_por: UUID, aprobado_en: datetime
+        self,
+        siniestro: Siniestro,
+        referencia_pago: str,
+        decidido_por: UUID | None,
+        aprobado_en: datetime,
     ) -> None:
         await outbox_pg.insertar(
             self._bruta, outbox_pg.aprobado(siniestro, referencia_pago, decidido_por, aprobado_en)

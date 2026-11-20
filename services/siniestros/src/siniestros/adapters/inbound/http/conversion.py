@@ -12,9 +12,12 @@ from siniestros.adapters.inbound.http.dto import (
     DetalleSiniestro,
     EnlaceEvidencia,
     EntradaHistorial,
+    EventoParametricoDto,
     EvidenciaVista,
     LiquidacionDto,
     PagoDto,
+    PagoParametricoDto,
+    PagosParametricosRespuesta,
     PasoTramiteDto,
     ResumenBandejaSiniestros,
     ResumenSiniestro,
@@ -29,9 +32,10 @@ from siniestros.application.siniestro.vistas import (
     Indicadores,
     LiquidacionAprobada,
     PaginaBandeja,
+    PagoParametrico,
     ResumenCaso,
 )
-from siniestros.domain.siniestro.modelos import CopiaPoliza, Ubicacion
+from siniestros.domain.siniestro.modelos import CopiaPoliza, EventoParametrico, Ubicacion
 from siniestros.domain.siniestro.pago import PagoSiniestro
 from siniestros.domain.siniestro.transiciones import referencia_pago
 
@@ -140,6 +144,36 @@ def pago_dto(pago: PagoSiniestro | None) -> PagoDto | None:
     )
 
 
+def evento_dto(evento: EventoParametrico | None) -> EventoParametricoDto | None:
+    """El bloque «Evento y regla aplicada» (AC3); null salvo en un siniestro paramétrico."""
+    if evento is None:
+        return None
+    return EventoParametricoDto(
+        evento_id=evento.evento_id,
+        fuente=evento.fuente,
+        tipo_evento=evento.tipo_evento,
+        valor_observado=evento.valor_observado,
+        umbral=evento.umbral,
+        unidad=evento.unidad,
+        zona=evento.zona,
+        observado_en=evento.observado_en,
+        evento_origen=evento.evento_origen,
+        regla=evento.regla,
+        version_regla=evento.version_regla,
+    )
+
+
+def pagos_parametricos_dto(pagos: tuple[PagoParametrico, ...]) -> PagosParametricosRespuesta:
+    return PagosParametricosRespuesta(
+        items=[
+            PagoParametricoDto(
+                siniestro_id=p.siniestro_id, codigo=p.codigo, estado_pago=p.estado_pago
+            )
+            for p in pagos
+        ]
+    )
+
+
 def detalle_dto(detalle: DetalleCaso) -> DetalleSiniestro:
     s = detalle.resumen.siniestro
     base = resumen_dto(detalle.resumen).model_dump()
@@ -202,7 +236,7 @@ def detalle_dto(detalle: DetalleCaso) -> DetalleSiniestro:
             for h in detalle.historial
         ],
         liquidacion=liquidacion_dto(detalle.liquidacion) if detalle.liquidacion else None,
-        evento=None,
+        evento=evento_dto(s.evento),
         pago=pago_dto(detalle.pago),
         valor_reclamado=monto(s.valor_reclamado),
         referencia_pago_prevista=referencia_pago(s.codigo),

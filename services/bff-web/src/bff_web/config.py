@@ -87,6 +87,31 @@ class Settings(ServiceSettings):
         validation_alias=AliasChoices("PAGOS_PARAMETRICOS_URL", "SOLVENTA_PAGOS_PARAMETRICOS_URL"),
     )
     pagos_parametricos_timeout_ms: int = 3000
+    # HU-W22 (DS3-26, H09): lo que se lee de CloudWatch y de siniestros es secundario: cada fuente
+    # tiene su corte y, si falla, su campo va en null (nunca un 503). Los nombres son los de la
+    # infraestructura (`solventa-<ambiente>-…`); sin cluster y servicio no se pregunta por las tareas
+    # activas. `consumidores_maximos` es el máximo del escalado de `pagos-parametricos`.
+    parametricos_secundario_timeout_ms: int = 700
+    parametricos_cola_eventos: str | None = Field(
+        None,
+        validation_alias=AliasChoices(
+            "PARAMETRICOS_COLA_EVENTOS", "SOLVENTA_PARAMETRICOS_COLA_EVENTOS"
+        ),
+    )
+    parametricos_cluster: str | None = Field(
+        None, validation_alias=AliasChoices("PARAMETRICOS_CLUSTER", "SOLVENTA_PARAMETRICOS_CLUSTER")
+    )
+    parametricos_servicio: str | None = Field(
+        None,
+        validation_alias=AliasChoices("PARAMETRICOS_SERVICIO", "SOLVENTA_PARAMETRICOS_SERVICIO"),
+    )
+    parametricos_consumidores_maximos: int | None = Field(
+        None,
+        ge=1,
+        validation_alias=AliasChoices(
+            "PARAMETRICOS_CONSUMIDORES_MAXIMOS", "SOLVENTA_PARAMETRICOS_CONSUMIDORES_MAXIMOS"
+        ),
+    )
     # Pool de Cognito del back-office (infra/apps/ecs.tf): Administración › Usuarios.
     backoffice_user_pool_id: str | None = Field(
         None,

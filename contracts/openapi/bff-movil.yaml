@@ -1701,6 +1701,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BorradorDetalleDto'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
         '401':
           description: 'NO_AUTENTICADO: se requiere un cliente autenticado'
           headers:
@@ -2192,6 +2203,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EnvioDto'
+        '400':
+          description: 'ERROR_HTTP: el cuerpo no se puede leer como JSON'
+          headers:
+            X-Correlation-Id:
+              description: Identificador de correlación de la solicitud
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDto'
         '401':
           description: 'NO_AUTENTICADO: se requiere un cliente autenticado'
           headers:

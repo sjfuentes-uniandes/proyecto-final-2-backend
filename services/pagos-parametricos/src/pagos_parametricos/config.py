@@ -14,6 +14,16 @@ class Settings(ServiceSettings):
     # HU-S03: un evento paramétrico válido crea el siniestro una sola vez
     # (PagosParametricos --> AtencionSiniestros, modelo_concurrencia.puml (9)).
     siniestros_url: str = Field("http://localhost:8091", validation_alias=_env("SINIESTROS_URL"))
+    # HU-W22 (DS3-23, §13 regla 7): el timeout hacia siniestros no supera el corte duro de 700 ms
+    # (el presupuesto es de 120 ms; DS3-23 fija 600). Un timeout después del commit de siniestros no
+    # duplica: el reintento recibe el existente.
+    siniestros_timeout_ms: int = Field(
+        600, ge=1, le=700, validation_alias=_env("SINIESTROS_TIMEOUT_MS")
+    )
+    # Circuito y *bulkhead* de la llamada (`ProteccionDependencia`): 10 llamadas a la vez (DS3-23).
+    siniestros_bulkhead_max: int = Field(10, ge=1, le=100)
+    cb_fallos_consecutivos: int = Field(5, ge=1)
+    cb_apertura_s: float = Field(30, gt=0)
     # Eventos observados y copia local de las coberturas activas (eventos Poliza*).
     sqs_parametricos_eventos_url: str | None = Field(
         None, validation_alias=_env("SQS_PARAMETRICOS_EVENTOS_URL")

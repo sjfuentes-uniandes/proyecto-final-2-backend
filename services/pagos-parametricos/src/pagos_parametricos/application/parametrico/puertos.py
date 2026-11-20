@@ -5,6 +5,12 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
+from pagos_parametricos.domain.parametrico.activacion import (
+    ActivacionPendiente,
+    Disparador,
+    SiniestroCreado,
+    SolicitudSiniestro,
+)
 from pagos_parametricos.domain.parametrico.modelos import (
     Cobertura,
     EvaluacionEvento,
@@ -49,3 +55,37 @@ class RepositorioEvaluaciones[T](Protocol):
 
 class Reloj(Protocol):
     def ahora(self) -> datetime: ...
+
+
+class RepositorioActivaciones(Protocol):
+    """Las activaciones de W21 que W22 convierte en siniestros (HU-W22). A diferencia de los
+    repositorios de arriba no recibe la transacción del inbox: la continuación corre **después** del
+    commit y cada operación es una transacción corta propia (nunca se retiene una conexión mientras
+    se espera a `siniestros`)."""
+
+    async def pendientes(self, evento_id: UUID) -> list[ActivacionPendiente]:
+        """Las activaciones `PENDIENTE` del evento con la cobertura de su póliza."""
+        ...
+
+    async def marcar_creada(
+        self,
+        evento_id: UUID,
+        poliza_id: UUID,
+        siniestro: SiniestroCreado,
+        disparador: Disparador,
+    ) -> None:
+        """`PENDIENTE` → `SINIESTRO_CREADO` con el siniestro, su código y el disparador, en una
+        transacción corta. Idempotente: una activación ya creada no cambia."""
+        ...
+
+    async def sumar_duplicado(self, evento_id: UUID) -> None:
+        """Una entrega repetida del evento que se reanuda (DS3-15): suma 1 a `duplicados`."""
+        ...
+
+
+class Siniestros(Protocol):
+    """`POST /v1/siniestros/parametricos` de `siniestros` (DS3-23), detrás de su ACL."""
+
+    async def crear(self, solicitud: SolicitudSiniestro) -> SiniestroCreado:
+        """Lanza `TiempoAgotado`, `DependenciaNoDisponible` o `SiniestrosRechazo`."""
+        ...

@@ -16,20 +16,22 @@ from pagos_parametricos.domain.parametrico.modelos import Cobertura, EstadoCober
 
 COLUMNAS = (
     "poliza_id, numero, estado, tipo_evento, zona, umbral, unidad, valor_pago, moneda, "
-    "version_regla, vigente_desde, vigente_hasta, aggregate_version, ultimo_evento_en"
+    "version_regla, vigente_desde, vigente_hasta, aggregate_version, ultimo_evento_en, "
+    "cliente_id, ramo"
 )
 # Dos eventos de la misma póliza a la vez se aplican en serie (el bloqueo vive hasta el commit).
 _BLOQUEAR = "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))"
 _LEER = f"SELECT {COLUMNAS} FROM coberturas_activas WHERE poliza_id = %s"
 _GUARDAR = (
     f"INSERT INTO coberturas_activas ({COLUMNAS}, actualizado_en) "
-    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now()) "
+    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now()) "
     "ON CONFLICT (poliza_id) DO UPDATE SET numero = EXCLUDED.numero, estado = EXCLUDED.estado, "
     "tipo_evento = EXCLUDED.tipo_evento, zona = EXCLUDED.zona, umbral = EXCLUDED.umbral, "
     "unidad = EXCLUDED.unidad, valor_pago = EXCLUDED.valor_pago, moneda = EXCLUDED.moneda, "
     "version_regla = EXCLUDED.version_regla, vigente_desde = EXCLUDED.vigente_desde, "
     "vigente_hasta = EXCLUDED.vigente_hasta, aggregate_version = EXCLUDED.aggregate_version, "
-    "ultimo_evento_en = EXCLUDED.ultimo_evento_en, actualizado_en = now()"
+    "ultimo_evento_en = EXCLUDED.ultimo_evento_en, cliente_id = EXCLUDED.cliente_id, "
+    "ramo = EXCLUDED.ramo, actualizado_en = now()"
 )
 _CANDIDATAS = (
     f"SELECT {COLUMNAS} FROM coberturas_activas "
@@ -53,6 +55,8 @@ def cobertura_de(fila: tuple[Any, ...]) -> Cobertura:
         hasta,
         version,
         ultimo,
+        cliente_id,
+        ramo,
     ) = fila
     regla = (
         Regla(
@@ -76,6 +80,8 @@ def cobertura_de(fila: tuple[Any, ...]) -> Cobertura:
         ultimo_evento_en=ultimo,
         aggregate_version=version,
         numero=numero,
+        cliente_id=cliente_id,
+        ramo=ramo,
     )
 
 
@@ -119,6 +125,8 @@ class CoberturasPg:
                 regla.vigente_hasta if regla else None,
                 cobertura.aggregate_version,
                 cobertura.ultimo_evento_en,
+                cobertura.cliente_id,
+                cobertura.ramo,
             ),
         )
 

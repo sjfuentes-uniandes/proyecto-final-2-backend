@@ -43,17 +43,20 @@ import uvicorn
 from bff_web.adapters.inbound import aceptaciones as ruta_aceptacion
 from bff_web.adapters.inbound import estado_polizas as ruta_estado
 from bff_web.adapters.inbound import operacion as ruta_operacion
+from bff_web.adapters.inbound import parametricos as ruta_parametricos
 from bff_web.adapters.inbound import polizas as ruta_poliza
 from bff_web.adapters.inbound import recaudos as ruta_recaudo
 from bff_web.adapters.inbound import siniestros as ruta_siniestros
 from bff_web.adapters.inbound import suscripciones as ruta
 from bff_web.adapters.outbound.clientes import ClientesCliente
 from bff_web.adapters.outbound.consulta import ConsultaCliente
+from bff_web.adapters.outbound.pagos_parametricos import PagosParametricosCliente
 from bff_web.adapters.outbound.polizas import PolizasCliente
 from bff_web.adapters.outbound.siniestros import SiniestrosCliente
 from bff_web.application.aceptacion import Aceptaciones
 from bff_web.application.consultar_capacidad import ConsultarCapacidad
 from bff_web.application.estado_poliza import EstadoPolizas
+from bff_web.application.parametricos import Parametricos
 from bff_web.application.poliza import Polizas
 from bff_web.application.recaudo import Recaudos
 from bff_web.application.siniestros import Siniestros
@@ -140,6 +143,17 @@ PAGO_RECHAZADO = "el siniestro está aprobado y su pago fue rechazado por la pas
 PAGO_PENDIENTE = "el siniestro está aprobado y su pago aún no tiene resultado"
 NO_APROBADO = "el siniestro existe pero no está aprobado"
 ESTADOS_PAGO = {PAGO_CONFIRMADO, PAGO_RECHAZADO, PAGO_PENDIENTE, NO_APROBADO}
+# HU-W22 (CT-W22-01): H09 y el detalle de un siniestro paramétrico (web/pact/siniestros.pact.spec.ts).
+# Los tres primeros hacen que `pagos-parametricos` responda (el resumen, los orígenes o un 503); el
+# primero, además, que `siniestros` informe el estado de pago de cada fila. El 403 de H09 usa el
+# estado SIN_GRUPO_ANALISTAS de HU-W19.
+PARAM_CON_PAGOS = "hay eventos paramétricos procesados con pagos activados"
+PARAM_ORIGENES = "existen eventos paramétricos recientes"
+PARAM_SIN_PAGOS_PARAMETRICOS = "pagos-parametricos no responde"
+PARAM_DETALLE = "existe el siniestro paramétrico aprobado con el pago pendiente"
+ESTADOS_PARAMETRICOS = {PARAM_CON_PAGOS, PARAM_ORIGENES, PARAM_SIN_PAGOS_PARAMETRICOS}
+EVENTO_ORIGEN = "EVT-2026-0913"
+SINIESTRO_PARAMETRICO = "5e000000-0000-4000-8000-000009000000"
 ESTADOS_SINIESTROS = {
     ANALISTA_CON_CASOS,
     EXISTE_SINIESTRO,
@@ -150,6 +164,7 @@ ESTADOS_SINIESTROS = {
     PUEDE_DECIDIR,
     EN_EVALUACION_ASIGNADO,
     YA_APROBADO,
+    PARAM_DETALLE,
     *ESTADOS_PAGO,
 }
 # HU-W08 (8.7): la capacidad de cotizacion en Operación › Tablero (web/pact/operacion.pact.spec.ts).
@@ -338,6 +353,177 @@ def _detalle_aprobado(estado: str) -> dict[str, Any]:
         "historial": historial,
         "pago": pago,
     }
+
+
+def _detalle_parametrico() -> dict[str, Any]:
+    """El detalle de un siniestro PARAMETRICO como lo entrega siniestros (HU-W22): nace APROBADO,
+    sin analista ni evidencias, con el evento y la regla, la liquidación sin valor reclamado y el pago
+    pendiente."""
+    referencia = "IND-88-2026-0604-01"
+    creado = "2026-11-05T14:00:05Z"
+    return {
+        **DETALLE_SINIESTRO,
+        "id": SINIESTRO_PARAMETRICO,
+        "codigo": "88-2026-0604",
+        "polizaNumero": "500-2026-000318",
+        "ramo": "Clima",
+        "origen": "PARAMETRICO",
+        "estado": "APROBADO",
+        "analistaId": None,
+        "causa": "LLUVIA_ACUMULADA",
+        "fechaEvento": "2026-11-05T14:00:00Z",
+        "ubicacionDeclarada": {"descripcion": "Zona ZONA-NORTE", "lat": None, "lon": None},
+        "poliza": {
+            **DETALLE_SINIESTRO["poliza"],
+            "numero": "500-2026-000318",
+            "ramo": "Clima",
+            "amparos": [
+                {
+                    "codigo": "LLUVIA_ACUMULADA",
+                    "nombre": "LLUVIA_ACUMULADA",
+                    "sumaAsegurada": "1400000.00",
+                }
+            ],
+            "carenciaDias": 0,
+            "plazoAvisoDias": 365,
+            "beneficiario": {
+                "beneficiarioRef": f"ben-par-{CLIENTE_SINIESTRO}",
+                "cuentaMascarada": "****0000",
+            },
+        },
+        "coherencia": {
+            "fechaDeclarada": "2026-11-05T14:00:00Z",
+            "primeraCaptura": None,
+            "diferenciaMin": None,
+            "ubicacionCoincide": None,
+            "archivosAlterados": 0,
+            "resultado": "NO_EVALUABLE",
+        },
+        "evidencias": [],
+        "soportesPendientes": [],
+        "tramite": [
+            {"paso": "RECIBIDO", "estado": "COMPLETADO", "ocurridoEn": creado, "actorNombre": None}
+        ],
+        "historial": [
+            {
+                "id": "00000000-0000-4000-8000-0000000000b1",
+                "accion": "CREADO_AUTOMATICAMENTE",
+                "estadoAnterior": None,
+                "estadoNuevo": "APROBADO",
+                "actorId": None,
+                "actorRol": "SISTEMA_PARAMETRICO",
+                "actorNombre": None,
+                "justificacion": None,
+                "ocurridoEn": creado,
+            }
+        ],
+        "liquidacion": {
+            "moneda": "COP",
+            "valorReclamado": None,
+            "deducible": "0.00",
+            "valorIndemnizar": "1400000.00",
+            "referenciaPago": referencia,
+            "aprobadaEn": creado,
+        },
+        "evento": {
+            "eventoId": "9e000000-0000-4000-8000-000000000001",
+            "fuente": "IDEAM-SIM",
+            "tipoEvento": "LLUVIA_ACUMULADA",
+            "valorObservado": "123.500",
+            "umbral": "120",
+            "unidad": "mm",
+            "zona": "ZONA-NORTE",
+            "observadoEn": "2026-11-05T14:00:00Z",
+            "eventoOrigen": EVENTO_ORIGEN,
+            "regla": "VALOR_IGUAL_O_SUPERIOR_AL_UMBRAL",
+            "versionRegla": "v1",
+        },
+        "pago": {
+            "estado": "PENDIENTE",
+            "referencia": referencia,
+            "transaccionId": None,
+            "motivo": None,
+            "intentos": 0,
+            "duplicadosDescartados": 0,
+        },
+        "valorReclamado": None,
+        "referenciaPagoPrevista": referencia,
+    }
+
+
+# HU-W22: lo que responde pagos-parametricos (GET /v1/parametricos/resumen y /eventos-origen).
+RESUMEN_PAGOS_PARAMETRICOS: dict[str, Any] = {
+    "eventoOrigen": EVENTO_ORIGEN,
+    "desde": "2026-11-05T14:00:00Z",
+    "recibidos": 612480,
+    "procesados": 611904,
+    "activados": 18204,
+    "duplicados": 576,
+    "enDlq": 3,
+    "ritmoPorMinuto": [{"minuto": "2026-11-05T14:00:00Z", "procesados": 100}],
+    "ultimosPagos": [
+        {
+            "siniestroId": SINIESTRO_PARAMETRICO,
+            "siniestroCodigo": "88-2026-0604",
+            "polizaId": "a0000000-0000-4000-8000-000009000000",
+            "polizaNumero": "500-2026-000318",
+            "disparador": {
+                "tipoEvento": "LLUVIA_ACUMULADA",
+                "valorObservado": "123.500",
+                "umbral": "120",
+                "unidad": "mm",
+            },
+            "valor": "1400000.00",
+            "moneda": "COP",
+            "estadoActivacion": "SINIESTRO_CREADO",
+        }
+    ],
+}
+ORIGENES_PAGOS_PARAMETRICOS: dict[str, Any] = {
+    "items": [
+        {
+            "eventoOrigen": EVENTO_ORIGEN,
+            "desde": "2026-11-05T14:00:00Z",
+            "hasta": "2026-11-05T14:14:00Z",
+            "eventos": 612480,
+        }
+    ]
+}
+
+
+class MetricasSimuladas:
+    """CloudWatch (HU-W22): la cola con 576 mensajes y 24 tareas; la DLQ la informa pagos-parametricos."""
+
+    def leer(
+        self, cola: str, dlq: str, cluster: str | None, servicio: str | None
+    ) -> dict[str, int | None]:
+        return {"profundidad": 576, "dlq": None, "tareas": 24}
+
+
+class PagosParametricosSimulado:
+    """pagos-parametricos (HU-W22): el resumen y los orígenes recientes del estado sembrado, o un 503.
+    Guarda el origen pedido y cada actor recibido."""
+
+    def __init__(self) -> None:
+        self.estado: str | None = None
+        self.origenes_pedidos: list[str | None] = []
+        self.limites: list[str] = []
+        self.actores: list[tuple[str, str]] = []
+
+    def responder(self, pedido: httpx.Request) -> httpx.Response:
+        self.actores.append(
+            (pedido.headers.get("X-Actor-Id", ""), pedido.headers.get("X-Actor-Rol", ""))
+        )
+        if self.estado == PARAM_SIN_PAGOS_PARAMETRICOS:
+            return _error("SERVICIO_NO_DISPONIBLE", 503)
+        ruta_ = pedido.url.path
+        if ruta_ == "/v1/parametricos/resumen" and self.estado == PARAM_CON_PAGOS:
+            self.origenes_pedidos.append(pedido.url.params.get("eventoOrigen"))
+            return httpx.Response(200, json=RESUMEN_PAGOS_PARAMETRICOS)
+        if ruta_ == "/v1/parametricos/eventos-origen" and self.estado == PARAM_ORIGENES:
+            self.limites.append(pedido.url.params.get("limite", ""))
+            return httpx.Response(200, json=ORIGENES_PAGOS_PARAMETRICOS)
+        return _error("SOLICITUD_INVALIDA", 422)
 
 
 # Lo que responde siniestros a cada decisión (el cuerpo de ResultadoDecisionSiniestro).
@@ -751,6 +937,14 @@ class SiniestrosSimulado:
             return _error("SOLICITUD_INVALIDA", 422)
         if ruta_.endswith("/decision") and pedido.method == "POST":
             return self._decidir(pedido)
+        if ruta_ == "/v1/siniestros/parametricos/pagos":
+            # HU-W22: el estado de pago de cada fila de H09, derivado de `dinero` (PENDIENTE hasta el resultado).
+            if self.estado != PARAM_CON_PAGOS:
+                return _error("SERVICIO_NO_DISPONIBLE", 503)
+            ids = pedido.url.params.get_list("siniestroIds")
+            return httpx.Response(
+                200, json={"items": [{"siniestroId": i, "estadoPago": "CONFIRMADO"} for i in ids]}
+            )
         if ruta_ == "/v1/siniestros":
             cuerpo = {"items": [RESUMEN_SINIESTRO], "siguienteCursor": None, "total": 1}
             return httpx.Response(200, json=cuerpo)
@@ -758,6 +952,8 @@ class SiniestrosSimulado:
             SINIESTRO_ID
         ):
             return httpx.Response(200, json=_detalle_aprobado(self.estado))
+        if self.estado == PARAM_DETALLE and ruta_.endswith(SINIESTRO_PARAMETRICO):
+            return httpx.Response(200, json=_detalle_parametrico())
         # Un caso que existe pero no está aprobado no tiene pago ordenado (H08: 404 del BFF).
         if self.estado in (EXISTE_SINIESTRO, NO_APROBADO) and ruta_.endswith(SINIESTRO_ID):
             return httpx.Response(200, json=DETALLE_SINIESTRO)
@@ -926,13 +1122,19 @@ def _sembrar_siniestros_y_consulta(
     siniestros: SiniestrosSimulado,
     consulta: ConsultaSimulado,
     clientes: ClientesSimulado,
+    pagos_parametricos: PagosParametricosSimulado,
     state: str,
     parametros: dict[str, Any],
 ) -> bool:
-    """Siembra los estados de HU-W18 y HU-W19; devuelve False si el estado es de otra historia."""
+    """Siembra los estados de HU-W18, HU-W19 y HU-W22; devuelve False si el estado es de otra historia."""
     siniestros.estado = None
     consulta.estado = None
     clientes.titular = None
+    pagos_parametricos.estado = None
+    if state in ESTADOS_PARAMETRICOS:
+        pagos_parametricos.estado = state
+        siniestros.estado = state
+        return True
     if state in ESTADOS_SINIESTROS:
         siniestros.estado = state
         # El nombre del cliente sale de `clientes` (CF-S3-09), no de siniestros.
@@ -969,15 +1171,32 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
     cliente_consulta = ConsultaCliente(
         "http://consulta:8080", 700, httpx.MockTransport(consulta.responder)
     )
+    cliente_siniestros = SiniestrosCliente(
+        "http://siniestros:8080", 1500, httpx.MockTransport(siniestros.responder)
+    )
     app.dependency_overrides[ruta_siniestros.siniestros_servicio] = lambda: Siniestros(
-        SiniestrosCliente(
-            "http://siniestros:8080", 1500, httpx.MockTransport(siniestros.responder)
-        ),
+        cliente_siniestros,
         cliente_clientes,
         cliente_consulta,
         500,
         700,
         300,
+    )
+    # HU-W22: H09 compone pagos-parametricos, CloudWatch y el estado de pago de siniestros.
+    pagos_parametricos = PagosParametricosSimulado()
+    app.dependency_overrides[ruta_parametricos.parametricos_servicio] = lambda: Parametricos(
+        PagosParametricosCliente(
+            "http://pagos-parametricos:8080",
+            1500,
+            httpx.MockTransport(pagos_parametricos.responder),
+        ),
+        cliente_siniestros,
+        MetricasSimuladas,
+        "solventa-pact-parametricos-eventos",
+        "solventa-pact",
+        "pagos-parametricos",
+        30,
+        500,
     )
     app.dependency_overrides[ruta_estado.estados] = lambda: EstadoPolizas(
         cliente_consulta, cliente_clientes, 500
@@ -1007,7 +1226,9 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
             return
         if state == SIN_GRUPO_ANALISTAS:
             settings.grupo_analistas_siniestros = GRUPO_SIN_MIEMBROS
-        if _sembrar_siniestros_y_consulta(siniestros, consulta, clientes, state, parametros):
+        if _sembrar_siniestros_y_consulta(
+            siniestros, consulta, clientes, pagos_parametricos, state, parametros
+        ):
             return
         _sembrar(polizas, clientes, state, parametros)
 
@@ -1072,6 +1293,12 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
             (PAGO_PENDIENTE, None),
             (NO_APROBADO, None),
             (SIN_GRUPO_ANALISTAS, None),
+            # HU-W22: el resumen de H09 (200, 403 y 503), los orígenes recientes y el detalle paramétrico.
+            (PARAM_CON_PAGOS, None),
+            (SIN_GRUPO_ANALISTAS, None),
+            (PARAM_SIN_PAGOS_PARAMETRICOS, None),
+            (PARAM_ORIGENES, None),
+            (PARAM_DETALLE, None),
             # HU-W08: la capacidad con un escalado terminado y sin escalados ni dato de tareas.
             (CAPACIDAD_CON_ESCALADO, None),
             (CAPACIDAD_SIN_ESCALADO, None),
@@ -1084,7 +1311,8 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
     assert {rol for _, rol in siniestros.actores} == {"ANALISTA_SINIESTROS"}
     # Los dos 403 por grupo (el detalle y el pago) no llegan a siniestros, pero el BFF le avisa de cada
     # acceso denegado (DS3-09).
-    assert siniestros.avisos == 2
+    # HU-W22: el 403 del resumen de H09 también se avisa (la misma dependencia de grupo): son tres.
+    assert siniestros.avisos == 3
     assert {actor for actor, _ in siniestros.actores} <= {"sub-asesor-pact"}
     # HU-W20: siniestros recibió las tres decisiones y el intento sobre el caso ya aprobado, cada una con
     # la Idempotency-Key del portal, y los catálogos una sola vez.
@@ -1096,6 +1324,12 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
     ]
     assert {clave for _, clave in siniestros.decisiones} == {"c0c0c0c0-0000-4000-8000-000000000001"}
     assert siniestros.catalogos == 1
+    # HU-W22: H09 pidió a pagos-parametricos el origen del portal (una vez, con el analista) y el selector
+    # los 10 orígenes recientes del contrato; nunca llamó a dinero.
+    assert pagos_parametricos.origenes_pedidos == [EVENTO_ORIGEN]
+    assert pagos_parametricos.limites == ["10"]
+    assert {actor for actor, _ in pagos_parametricos.actores} == {"sub-asesor-pact"}
+    assert {rol for _, rol in pagos_parametricos.actores} == {"ANALISTA_SINIESTROS"}
     # El asesor pide como ASESOR: polizas filtra las reglas reservadas (DS2-07, R-08).
     assert set(polizas.roles) == {"ASESOR"}
 

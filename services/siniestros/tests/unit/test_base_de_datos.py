@@ -45,7 +45,7 @@ def test_aplica_las_migraciones_entre_el_bloqueo_y_su_liberacion(conectar: Conex
     assert conectar.sentencias[0] == base_de_datos._LOCK
     assert conectar.sentencias[-1] == base_de_datos._UNLOCK
     migraciones = conectar.sentencias[1:-1]
-    assert len(migraciones) == 7
+    assert len(migraciones) == 8
     assert "CREATE TABLE IF NOT EXISTS siniestros" in migraciones[0]
     assert "CREATE TABLE IF NOT EXISTS decisiones_siniestro" in migraciones[1]
     assert "CREATE TABLE IF NOT EXISTS borradores" in migraciones[2]
@@ -53,6 +53,8 @@ def test_aplica_las_migraciones_entre_el_bloqueo_y_su_liberacion(conectar: Conex
     assert "ADD COLUMN IF NOT EXISTS estado_carga" in migraciones[4]
     assert "ADD COLUMN IF NOT EXISTS envio_resultado" in migraciones[5]
     assert "ADD COLUMN IF NOT EXISTS ubicacion" in migraciones[6]
+    # HU-W22: la medición del paramétrico y su índice único evento-póliza.
+    assert "siniestros_parametrico_evento_poliza" in migraciones[7]
 
 
 def test_libera_el_bloqueo_aunque_una_migracion_falle(

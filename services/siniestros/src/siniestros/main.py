@@ -10,10 +10,11 @@ from solventa_common.inbox import ConsumidorInbox, InboxPg, Receptor, ReceptorSq
 from solventa_common.outbox import OutboxPg, PublicadorSns, RelayOutbox, cliente_sns
 from solventa_common.telemetry import instrumentar
 
-from siniestros.adapters.inbound.http import borradores, decisiones
+from siniestros.adapters.inbound.http import borradores, decisiones, parametricos
 from siniestros.adapters.inbound.http import siniestros as http
 from siniestros.adapters.inbound.sqs.indemnizaciones import manejador_indemnizaciones
 from siniestros.adapters.outbound.base_de_datos import migrar
+from siniestros.adapters.outbound.codigos import CodigosPg
 from siniestros.adapters.outbound.envios_pg import EnviosPg
 from siniestros.adapters.outbound.evidencias_s3 import (
     AlmacenSinConfigurar,
@@ -27,10 +28,12 @@ from siniestros.adapters.outbound.soportes_requeridos import SoportesRequeridosJ
 from siniestros.application.siniestro.acceso import RegistrarAccesoDenegado
 from siniestros.application.siniestro.bandeja import ConsultarResumen, ListarBandeja
 from siniestros.application.siniestro.borradores import Borradores
+from siniestros.application.siniestro.crear_parametrico import CrearParametrico
 from siniestros.application.siniestro.decidir import Decidir
 from siniestros.application.siniestro.detalle import ConsultarDetalle
 from siniestros.application.siniestro.enlace import EmitirEnlace, EmitirEnlaceCliente
 from siniestros.application.siniestro.envio import EnviarBorrador
+from siniestros.application.siniestro.pagos_parametricos import ConsultarPagosParametricos
 from siniestros.application.siniestro.plazos import VencerPlazosSoporte
 from siniestros.application.siniestro.puertos import AlmacenEvidencias, Reloj
 from siniestros.application.siniestro.resultado_pago import RegistrarResultadoPago
@@ -102,6 +105,8 @@ def armar_servicios(
         ),
         enlace=EmitirEnlace(repo, almacen, reloj, settings.evidencia_url_ttl_s),
         decidir=Decidir(repo, reloj),
+        crear_parametrico=CrearParametrico(repo, CodigosPg(pool), reloj, plazos),
+        pagos_parametricos=ConsultarPagosParametricos(repo),
         acceso=RegistrarAccesoDenegado(repo, reloj),
         reloj=reloj,
         plazos=plazos,
@@ -399,7 +404,9 @@ def crear_app(
                 await _detener(relay)
 
     app = instrumentar(FastAPI(title=settings.service_name, lifespan=ciclo), settings)
-    # Primero la decisión: `/catalogos-decision` va antes de `/{siniestroId}`.
+    # Primero los de rutas fijas: `/catalogos-decision` (W20) y `/parametricos` (W22) van antes de
+    # `/{siniestroId}`, para que no se lean como un identificador.
+    app.include_router(parametricos.router)
     app.include_router(decisiones.router)
     app.include_router(borradores.router_borradores)
     app.include_router(borradores.router_cliente)

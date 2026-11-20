@@ -35,6 +35,7 @@ from siniestros.adapters.inbound.http.dto import (
 )
 from siniestros.application.siniestro.acceso import RegistrarAccesoDenegado
 from siniestros.application.siniestro.bandeja import ConsultarResumen, ListarBandeja
+from siniestros.application.siniestro.crear_parametrico import CrearParametrico
 from siniestros.application.siniestro.decidir import Decidir
 from siniestros.application.siniestro.detalle import ConsultarDetalle
 from siniestros.application.siniestro.enlace import EmitirEnlace
@@ -43,6 +44,7 @@ from siniestros.application.siniestro.errores import (
     DependenciaNoDisponible,
     RolNoAutorizado,
 )
+from siniestros.application.siniestro.pagos_parametricos import ConsultarPagosParametricos
 from siniestros.application.siniestro.puertos import Reloj
 from siniestros.application.siniestro.tomar import TomarSiguiente
 from siniestros.application.siniestro.vistas import (
@@ -75,6 +77,8 @@ class Servicios:
     detalle: ConsultarDetalle
     enlace: EmitirEnlace
     decidir: Decidir
+    crear_parametrico: CrearParametrico
+    pagos_parametricos: ConsultarPagosParametricos
     acceso: RegistrarAccesoDenegado
     reloj: Reloj
     plazos: Plazos

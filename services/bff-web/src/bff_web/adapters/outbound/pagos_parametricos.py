@@ -14,6 +14,8 @@ from solventa_common.correlation import cliente_async
 
 ROL_ANALISTA = "ANALISTA_SINIESTROS"
 PREFIJO = "/v1/parametricos/descartes"
+# HU-W22: el seguimiento de H09 (resumen y orígenes recientes) cuelga de `/v1/parametricos`.
+PREFIJO_SEGUIMIENTO = "/v1/parametricos"
 
 
 class ErrorPagosParametricos(Exception):
@@ -33,13 +35,15 @@ class PagosParametricosCliente:
         self.timeout = timeout_ms / 1000
         self.transporte = transporte
 
-    async def _llamar(self, metodo: str, ruta: str, actor: str, **opciones: Any) -> Any:
+    async def _llamar(
+        self, metodo: str, ruta: str, actor: str, prefijo: str = PREFIJO, **opciones: Any
+    ) -> Any:
         encabezados = {"X-Actor-Id": actor, "X-Actor-Rol": ROL_ANALISTA}
         async with cliente_async(
             base_url=self.url, timeout=self.timeout, transport=self.transporte
         ) as cliente:
             respuesta = await cliente.request(
-                metodo, f"{PREFIJO}{ruta}", headers=encabezados, **opciones
+                metodo, f"{prefijo}{ruta}", headers=encabezados, **opciones
             )
         if respuesta.status_code >= 400:
             try:
@@ -65,3 +69,16 @@ class PagosParametricosCliente:
 
     async def descartar(self, message_id: str, cuerpo: dict[str, Any], actor: str) -> Any:
         return await self._llamar("POST", f"/{message_id}/descarte", actor, json=cuerpo)
+
+    async def resumen(self, evento_origen: str | None, actor: str) -> Any:
+        """`GET /v1/parametricos/resumen` (HU-W22, H09). Sin `eventoOrigen`, el más reciente."""
+        parametros = {"eventoOrigen": evento_origen} if evento_origen else None
+        return await self._llamar(
+            "GET", "/resumen", actor, prefijo=PREFIJO_SEGUIMIENTO, params=parametros
+        )
+
+    async def origenes(self, limite: int, actor: str) -> Any:
+        """`GET /v1/parametricos/eventos-origen` (HU-W22): los orígenes recientes del selector."""
+        return await self._llamar(
+            "GET", "/eventos-origen", actor, prefijo=PREFIJO_SEGUIMIENTO, params={"limite": limite}
+        )

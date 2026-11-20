@@ -52,6 +52,9 @@ def test_las_rutas_son_las_de_la_historia() -> None:
             "/v1/siniestros/borradores/{borradorId}/evidencias/{evidenciaId}/confirmacion",
         ),
         ("POST", "/v1/siniestros/borradores/{borradorId}/evidencias/{evidenciaId}/carga"),
+        # HU-W22
+        ("POST", "/v1/siniestros/parametricos"),
+        ("GET", "/v1/siniestros/parametricos/pagos"),
         ("GET", "/health"),
     }
 
@@ -103,6 +106,33 @@ def test_las_rutas_exigen_el_actor_y_la_siguiente_la_clave_de_idempotencia() -> 
     siguiente = rutas["/v1/siniestros/siguiente"]["post"]["parameters"]
     clave = next(p for p in siguiente if p["name"] == "Idempotency-Key")
     assert clave["required"] is True
+
+
+def test_el_siniestro_parametrico_exige_la_clave_evento_poliza_y_declara_sus_respuestas() -> None:
+    creacion = app.openapi()["paths"]["/v1/siniestros/parametricos"]["post"]
+    clave = next(p for p in creacion["parameters"] if p["name"] == "Idempotency-Key")
+    assert clave["required"] is True
+    assert clave["schema"]["pattern"] == "^[0-9a-fA-F-]{36}:[0-9a-fA-F-]{36}$"
+    assert set(creacion["responses"]) == {"200", "201", "401", "403", "422"}
+    solicitud = app.openapi()["components"]["schemas"]["SolicitudSiniestroParametrico"]
+    assert solicitud["additionalProperties"] is False
+    assert {"eventoId", "polizaId", "clienteId", "poliza", "evento", "valor"} <= set(
+        solicitud["required"]
+    )
+
+
+def test_la_lectura_por_lote_de_pagos_admite_de_1_a_20_ids() -> None:
+    lectura = app.openapi()["paths"]["/v1/siniestros/parametricos/pagos"]["get"]
+    ids = next(p for p in lectura["parameters"] if p["name"] == "siniestroIds")
+    assert ids["required"] is True
+    assert (ids["schema"]["minItems"], ids["schema"]["maxItems"]) == (1, 20)
+
+
+def test_el_evento_del_detalle_lleva_el_origen_y_la_regla() -> None:
+    evento = app.openapi()["components"]["schemas"]["EventoParametricoDto"]
+    assert {"eventoOrigen", "regla", "versionRegla", "valorObservado", "umbral"} <= set(
+        evento["required"]
+    )
 
 
 def test_la_decision_exige_la_clave_y_el_actor_y_declara_sus_errores() -> None:

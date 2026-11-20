@@ -4,11 +4,13 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
+import httpx
 import psycopg
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from opentelemetry.sdk.metrics.export import MetricReader
 from opentelemetry.sdk.trace.export import SpanExporter
+from solventa_common import correlation
 from solventa_common.errors import registrar_manejadores
 from solventa_common.inbox import (
     ESPERA_LARGA_S,
@@ -18,11 +20,13 @@ from solventa_common.inbox import (
     cliente_sqs,
 )
 from solventa_common.outbox import OutboxPg, PublicadorSns, RelayOutbox, cliente_sns
+from solventa_common.resiliencia import ProteccionDependencia
 from solventa_common.telemetry import instrumentar
 
-from pagos_parametricos.adapters.inbound.http import descartes
-from pagos_parametricos.adapters.inbound.sqs.eventos import manejador_eventos
+from pagos_parametricos.adapters.inbound.http import descartes, resumen
+from pagos_parametricos.adapters.inbound.sqs.eventos import manejador_eventos, reanudador_eventos
 from pagos_parametricos.adapters.inbound.sqs.polizas import manejador_polizas
+from pagos_parametricos.adapters.outbound.activaciones_pg import ActivacionesPg
 from pagos_parametricos.adapters.outbound.coberturas_pg import CoberturasPg
 from pagos_parametricos.adapters.outbound.descartes_pg import (
     RegistroFallosPg,
@@ -32,10 +36,15 @@ from pagos_parametricos.adapters.outbound.descartes_pg import (
 from pagos_parametricos.adapters.outbound.dlq_sqs import DlqSqs
 from pagos_parametricos.adapters.outbound.evaluaciones_pg import EvaluacionesPg
 from pagos_parametricos.adapters.outbound.reloj import RelojSistema
+from pagos_parametricos.adapters.outbound.resumen_pg import ResumenPg
+from pagos_parametricos.adapters.outbound.siniestros_http import SiniestrosHttp
 from pagos_parametricos.adapters.outbound.verificaciones_pg import VerificacionesPg
 from pagos_parametricos.application.descartes import ColaDescarte, Dlq, Reloj
+from pagos_parametricos.application.parametrico.activar import ActivarSiniestros
 from pagos_parametricos.application.parametrico.aplicar_poliza import AplicarEventoPoliza
 from pagos_parametricos.application.parametrico.evaluar_evento import EvaluarEvento
+from pagos_parametricos.application.parametrico.puertos import Siniestros
+from pagos_parametricos.application.parametrico.resumen import ConsultarResumen, ProfundidadDlq
 from pagos_parametricos.config import Settings
 
 if TYPE_CHECKING:
@@ -120,7 +129,19 @@ def _cola_descarte(app: FastAPI, settings: Settings, reloj: Reloj) -> None:
         logger.error(MENSAJE_DESCARTE_NO_ARRANCO, extra={"error_type": type(error).__name__})
         return
     dlq = DlqSqs(cliente, cola, settings.sqs_parametricos_eventos_dlq_url)
+    app.state.dlq = dlq
     app.state.cola_descarte = armar_cola(pool, dlq, reloj, settings)
+
+
+def _resumen(app: FastAPI, reloj: Reloj) -> None:
+    """El seguimiento de H09 (HU-W22): lectura de la base y, si hay DLQ configurada (la misma de la
+    cola de descarte), su profundidad (null si no se puede leer). Sin base, las rutas dan 503."""
+    pool = getattr(app.state, "pool", None)
+    if pool is None:
+        return
+    dlq = getattr(app.state, "dlq", None)
+    profundidad: ProfundidadDlq | None = dlq if hasattr(dlq, "profundidad") else None
+    app.state.resumen = ConsultarResumen(ResumenPg(pool), profundidad, reloj)
 
 
 def armar_consumidores(
@@ -128,18 +149,28 @@ def armar_consumidores(
     cliente: Any,
     reloj: Reloj,
     settings: Settings,
+    siniestros: Siniestros | None = None,
     visibilidad_s: int = VISIBILIDAD_S,
     espera_larga_s: int = ESPERA_LARGA_S,
 ) -> dict[str, ConsumidorInbox[Any]]:
     """Los dos consumidores de HU-W21, con la forma de HU-W24 (§9): `ConsumidorInbox` con
-    contrapresión (`SQS_CONCURRENCIA`), latido de visibilidad y parada ordenada. Los dos escriben
-    su efecto en la transacción del inbox (modo (a)); `parametricos-eventos` además anota la causa
-    de cada fallo, que luego muestra la DLQ (H10). `visibilidad_s` y `espera_larga_s` son los
-    de la cola y el cliente; solo las pruebas de módulo los bajan, para no esperar 30 s por
-    recepción ni 20 s al parar."""
+    contrapresión (`SQS_CONCURRENCIA`), latido de visibilidad y parada ordenada. El de pólizas
+    escribe su efecto en la transacción del inbox (modo (a)). El de `parametricos-eventos` evalúa en
+    esa transacción y devuelve la continuación de HU-W22 (modo (b)): después del commit crea los
+    siniestros de las activaciones `PENDIENTE`, y `reanudar` (DS3-15) la retoma si el mensaje vuelve
+    con `siniestros` caído; además anota la causa de cada fallo, que luego muestra la DLQ (H10).
+    `siniestros` es el puerto que usa la continuación (`SiniestrosHttp` en la app). `visibilidad_s`
+    y `espera_larga_s` son los de la cola y el cliente; solo las pruebas de módulo los bajan, para no
+    esperar 30 s por recepción ni 20 s al parar."""
     consumidores: dict[str, ConsumidorInbox[Any]] = {}
     if settings.sqs_parametricos_eventos_url:
         evaluar = EvaluarEvento(CoberturasPg(), EvaluacionesPg(), reloj)
+        # Sin `siniestros` (pruebas de W21), las activaciones quedan `PENDIENTE` como en el modo (a).
+        activar = (
+            ActivarSiniestros(ActivacionesPg(pool), siniestros, settings.siniestros_bulkhead_max)
+            if siniestros is not None
+            else None
+        )
         consumidores["consumidor_eventos"] = ConsumidorInbox(
             ReceptorSqs(
                 cliente,
@@ -148,11 +179,12 @@ def armar_consumidores(
                 max_mensajes=10,
             ),
             InboxPg(pool),
-            manejador_eventos(evaluar),
+            manejador_eventos(evaluar, activar),
             concurrencia=settings.sqs_concurrencia,
             visibilidad_s=visibilidad_s,
             plazo_parada_s=PLAZO_PARADA_S,
             al_fallar=RegistroFallosPg(pool, reloj).al_fallar,
+            reanudar=reanudador_eventos(activar) if activar is not None else None,
         )
     if settings.sqs_parametricos_polizas_url:
         aplicar = AplicarEventoPoliza(CoberturasPg())
@@ -172,10 +204,28 @@ def armar_consumidores(
     return consumidores
 
 
+def armar_siniestros(cliente: httpx.AsyncClient, settings: Settings) -> SiniestrosHttp:
+    """La ACL hacia `siniestros` (DS3-23): timeout de 600 ms, un circuito por operación y *bulkhead*
+    de 10 (`ProteccionDependencia`). Una sola protección por app."""
+    return SiniestrosHttp(
+        cliente,
+        settings.siniestros_url,
+        settings.siniestros_timeout_ms,
+        ProteccionDependencia(
+            settings.cb_fallos_consecutivos,
+            settings.cb_apertura_s,
+            settings.siniestros_bulkhead_max,
+        ),
+    )
+
+
 @asynccontextmanager
-async def _consumidores(app: FastAPI, settings: Settings, reloj: Reloj) -> AsyncIterator[None]:
+async def _consumidores(
+    app: FastAPI, settings: Settings, reloj: Reloj, siniestros: Siniestros | None = None
+) -> AsyncIterator[None]:
     """Lanza los consumidores de las colas configuradas y los para con el cierre. Sin base o sin
-    ninguna cola, lo registra y la app arranca igual."""
+    ninguna cola, lo registra y la app arranca igual. `siniestros` solo lo inyectan las pruebas; en
+    la app es `SiniestrosHttp` con `correlation.cliente_async()`."""
     pool = getattr(app.state, "pool", None)
     if pool is None or not (
         settings.sqs_parametricos_eventos_url or settings.sqs_parametricos_polizas_url
@@ -190,7 +240,11 @@ async def _consumidores(app: FastAPI, settings: Settings, reloj: Reloj) -> Async
         yield
         return
     async with AsyncExitStack() as pila:
-        for atributo, consumidor in armar_consumidores(pool, cliente, reloj, settings).items():
+        if siniestros is None:
+            http = await pila.enter_async_context(correlation.cliente_async())
+            siniestros = armar_siniestros(http, settings)
+        consumidores = armar_consumidores(pool, cliente, reloj, settings, siniestros)
+        for atributo, consumidor in consumidores.items():
             await pila.enter_async_context(
                 _en_fondo(
                     app,
@@ -240,6 +294,7 @@ def crear_app(
     reloj: Reloj | None = None,
     pool: "AsyncConnectionPool[Any] | None" = None,
     dlq: Dlq | None = None,
+    siniestros: Siniestros | None = None,
     span_exporter: SpanExporter | None = None,
     metric_readers: Sequence[MetricReader] = (),
 ) -> FastAPI:
@@ -247,6 +302,8 @@ def crear_app(
 
     HU-W24 deja la cola de descarte y el relay; HU-W21 agrega los consumidores de
     `parametricos-eventos` y `parametricos-polizas`, que se lanzan y paran con el ciclo de vida.
+    HU-W22 suma la creación del siniestro (continuación de `parametricos-eventos`, hacia
+    `siniestros`) y el seguimiento de H09 (`GET /v1/parametricos/resumen`).
     """
     settings = settings or Settings()
 
@@ -270,13 +327,15 @@ def crear_app(
                 pila.push_async_callback(pool_base.close)
                 app.state.pool = pool_base
             if dlq is not None and getattr(app.state, "pool", None) is not None:
+                app.state.dlq = dlq
                 app.state.cola_descarte = armar_cola(app.state.pool, dlq, reloj_app, settings)
             else:
                 _cola_descarte(app, settings, reloj_app)
+            _resumen(app, reloj_app)
             # LIFO al cerrar: los consumidores paran primero y el relay publica lo último que
             # escribieron (R-77).
             await pila.enter_async_context(_relay(app, settings, reloj_app))
-            await pila.enter_async_context(_consumidores(app, settings, reloj_app))
+            await pila.enter_async_context(_consumidores(app, settings, reloj_app, siniestros))
             yield
 
     app = instrumentar(
@@ -287,6 +346,7 @@ def crear_app(
     )
     registrar_manejadores(app)
     app.include_router(descartes.router)
+    app.include_router(resumen.router)
 
     @app.get("/health", response_model=None)
     async def health(request: Request) -> dict[str, str] | JSONResponse:

@@ -206,9 +206,11 @@ async def test_el_mismo_evento_dos_veces_tiene_un_solo_efecto(
         sobre = _sobre("RecaudoConfirmado", aceptacion["id"])
         await asyncio.to_thread(cola_recaudos.publicar, sobre)
         await asyncio.to_thread(cola_recaudos.publicar, sobre)
-        # Los dos se consumen y se borran (el segundo como duplicado), y nada va a la DLQ.
+        # SNS entrega a SQS de forma asíncrona: esperar solo a que la cola quede vacía podía leer el
+        # estado antes de que llegara el primer mensaje. Primero el efecto, después la cola: los dos
+        # se consumen y se borran (el segundo como duplicado) y nada va a la DLQ.
+        estado = await _esperar_estado(api, aceptacion["cotizacionId"], "CONFIRMADO")
         await _esperar(lambda: _sin_pendientes(cola_recaudos, cola_recaudos.cola))
-        estado = await _estado(api, aceptacion["cotizacionId"])
 
     assert estado["estado"] == "CONFIRMADO"
     assert _filas(limpia, "SELECT count(*) FROM inbox") == [(1,)]
