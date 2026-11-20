@@ -124,6 +124,12 @@ locals {
         ALERTAS_ATENCION_MIN       = tostring(var.alert_attention_minutes)
         ALERTAS_FALSO_POSITIVO_MIN = tostring(var.false_positive_minutes)
       } : {},
+      # HU-W08: todo o nada; sin capacity_service desplegado no hay panel que leer. Las métricas
+      # salen de METRICS_NAMESPACE, que ya reciben todos los servicios.
+      contains(local.capacity_readers, name) && contains(keys(local.deployed), local.capacity_service) ? {
+        CAPACIDAD_CLUSTER  = local.p.cluster.name
+        CAPACIDAD_SERVICIO = local.capacity_service
+      } : {},
       # Último: las variables de QA del ambiente (service_environment) tienen prioridad.
       lookup(var.service_environment, name, {}),
     )

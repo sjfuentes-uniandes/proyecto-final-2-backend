@@ -19,7 +19,10 @@ con su 404 EVIDENCIA_NO_DISPONIBLE (siniestros, clientes y consulta simulados). 
 el pago de la indemnización (H08) confirmado, rechazado y pendiente, su 404 INDEMNIZACION_NO_ENCONTRADA
 y su 403 (el detalle de siniestros se simula con el caso APROBADO y su `pago`). El verificador envía
 los encabezados que pone API Gateway para un usuario de los grupos `asesores` y
-`analistas-siniestros`; el estado del 403 hace que la ruta exija otro grupo mientras dura.
+`analistas-siniestros`; el estado del 403 hace que la ruta exija otro grupo mientras dura. HU-W08
+(8.7): los dos estados de la capacidad de cotizacion leen un doble del adaptador de capacidad (sin
+CloudWatch ni Application Auto Scaling) desde el caso de uso real con un reloj fijo y, solo mientras
+duran, el usuario también está en el grupo `operacion` que exige /operacion/capacidad.
 """
 
 import asyncio
@@ -28,8 +31,9 @@ import re
 import socket
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +42,7 @@ import pytest
 import uvicorn
 from bff_web.adapters.inbound import aceptaciones as ruta_aceptacion
 from bff_web.adapters.inbound import estado_polizas as ruta_estado
+from bff_web.adapters.inbound import operacion as ruta_operacion
 from bff_web.adapters.inbound import polizas as ruta_poliza
 from bff_web.adapters.inbound import recaudos as ruta_recaudo
 from bff_web.adapters.inbound import siniestros as ruta_siniestros
@@ -47,6 +52,7 @@ from bff_web.adapters.outbound.consulta import ConsultaCliente
 from bff_web.adapters.outbound.polizas import PolizasCliente
 from bff_web.adapters.outbound.siniestros import SiniestrosCliente
 from bff_web.application.aceptacion import Aceptaciones
+from bff_web.application.consultar_capacidad import ConsultarCapacidad
 from bff_web.application.estado_poliza import EstadoPolizas
 from bff_web.application.poliza import Polizas
 from bff_web.application.recaudo import Recaudos
@@ -54,9 +60,9 @@ from bff_web.application.siniestros import Siniestros
 from bff_web.application.suscripcion import Suscripciones
 from bff_web.config import settings
 from bff_web.main import app
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pact import Verifier
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 RAIZ = Path(__file__).parents[4]
 PACTO = RAIZ / "contracts" / "pact" / "web-bff-web.json"
@@ -146,6 +152,14 @@ ESTADOS_SINIESTROS = {
     YA_APROBADO,
     *ESTADOS_PAGO,
 }
+# HU-W08 (8.7): la capacidad de cotizacion en Operación › Tablero (web/pact/operacion.pact.spec.ts).
+CAPACIDAD_CON_ESCALADO = "la capacidad de cotizacion tiene un escalado terminado en la ventana"
+CAPACIDAD_SIN_ESCALADO = (
+    "la capacidad de cotizacion no tiene escalados ni dato de tareas en la ventana"
+)
+ESTADOS_CAPACIDAD = {CAPACIDAD_CON_ESCALADO, CAPACIDAD_SIN_ESCALADO}
+# Reloj del caso de uso: la ventana va de 14:00 a 15:00 (termina en el último minuto completo).
+AHORA_CAPACIDAD = datetime(2026, 11, 19, 15, 0, 30, tzinfo=UTC)
 GRUPO_SIN_MIEMBROS = "grupo-sin-miembros"
 SINIESTRO_ID = "5e000000-0000-4000-8000-000004000000"
 EVIDENCIA_ID = "e0000000-0000-4000-8000-000004000001"
@@ -790,8 +804,74 @@ class ConsultaSimulado:
         return _error("POLIZA_NO_ENCONTRADA", 404)
 
 
+class CapacidadSimulada:
+    """Doble del adaptador de capacidad (adapters/outbound/capacidad.py) para cotizacion: lo que
+    leería de CloudWatch y de Application Auto Scaling en el estado sembrado. En los dos estados,
+    cotizaciones en algunos minutos de la ventana y límites 2 y 4. Con un escalado terminado, 3
+    tareas en el último minuto y una actividad de 41 s; sin él, ni puntos de CPUUtilization (las
+    tareas activas salen null) ni actividades. Fuera de sus estados, falla."""
+
+    servicio = "cotizacion"
+
+    def __init__(self) -> None:
+        self.estado: str | None = None
+        self.consultas: list[str] = []
+
+    def _estado(self) -> str:
+        assert self.estado in ESTADOS_CAPACIDAD, f"capacidad leída sin su estado: {self.estado!r}"
+        return self.estado
+
+    def metricas(
+        self, desde: datetime, hasta: datetime
+    ) -> tuple[dict[datetime, float], dict[datetime, float]]:
+        estado = self._estado()
+        self.consultas.append(estado)
+        cotizaciones = {desde + timedelta(minutes=m): v for m, v in ((5, 180.0), (40, 20000.0))}
+        tareas = {hasta - timedelta(minutes=1): 3.0} if estado == CAPACIDAD_CON_ESCALADO else {}
+        return cotizaciones, tareas
+
+    def limites(self) -> tuple[int, int]:
+        self._estado()
+        return 2, 4
+
+    def actividades(self, desde: datetime) -> list[Mapping[str, Any]]:
+        if self._estado() == CAPACIDAD_SIN_ESCALADO:
+            return []
+        inicio = desde + timedelta(minutes=40, seconds=45)
+        return [
+            {
+                "StartTime": inicio,
+                "EndTime": inicio + timedelta(seconds=41),
+                "Description": "Setting desired count to 3.",
+                "StatusCode": "Successful",
+            }
+        ]
+
+
+class GruposPorEstado:
+    """Sirve la app y, solo mientras dura un estado que lo pide, agrega un grupo a
+    X-Authenticated-Groups (HU-W08: `operacion` para /operacion/capacidad). Sin grupo, la solicitud
+    pasa con los encabezados del verificador sin cambios."""
+
+    def __init__(self, aplicacion: ASGIApp) -> None:
+        self.aplicacion = aplicacion
+        self.grupo: str | None = None
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and self.grupo is not None:
+            extra = f", {self.grupo}]".encode()
+            scope = {
+                **scope,
+                "headers": [
+                    (k, v.removesuffix(b"]") + extra if k == b"x-authenticated-groups" else v)
+                    for k, v in scope["headers"]
+                ],
+            }
+        await self.aplicacion(scope, receive, send)
+
+
 @contextmanager
-def _servir(aplicacion: FastAPI) -> Iterator[str]:
+def _servir(aplicacion: ASGIApp) -> Iterator[str]:
     zocalo = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     zocalo.bind(("127.0.0.1", 0))
     url = f"http://127.0.0.1:{zocalo.getsockname()[1]}"
@@ -902,6 +982,11 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
     app.dependency_overrides[ruta_estado.estados] = lambda: EstadoPolizas(
         cliente_consulta, cliente_clientes, 500
     )
+    capacidad = CapacidadSimulada()
+    app.dependency_overrides[ruta_operacion.consultar_capacidad] = lambda: ConsultarCapacidad(
+        capacidad, ahora=lambda: AHORA_CAPACIDAD
+    )
+    servida = GruposPorEstado(app)
     grupo_original = settings.grupo_analistas_siniestros
     vistos: list[tuple[str, str | None]] = []
 
@@ -910,9 +995,16 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
         if action != "setup":
             # El 403 de siniestros exige otro grupo solo mientras dura su estado.
             settings.grupo_analistas_siniestros = grupo_original
+            # HU-W08: el grupo operacion y la capacidad sembrada, también solo durante su estado.
+            servida.grupo = None
+            capacidad.estado = None
             return
         parametros = parameters or {}
         vistos.append((state, parametros.get("caso")))
+        if state in ESTADOS_CAPACIDAD:
+            capacidad.estado = state
+            servida.grupo = settings.grupo_operacion
+            return
         if state == SIN_GRUPO_ANALISTAS:
             settings.grupo_analistas_siniestros = GRUPO_SIN_MIEMBROS
         if _sembrar_siniestros_y_consulta(siniestros, consulta, clientes, state, parametros):
@@ -920,7 +1012,7 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
         _sembrar(polizas, clientes, state, parametros)
 
     try:
-        with _servir(app) as url:
+        with _servir(servida) as url:
             Verifier("bff-web", host="127.0.0.1").add_source(PACTO).add_transport(
                 url=url
             ).add_custom_headers(
@@ -980,9 +1072,14 @@ def test_bff_web_cumple_el_pacto_del_portal(monkeypatch: pytest.MonkeyPatch) -> 
             (PAGO_PENDIENTE, None),
             (NO_APROBADO, None),
             (SIN_GRUPO_ANALISTAS, None),
+            # HU-W08: la capacidad con un escalado terminado y sin escalados ni dato de tareas.
+            (CAPACIDAD_CON_ESCALADO, None),
+            (CAPACIDAD_SIN_ESCALADO, None),
         ],
         key=str,
     )
+    # HU-W08: cada estado de la capacidad leyó el doble una vez, desde el caso de uso real.
+    assert sorted(capacidad.consultas) == sorted(ESTADOS_CAPACIDAD)
     # siniestros recibe siempre al analista autenticado con el rol del servicio (DS3-10).
     assert {rol for _, rol in siniestros.actores} == {"ANALISTA_SINIESTROS"}
     # Los dos 403 por grupo (el detalle y el pago) no llegan a siniestros, pero el BFF le avisa de cada

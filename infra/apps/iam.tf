@@ -37,6 +37,12 @@ locals {
   trace_readers = ["bff-web"]
   # HU-W28: pantalla Operación › Alertas (alarmas del ambiente y su historial).
   alert_readers = ["bff-web"]
+  # HU-W08: panel «Cotizaciones por minuto y capacidad» de Operación › Tablero. Lee el scalable
+  # target y las actividades de escalado de capacity_service (clave del catálogo, que es también
+  # el nombre del servicio ECS: modules/ecs-service usa var.name). No se toma de
+  # local.ecs_services porque las variables de entorno alimentan a esos módulos (ciclo).
+  capacity_readers = ["bff-web"]
+  capacity_service = "cotizacion"
   # Administración › Usuarios del portal: alta de usuarios del back-office y sus grupos.
   backoffice_user_admins = ["bff-web"]
   cors_services          = ["bff-web"]
@@ -120,6 +126,11 @@ locals {
       # de recurso; bff-web filtra por el prefijo del ambiente (ALERTAS_PREFIJO).
       contains(local.alert_readers, name) ? [
         { Effect = "Allow", Action = ["cloudwatch:DescribeAlarms", "cloudwatch:DescribeAlarmHistory", "cloudwatch:GetMetricData"], Resource = ["*"] },
+      ] : [],
+      # HU-W08: solo lectura. Las dos acciones Describe* no admiten ARN de recurso ni claves de
+      # condición; bff-web filtra por el resource_id service/CAPACIDAD_CLUSTER/CAPACIDAD_SERVICIO.
+      contains(local.capacity_readers, name) ? [
+        { Effect = "Allow", Action = ["application-autoscaling:DescribeScalableTargets", "application-autoscaling:DescribeScalingActivities"], Resource = ["*"] },
       ] : [],
       contains(local.backoffice_user_admins, name) ? [
         {
