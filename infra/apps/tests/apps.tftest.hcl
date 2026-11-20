@@ -983,3 +983,152 @@ run "capacidad_sin_cotizacion" {
     error_message = "HU-W08: sin cotizacion desplegado, bff-web no recibe CAPACIDAD_* y conserva la política de lectura."
   }
 }
+
+# HU-W09: tarea k6 del experimento de carga (carga.tf), apagada fuera de exp.
+run "carga_apagada_por_omision" {
+  command = plan
+
+  assert {
+    condition = (
+      !var.load_test_enabled &&
+      length(aws_cloudwatch_log_group.load_test) == 0 &&
+      length(aws_iam_role.load_test_execution) == 0 &&
+      length(aws_iam_role_policy.load_test_execution) == 0 &&
+      length(aws_ecs_task_definition.load_test) == 0 &&
+      length(aws_security_group.load_test) == 0 &&
+      length(aws_vpc_security_group_egress_rule.load_test) == 0 &&
+      length(aws_vpc_security_group_ingress_rule.load_test_alb) == 0
+    )
+    error_message = "HU-W09: por omisión load_test_enabled es false y no existe ningún recurso de carga.tf."
+  }
+}
+
+run "carga_encendida" {
+  command = plan
+
+  variables {
+    load_test_enabled = true
+  }
+
+  # Con mocks, el id del SG y los ARN del rol y del log group se calculan en apply; aquí se fijan
+  # en el plan para poder comparar la regla del ALB, la política y la tarea con sus recursos.
+  override_resource {
+    target          = aws_security_group.load_test
+    override_during = plan
+    values          = { id = "sg-carga" }
+  }
+  override_resource {
+    target          = aws_iam_role.load_test_execution
+    override_during = plan
+    values          = { arn = "arn:aws:iam::123456789012:role/solventa-int-carga-exec" }
+  }
+  override_resource {
+    target          = aws_cloudwatch_log_group.load_test
+    override_during = plan
+    values          = { arn = "arn:aws:logs:us-east-1:123456789012:log-group:/ecs/solventa-int/carga" }
+  }
+
+  assert {
+    condition = (
+      length(aws_cloudwatch_log_group.load_test) == 1 &&
+      length(aws_iam_role.load_test_execution) == 1 &&
+      length(aws_iam_role_policy.load_test_execution) == 1 &&
+      length(aws_ecs_task_definition.load_test) == 2 &&
+      length(aws_security_group.load_test) == 1 &&
+      length(aws_vpc_security_group_egress_rule.load_test) == 1 &&
+      length(aws_vpc_security_group_ingress_rule.load_test_alb) == 1
+    )
+    error_message = "HU-W09: encendida, existen el log group, el rol de ejecución y su política, las dos definiciones de tarea (carga y alta), el SG, su salida y la entrada al ALB."
+  }
+  assert {
+    # Las pruebas de tests/e2e buscan las familias y el SG por nombre (no leen las salidas de apps).
+    condition = (
+      toset(keys(aws_ecs_task_definition.load_test)) == toset(["carga", "alta"]) &&
+      aws_ecs_task_definition.load_test["carga"].family == "solventa-int-carga" &&
+      aws_ecs_task_definition.load_test["alta"].family == "solventa-int-carga-alta" &&
+      aws_security_group.load_test[0].name == "solventa-int-carga" &&
+      aws_security_group.load_test[0].vpc_id == local.p.vpc_id &&
+      aws_cloudwatch_log_group.load_test[0].name == "/ecs/solventa-int/carga" &&
+      aws_cloudwatch_log_group.load_test[0].retention_in_days == var.load_test_log_retention_days
+    )
+    error_message = "HU-W09: las familias son <prefijo>-carga y <prefijo>-carga-alta, el SG se llama <prefijo>-carga y está en la VPC de platform, y el log group es /ecs/<prefijo>/carga con su retención."
+  }
+  assert {
+    condition = alltrue([for definicion in aws_ecs_task_definition.load_test : (
+      definicion.requires_compatibilities == toset(["FARGATE"]) &&
+      definicion.network_mode == "awsvpc" &&
+      definicion.cpu == tostring(var.load_test_cpu) &&
+      definicion.memory == tostring(var.load_test_memory) &&
+      definicion.execution_role_arn == aws_iam_role.load_test_execution[0].arn &&
+      definicion.task_role_arn == null
+    )])
+    error_message = "HU-W09: las dos tareas k6 son FARGATE, awsvpc, con CPU y memoria por variable, el mismo rol de ejecución y sin rol de tarea."
+  }
+  assert {
+    # Un solo contenedor k6, la imagen por variable y el log a su grupo, en las dos definiciones.
+    condition = alltrue([for definicion in aws_ecs_task_definition.load_test : (
+      length(jsondecode(definicion.container_definitions)) == 1 &&
+      jsondecode(definicion.container_definitions)[0].name == "k6" &&
+      jsondecode(definicion.container_definitions)[0].image == var.load_test_image &&
+      jsondecode(definicion.container_definitions)[0].logConfiguration.logDriver == "awslogs" &&
+      jsondecode(definicion.container_definitions)[0].logConfiguration.options["awslogs-group"] == aws_cloudwatch_log_group.load_test[0].name
+    )])
+    error_message = "HU-W09: el contenedor k6 usa load_test_image y escribe en /ecs/<prefijo>/carga, en las dos definiciones."
+  }
+  assert {
+    # El script viaja en la definición (no en una URL): sh -c lo decodifica a /tmp/s.js y k6 corre
+    # el archivo local, con -q (sin progreso ni encabezado). command y entryPoint son fijos.
+    condition = alltrue([for definicion in aws_ecs_task_definition.load_test : (
+      jsondecode(definicion.container_definitions)[0].entryPoint == ["sh", "-c"] &&
+      jsondecode(definicion.container_definitions)[0].command == ["echo \"$HU_W09_SCRIPT\" | base64 -d > /tmp/s.js && exec k6 run --log-format=raw -q /tmp/s.js"] &&
+      [for variable in jsondecode(definicion.container_definitions)[0].environment : variable.name] == ["HU_W09_SCRIPT"]
+    )])
+    error_message = "HU-W09: entryPoint [sh, -c] y el command fijo que decodifica HU_W09_SCRIPT a /tmp/s.js y corre k6 con --log-format=raw -q; HU_W09_SCRIPT es la única variable fija."
+  }
+  assert {
+    # Cada definición lleva su script, tal cual está en experiments/hu-w09/.
+    condition = alltrue([for nombre, definicion in aws_ecs_task_definition.load_test :
+      base64decode(one([for variable in jsondecode(definicion.container_definitions)[0].environment : variable.value if variable.name == "HU_W09_SCRIPT"])) == file("${path.module}/../../experiments/hu-w09/${nombre}.js")
+    ])
+    error_message = "HU-W09: HU_W09_SCRIPT de la definición carga es experiments/hu-w09/carga.js en base64, y el de alta, alta.js."
+  }
+  assert {
+    # Una definición de tarea admite 64 KiB (cuota de ECS no ajustable): la guarda es 48 KiB.
+    condition     = alltrue([for definicion in aws_ecs_task_definition.load_test : length(definicion.container_definitions) < 49152])
+    error_message = "HU-W09: container_definitions de cada tarea k6 mide menos de 48 KiB (la definición de tarea admite 64 KiB)."
+  }
+  assert {
+    # Solo escribir en su log group: ni ECR (imagen pública), ni secretos, ni KMS.
+    condition = (
+      aws_iam_role.load_test_execution[0].name == "solventa-int-carga-exec" &&
+      aws_iam_role.load_test_execution[0].assume_role_policy == local.task_trust &&
+      length(jsondecode(aws_iam_role_policy.load_test_execution[0].policy).Statement) == 1 &&
+      jsondecode(aws_iam_role_policy.load_test_execution[0].policy).Statement[0].Effect == "Allow" &&
+      toset(jsondecode(aws_iam_role_policy.load_test_execution[0].policy).Statement[0].Action) == toset(["logs:CreateLogStream", "logs:PutLogEvents"]) &&
+      jsondecode(aws_iam_role_policy.load_test_execution[0].policy).Statement[0].Resource == ["${aws_cloudwatch_log_group.load_test[0].arn}:*"]
+    )
+    error_message = "HU-W09: el rol de ejecución de k6 solo crea streams y escribe eventos en su log group."
+  }
+  assert {
+    condition = (
+      aws_vpc_security_group_egress_rule.load_test[0].security_group_id == aws_security_group.load_test[0].id &&
+      aws_vpc_security_group_egress_rule.load_test[0].cidr_ipv4 == "0.0.0.0/0" &&
+      aws_vpc_security_group_egress_rule.load_test[0].ip_protocol == "-1"
+    )
+    error_message = "HU-W09: el SG de k6 sale a todo (imagen por el NAT, CloudWatch Logs, ALB y API Gateway)."
+  }
+  assert {
+    # La entrada al ALB: solo desde el SG de k6 y solo en el listener de api-socios del catálogo.
+    condition = (
+      aws_vpc_security_group_ingress_rule.load_test_alb[0].security_group_id == local.p.alb.security_group_id &&
+      aws_vpc_security_group_ingress_rule.load_test_alb[0].referenced_security_group_id == aws_security_group.load_test[0].id &&
+      aws_vpc_security_group_ingress_rule.load_test_alb[0].cidr_ipv4 == null &&
+      aws_vpc_security_group_ingress_rule.load_test_alb[0].cidr_ipv6 == null &&
+      aws_vpc_security_group_ingress_rule.load_test_alb[0].prefix_list_id == null &&
+      aws_vpc_security_group_ingress_rule.load_test_alb[0].ip_protocol == "tcp" &&
+      aws_vpc_security_group_ingress_rule.load_test_alb[0].from_port == local.p.catalog["api-socios"].listener_port &&
+      aws_vpc_security_group_ingress_rule.load_test_alb[0].to_port == local.p.catalog["api-socios"].listener_port
+    )
+    error_message = "HU-W09: el ALB admite a k6 solo desde su SG, por TCP y en el listener_port de api-socios."
+  }
+}

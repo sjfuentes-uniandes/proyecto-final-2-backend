@@ -172,4 +172,14 @@ run "ambiente_int" {
     ])
     error_message = "El objetivo y los enfriamientos de cada política cpu deben salir de service_overrides o, sin él, de las variables del ambiente."
   }
+
+  # --- HU-W09: la tarea k6 del experimento de carga no existe en int -----
+  assert {
+    condition = !var.load_test_enabled && (
+      length(aws_cloudwatch_log_group.load_test) + length(aws_iam_role.load_test_execution) + length(aws_iam_role_policy.load_test_execution) +
+      length(aws_ecs_task_definition.load_test) + length(aws_security_group.load_test) + length(aws_vpc_security_group_egress_rule.load_test) +
+      length(aws_vpc_security_group_ingress_rule.load_test_alb)
+    ) == 0
+    error_message = "HU-W09: en int no existe ningún recurso de carga.tf (load_test_enabled solo se enciende en envs/exp)."
+  }
 }
