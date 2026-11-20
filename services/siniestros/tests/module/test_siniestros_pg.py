@@ -94,6 +94,26 @@ def guardar(conexion: psycopg.Connection[Any], s: Siniestro, *evidencias: Eviden
         )
 
 
+def guardar_borrador(
+    conexion: psycopg.Connection[Any], borrador_id: UUID, actor_id: str, creado_en: Any
+) -> None:
+    conexion.execute(
+        "INSERT INTO borradores "
+        "(id, actor_id, cliente_id, poliza_id, descripcion, copia_poliza, creado_en, "
+        "correlation_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+        (
+            borrador_id,
+            actor_id,
+            uuid4(),
+            uuid4(),
+            "Descripción del siniestro",
+            Jsonb({"numero": "900-2026-000001"}),
+            creado_en,
+            "corr-m01",
+        ),
+    )
+
+
 def filtro(ahora: Any, **cambios: Any) -> FiltroBandeja:
     datos: dict[str, Any] = {
         "bandeja": TipoBandeja.MIA,
@@ -103,6 +123,81 @@ def filtro(ahora: Any, **cambios: Any) -> FiltroBandeja:
     }
     datos.update(cambios)
     return FiltroBandeja(**datos)
+
+
+async def test_borradores_y_detalles_se_filtran_por_actor(
+    pool: Any, conexion: psycopg.Connection[Any], ahora: Any
+) -> None:
+    actor = "actor-cliente"
+    borrador_id, ajeno_id = uuid4(), uuid4()
+    guardar_borrador(conexion, borrador_id, actor, ahora)
+    guardar_borrador(conexion, ajeno_id, "otro-actor", ahora)
+    evidencia_id = uuid4()
+    conexion.execute(
+        "INSERT INTO borrador_evidencias "
+        "(id, borrador_id, nombre_archivo, tipo, clave_objeto, sha256, tamano_bytes, "
+        "tipo_contenido) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+        (
+            evidencia_id,
+            borrador_id,
+            "foto.jpg",
+            "FOTOGRAFIA",
+            f"tmp/{borrador_id}/{evidencia_id}",
+            "a" * 64,
+            100,
+            "image/jpeg",
+        ),
+    )
+
+    repositorio = SiniestrosPg(pool)
+    listado = await repositorio.listar_borradores(actor)
+    detalle = await repositorio.consultar_borrador(actor, borrador_id)
+
+    assert [item["borradorId"] for item in listado] == [borrador_id]
+    assert listado[0]["cantidadEvidencias"] == 1
+    assert listado[0]["evidenciasPendientes"] == 1
+    assert detalle is not None
+    assert detalle["descripcion"] == "Descripción del siniestro"
+    assert detalle["evidencias"][0]["estadoCarga"] == "PENDIENTE"
+    assert "claveObjeto" not in detalle["evidencias"][0]
+    assert await repositorio.consultar_borrador(actor, ajeno_id) is None
+
+
+async def test_confirmar_evidencia_es_idempotente_y_verifica_el_actor(
+    pool: Any, conexion: psycopg.Connection[Any], ahora: Any
+) -> None:
+    actor, borrador_id, evidencia_id = "actor-cliente", uuid4(), uuid4()
+    guardar_borrador(conexion, borrador_id, actor, ahora)
+    conexion.execute(
+        "INSERT INTO borrador_evidencias "
+        "(id, borrador_id, nombre_archivo, tipo, clave_objeto, sha256, tamano_bytes, "
+        "tipo_contenido) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+        (
+            evidencia_id,
+            borrador_id,
+            "foto.jpg",
+            "FOTOGRAFIA",
+            f"tmp/{borrador_id}/{evidencia_id}",
+            "a" * 64,
+            100,
+            "image/jpeg",
+        ),
+    )
+    repositorio = SiniestrosPg(pool)
+    confirmada_en = await repositorio.confirmar_evidencia_borrador(
+        actor, borrador_id, evidencia_id, ahora
+    )
+    repetida_en = await repositorio.confirmar_evidencia_borrador(
+        actor, borrador_id, evidencia_id, ahora + timedelta(minutes=1)
+    )
+
+    assert confirmada_en == repetida_en == ahora
+    assert await repositorio.evidencia_borrador("otro-actor", borrador_id, evidencia_id) is None
+    fila = conexion.execute(
+        "SELECT estado_carga, carga_confirmada_en FROM borrador_evidencias WHERE id = %s",
+        (evidencia_id,),
+    ).fetchone()
+    assert fila == ("CARGADA", ahora)
 
 
 @pytest.fixture

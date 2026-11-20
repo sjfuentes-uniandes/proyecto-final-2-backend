@@ -19,6 +19,7 @@ from siniestros.adapters.outbound.eventos import (
     SINIESTRO_CONSULTADO,
     SINIESTRO_EN_EVALUACION,
     SINIESTRO_RECHAZADO,
+    SINIESTRO_REPORTADO,
     SINIESTRO_SOPORTE_SOLICITADO,
     AccesoSiniestroDenegadoV1,
     EvidenciaConsultadaV1,
@@ -27,6 +28,7 @@ from siniestros.adapters.outbound.eventos import (
     SiniestroConsultadoV1,
     SiniestroEnEvaluacionV1,
     SiniestroRechazadoV1,
+    SiniestroReportadoV1,
     SiniestroSoporteSolicitadoV1,
     SobreEvento,
 )
@@ -80,6 +82,23 @@ def en_evaluacion(
             motivo=motivo,
         ),
     )
+
+
+def reportado(siniestro: Siniestro) -> SobreEvento[SiniestroReportadoV1]:
+    return _sobre(
+        SINIESTRO_REPORTADO,
+        siniestro.id,
+        siniestro.reportado_en,
+        SiniestroReportadoV1(
+            siniestro_id=siniestro.id,
+            codigo=siniestro.codigo,
+            origen="MOVIL",
+            estado="REPORTADO",
+            poliza_id=siniestro.poliza_id,
+            cliente_id=siniestro.cliente_id,
+            reportado_en=siniestro.reportado_en,
+        ),
+    ).model_copy(update={"correlation_id": siniestro.correlation_id})
 
 
 def aprobado(

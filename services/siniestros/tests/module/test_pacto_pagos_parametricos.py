@@ -42,7 +42,7 @@ SIN_SINIESTRO = "no existe un siniestro para ese evento y esa póliza"
 CON_SINIESTRO = "ya existe el siniestro paramétrico de ese evento y esa póliza"
 SINIESTRO_ID = UUID("5a000000-0000-4000-8000-000000000022")
 CODIGO = "88-2026-1001"
-TABLAS = "siniestros, evidencias, historial_siniestro, decisiones_siniestro, outbox, inbox, idempotencia, secuencia_codigo"
+TABLAS = "borrador_evidencias, borradores, siniestros, evidencias, historial_siniestro, decisiones_siniestro, outbox, inbox, idempotencia, secuencia_codigo"
 
 
 @contextmanager

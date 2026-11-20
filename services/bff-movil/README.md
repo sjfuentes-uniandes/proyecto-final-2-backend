@@ -11,6 +11,27 @@ BFF de la aplicación móvil. Compone las respuestas de los servicios de dominio
 | `verificacion` | HU-M06 | `POST /v1/identidad/verificaciones`: revalida el JWT y envía la selfie y la prueba de vida a `clientes`, que verifica la identidad con el proveedor KYC |
 | `consentimientos` | HU-M08 | `GET`/`POST /v1/consentimientos`, `GET /v1/consentimientos/{consentimientoId}` y `GET /v1/consentimientos/texto-vigente`: otorga y consulta el consentimiento del titular del token en `clientes` |
 
+## Borradores y evidencia de siniestro (HU-M01)
+
+Contrato: [`contracts/openapi/bff-movil.yaml`](../../contracts/openapi/bff-movil.yaml). Todas las
+rutas derivan al titular del token; no reciben `clienteId` del móvil.
+
+1. `POST /v1/siniestros/borradores` crea un borrador `ABIERTO` asociado a una póliza vigente y exige
+   `polizaId` y `descripcion`.
+2. `GET /v1/siniestros/borradores` devuelve los borradores del titular en `items`; el detalle se
+   recupera con `GET /v1/siniestros/borradores/{borradorId}`.
+3. `POST /v1/siniestros/borradores/{borradorId}/evidencias` registra la evidencia como
+   `PENDIENTE` y devuelve el formulario POST prefirmado. El móvil sube el archivo directamente a S3
+   con `carga.url` y `carga.campos`; después llama
+   `POST /v1/siniestros/borradores/{borradorId}/evidencias/{evidenciaId}/confirmacion`. El backend
+   comprueba el checksum en S3 y cambia el estado a `CARGADA`. La confirmación es idempotente.
+4. Si la URL expiró antes de completar la subida, el móvil obtiene otra para la misma evidencia
+   pendiente con `POST /v1/siniestros/borradores/{borradorId}/evidencias/{evidenciaId}/carga`; no
+   se crea una fila ni un archivo nuevo. Una evidencia ya confirmada no permite renovar la URL.
+5. Confirmar la carga no envía definitivamente el reporte: el envío final queda fuera de este flujo.
+   Si el objeto aún no está en S3, la confirmación responde `EVIDENCIA_NO_CARGADA`; si el checksum
+   difiere, responde `INTEGRIDAD_EVIDENCIA_INVALIDA`.
+
 ## `GET /v1/sesion` (HU-M07)
 
 Contrato: [`contracts/openapi/bff-movil.yaml`](../../contracts/openapi/bff-movil.yaml).

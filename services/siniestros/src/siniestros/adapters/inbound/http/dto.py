@@ -125,7 +125,9 @@ class ResumenBandejaSiniestros(_Dto):
 class AmparoCopiaDto(_Dto):
     codigo: str
     nombre: str
-    suma_asegurada: TextoDecimal = Field(description="Suma asegurada del amparo (DS2-16)")
+    suma_asegurada: TextoDecimal | None = Field(
+        description="Suma asegurada del amparo (DS2-16); null si la fuente no la informa"
+    )
 
 
 class VigenciaCopiaDto(_Dto):

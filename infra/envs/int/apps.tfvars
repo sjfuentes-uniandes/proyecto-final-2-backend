@@ -19,7 +19,7 @@ cpu_target = 60
 service_overrides = {
   simulador-aliados = { cpu = 1024, memory = 2048 }
   adaptador-datos   = { cpu = 512, memory = 1024 }
-  cotizacion        = { cpu = 512, memory = 1024, min = 2 }
+  cotizacion        = { cpu = 512, memory = 1024, min = 2, max = 4 }
 }
 
 enable_tracing = true

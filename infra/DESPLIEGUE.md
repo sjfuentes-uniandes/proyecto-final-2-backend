@@ -437,6 +437,30 @@ La ráfaga son `E2E_W07_SOLICITUDES` cotizaciones (160) cada `E2E_W07_INTERVALO_
 
 Imprime un resumen para la evidencia: tareas y zonas antes y después, la tarea detenida, el conteo por código, los `task_id` vistos y la duración del reemplazo. El cliente se cambia con `E2E_W07_CLIENTE_ID`. Lo que no se ve aquí lo cubre la versión de módulo: la equivalencia contra la misma base, la idempotencia y la carrera entre instancias (`services/cotizacion/tests/module/test_hu_w07_replicas.py`), y el drenaje de la solicitud en curso con `--timeout-graceful-shutdown` (`services/cotizacion/tests/module/test_hu_w07_drenaje.py`, solo en Linux).
 
+**HU-W08, N2 (`tests/e2e/test_hu_w08_escalado.py`)** **fuerza la alarma alta de la política de CPU de `cotizacion` en `int`**, y con ello App Auto Scaling cambia el número de tareas del servicio. No genera carga ni usa el portal, así que **no necesita el usuario E2E del back-office** (`E2E_ADMIN_*`) ni secretos nuevos. Reemplaza al `scripts/plataforma/probar-escalado.sh` que pedía la historia (plan de HU-W08, §b, decisión 2). **Filtro obligatorio: `-k hu_w08`.** Con el filtro vacío (todas las E2E), la prueba se omite siempre, también con `E2E_REQUERIDO=1`. Solo corre con `ENV=int`, sobre el clúster `solventa-int` (salida `platform.cluster.name`) y el servicio `cotizacion`.
+
+Precondiciones, que se comprueban antes de tocar nada; si alguna falta, se omite con el motivo (o falla con `E2E_REQUERIDO=1`):
+
+- existe la política `solventa-int-cotizacion-cpu` (`infra/apps/autoscaling.tf`; solo se crea si `max > min`);
+- el scalable target de `service/solventa-int/cotizacion` tiene `min < max` (en `int`, 2 y 4: `envs/int/apps.tfvars`) y el escalado hacia fuera no está suspendido;
+- el servicio está en su mínimo (`desiredCount == MinCapacity`). Si un escalado anterior aún no terminó, hay que esperar a que vuelva solo.
+
+Necesita las credenciales del workflow, con `application-autoscaling:DescribeScalableTargets`, `DescribeScalingPolicies` y `DescribeScalingActivities`; `cloudwatch:DescribeAlarms`, `DescribeAlarmHistory` y `SetAlarmState`; y `ecs:DescribeServices`, `ListTasks` y `DescribeTasks`. Sin ellas se omite, o falla con `E2E_REQUERIDO=1`.
+
+Lee la política con `DescribeScalingPolicies` y toma la alarma alta y la baja de su lista `Alarms`, tal como las devuelve la API (`TargetTracking-service/solventa-int/cotizacion-AlarmHigh-…` y `…-AlarmLow-…`), sin construir el nombre. Su única escritura es `SetAlarmState` de la alarma alta a `ALARM`, con el motivo `HU-W08 N2: …`. Nunca cambia el scalable target ni la política, y no vuelve a tocar la alarma: vuelve sola a su estado en la siguiente evaluación. Estas alarmas no empiezan por `solventa-int-`, así que no las notifica la regla de HU-W28 ni aparecen en `/operacion/alertas`. La prueba comprueba:
+
+- AC1: que `desiredCount` suba en `E2E_W08_ESPERA_SUBIDA_S` (180 s) y nunca pase de `MaxCapacity`;
+- AC2: que vuelva a `MinCapacity` en `E2E_W08_ESPERA_BAJADA_S` (600 s) sin bajar de él. Si no vuelve a tiempo, no falla: lo informa, porque el autoescalado lo devuelve solo tras el enfriamiento de entrada (300 s) y la evaluación de la alarma baja, que exige varios minutos seguidos por debajo del objetivo;
+- AC3: informa la tarea retirada, con su `stoppedReason` y el `exitCode` de cada contenedor (143 en `cotizacion` tras el apagado ordenado de HU-W07). El drenaje en sí lo prueban la N3 y la versión de módulo de HU-W07.
+
+Muestrea `desiredCount`, `runningCount` y `pendingCount` cada `E2E_W08_MUESTREO_S` (10 s). Los 600 s de bajada están pensados para el `timeout-minutes: 20` del job de `e2e.yml`: unos 4 min de preparación, 180 s de subida y 600 s de bajada dejan unos 3 min de margen.
+
+**Riesgo (plan de HU-W08, §e c):** una política de *target tracking* calcula la capacidad con el valor real de la métrica, así que forzar la alarma podría no subir `desiredCount`, o App Auto Scaling podría reevaluarla enseguida. Es lo primero que demuestra o descarta la prueba. Si no sube en la espera, falla con «forzar la alarma alta no disparó el escalado», más el estado de la alarma (si volvió sola a `OK`), su historial de estados y acciones, y las actividades de escalado. No intenta otra vía: ni registrar el target, ni cambiar la política, ni generar carga.
+
+Imprime un resumen para la evidencia que pide la historia: la configuración de la política (objetivo, enfriamientos, mínimo y máximo), la línea de tiempo de `desiredCount` y `runningCount`, las actividades de `DescribeScalingActivities` (inicio, fin, estado y descripción), el historial de la alarma alta, la tarea retirada y las duraciones de subida y de bajada. Al final, pase lo que pase, informa el estado de las dos alarmas y del servicio.
+
+Se puede lanzar en el mismo ciclo de `int` que la N3 de HU-W07 (plan de HU-W08, §b, decisión 10), pero como **otra ejecución** de **E2E (N3)** con `filtro = hu_w08`, después de la de `-k hu_w07`. Las dos juntas en un solo `-k` pueden no caber en los 20 min del job. El grupo de concurrencia `infra-int` las ejecuta una tras otra. La historia pide además `make infra-probar` tras el escalado: lo cubre la opción `probar` de **Infra - Desplegar**.
+
 ### Portal web (repo proyecto-final-2-frontend)
 
 `infra/platform` crea el bucket privado, CloudFront y el parámetro SSM `/solventa/<ambiente>/web/config` (bucket, distribución, URL de la API de canales, IDs públicos de Cognito y tablero; sin secretos). El repo del portal lo usa para publicar:

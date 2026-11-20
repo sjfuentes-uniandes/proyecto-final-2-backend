@@ -174,7 +174,7 @@ class Ubicacion:
 class Amparo:
     codigo: str
     nombre: str
-    suma_asegurada: str  # texto decimal (DS2-16); el dinero no pasa por float
+    suma_asegurada: str | None  # None cuando la fuente no informa la suma por amparo.
 
 
 @dataclass(frozen=True)

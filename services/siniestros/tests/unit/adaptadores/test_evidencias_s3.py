@@ -5,6 +5,7 @@ import hashlib
 import logging
 import time
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 from botocore.exceptions import BotoCoreError, ClientError, ConnectTimeoutError
@@ -14,7 +15,11 @@ from siniestros.adapters.outbound.evidencias_s3 import (
     checksum_base64,
     cliente_s3,
 )
-from siniestros.application.siniestro.errores import DependenciaNoDisponible
+from siniestros.application.siniestro.errores import (
+    DependenciaNoDisponible,
+    EvidenciaNoDisponible,
+    IntegridadEvidenciaInvalida,
+)
 from siniestros.domain.siniestro.modelos import IntegridadEvidencia
 
 pytestmark = pytest.mark.anyio
@@ -33,6 +38,7 @@ class ClienteFalso:
         self.demora_s = demora_s
         self.llamadas: list[dict[str, Any]] = []
         self.firmas: list[tuple[str, dict[str, Any], int]] = []
+        self.firmas_carga: list[dict[str, Any]] = []
         self.falla_firma: Exception | None = None
 
     def head_object(self, **argumentos: Any) -> dict[str, Any]:
@@ -47,6 +53,13 @@ class ClienteFalso:
             raise self.falla_firma
         self.firmas.append((operacion, Params, ExpiresIn))
         return "https://s3.local/bucket/objeto?X-Amz-Signature=firma"
+
+    def generate_presigned_post(self, **argumentos: Any) -> dict[str, Any]:
+        self.firmas_carga.append(argumentos)
+        return {
+            "url": "https://s3.local/bucket",
+            "fields": argumentos["Fields"],
+        }
 
 
 def almacen(
@@ -65,6 +78,72 @@ async def test_el_objeto_integro_es_verificada_y_se_pide_el_checksum() -> None:
     assert cliente.llamadas == [
         {"Bucket": "bucket-evidencias", "Key": CLAVE, "ChecksumMode": "ENABLED"}
     ]
+
+
+async def test_conservar_tiene_su_corte_sin_ampliar_el_del_detalle() -> None:
+    cliente = ClienteFalso(
+        {
+            "ChecksumSHA256": checksum_base64(SHA),
+            "ContentLength": len(CONTENIDO),
+            "ContentType": "image/png",
+        },
+        demora_s=0.4,
+    )
+    s3 = almacen(cliente)
+    await s3.conservar("tmp/origen", CLAVE, SHA, len(CONTENIDO), "image/png", "AES256")
+    assert await s3.verificar(CLAVE, SHA) is IntegridadEvidencia.NO_VERIFICABLE
+    with pytest.raises(DependenciaNoDisponible):
+        await EvidenciasS3(cliente, "bucket-evidencias", 300, conservacion_timeout_ms=50).conservar(
+            "tmp/origen", CLAVE, SHA, len(CONTENIDO), "image/png", "AES256"
+        )
+
+
+@pytest.mark.parametrize("final_denegado", [False, True])
+async def test_destino_sin_listbucket_exige_origen_y_copia_verificados(
+    final_denegado: bool,
+) -> None:
+    cliente = Mock()
+    datos = {
+        "ChecksumSHA256": checksum_base64(SHA),
+        "ContentLength": len(CONTENIDO),
+        "ContentType": "image/png",
+        "ETag": '"etag"',
+        "VersionId": "version-origen",
+    }
+    cliente.head_object.side_effect = [
+        error_cliente("403"),
+        datos,
+        error_cliente("403") if final_denegado else datos,
+    ]
+    s3 = EvidenciasS3(cliente, "bucket-evidencias", 300)
+    if final_denegado:
+        with pytest.raises(DependenciaNoDisponible):
+            await s3.conservar("tmp/origen", CLAVE, SHA, len(CONTENIDO), "image/png", "AES256")
+    else:
+        await s3.conservar("tmp/origen", CLAVE, SHA, len(CONTENIDO), "image/png", "AES256")
+    cliente.copy_object.assert_called_once_with(
+        Bucket="bucket-evidencias",
+        Key=CLAVE,
+        CopySource={
+            "Bucket": "bucket-evidencias",
+            "Key": "tmp/origen",
+            "VersionId": "version-origen",
+        },
+        CopySourceIfMatch='"etag"',
+        ChecksumAlgorithm="SHA256",
+        ServerSideEncryption="AES256",
+        MetadataDirective="COPY",
+    )
+
+
+async def test_destino_y_origen_denegados_no_permiten_copiar() -> None:
+    cliente = Mock()
+    cliente.head_object.side_effect = error_cliente("403")
+    with pytest.raises(DependenciaNoDisponible):
+        await EvidenciasS3(cliente, "bucket-evidencias", 300).conservar(
+            "tmp/origen", CLAVE, SHA, len(CONTENIDO), "image/png", "AES256"
+        )
+    cliente.copy_object.assert_not_called()
 
 
 async def test_un_checksum_distinto_es_alterada() -> None:
@@ -123,6 +202,45 @@ async def test_firma_con_el_ttl_el_tipo_y_el_cliente_de_firma() -> None:
     ]
 
 
+async def test_firma_post_fija_tipo_tamano_hash_cifrado_y_vencimiento() -> None:
+    cliente = ClienteFalso()
+    evidencia = almacen(cliente)
+
+    url, campos = await evidencia.firmar_carga(
+        "tmp/borrador/evidencia",
+        "image/jpeg",
+        1234,
+        SHA,
+        300,
+        "AES256",
+    )
+
+    assert url == "https://s3.local/bucket"
+    assert cliente.firmas_carga == [
+        {
+            "Bucket": "bucket-evidencias",
+            "Key": "tmp/borrador/evidencia",
+            "Fields": {
+                "key": "tmp/borrador/evidencia",
+                "Content-Type": "image/jpeg",
+                "x-amz-checksum-algorithm": "SHA256",
+                "x-amz-checksum-sha256": checksum_base64(SHA),
+                "x-amz-server-side-encryption": "AES256",
+            },
+            "Conditions": [
+                {"key": "tmp/borrador/evidencia"},
+                {"Content-Type": "image/jpeg"},
+                {"x-amz-checksum-algorithm": "SHA256"},
+                {"x-amz-checksum-sha256": checksum_base64(SHA)},
+                {"x-amz-server-side-encryption": "AES256"},
+                ["content-length-range", 1234, 1234],
+            ],
+            "ExpiresIn": 300,
+        }
+    ]
+    assert campos["x-amz-checksum-sha256"] == checksum_base64(SHA)
+
+
 async def test_sin_cliente_de_firma_firma_con_el_de_lectura() -> None:
     cliente = ClienteFalso()
     await almacen(cliente).firmar_lectura(CLAVE, 60, "application/pdf")
@@ -143,6 +261,75 @@ async def test_el_almacen_sin_configurar_no_verifica_ni_firma() -> None:
     assert await sin.verificar(CLAVE, SHA) is IntegridadEvidencia.NO_VERIFICABLE
     with pytest.raises(DependenciaNoDisponible):
         await sin.firmar_lectura(CLAVE, 300, "image/jpeg")
+    with pytest.raises(DependenciaNoDisponible):
+        await sin.firmar_descarga(CLAVE, SHA, 300, "image/jpeg", "foto.jpg")
+
+
+async def test_descarga_verifica_y_fija_version_nombre_utf8_y_duracion() -> None:
+    cliente = ClienteFalso({"ChecksumSHA256": checksum_base64(SHA), "VersionId": "v1"})
+    await almacen(cliente).firmar_descarga(CLAVE, SHA, 300, "image/jpeg", "da\u00f1o.jpg")
+    _, parametros, ttl = cliente.firmas[0]
+    assert ttl == 300 and parametros["VersionId"] == "v1"
+    assert parametros["ResponseContentType"] == "image/jpeg"
+    assert "filename*=UTF-8''da%C3%B1o.jpg" in parametros["ResponseContentDisposition"]
+
+
+@pytest.mark.parametrize(
+    ("respuesta", "error"),
+    [
+        (error_cliente("404"), EvidenciaNoDisponible),
+        (error_cliente("NoSuchBucket"), DependenciaNoDisponible),
+        ({}, DependenciaNoDisponible),
+        ({"ChecksumSHA256": checksum_base64("b" * 64)}, IntegridadEvidenciaInvalida),
+    ],
+)
+async def test_descarga_no_firma_archivo_ausente_inverificable_o_alterado(
+    respuesta: Any,
+    error: type[Exception],
+) -> None:
+    cliente = ClienteFalso(respuesta)
+    with pytest.raises(error):
+        await almacen(cliente).firmar_descarga(CLAVE, SHA, 300, "image/jpeg", "foto.jpg")
+    assert not cliente.firmas
+
+
+@pytest.mark.parametrize("estado", ["ausente", "presente", "denegado"])
+async def test_descarga_distingue_403_ambiguo_sin_listar_otros_prefijos(estado: str) -> None:
+    cliente = Mock()
+    cliente.head_object.side_effect = error_cliente("403")
+    if estado == "denegado":
+        cliente.list_objects_v2.side_effect = error_cliente("AccessDenied")
+    else:
+        cliente.list_objects_v2.return_value = {
+            "Contents": [{"Key": CLAVE if estado == "presente" else CLAVE + "-otro"}]
+        }
+    with pytest.raises(EvidenciaNoDisponible if estado == "ausente" else DependenciaNoDisponible):
+        await EvidenciasS3(cliente, "bucket-evidencias", 300).firmar_descarga(
+            CLAVE, SHA, 300, "image/jpeg", "foto.jpg"
+        )
+    cliente.list_objects_v2.assert_called_once_with(
+        Bucket="bucket-evidencias", Prefix=CLAVE, MaxKeys=1
+    )
+    cliente.generate_presigned_url.assert_not_called()
+
+
+async def test_descarga_rechaza_http_y_no_registra_url(caplog: pytest.LogCaptureFixture) -> None:
+    cliente = Mock()
+    cliente.head_object.return_value = {"ChecksumSHA256": checksum_base64(SHA)}
+    cliente.generate_presigned_url.return_value = "http://s3.test/objeto?firma=privada"
+    with pytest.raises(DependenciaNoDisponible):
+        await EvidenciasS3(cliente, "bucket-evidencias", 300).firmar_descarga(
+            CLAVE, SHA, 300, "image/jpeg", "foto.jpg"
+        )
+    assert "firma=privada" not in caplog.text
+
+
+@pytest.mark.parametrize("ttl", [0, 301])
+async def test_descarga_no_admite_duracion_fuera_de_limites(ttl: int) -> None:
+    cliente = ClienteFalso()
+    with pytest.raises(ValueError):
+        await almacen(cliente).firmar_descarga(CLAVE, SHA, ttl, "image/jpeg", "foto.jpg")
+    assert not cliente.llamadas and not cliente.firmas
 
 
 def test_el_cliente_real_tiene_corte_sin_reintentos_y_endpoint_configurable(

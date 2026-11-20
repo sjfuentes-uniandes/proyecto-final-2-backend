@@ -446,7 +446,7 @@ class Decidir:
     def _liquidacion(caso: Siniestro, solicitud: SolicitudAprobar) -> Liquidacion:
         copia = caso.copia_poliza
         amparo = next((a for a in copia.amparos if a.codigo == caso.causa), None)
-        if amparo is None:
+        if amparo is None or amparo.suma_asegurada is None:
             # La copia no trae el amparo reclamado: no hay suma asegurada contra la que validar.
             raise ValorFueraDeRango(["liquidacion.valorIndemnizar"])
         try:

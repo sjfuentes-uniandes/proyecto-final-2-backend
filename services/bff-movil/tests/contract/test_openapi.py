@@ -12,6 +12,56 @@ def test_contrato_publicado_coincide_con_la_app() -> None:
     assert yaml.safe_load(CONTRATO.read_text(encoding="utf-8")) == app.openapi()
 
 
+def test_descarga_evidencia_no_recibe_titular_ni_cuerpo() -> None:
+    ruta = "/v1/siniestros/{siniestroId}/evidencias/{evidenciaId}/enlace"
+    operacion = app.openapi()["paths"][ruta]["post"]
+    assert operacion["security"] == [{"bearerAuth": []}]
+    assert "requestBody" not in operacion
+    assert "clienteId" not in {p["name"] for p in operacion["parameters"]}
+    assert set(operacion["responses"]) == {"200", "401", "403", "404", "409", "422", "503"}
+    esquema = app.openapi()["components"]["schemas"]["EnlaceEvidenciaDto"]
+    assert set(esquema["required"]) == {"url", "expiraEn", "nombreArchivo", "tipoContenido"}
+    assert esquema["properties"]["url"]["pattern"] == "^https://"
+
+
+def test_ubicacion_es_metadato_del_reporte_y_estado_solo_de_respuesta() -> None:
+    esquemas = app.openapi()["components"]["schemas"]
+    captura = esquemas["UbicacionCapturada"]
+    assert captura["additionalProperties"] is False
+    assert set(captura["properties"]) == {"permiso", "lat", "lon", "precisionM", "capturadaEn"}
+    assert "estado" in esquemas["UbicacionReporte"]["properties"]
+    for dto in ("ActualizacionBorrador", "BorradorResumenDto", "SiniestroDetalleDto"):
+        assert "ubicacion" in esquemas[dto]["properties"]
+    assert {"ubicacionObligatoria", "ubicacionTiposOpcionales", "ubicacionPrecisionMaxM"} <= set(
+        esquemas["LimitesDto"]["properties"]
+    )
+    assert "ubicacion" not in esquemas["SolicitudEvidencia"]["properties"]
+
+
+def test_envio_explicito_y_consultas_del_titular() -> None:
+    rutas = app.openapi()["paths"]
+    envio = rutas["/v1/siniestros/borradores/{borradorId}/envio"]["post"]
+    clave = next(p for p in envio["parameters"] if p["name"] == "Idempotency-Key")
+    assert clave["required"] and clave["schema"]["format"] == "uuid"
+    assert envio["responses"]["201"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/EnvioDto"
+    }
+    esquemas = app.openapi()["components"]["schemas"]
+    assert esquemas["SolicitudEnvio"]["additionalProperties"] is False
+    assert set(esquemas["EnvioDto"]["required"]) == {
+        "borradorId",
+        "siniestroId",
+        "codigo",
+        "estado",
+        "reportadoEn",
+    }
+    for ruta, operaciones in rutas.items():
+        if ruta.startswith("/v1/siniestros"):
+            for operacion in operaciones.values():
+                assert operacion["security"] == [{"bearerAuth": []}]
+                assert all(p["name"] != "clienteId" for p in operacion.get("parameters", []))
+
+
 def test_contrato_de_sesion() -> None:
     operacion = app.openapi()["paths"]["/v1/sesion"]["get"]
     assert set(operacion["responses"]) == {"200", "401", "403", "404", "422", "503"}
@@ -127,6 +177,41 @@ def test_los_cambios_de_la_parte_2_son_aditivos() -> None:
             "revocadoEn",
         }
     )
+
+
+def test_el_reporte_movil_usa_token_y_no_acepta_cliente_id() -> None:
+    rutas = app.openapi()["paths"]
+    limites = rutas["/v1/siniestros/limites"]["get"]
+    listar = rutas["/v1/siniestros/borradores"]["get"]
+    crear = rutas["/v1/siniestros/borradores"]["post"]
+    agregar = rutas["/v1/siniestros/borradores/{borradorId}/evidencias"]["post"]
+    consultar = rutas["/v1/siniestros/borradores/{borradorId}"]["get"]
+    confirmar = rutas[
+        "/v1/siniestros/borradores/{borradorId}/evidencias/{evidenciaId}/confirmacion"
+    ]["post"]
+    renovar = rutas["/v1/siniestros/borradores/{borradorId}/evidencias/{evidenciaId}/carga"]["post"]
+
+    assert (
+        limites["security"]
+        == listar["security"]
+        == crear["security"]
+        == agregar["security"]
+        == consultar["security"]
+        == confirmar["security"]
+        == renovar["security"]
+        == [{"bearerAuth": []}]
+    )
+    esquema = app.openapi()["components"]["schemas"]["SolicitudBorrador"]
+    assert set(esquema["required"]) == {"polizaId", "descripcion"}
+    assert set(esquema["properties"]) == {"polizaId", "descripcion"}
+    assert esquema["properties"]["descripcion"]["maxLength"] == 2000
+    clave = next(p for p in crear["parameters"] if p["name"] == "Idempotency-Key")
+    assert clave["required"] is True and clave["schema"]["format"] == "uuid"
+    assert set(crear["responses"]) == {"201", "400", "401", "403", "404", "409", "422", "503"}
+    assert set(listar["responses"]) == {"200", "401", "403", "422", "503"}
+    assert "BORRADOR_NO_ENCONTRADO" in consultar["responses"]["404"]["description"]
+    assert "EVIDENCIA_NO_CARGADA" in confirmar["responses"]["409"]["description"]
+    assert "EVIDENCIA_YA_CONFIRMADA" in renovar["responses"]["409"]["description"]
 
 
 def test_el_bff_es_compatible_con_lo_que_clientes_publica() -> None:

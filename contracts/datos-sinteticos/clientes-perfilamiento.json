@@ -761,7 +761,8 @@
       "puntaje": 75.9,
       "confianza": null,
       "llamadasAliados": 4,
-      "duracionMsMenorQue": 350
+      "ramasEnParalelo": 4,
+      "duracionMsObjetivo": 350
     }
   },
   {

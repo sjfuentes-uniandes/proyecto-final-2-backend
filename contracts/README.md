@@ -16,7 +16,7 @@ Contratos que publica el backend para sus consumidores (web, móvil, socios y ot
 | `openapi/publicados/api-socios.v1.yaml` | **Versión v1 publicada a los socios, congelada** (HU-W04 AC2): las operaciones del socio ya disponibles (`/socio/me` y `/cotizaciones`), sin `/admin`, `/health` ni las que aún responden 501. `services/api-socios/tests/contract/test_contrato_publicado.py` falla si el contrato actual elimina o renombra un campo, cambia su tipo, vuelve obligatorio un campo opcional de la solicitud, deja de garantizar un campo de la respuesta, elimina una operación, un código o un valor de un enum. Un cambio incompatible es una versión nueva (v2), no una edición de este archivo | Integrante 1 (`api-socios`) | Solo al publicar una versión: `uv run python services/api-socios/tests/contract/test_contrato_publicado.py` |
 | `pact/socio-referencia-api-socios.json` | Pacto de un **socio de referencia** (consumidor) → `api-socios` (HU-W04 AC2): cotiza, consulta y presenta la oferta con solo los campos publicados (matchers de tipo y formato), recotiza ante `410 OFERTA_VENCIDA` y recibe `404 OFERTA_NO_ENCONTRADA` por la oferta de otro socio. Las solicitudes son las que llegan a `api-socios` (con los `X-Partner-*` que agrega API Gateway) | Integrante 1 (`api-socios`) | `make test-contract SERVICE=api-socios` lo genera (`test_pact_socio_referencia.py`) y lo verifica (`test_pact_socio_referencia_proveedor.py`) |
 | `pact/api-socios-cotizacion.json` | Pacto consumidor `api-socios` → proveedor `cotizacion` (HU-W04): `POST /v1/cotizaciones` y `GET /v1/cotizaciones/{cotizacionId}` con el actor `SOCIO`, la oferta (`productoId` y `oferta`; lector tolerante), `404 COTIZACION_NO_ENCONTRADA` de la cotización de otro socio y `422 PRODUCTO_FUERA_DE_VIGENCIA`. `cotizacion` lo verifica con su app real y los puertos en memoria (`services/cotizacion/tests/contract/test_pact_api_socios.py`) | Integrante 1 (`api-socios`) | `make test-contract SERVICE=api-socios` lo genera; `make test-contract SERVICE=cotizacion` lo verifica |
-| `pact/web-bff-web.json` | Pacto consumidor del portal web (`portal-web`) → proveedor `bff-web` (HU-W14): `GET /v1/suscripciones/{decisionId}` de una aprobada, dos rechazos (SUS-001 y SUS-015), una revisión y el 404 `DECISION_NO_ENCONTRADA`, con la `comunicacion` exacta. HU-W16: `GET /v1/cotizaciones/{cotizacionId}/recaudo` con el recaudo `PENDIENTE`, `CONFIRMADO` y `RECHAZADO`, y el 404 `ACEPTACION_NO_ENCONTRADA` de una cotización sin aceptación. HU-W17: `GET /v1/cotizaciones/{cotizacionId}/poliza` con la póliza `EMITIENDO` y `ACTIVA` (la activa, con el nombre del titular en `titularNombre`; `null` mientras se emite), y el 404 `POLIZA_NO_ENCONTRADA`; `GET /v1/polizas/{polizaId}/documento` con el 200 `{url, venceEn}` y el 409 `POLIZA_NO_ACTIVA` mientras se emite. HU-W19, HU-W20 y HU-W23: los siniestros del analista, su decisión y `GET /v1/siniestros/{siniestroId}/pago` (H08) con el pago confirmado, rechazado y pendiente, el 404 `INDEMNIZACION_NO_ENCONTRADA` y el 403. Lo genera el portal (`npm run test:pact` en `proyecto-final-2-frontend/web`) y se copia aquí sin editarlo; `bff-web` lo verifica con su app real y `polizas` y `clientes` simulados (`services/bff-web/tests/contract/test_pact_web.py`) | @capbmaster | Portal: `npm run test:pact`; verificación: `make test-contract SERVICE=bff-web` |
+| `pact/web-bff-web.json` | Pacto consumidor del portal web (`portal-web`) → proveedor `bff-web` (HU-W14): `GET /v1/suscripciones/{decisionId}` de una aprobada, dos rechazos (SUS-001 y SUS-015), una revisión y el 404 `DECISION_NO_ENCONTRADA`, con la `comunicacion` exacta. HU-W16: `GET /v1/cotizaciones/{cotizacionId}/recaudo` con el recaudo `PENDIENTE`, `CONFIRMADO` y `RECHAZADO`, y el 404 `ACEPTACION_NO_ENCONTRADA` de una cotización sin aceptación. HU-W17: `GET /v1/cotizaciones/{cotizacionId}/poliza` con la póliza `EMITIENDO` y `ACTIVA` (la activa, con el nombre del titular en `titularNombre`; `null` mientras se emite), y el 404 `POLIZA_NO_ENCONTRADA`; `GET /v1/polizas/{polizaId}/documento` con el 200 `{url, venceEn}` y el 409 `POLIZA_NO_ACTIVA` mientras se emite. HU-W19, HU-W20 y HU-W23: los siniestros del analista, su decisión y `GET /v1/siniestros/{siniestroId}/pago` (H08) con el pago confirmado, rechazado y pendiente, el 404 `INDEMNIZACION_NO_ENCONTRADA` y el 403. HU-W08: `GET /operacion/capacidad` (grupo `operacion`) con un escalado terminado en la ventana (`tareas_activas` y `ultimo_escalado` con `fin` y `duracion_s`) y sin escalados ni dato de tareas (`tareas_activas` y `ultimo_escalado` en `null`), con el adaptador de capacidad simulado. Lo genera el portal (`npm run test:pact` en `proyecto-final-2-frontend/web`) y se copia aquí sin editarlo; `bff-web` lo verifica con su app real y `polizas` y `clientes` simulados (`services/bff-web/tests/contract/test_pact_web.py`) | @capbmaster | Portal: `npm run test:pact`; verificación: `make test-contract SERVICE=bff-web` |
 | `pact/bff-web-api-socios.json` | Pacto consumidor `bff-web` → proveedor `api-socios` (HU-W01, HU-W02) | Integrante 1 | `make test-contract SERVICE=bff-web` lo genera; `make test-contract SERVICE=api-socios` lo verifica |
 | `openapi/bff-movil.yaml` | API de `bff-movil` para la app móvil: sesión, verificación de identidad y registro (HU-M06); `/v1/consentimientos` (otorgar y listar), `/v1/consentimientos/{consentimientoId}` y `/v1/consentimientos/texto-vigente` (HU-M08); `/v1/consentimientos/{consentimientoId}/revocacion` y `.../historial` (HU-M09). El titular sale siempre del token | Por confirmar (responsable de `bff-movil`) | Ver [Regenerar un contrato](#regenerar-un-contrato) |
 | `pact/bff-movil-clientes.json` | Pacto consumidor `bff-movil` → proveedor `clientes`: rutas de consentimiento (HU-M08) y su revocación e historial (HU-M09). Se coteja con `openapi/clientes.yaml`; la verificación del lado de `clientes` está pendiente | Por confirmar (responsable de `bff-movil`) | `make test-contract SERVICE=bff-movil` lo genera |
@@ -142,8 +142,344 @@ Contrato entre `catalogo` (escribe e invalida) y `cotizacion` (solo lee), según
 - **Lectura en `cotizacion`:** usa las reglas guardadas solo si su `vigenteDesde` ≤ la fecha de la cotización; un valor fuera del contrato o una falla de Valkey (timeout de 50 ms, circuito) es un fallo de caché y va a `catalogo` por HTTP. Sin `CACHE_URL`, una caché TTL en memoria por réplica.
 - **Prefijo `v1`:** si cambia la forma del valor, se cambia el prefijo en ambos servicios a la vez.
 
+## Envío móvil de siniestros (HU-M01)
+
+Contratos: [BFF móvil](openapi/bff-movil.yaml), [siniestros](openapi/siniestros.yaml)
+y [evento SiniestroReportado v1](events/SiniestroReportado.v1.schema.json).
+El borrador no es un reporte definitivo. Flujo para Android:
+
+1. `POST /v1/siniestros/borradores` con `polizaId`, `descripcion` e `Idempotency-Key` UUID.
+2. `PATCH /v1/siniestros/borradores/{borradorId}` completa/corrige `descripcion`, `causa`
+   y `fechaEvento`. `causa` es el **código de cobertura/amparo**, no texto libre.
+   `fechaEvento` es un instante explícito con zona, por ejemplo `2026-11-17T10:00:00-05:00`;
+   no se sustituye por la fecha del envío. No puede ser futura ni estar fuera de la
+   vigencia de la póliza (fechas de vigencia evaluadas en Bogotá).
+   `causa` y `fechaEvento` pueden borrarse con `null`, pero deben completarse al enviar.
+3. Agregar, cargar y confirmar **al menos una evidencia**. Todas las incluidas deben
+   estar `CARGADA`. La confirmación verifica SHA-256, tamaño y MIME y conserva el
+   objeto fuera de `tmp/`; la limpieza temporal no elimina esa copia.
+   `DELETE .../{borradorId}/evidencias/{evidenciaId}` quita una referencia mientras
+   el borrador siga abierto; no elimina físicamente el archivo.
+4. `POST /v1/siniestros/borradores/{borradorId}/envio`, con `Idempotency-Key` UUID y
+   sin cuerpo o `{}`. No admite datos adicionales; se envía la versión guardada.
+   La póliza propia debe seguir `ACTIVA` y vigente. Devuelve **201**, también en reintentos:
+
+   ```json
+   {
+     "borradorId": "<uuid>",
+     "siniestroId": "<uuid>",
+     "codigo": "88-2026-1000",
+     "estado": "REPORTADO",
+     "reportadoEn": "2026-11-18T15:00:00Z"
+   }
+   ```
+
+El siniestro `MOVIL`, evidencias, historial, evento de outbox, cierre del borrador y
+resultado idempotente se guardan en una transacción. Dos envíos concurrentes, incluso
+con claves distintas, recuperan el mismo caso. Reusar una clave para otro borrador
+produce `422 IDEMPOTENCIA_CONFLICTO`. La clave identifica la operación sobre el borrador;
+los datos se corrigen por PATCH antes del primer envío confirmado.
+
+Ante un error se conserva el mismo borrador y sus evidencias confirmadas. Tras un
+timeout, repetir el envío con la misma clave o consultar el borrador: `estado=CONVERTIDO`
+y `envio` recuperan la confirmación, aunque la póliza haya vencido después.
+Los convertidos desaparecen de `GET /v1/siniestros/borradores`.
+Las cargas no confirmadas siguen siendo temporales y pueden requerir renovar su URL y recargar.
+
+`GET /v1/siniestros?limite=20&cursor=...` lista definitivos del titular, y
+`GET /v1/siniestros/{siniestroId}` muestra estado **actual**, datos, evidencias e historial.
+El envío conserva su respuesta original `REPORTADO`, aunque el analista ya haya tomado el caso.
+El BFF obtiene el cliente del token; las rutas internas `/v1/clientes/{clienteId}/siniestros`
+confían en ese cliente resuelto por el BFF, como las consultas internas de pólizas.
+No se deben exponer esas rutas internas directamente al móvil.
+
+Los errores incluyen código estable, `correlationId` y `detalles.campos` cuando aplica.
+Falta de datos, causa no cubierta, fecha inválida o ausencia de evidencias: `422 SOLICITUD_INVALIDA`.
+Ver también [códigos de error](codigos-error.md).
+La consulta de pólizas no informa sumas por amparo: se representan con `null` en el
+detalle del analista (también en BFF web), sin inventar montos ni beneficiarios.
+La aprobación monetaria permanece bloqueada si faltan esos datos.
+
+### Adjuntar ubicacion al reporte movil (F-M1.1)
+
+La ubicacion es metadato del **reporte**, no del archivo de evidencia. Se agrega al
+mismo borrador mediante `PATCH /v1/siniestros/borradores/{borradorId}` con el token
+del cliente, sin `clienteId`:
+
+```json
+{
+  "ubicacion": {
+    "permiso": "PRECISO",
+    "lat": 4.60971,
+    "lon": -74.08175,
+    "precisionM": 35.5,
+    "capturadaEn": "2026-11-18T10:00:00-05:00"
+  }
+}
+```
+
+`lat` y `lon` son coordenadas WGS84 en grados (rangos inclusivos -90..90 y
+-180..180). `precisionM` es la precision horizontal real informada por el proveedor,
+en metros, finita y mayor que cero; no se calcula por decimales de las coordenadas.
+`capturadaEn` es la fecha de la lectura **con zona horaria**, no sustituye
+`fechaEvento`. No se modifica EXIF, contenido, checksum ni metadatos de S3.
+
+El permiso declarado admite `PRECISO`, `APROXIMADO`, `DENEGADO`,
+`DENEGADO_PERMANENTEMENTE` y `NO_SOLICITADO`. Solo los dos primeros admiten
+coordenadas. Si se adjunta una lectura, deben enviarse juntos latitud, longitud,
+precision y fecha. No se aceptan valores infinitos, NaN, booleanos ni lecturas
+parciales. El backend no puede comprobar el permiso del SO: Android debe obtener
+consentimiento antes de leer o enviar coordenadas.
+
+Para registrar rechazo, permiso permanente denegado o ausencia de lectura:
+
+```json
+{"ubicacion": {"permiso": "DENEGADO"}}
+```
+
+Enviar `PRECISO` o `APROXIMADO` sin lectura permite registrar que el permiso existe
+pero el proveedor no entrego ubicacion. Este objeto **reemplaza** la ubicacion
+anterior y elimina sus coordenadas; omitir `ubicacion` conserva lo guardado.
+`ubicacion: null` no se admite: la ausencia debe ser explicita mediante el permiso.
+
+El PATCH devuelve `200` con el borrador y `ubicacion`, incluyendo el `estado`
+calculado por el servidor (no enviarlo en la solicitud):
+
+- `DISPONIBLE`: lectura autorizada con `precisionM <= ubicacionPrecisionMaxM`.
+- `NO_CONFIABLE`: lectura completa que supera ese maximo. Se guarda sin redondear
+  ni perder coordenadas, precision o fecha; Android debe marcarla y ofrecer reintento.
+- `NO_DISPONIBLE`: no hay lectura. Las coordenadas, precision y fecha son `null`.
+
+Los GET de borrador, pendientes y detalle del siniestro definitivo conservan esos
+metadatos. `ubicacion: null` en datos anteriores significa que no se registro este
+contexto; nunca se inventa una ubicacion ni un permiso para los casos existentes.
+
+#### Regla por tipo y configuracion
+
+`GET /v1/siniestros/limites` conserva los limites de evidencia y agrega:
+
+```json
+{
+  "ubicacionObligatoria": true,
+  "ubicacionTiposOpcionales": ["AUXILIO_FUNERARIO", "ENFERMEDADES_GRAVES"],
+  "ubicacionPrecisionMaxM": 100.0
+}
+```
+
+**AUXILIO_FUNERARIO y ENFERMEDADES_GRAVES permiten enviar sin ubicacion**;
+los demas tipos requieren ubicacion confiable. Para esta regla, el tipo es `causa`,
+el codigo exacto de cobertura/amparo de la poliza.
+Android debe consultar los limites y considerar obligatoria la ubicacion solo si
+`ubicacionObligatoria` es `true` y la causa no esta en `ubicacionTiposOpcionales`.
+Deshabilitar el boton es una ayuda UX: el servidor aplica la misma regla al enviar.
+
+Configuracion exclusiva de `siniestros` (tambien admite prefijo `SOLVENTA_`):
+
+- `UBICACION_OBLIGATORIA=true`: valor global por defecto.
+- `UBICACION_TIPOS_OPCIONALES='["AUXILIO_FUNERARIO","ENFERMEDADES_GRAVES"]'`:
+  excepciones por codigo de causa, con esos dos valores por defecto.
+  No requiere modificar codigo para cambiar excepciones; `[]` vuelve a exigir
+  ubicacion en todos los tipos. La obligatoriedad de una cobertura en el producto
+  no determina la obligatoriedad de ubicacion.
+- `UBICACION_PRECISION_MAX_M=100`: umbral positivo configurable. **100 m es una
+  decision inicial de producto, no un estandar universal**. El limite es inclusivo;
+  una lectura aproximada se conserva con su precision y usa la misma regla.
+
+En AWS se pueden sobrescribir estas variables mediante
+`service_environment.siniestros` de `infra/apps`. Los limites del BFF se obtienen
+del servicio, sin duplicar configuracion en Android ni en el BFF.
+
+Si la ubicacion es obligatoria y falta o no es confiable, el envio responde
+`422 SOLICITUD_INVALIDA`, con `detalles.campos: ["ubicacion"]` y `correlationId`.
+El borrador queda abierto y conserva sus evidencias; corregir por PATCH y reintentar
+el envio del **mismo borrador y clave idempotente**. Si es opcional, puede enviarse
+con estado no disponible o no confiable, sin falsear el contexto.
+Coordenadas sin permiso, fecha sin zona, lectura incompleta, rangos invalidos,
+`ubicacion: null` o un `estado` enviado por Android tambien producen `422`.
+Se mantienen `401`, `403`, `404 BORRADOR_NO_ENCONTRADO`, `409 BORRADOR_CONVERTIDO`
+y `503` de las rutas existentes. Otro titular no puede leer ni modificar la ubicacion.
+
+La conversion copia los metadatos a `siniestros.ubicacion_declarada` (JSONB existente)
+en la misma transaccion del reporte. El envio revalida el umbral vigente, incluso
+dentro de la transaccion, y guarda la confianza recalculada tanto en el borrador
+convertido como en el definitivo. Una confirmacion previa se recupera sin revalidar
+ubicacion, poliza ni archivos. Los eventos/outbox no incorporan coordenadas.
+
+#### Privacidad, despliegue y trabajo Android pendiente
+
+- RDS ya usa `storage_encrypted=true` y KMS en `infra/platform/database.tf`;
+  la nueva columna y el JSONB definitivo quedan cubiertos por ese cifrado en reposo.
+- `sanitizar` y el enmascarado de texto redactan `lat`, `lon` y sus nombres
+  alternativos en logs. Los errores de validacion incluyen campos, nunca valores.
+  Android tampoco debe registrar coordenadas en logs, analitica o reportes de errores.
+- Desplegar **siniestros,bff-movil**, alcance **microservicios** del workflow
+  **Infra - Desplegar**, con pruebas habilitadas. Incluye la configuracion de apps.
+  La migracion **007** se aplica al arrancar: agrega `borradores.ubicacion` y reutiliza
+  el JSONB definitivo; no requiere recrear RDS ni desplegar bases/plataforma.
+  La reversa rechaza eliminar metadatos ya guardados.
+- **Cambio de comportamiento intencional:** un borrador abierto anterior sin ubicacion
+  debe completarse antes de enviarse mientras su causa sea obligatoria. Coordinar
+  este despliegue con Android. Los siniestros ya enviados no se invalidan.
+- Fuera de este repositorio quedan Play Services Location y su dependencia en
+  `libs.versions.toml`, permisos y explicacion segun mockups, boton y reintento,
+  visores de precision/fecha y ausencia, Robolectric/WireMock, Compose/Espresso,
+  pruebas fisicas exterior/interior, TalkBack, fuente al 200 %, es-CO y en-US.
+  No se verificaron esos criterios de UI en el backend.
+
+#### Semillas para ejecutar R4 en int/local
+
+`consulta` agrega las polizas de `services/consulta/src/consulta/adapters/outbound/semillas/polizas_semilla.json`
+al arrancar con `CONSULTA_SEMILLA_POLIZAS=true` (ya habilitado en `int`).
+Los clientes C01 y C28-C33 ya existen con `CLIENTES_SEMILLA_SINTETICA=true`.
+No se crean documentos nuevos, usuarios Cognito, contrasenas, evidencias ni siniestros
+definitivos: iniciar sesion con una cuenta vinculada al cliente elegido y completar
+el reporte desde Android. Los documentos siguientes son **100 % sinteticos**.
+
+Las polizas 001-004 se conservan sin cambios; 005-015 son nuevas y se insertan
+idempotentemente, sin duplicar ni sobrescribir datos del ambiente. Son proyecciones
+QA de consulta, no emisiones reales ni disparadores de la automatizacion parametrica.
+La lectura no exige consultar el catalogo para recuperar estas polizas.
+
+**Matriz de polizas** (vigencia evaluada al 19/11/2026):
+
+| Cliente / documento CC | Numero de poliza | Amparos disponibles | Caso de prueba |
+|---|---|---|---|
+| C01 / `9000000001` | `900-2026-000003` | `MUERTE` | Ubicacion obligatoria (original) |
+| C01 / `9000000001` | `900-2026-000005` | `AUXILIO_FUNERARIO` | AC2: rechazar permiso y enviar |
+| C01 / `9000000001` | `900-2026-000006` | `ENFERMEDADES_GRAVES` | AC2: rechazar permiso y enviar |
+| C28 / `9000000028` | `900-2026-000007` | `MUERTE`, `INCAPACIDAD_TOTAL_PERMANENTE` | AC1 y AC3: ubicacion obligatoria |
+| C29 / `9000000029` | `900-2026-000008` | `INCAPACIDAD` | Codigo legado: tambien exige ubicacion |
+| C30 / `9000000030` | `900-2026-000009` | `INCENDIO`, `HURTO` | Ambos exigen ubicacion, incluso si la cobertura es opcional en el producto |
+| C31 / `9000000031` | `900-2026-000010` | `LLUVIA_ACUMULADA` | Exige ubicacion; prueba de reporte movil, no de disparador automatico |
+| C32 / `9000000032` | `900-2026-000011` | `MUERTE`, `INCAPACIDAD_TOTAL_PERMANENTE`, `ENFERMEDADES_GRAVES`, `AUXILIO_FUNERARIO` | Cambiar de amparo opcional a obligatorio y viceversa en el mismo borrador |
+| C33 / `9000000033` | `900-2026-000012` | `ENFERMEDADES_GRAVES`, `AUXILIO_FUNERARIO` | Probar ambos amparos opcionales con otro titular |
+| C01 / `9000000001` | `900-2025-000013` | `AUXILIO_FUNERARIO` | Vencida: la excepcion de ubicacion no permite reportar |
+| C01 / `9000000001` | `900-2026-000014` | `ENFERMEDADES_GRAVES` | No iniciada: la excepcion de ubicacion no permite reportar |
+| Movil / `1020456789` | `900-2026-000015` | `MUERTE`, `INCAPACIDAD_TOTAL_PERMANENTE`, `ENFERMEDADES_GRAVES`, `AUXILIO_FUNERARIO` | Mismos cambios de amparo para el cliente movil preexistente |
+
+El cliente movil conserva ademas `900-2026-000001` (`MUERTE`, `INCAPACIDAD`,
+vigente) y `900-2025-000002` (`MUERTE`, vencida). C02 / CC `9000000002`
+conserva `900-2025-000004` (`INCENDIO`, `HURTO`), cuya vigencia termina
+**20/11/2026**; para pruebas posteriores usar C30.
+
+Obtener el `polizaId` desde `GET /v1/polizas` con el token del titular y abrir su
+detalle para elegir `causa` desde las coberturas. Como referencia, el UUID de
+`900-2026-000005` es `5eed0000-0000-4000-8000-000000000005`; los demas siguen
+el mismo prefijo y sufijo de 12 digitos de la secuencia 001-015. Los UUID de cliente
+C28-C33 usan sufijos hexadecimales: no deducirlos concatenando el documento.
+
+Las nuevas polizas vigentes cubren 15/10/2026-14/10/2027, excepto lluvia,
+01/11/2026-31/10/2027. La 013 termino el 30/09/2026 y la 014 inicia el
+01/01/2027. Son fechas fijas, no se renuevan al reiniciar. Todas se almacenan
+como `ACTIVA`: `vigente` se calcula con las fechas. La proyeccion actual solo
+admite ese estado; no se fabrican polizas `CANCELADA` o `EMITIDA` mediante esta
+semilla. Sus rechazos se cubren con pruebas automatizadas de validacion.
+
+**Ejecucion y resultados esperados** (en todos los envios positivos: descripcion,
+causa incluida en la poliza, fecha real pasada dentro de vigencia y al menos una
+evidencia cargada/confirmada):
+
+| Escenario | Datos / accion | Resultado |
+|---|---|---|
+| AC1 | C28, poliza 007; permiso `PRECISO`, lectura completa de 35.5 m | PATCH 200 `DISPONIBLE`; envio 201 `REPORTADO` |
+| AC2 | C01, 005 y 006; repetir con `DENEGADO` y `DENEGADO_PERMANENTEMENTE` sin coordenadas | PATCH 200 y envio 201; detalle conserva `NO_DISPONIBLE`, permiso y campos de lectura `null` |
+| Falta de permiso en obligatorio | C28/C29/C30/C31; denegar permiso o no tener lectura | Borrador recuperable; envio 422 con campo `ubicacion` |
+| Precision en el limite | C28: 99.99, 100 y 100.01 m con umbral 100 | Los dos primeros aceptan envio; el ultimo guarda `NO_CONFIABLE` y bloquea con 422 |
+| Permiso aproximado | C28, permiso `APROXIMADO`, precision real del proveedor | La misma comparacion inclusiva; no inventar ni redondear precision |
+| Precision mala en opcional | C01, 005/006, lectura autorizada por encima de 100 m | Guarda `NO_CONFIABLE` y permite envio, conservando el contexto |
+| Proveedor sin lectura | C01 005/006, permiso concedido sin los cuatro datos de lectura | `NO_DISPONIBLE`; permite envio por ser opcional |
+| Cambio de causa | C32 011 o movil 015: guardar rechazo con amparo opcional, cambiar a `MUERTE` antes de enviar | Bloquea con 422 hasta adjuntar ubicacion confiable; cambiar de nuevo a amparo opcional permite enviar |
+| Vigencia | C01 013 y 014 | `vigente=false`, selector no las ofrece como elegibles; POST forzado de borrador responde 409 `POLIZA_NO_VIGENTE` |
+| Titularidad | Sesion C01 intenta usar la poliza 007 de C28, y viceversa | 403 `POLIZA_NO_AUTORIZADA`, sin datos de la poliza ajena |
+| Amparo ajeno a la poliza | C01 005, guardar `causa=MUERTE` | Envio 422 con campo `causa`, sin crear caso |
+| Consentimiento incoherente | Enviar coordenadas con `DENEGADO`, lectura parcial o `ubicacion:null` | PATCH 422; no modifica lo guardado |
+| Carga incompleta | C01 005/006 con evidencia pendiente | Envio 409 `EVIDENCIA_NO_CARGADA`; no se elude por ser ubicacion opcional |
+| Recuperacion / idempotencia | C01 005/006: corregir mismo borrador, reintentar tras timeout o enviar simultaneamente | Un solo siniestro y misma confirmacion tras registrar; sin recrear borrador ni duplicar archivos |
+| Sesion invalida | Cualquier poliza, sin token valido | 401, sin cambios |
+
+AC4, TalkBack, fuente al 200 %, es-CO/en-US y lecturas fisicas exterior/interior
+se ejecutan en Android con estos mismos datos; no se validan con la semilla por si sola.
+No se registran coordenadas ni enlaces firmados en evidencias de prueba compartidas.
+
+**Despliegue de esta ampliacion:** workflow **Infra - Desplegar**, rama de la
+entrega, `ambiente=int`, `alcance=microservicios`,
+`servicios=consulta,siniestros,bff-movil`, `probar=true`. Reconstruir `consulta`
+es necesario para que cargue el JSON nuevo; desplegar solo aplicaciones no incorpora
+el archivo a la imagen. Se aplican las excepciones de ubicacion de `infra/apps`.
+No requiere modificar plataforma ni bases; si aun no estaba aplicada, la migracion
+007 de siniestros se ejecuta al arrancar. La siembra de clientes existente debe estar
+habilitada y las sesiones deben corresponder a los titulares de la matriz.
+
+### Descargar evidencias desde Android
+
+`POST /v1/siniestros/{siniestroId}/evidencias/{evidenciaId}/enlace`,
+con `Authorization: Bearer <token>` y **sin cuerpo**:
+
+```json
+{
+  "url": "https://bucket.s3.amazonaws.com/...",
+  "expiraEn": "2026-11-18T21:05:00Z",
+  "nombreArchivo": "evidencia.jpg",
+  "tipoContenido": "image/jpeg"
+}
+```
+
+Responde `200`. El BFF resuelve el titular desde el token y `siniestros` comprueba
+la propiedad del caso, pertenencia de la evidencia y confirmación de la carga.
+Una evidencia definitiva sin borrador asociado sigue siendo una evidencia confirmada
+(casos previos/portal); si tiene borrador, se exige la confirmación correspondiente.
+Se verifica existencia e integridad antes de firmar. El enlace es **HTTPS**, dura como
+máximo **300 segundos** (`EVIDENCIA_URL_TTL_S`) y fija la versión del objeto cuando S3
+la informa. El archivo se entrega con `Content-Type` y `Content-Disposition: attachment`,
+incluyendo nombre UTF-8. No se publica el objeto ni se guardan URLs en logs/outbox.
+
+Android debe pedir el enlace al abrir/descargar el archivo y descargar directamente
+desde esa URL **sin reenviar el token de Cognito a S3**. No persistir ni registrar
+la URL firmada. Si vence, solicitar una nueva; no usar el detalle como fuente de enlaces.
+En local el endpoint público de firma también debe ser HTTPS (LocalStack admite TLS).
+
+- `401`: sesión inválida.
+- `404 SINIESTRO_NO_ENCONTRADO`: inexistente o de otro titular, sin revelar cuál.
+- `404 EVIDENCIA_NO_ENCONTRADA`: no existe o no corresponde al caso.
+- `404 EVIDENCIA_NO_DISPONIBLE`: archivo ausente.
+- `409 EVIDENCIA_NO_CARGADA`: falta confirmación.
+- `422 INTEGRIDAD_EVIDENCIA_INVALIDA`: checksum distinto; no se firma.
+- `503 SERVICIO_NO_DISPONIBLE`: falla de servicio, permisos S3 o almacenamiento.
+
+La ruta interna agrega `/v1/clientes/{clienteId}` y solo la invoca el BFF con el
+cliente resuelto, como las consultas móviles. No debe exponerse directamente.
+Esta ampliación requiere desplegar **bff-movil y siniestros**, incluyendo el cambio
+IAM de `infra/apps` descrito abajo. No requiere migraciones ni cambios en BFF web.
+
+### Despliegue
+
+Workflow **Infra - Desplegar**, ambiente `int`, alcance `microservicios`,
+servicios `siniestros,bff-movil,bff-web`, `probar=true`. La migración `006` se aplica
+al arrancar siniestros; no requiere desplegar plataforma ni bases.
+Esperar a que los tres servicios estén estables antes de probar Android.
+Para la descarga se agrega a `siniestros` `s3:ListBucket` condicionado exclusivamente
+al prefijo `siniestros/*`. Permite consultar la clave exacta si HEAD devuelve `403`
+ambiguo y distinguir ausencia (`404`) de permisos/almacenamiento (`503`).
+No permite listar otros prefijos ni borrar archivos. `microservicios` aplica
+`infra/apps`, por lo que incluye este permiso sin desplegar plataforma ni bases.
+No revertir la migración si existen borradores convertidos: su reversa lo rechaza
+para conservar las confirmaciones y evitar reaperturas.
+
+La conservación S3 tiene corte independiente `S3_CONSERVACION_TIMEOUT_MS=2000`;
+la lectura del detalle mantiene `S3_TIMEOUT_MS=300`.
+Confirmación y envío en el BFF usan `SOLVENTA_SINIESTROS_ESCRITURA_TIMEOUT_MS=15000`,
+sin ampliar el corte de las consultas. Los timeouts no reintentan automáticamente:
+el móvil recupera la confirmación o reintenta el mismo borrador.
+
 ## Datos sintéticos
 
 Todos los datos son **100 % sintéticos**: Solventa no usa datos reales de clientes ni proveedores reales. El simulador sustituye a Open Finance y a Datos Abiertos, y así las pruebas, los logs y las trazas nunca exponen información personal o financiera de nadie. Los identificadores de perfilamiento siguen el patrón `00000000-0000-4000-8000-0000000000NN`; los `consentimientoId` del stub, `00000000-0000-4000-9000-0000000000NN`.
 
 En `simulador.<FUENTE>.datos`, una clave con punto (`listasRestrictivas.coincidencias`) es una ruta anidada; con el comportamiento `incompleta`, las claves listadas se **eliminan** de la respuesta nominal.
+
+En C18 (HU-W12), la prueba de módulo comprueba que las cuatro ramas se solapan:
+todas deben comenzar antes de que termine la primera, con las cuatro llamadas reales
+al simulador y el resultado funcional esperado. Usa el presupuesto del arnés de módulo,
+sin cambiar los timeouts de producción ni los casos que prueban el corte de 300 ms.
+`esperado.duracionMsObjetivo = 350` se conserva como objetivo para mediciones de
+rendimiento en un ambiente controlado, no como condición bloqueante del módulo.

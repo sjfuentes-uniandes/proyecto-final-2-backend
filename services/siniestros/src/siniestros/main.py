@@ -10,11 +10,12 @@ from solventa_common.inbox import ConsumidorInbox, InboxPg, Receptor, ReceptorSq
 from solventa_common.outbox import OutboxPg, PublicadorSns, RelayOutbox, cliente_sns
 from solventa_common.telemetry import instrumentar
 
-from siniestros.adapters.inbound.http import decisiones, parametricos
+from siniestros.adapters.inbound.http import borradores, decisiones, parametricos
 from siniestros.adapters.inbound.http import siniestros as http
 from siniestros.adapters.inbound.sqs.indemnizaciones import manejador_indemnizaciones
 from siniestros.adapters.outbound.base_de_datos import migrar
 from siniestros.adapters.outbound.codigos import CodigosPg
+from siniestros.adapters.outbound.envios_pg import EnviosPg
 from siniestros.adapters.outbound.evidencias_s3 import (
     AlmacenSinConfigurar,
     EvidenciasS3,
@@ -26,10 +27,12 @@ from siniestros.adapters.outbound.siniestros_pg import SiniestrosPg, TxSiniestro
 from siniestros.adapters.outbound.soportes_requeridos import SoportesRequeridosJson
 from siniestros.application.siniestro.acceso import RegistrarAccesoDenegado
 from siniestros.application.siniestro.bandeja import ConsultarResumen, ListarBandeja
+from siniestros.application.siniestro.borradores import Borradores
 from siniestros.application.siniestro.crear_parametrico import CrearParametrico
 from siniestros.application.siniestro.decidir import Decidir
 from siniestros.application.siniestro.detalle import ConsultarDetalle
-from siniestros.application.siniestro.enlace import EmitirEnlace
+from siniestros.application.siniestro.enlace import EmitirEnlace, EmitirEnlaceCliente
+from siniestros.application.siniestro.envio import EnviarBorrador
 from siniestros.application.siniestro.pagos_parametricos import ConsultarPagosParametricos
 from siniestros.application.siniestro.plazos import VencerPlazosSoporte
 from siniestros.application.siniestro.puertos import AlmacenEvidencias, Reloj
@@ -137,7 +140,17 @@ def armar_almacen(settings: Settings) -> AlmacenEvidencias:
         if settings.evidencias_endpoint_publico
         else cliente
     )
-    return EvidenciasS3(cliente, settings.evidencias_bucket, settings.s3_timeout_ms, firma)
+    conservacion = cliente_s3(
+        settings.aws_region, settings.s3_conservacion_timeout_ms, settings.aws_endpoint_url
+    )
+    return EvidenciasS3(
+        cliente,
+        settings.evidencias_bucket,
+        settings.s3_timeout_ms,
+        firma,
+        cliente_conservacion=conservacion,
+        conservacion_timeout_ms=settings.s3_conservacion_timeout_ms,
+    )
 
 
 @dataclass(frozen=True)
@@ -354,8 +367,25 @@ def crear_app(
                 app.state.pool = pool_base
             pool_activo = getattr(app.state, "pool", None)
             if pool_activo is not None:
+                almacen_activo = almacen or armar_almacen(settings)
+                app.state.borradores = Borradores(
+                    SiniestrosPg(pool_activo), almacen_activo, reloj_activo, settings
+                )
+                app.state.enlace_evidencia_cliente = EmitirEnlaceCliente(
+                    SiniestrosPg(pool_activo),
+                    almacen_activo,
+                    reloj_activo,
+                    settings.evidencia_url_ttl_s,
+                )
+                app.state.enviar_borrador = EnviarBorrador(
+                    EnviosPg(pool_activo, settings),
+                    almacen_activo,
+                    reloj_activo,
+                    settings.evidencias_bucket_sse,
+                    settings,
+                )
                 app.state.servicios = armar_servicios(
-                    pool_activo, almacen or armar_almacen(settings), reloj_activo, settings
+                    pool_activo, almacen_activo, reloj_activo, settings
                 )
             relay: _Fondo | None = None
             semilla: _Fondo | None = None
@@ -378,6 +408,8 @@ def crear_app(
     # `/{siniestroId}`, para que no se lean como un identificador.
     app.include_router(parametricos.router)
     app.include_router(decisiones.router)
+    app.include_router(borradores.router_borradores)
+    app.include_router(borradores.router_cliente)
     app.include_router(http.router)
     app.include_router(http.router_accesos)
 

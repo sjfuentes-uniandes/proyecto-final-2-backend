@@ -189,6 +189,11 @@ class EnlaceEmitido:
 
 
 @dataclass(frozen=True)
+class EnlaceDescargaEmitido(EnlaceEmitido):
+    nombre_archivo: str
+
+
+@dataclass(frozen=True)
 class AccesoDenegado:
     actor_id: str
     rol: str | None
