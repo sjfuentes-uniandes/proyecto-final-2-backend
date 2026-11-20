@@ -58,8 +58,8 @@ TABLAS = (
     "resoluciones_descarte, outbox"
 )
 TABLAS_SINIESTROS = (
-    "siniestros, evidencias, historial_siniestro, decisiones_siniestro, outbox, inbox, "
-    "idempotencia, secuencia_codigo"
+    "borrador_evidencias, borradores, siniestros, evidencias, historial_siniestro, "
+    "decisiones_siniestro, outbox, inbox, idempotencia, secuencia_codigo"
 )
 
 
