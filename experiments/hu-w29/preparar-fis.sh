@@ -27,7 +27,8 @@ jq --arg rol "$(jq -r .fis_role_arn <<<"${exp}")" \
   | .tags.Name = "\($prefijo)-hu-w29-multizona" | .tags.Environment = $ambiente
 ' "${EXPERIMENTO_DIR}/fis.json" >"${RESULTADOS}/fis.json"
 
-! grep -q '\${' "${RESULTADOS}/fis.json" || die "Quedaron variables sin llenar en ${RESULTADOS}/fis.json."
+# Marcadores literales "${...}" de la plantilla que jq no reemplazó.
+! grep -qF "\${" "${RESULTADOS}/fis.json" || die "Quedaron variables sin llenar en ${RESULTADOS}/fis.json."
 [ "$(jq -r .db_multi_az <<<"${exp}")" = "true" ] || die "RDS no es Multi-AZ: high_availability = true antes del experimento."
 
 log "Plantilla lista: ${RESULTADOS}/fis.json (zona $(jq -r .zone <<<"${exp}"))"

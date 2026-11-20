@@ -19,7 +19,10 @@ for servicio in $(jq -r '.[]' <<<"${servicios}"); do
   arns="$(aws ecs list-tasks --cluster "${cluster}" --service-name "${servicio}" --desired-status RUNNING --query taskArns --output json)"
   [ "$(jq length <<<"${arns}")" -gt 0 ] || continue
   # describe-tasks admite hasta 100 tareas por llamada; cada servicio tiene a lo sumo max_replicas.
-  detalle="$(aws ecs describe-tasks --cluster "${cluster}" --tasks $(jq -r '.[]' <<<"${arns}") \
+  # Arreglo sin mapfile (bash 3.2 de macOS, como scripts/plataforma/lib.sh).
+  ids=()
+  while IFS= read -r arn; do ids+=("${arn}"); done < <(jq -r '.[]' <<<"${arns}")
+  detalle="$(aws ecs describe-tasks --cluster "${cluster}" --tasks "${ids[@]}" \
     --query 'tasks[].{servicio:group,zona:availabilityZone,estado:lastStatus,salud:healthStatus}' --output json)"
   tareas="$(jq -s 'add' <(echo "${tareas}") <(echo "${detalle}"))"
 done
