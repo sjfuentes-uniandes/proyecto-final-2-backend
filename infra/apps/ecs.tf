@@ -95,6 +95,11 @@ locals {
         EVIDENCIAS_BUCKET_SSE = local.p.evidence_bucket.sse
       } : {},
       contains(local.telemetria_archivers, name) ? { TELEMETRIA_ARCHIVO_PREFIJO = local.p.evidence_bucket.telemetry_prefix } : {},
+      name == "siniestros" ? {
+        UBICACION_OBLIGATORIA      = "true"
+        UBICACION_TIPOS_OPCIONALES = jsonencode(["AUXILIO_FUNERARIO", "ENFERMEDADES_GRAVES"])
+        UBICACION_PRECISION_MAX_M  = "100"
+      } : {},
       # Cache-Aside: vacía con cache_enabled = false; el servicio lee de RDS.
       service.cache ? { CACHE_URL = local.p.cache.url } : {},
       contains(local.latency_budget_readers, name) ? { LATENCY_BUDGET_MS = jsonencode(var.latency_budget_ms) } : {},

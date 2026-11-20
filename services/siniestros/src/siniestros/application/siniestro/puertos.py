@@ -43,6 +43,24 @@ class SoportesRequeridos(Protocol):
 
 
 class AlmacenEvidencias(Protocol):
+    async def firmar_descarga(
+        self, clave: str, sha256: str, ttl_s: int, tipo_contenido: str, nombre_archivo: str
+    ) -> str:
+        """Comprueba el objeto y firma una descarga HTTPS con nombre y MIME, por hasta 300 s."""
+        ...
+
+    async def conservar(
+        self,
+        origen: str,
+        destino: str,
+        sha256: str,
+        tamano_bytes: int,
+        tipo_contenido: str,
+        cifrado: str,
+    ) -> None:
+        """Verifica y conserva el archivo fuera de tmp; repetir recupera la misma copia."""
+        ...
+
     async def verificar(self, clave: str, sha256: str) -> IntegridadEvidencia:
         """Compara el checksum del objeto con `sha256` sin descargarlo. Nunca lanza: un objeto
         ausente es `NO_DISPONIBLE`; un fallo o un corte por tiempo, `NO_VERIFICABLE`."""
@@ -50,6 +68,18 @@ class AlmacenEvidencias(Protocol):
 
     async def firmar_lectura(self, clave: str, ttl_s: int, tipo_contenido: str) -> str:
         """URL prefirmada de lectura. Lanza `DependenciaNoDisponible` si no se puede firmar."""
+        ...
+
+    async def firmar_carga(
+        self,
+        clave: str,
+        tipo_contenido: str,
+        tamano_bytes: int,
+        sha256: str,
+        ttl_s: int,
+        cifrado: str,
+    ) -> tuple[str, dict[str, str]]:
+        """POST prefirmado con tipo, tamaño, checksum y cifrado inmutables."""
         ...
 
 
@@ -145,6 +175,12 @@ class TxSiniestros(Protocol):
 
 
 class SiniestrosRepositorio(Protocol):
+    async def evidencia_cliente(
+        self, cliente_id: UUID, siniestro_id: UUID, evidencia_id: UUID
+    ) -> tuple[bool, Evidencia | None, bool]:
+        """(¿siniestro propio?, evidencia de ese siniestro, ¿confirmada?)."""
+        ...
+
     def transaccion(self) -> AbstractAsyncContextManager[TxSiniestros]: ...
 
     async def bandeja(self, filtro: FiltroBandeja) -> PaginaSiniestros:

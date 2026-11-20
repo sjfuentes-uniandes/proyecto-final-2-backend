@@ -3981,10 +3981,13 @@ components:
           type: string
           title: Nombre
         sumaAsegurada:
-          type: string
-          pattern: ^-?\d+(\.\d+)?$
           title: Sumaasegurada
-          description: Suma asegurada del amparo (DS2-16)
+          description: Suma asegurada del amparo (DS2-16); null si la fuente no la
+            informa
+          anyOf:
+          - type: string
+            pattern: ^-?\d+(\.\d+)?$
+          - type: 'null'
       type: object
       required:
       - codigo

@@ -49,9 +49,27 @@ _FRAGMENTOS_SENSIBLES = (
     "nacimiento",
     "sumaasegurada",
 )
-_CLAVES_SENSIBLES = {"pin", "cvv", "otp", "jwt"}
+_CLAVES_SENSIBLES = {
+    "pin",
+    "cvv",
+    "otp",
+    "jwt",
+    "lat",
+    "lon",
+    "lng",
+    "latitud",
+    "longitud",
+    "latitude",
+    "longitude",
+}
 
 _MASCARAS = (
+    (
+        re.compile(
+            r"""(?i)\b(lat|lon|lng|latitud|longitud|latitude|longitude)(["']?\s*[=:]\s*["']?)[^\s"'`,;}\]&]+"""
+        ),
+        r"\1\2" + REDACTADO,
+    ),
     (re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]+"), "Bearer " + REDACTADO),
     (re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*"), REDACTADO),
     (

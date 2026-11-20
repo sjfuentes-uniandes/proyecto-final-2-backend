@@ -186,6 +186,16 @@ locals {
       contains(local.evidence_readers, name) ? [
         { Effect = "Allow", Action = ["s3:GetObject", "s3:GetObjectVersion"], Resource = ["${local.p.evidence_bucket.arn}/*"] },
       ] : [],
+      contains(local.evidence_readers, name) ? [
+        # HEAD devuelve 403 tanto si falta el objeto como si se deniega acceso.
+        # Permite comprobar su clave exacta sin listar telemetría ni otros prefijos.
+        {
+          Effect    = "Allow"
+          Action    = ["s3:ListBucket"]
+          Resource  = [local.p.evidence_bucket.arn]
+          Condition = { StringLike = { "s3:prefix" = ["siniestros/*"] } }
+        },
+      ] : [],
       contains(local.evidence_writers, name) || contains(local.evidence_readers, name) ? [
         { Effect = "Deny", Action = ["s3:*"], Resource = ["${local.p.evidence_bucket.arn}/${local.p.evidence_bucket.telemetry_prefix}*"] },
       ] : [],

@@ -533,6 +533,14 @@ run "sprint3" {
 
   assert {
     condition = (
+      local.environment["siniestros"]["UBICACION_OBLIGATORIA"] == "true" &&
+      toset(jsondecode(local.environment["siniestros"]["UBICACION_TIPOS_OPCIONALES"])) == toset(["AUXILIO_FUNERARIO", "ENFERMEDADES_GRAVES"])
+    )
+    error_message = "Solo auxilio funerario y enfermedades graves tienen ubicación opcional por defecto."
+  }
+
+  assert {
+    condition = (
       contains(local.task_statements["siniestros"], { Effect = "Allow", Action = ["s3:PutObject"], Resource = ["arn:aws:s3:::solventa-int-evidencias-123456789012/*"] }) &&
       contains(local.task_statements["siniestros"], { Effect = "Allow", Action = ["s3:GetObject", "s3:GetObjectVersion"], Resource = ["arn:aws:s3:::solventa-int-evidencias-123456789012/*"] }) &&
       contains(local.task_statements["siniestros"], { Effect = "Deny", Action = ["s3:*"], Resource = ["arn:aws:s3:::solventa-int-evidencias-123456789012/telemetria/*"] }) &&
@@ -551,9 +559,14 @@ run "sprint3" {
     condition = (
       !strcontains(jsonencode(local.task_statements["adaptador-telemetria"]), "s3:GetObject") &&
       !strcontains(jsonencode(local.task_statements), "s3:DeleteObject") &&
-      !strcontains(jsonencode(local.task_statements["siniestros"]), "s3:ListBucket")
+      contains(local.task_statements["siniestros"], {
+        Effect    = "Allow", Action = ["s3:ListBucket"],
+        Resource  = ["arn:aws:s3:::solventa-int-evidencias-123456789012"],
+        Condition = { StringLike = { "s3:prefix" = ["siniestros/*"] } }
+      }) &&
+      length([for statement in local.task_statements["siniestros"] : statement if contains(statement.Action, "s3:ListBucket")]) == 1
     )
-    error_message = "AC3: el adaptador no lee el archivo y nadie borra ni lista evidencias."
+    error_message = "AC3: nadie borra evidencias; solo siniestros comprueba existencia bajo siniestros/*, sin listar otros prefijos."
   }
   assert {
     condition = alltrue([
@@ -755,6 +768,10 @@ run "variables_de_qa_por_servicio" {
   variables {
     service_environment = {
       clientes = { CLIENTES_SEMILLA_SINTETICA = "true", ENVIRONMENT = "qa-sobrescrito" }
+      siniestros = {
+        UBICACION_PRECISION_MAX_M  = "50"
+        UBICACION_TIPOS_OPCIONALES = "[\"COLISION\"]"
+      }
     }
   }
 
@@ -768,6 +785,15 @@ run "variables_de_qa_por_servicio" {
   assert {
     condition     = local.environment["clientes"]["ENVIRONMENT"] == "qa-sobrescrito"
     error_message = "service_environment va al final del merge: tiene prioridad."
+  }
+  assert {
+    condition = (
+      local.environment["siniestros"]["UBICACION_PRECISION_MAX_M"] == "50" &&
+      local.environment["siniestros"]["UBICACION_TIPOS_OPCIONALES"] == "[\"COLISION\"]" &&
+      local.environment["siniestros"]["UBICACION_OBLIGATORIA"] == "true" &&
+      !contains(keys(local.environment["bff-movil"]), "UBICACION_PRECISION_MAX_M")
+    )
+    error_message = "La regla de ubicación llega a siniestros y admite excepciones por tipo sin duplicarse en el BFF."
   }
   assert {
     condition     = alltrue([for name, env in local.environment : !contains(keys(env), "CLIENTES_SEMILLA_SINTETICA") if name != "clientes"])

@@ -18,8 +18,8 @@ from siniestros.adapters.outbound.base_de_datos import migrar
 docker = pytest.importorskip("docker")
 
 TABLAS = (
-    "siniestros, evidencias, historial_siniestro, decisiones_siniestro, outbox, inbox, "
-    "idempotencia, secuencia_codigo"
+    "borrador_evidencias, borradores, siniestros, evidencias, historial_siniestro, "
+    "decisiones_siniestro, outbox, inbox, idempotencia, secuencia_codigo"
 )
 
 
