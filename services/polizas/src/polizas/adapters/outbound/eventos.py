@@ -15,8 +15,9 @@
   (instantánea de la decisión, DS2-10), no las del catálogo vigente: `consulta` no llama a
   `catalogo`.
   HU-W21 (DS3-20, opción A), aditivo y opcional: `coberturaParametrica`, la regla de una póliza
-  paramétrica para `pagos-parametricos`. **`polizas` todavía no la llena** (siempre `null`): la
-  emisión de la cobertura paramétrica queda para la sincronización final del Sprint 3.
+  paramétrica para `pagos-parametricos`. Desde HU-W24 se llena en los productos paramétricos con la
+  instantánea de la cotización (la regla del catálogo y la zona del riesgo, `datosAsegurado.zona`),
+  que llega en los insumos de la decisión; en los demás productos es `null`.
   HU-W24 (aditivo y opcional en el esquema): `aggregateVersion` = 1 en el sobre. La emisión es el
   primer evento del agregado póliza (HU-W17: "la póliza tiene … versión"); un evento posterior de la
   misma póliza llevará una versión mayor. Lo agrega el relay (`VERSIONES_AGREGADO`), porque el outbox

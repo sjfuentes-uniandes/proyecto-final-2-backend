@@ -31,6 +31,14 @@ class DatosFueraDeRango(Exception):
         self.campos = campos
 
 
+class ZonaRequerida(Exception):
+    """El producto es paramétrico y la solicitud no trae la zona del riesgo (HU-W24)."""
+
+    def __init__(self, campos: tuple[str, ...]) -> None:
+        super().__init__(", ".join(campos))
+        self.campos = campos
+
+
 class CoberturaNoDisponible(Exception):
     """Una cobertura opcional pedida no es opcional en el producto."""
 

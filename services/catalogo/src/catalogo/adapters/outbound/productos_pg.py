@@ -169,9 +169,13 @@ def sembrar(conexion: psycopg.Connection[Any], archivo: str = PRODUCTOS) -> None
 
 
 def sembrar_qa(url: str) -> None:
-    """Publica los productos de QA (CATALOGO_PRODUCTOS_QA). Idempotente, como `sembrar`."""
+    """Publica los productos de QA (CATALOGO_PRODUCTOS_QA) y, desde HU-W24, sus reglas de
+    suscripción. Idempotente, como `sembrar`."""
+    from catalogo.adapters.outbound import reglas_suscripcion_pg
+
     with psycopg.connect(url) as conexion, conexion.transaction():
         sembrar(conexion, PRODUCTOS_QA)
+        reglas_suscripcion_pg.sembrar(conexion, PRODUCTOS_QA)
 
 
 def _cobertura_json(cobertura: Cobertura) -> dict[str, Any]:

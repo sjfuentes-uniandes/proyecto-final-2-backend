@@ -85,6 +85,13 @@ class DatosAseguradoDto(_Dto):
     fecha_nacimiento: date
     plazo_credito_meses: Annotated[int, Field(ge=1, le=600)]
     suma_asegurada: Annotated[int, Field(ge=0, le=1_000_000_000_000)]
+    zona: Annotated[str, Field(pattern=r"^[A-Z0-9]{2,16}$")] | None = Field(
+        default=None,
+        description=(
+            "HU-W24: zona del riesgo (municipio DANE o código de vuelo). Obligatoria en un "
+            "producto paramétrico (ZONA_REQUERIDA); sin uso en los demás"
+        ),
+    )
 
 
 class SolicitudCotizacion(_Dto):
@@ -334,8 +341,8 @@ Actor = Annotated[str, Depends(actor)]
         422: _error(
             "SOLICITUD_INVALIDA, IDEMPOTENCIA_CONFLICTO, PRODUCTO_NO_ENCONTRADO, "
             "PRODUCTO_INACTIVO, PRODUCTO_FUERA_DE_VIGENCIA, REGLAS_NO_VIGENTES, "
-            "DATOS_FUERA_DE_RANGO, COBERTURA_NO_DISPONIBLE o PERFIL_NO_CORRESPONDE "
-            "(detalles.campos, sin valores)"
+            "DATOS_FUERA_DE_RANGO, COBERTURA_NO_DISPONIBLE, ZONA_REQUERIDA o "
+            "PERFIL_NO_CORRESPONDE (detalles.campos, sin valores)"
         ),
     },
 )

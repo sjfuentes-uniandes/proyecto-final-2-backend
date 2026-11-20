@@ -1,6 +1,7 @@
 """HU-W03: rutas /v1/cotizaciones y /v1/productos/{id}/condiciones del portal con cotizacion
 simulada: solo asesores, el actor es el asesor, los B2 de cotizacion pasan y el resto es 503."""
 
+import json
 from collections.abc import Iterator
 from typing import Any
 
@@ -132,6 +133,17 @@ def test_reenvia_como_asesor_con_la_clave(cotizacion: CotizacionFalsa) -> None:
     assert enviada.headers["X-Correlation-Id"] == "corr-bff-w03"
     cuerpo = enviada.read()
     assert b'"perfilId"' not in cuerpo and b'"socioId"' not in cuerpo
+
+
+def test_hu_w24_la_zona_del_riesgo_llega_a_cotizacion(cotizacion: CotizacionFalsa) -> None:
+    con_zona = {**SOLICITUD, "datosAsegurado": {**SOLICITUD["datosAsegurado"], "zona": "11001"}}
+    TestClient(app).post(
+        "/v1/cotizaciones", json=con_zona, headers={**ASESOR, "Idempotency-Key": CLAVE}
+    )
+    (enviada,) = cotizacion.solicitudes
+    assert json.loads(enviada.read())["datosAsegurado"]["zona"] == "11001"
+    _cotizar()
+    assert "zona" not in json.loads(cotizacion.solicitudes[1].read())["datosAsegurado"]
 
 
 def test_misma_clave_devuelve_200(cotizacion: CotizacionFalsa) -> None:

@@ -46,6 +46,18 @@ class PerfilInsumosDto(_Dto):
     fuentes_declaradas: int
 
 
+class CoberturaParametricaDto(_Dto):
+    """HU-W24: la del producto paramétrico y la zona de la cotización."""
+
+    tipo_evento: str
+    zona: str
+    umbral: TextoDecimal
+    unidad: str
+    valor_pago: TextoDecimal
+    moneda: str
+    version_regla: str
+
+
 class InsumosSuscripcionDto(_Dto):
     cotizacion_id: UUID
     oferta_id: UUID | None
@@ -68,11 +80,16 @@ class InsumosSuscripcionDto(_Dto):
     vigente_hasta: datetime
     perfil: PerfilInsumosDto | None
     coincidencias_listas_restrictivas: int | None
+    # HU-W24: opcional; las versiones de cotizacion sin el campo siguen valiendo.
+    cobertura_parametrica: CoberturaParametricaDto | None = None
 
 
 def a_insumos(contenido: bytes) -> InsumosSuscripcion:
     dto = InsumosSuscripcionDto.model_validate_json(contenido)
-    return insumos_de(dto.model_dump(mode="json", by_alias=True))
+    datos = dto.model_dump(mode="json", by_alias=True)
+    if datos["coberturaParametrica"] is None:
+        del datos["coberturaParametrica"]
+    return insumos_de(datos)
 
 
 class CotizacionHttp:

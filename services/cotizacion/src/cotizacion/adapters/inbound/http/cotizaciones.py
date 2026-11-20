@@ -57,6 +57,7 @@ from cotizacion.domain.cotizacion.errores import (
     ProductoNoEncontrado,
     ReglasNoVigentes,
     RolNoPermitido,
+    ZonaRequerida,
 )
 from cotizacion.domain.cotizacion.fallback import (
     AccionSugerida,
@@ -148,6 +149,13 @@ class DatosAseguradoDto(_Dto):
     fecha_nacimiento: date
     plazo_credito_meses: Annotated[int, Field(ge=1, le=600)]
     suma_asegurada: Annotated[int, Field(ge=0, le=1_000_000_000_000)]
+    zona: Annotated[str, Field(pattern=r"^[A-Z0-9]{2,16}$")] | None = Field(
+        default=None,
+        description=(
+            "HU-W24: zona del riesgo (municipio DANE o código de vuelo). Obligatoria en un "
+            "producto paramétrico (ZONA_REQUERIDA); sin uso en los demás"
+        ),
+    )
 
 
 class SolicitudCotizacion(_Dto):
@@ -571,6 +579,13 @@ def error_cotizacion(error: Exception, producto_en_ruta: bool = False) -> ErrorN
                 422,
                 {"campos": list(campos)},
             )
+        case ZonaRequerida(campos=campos):
+            return ErrorNegocio(
+                "ZONA_REQUERIDA",
+                "El producto es paramétrico y requiere la zona del riesgo",
+                422,
+                {"campos": list(campos)},
+            )
         case PerfilNoCorresponde(campos=campos):
             return ErrorNegocio(
                 "PERFIL_NO_CORRESPONDE",
@@ -624,6 +639,7 @@ ERRORES_TRADUCIBLES = (
     ReglasNoVigentes,
     DatosFueraDeRango,
     CoberturaNoDisponible,
+    ZonaRequerida,
     PerfilNoCorresponde,
     PerfilNoEncontrado,
     ClienteNoEncontrado,
@@ -688,8 +704,8 @@ DeadlineMs = Annotated[
         422: _error(
             "SOLICITUD_INVALIDA, IDEMPOTENCIA_CONFLICTO, PRODUCTO_NO_ENCONTRADO, "
             "PRODUCTO_INACTIVO, PRODUCTO_FUERA_DE_VIGENCIA, REGLAS_NO_VIGENTES, "
-            "DATOS_FUERA_DE_RANGO, COBERTURA_NO_DISPONIBLE o PERFIL_NO_CORRESPONDE "
-            "(detalles.campos, sin valores)"
+            "DATOS_FUERA_DE_RANGO, COBERTURA_NO_DISPONIBLE, ZONA_REQUERIDA o "
+            "PERFIL_NO_CORRESPONDE (detalles.campos, sin valores)"
         ),
         503: _error(
             "DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia). HU-W06: con dependencia "
@@ -721,6 +737,7 @@ async def cotizar(
         actor=actor,
         correlation_id=correlation.obtener() or "",
         deadline_ms=x_deadline_ms,
+        zona=datos.zona,
     )
     try:
         cotizacion, pasos, creada = await calcular.ejecutar(comando)

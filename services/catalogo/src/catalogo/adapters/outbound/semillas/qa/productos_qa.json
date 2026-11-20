@@ -35,6 +35,7 @@
       "valorPago": "1400000.00",
       "versionRegla": "1"
     },
-    "reglas": [{"version": "2026.11.1", "vigenteDesde": "2026-11-01T00:00:00Z", "archivo": "qa/reglas_prima_qa_clima_lluvia.json"}]
+    "reglas": [{"version": "2026.11.1", "vigenteDesde": "2026-11-01T00:00:00Z", "archivo": "qa/reglas_prima_qa_clima_lluvia.json"}],
+    "reglasSuscripcion": [{"version": "2026.11.1", "vigenteDesde": "2026-11-01T00:00:00Z", "archivo": "qa/reglas_suscripcion_qa_clima_lluvia.json"}]
   }
 ]

@@ -49,6 +49,8 @@ RECHAZOS_DEL_SOCIO = frozenset(
         "REGLAS_NO_VIGENTES",
         "DATOS_FUERA_DE_RANGO",
         "COBERTURA_NO_DISPONIBLE",
+        # HU-W24: producto paramétrico sin `datosAsegurado.zona`.
+        "ZONA_REQUERIDA",
         "CLIENTE_NO_ENCONTRADO",
     }
 )
@@ -128,15 +130,18 @@ def a_oferta(leida: CotizacionLeida) -> Oferta | None:
 
 
 def cuerpo_solicitud(solicitud: SolicitudOferta) -> dict[str, Any]:
-    """Sin socioId ni perfilId: el socio es el actor."""
+    """Sin socioId ni perfilId: el socio es el actor. `zona` solo si viene (HU-W24)."""
+    datos: dict[str, Any] = {
+        "fechaNacimiento": solicitud.fecha_nacimiento.isoformat(),
+        "plazoCreditoMeses": solicitud.plazo_credito_meses,
+        "sumaAsegurada": solicitud.suma_asegurada,
+    }
+    if solicitud.zona is not None:
+        datos["zona"] = solicitud.zona
     return {
         "clienteId": str(solicitud.cliente_id),
         "productoId": solicitud.producto_id,
-        "datosAsegurado": {
-            "fechaNacimiento": solicitud.fecha_nacimiento.isoformat(),
-            "plazoCreditoMeses": solicitud.plazo_credito_meses,
-            "sumaAsegurada": solicitud.suma_asegurada,
-        },
+        "datosAsegurado": datos,
         "coberturasOpcionales": list(solicitud.coberturas_opcionales),
     }
 

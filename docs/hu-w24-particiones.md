@@ -76,6 +76,20 @@ Con esto, una `PolizaCancelada` (versión 2) que llega antes que la `PolizaEmiti
 
 **`aggregateVersion` en `polizas` (HU-W24, sobre lo que entregó HU-W17):** `PolizaEmitida` sale con `aggregateVersion` = 1, porque la emisión es el primer evento del agregado póliza. El outbox no guarda la columna, así que la agrega el relay común: `PublicadorSns(cliente, topico, VERSIONES_AGREGADO)` y `sobre_json(evento, versiones_agregado)`, con `VERSIONES_AGREGADO = {"PolizaEmitida": 1}` en `polizas/adapters/outbound/eventos.py`. Sin el mapa, los demás servicios publican igual que antes. El esquema publicado lo declara opcional (`const` 1). Pruebas: `libs/solventa-common/tests/unit/test_outbox.py` (`…aggregate_version…`) y `services/polizas/tests/contract/test_poliza_emitida_v1.py` (`test_aggregate_version_es_opcional_y_vale_1` y `test_el_relay_publica_aggregate_version_1_y_el_sobre_cumple_el_esquema`).
 
+**`coberturaParametrica` en `PolizaEmitida` (HU-W24, sobre lo que entregaron HU-W17 y HU-W21):** hasta ahora `polizas` la publicaba siempre en `null`, así que `pagos-parametricos` no tenía coberturas reales que evaluar. La regla está en el producto del catálogo (HU-W21, `clima-lluvia` en QA), pero la zona es de cada póliza y nadie la capturaba. Ahora la zona viaja así:
+
+1. `POST /v1/cotizaciones` (en `cotizacion`, y pasada tal cual por `bff-web` y `api-socios`) acepta `datosAsegurado.zona` (`^[A-Z0-9]{2,16}$`: municipio DANE o código de vuelo).
+   - Si el producto del catálogo trae `parametrico`, la zona es obligatoria: sin ella responde `422 ZONA_REQUERIDA`, con `detalles.campos = ["datosAsegurado.zona"]`.
+   - En los demás productos la zona se ignora.
+   - La huella de idempotencia solo la incluye si viene, así que las solicitudes sin zona conservan su huella.
+2. La cotización guarda la instantánea de la regla y la zona (`cotizaciones.cobertura_parametrica`, migración `007`), como ya guarda sus coberturas, y la entrega en `GET …/insumos-suscripcion` (`coberturaParametrica`, null si no aplica).
+3. `polizas` la guarda con los insumos de la decisión. La forma canónica solo la incluye si existe, así que la huella de los insumos ya guardados no cambia. De ahí pasa a los datos de la emisión (no al PDF) y a `PolizaEmitida.coberturaParametrica`.
+4. Para que `clima-lluvia` se pueda contratar y emitir de punta a punta se agregaron:
+   - su ramo en `polizas` (`RAMOS`: `250` "Paramétrico", el de los datos sintéticos de HU-W21);
+   - sus reglas de suscripción en la semilla QA del catálogo (`qa/reglas_suscripcion_qa_clima_lluvia.json`, las mismas de `vida-hipotecario` sin alternativas). Se publican con `CATALOGO_PRODUCTOS_QA`.
+
+Pruebas: `services/cotizacion/tests/unit/cotizacion/test_hu_w24_cobertura_parametrica.py`, `services/polizas/tests/unit/poliza/test_hu_w24_cobertura_parametrica.py`, `test_hu_w24_*` en `services/api-socios/tests/unit/test_ofertas.py` y `services/bff-web/tests/unit/test_cotizaciones.py`, y `ZONA_REQUERIDA` en `contracts/codigos-error.md`. El portal no pide la zona todavía: el formulario de contratación no cambió, y un producto paramétrico solo se cotiza por API.
+
 **`PolizaCancelada`:** ninguna historia del tablero cubre la cancelación de pólizas, así que `polizas` no la publica. Sigue siendo sintética (`contracts/datos-sinteticos/eventos-parametricos.json`, `cancelaciones` y `ordenCoberturas`): llegará con `aggregateVersion` = 2 cuando exista esa historia. Con eso, una cancelación atrasada no reactiva la cobertura ni una emisión atrasada reactiva una cancelada.
 
 ## 4. Auditoría por lotes
@@ -174,6 +188,7 @@ Necesita credenciales de AWS con `sns:Publish` y lectura del bucket de auditorí
 
 - La flecha `ServiciosWeb --> PagosParametricos` en `modelo_componentes.puml` y `modelo_despliegue.puml` (decisión B1).
 - `PolizaCancelada` publicada por `polizas` (con `aggregateVersion` = 2): no hay historia de cancelación en el tablero; hoy es sintética. `PolizaEmitida` ya publica `aggregateVersion` = 1.
+- Campo «Zona» en el formulario de contratación del portal para productos paramétricos (la API ya la acepta: `datosAsegurado.zona`).
 - Ejecutar en `int` el paso 13 del humo y la N3 (sección 10).
 - Pacto del portal (`web-bff-web.json`) para H10 y H11: el contrato del BFF se cubre hoy con la igualdad de DTO frente a `pagos-parametricos.yaml` (`test_openapi.py`).
 - Las E2E del portal solo corrieron en Chromium (Firefox y WebKit no están instalados en esta Mac).

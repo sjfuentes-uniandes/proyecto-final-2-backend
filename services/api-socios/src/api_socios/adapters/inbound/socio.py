@@ -143,6 +143,13 @@ class DatosAseguradoV1(_V1):
     suma_asegurada: Annotated[int, Field(ge=0, le=1_000_000_000_000)] = Field(
         description="Entero, en la moneda del producto"
     )
+    zona: Annotated[str, Field(pattern=r"^[A-Z0-9]{2,16}$")] | None = Field(
+        default=None,
+        description=(
+            "HU-W24: zona del riesgo (municipio DANE o código de vuelo). Obligatoria en un "
+            "producto paramétrico (ZONA_REQUERIDA); sin uso en los demás"
+        ),
+    )
 
 
 class SolicitudCotizacionV1(_V1):
@@ -281,7 +288,8 @@ _NO_DISPONIBLE = error("SERVICIO_NO_DISPONIBLE: la cotización no respondió (si
         422: error(
             "SOLICITUD_INVALIDA, IDEMPOTENCIA_CONFLICTO, PRODUCTO_NO_ENCONTRADO, "
             "PRODUCTO_INACTIVO, PRODUCTO_FUERA_DE_VIGENCIA, REGLAS_NO_VIGENTES, "
-            "DATOS_FUERA_DE_RANGO o COBERTURA_NO_DISPONIBLE (detalles.campos, sin valores)"
+            "DATOS_FUERA_DE_RANGO, COBERTURA_NO_DISPONIBLE o ZONA_REQUERIDA (detalles.campos, "
+            "sin valores)"
         ),
         503: _NO_DISPONIBLE,
     },
@@ -305,6 +313,7 @@ async def solicitar_cotizacion(
                 plazo_credito_meses=datos.plazo_credito_meses,
                 suma_asegurada=datos.suma_asegurada,
                 coberturas_opcionales=tuple(solicitud.coberturas_opcionales),
+                zona=datos.zona,
             ),
             idempotency_key,
         )

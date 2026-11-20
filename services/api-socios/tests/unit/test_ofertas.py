@@ -251,6 +251,24 @@ def test_reenvia_como_socio_con_la_clave_y_sin_campos_del_back_office(
     assert json.loads(enviada.read()) == SOLICITUD
 
 
+def test_hu_w24_la_zona_del_riesgo_llega_a_cotizacion(
+    entorno: Any, socio: dict[str, str], cotizacion: CotizacionFalsa
+) -> None:
+    """Producto paramétrico: `datosAsegurado.zona` pasa tal cual; sin ella, el cuerpo no la lleva."""
+    con_zona = {**SOLICITUD, "datosAsegurado": {**SOLICITUD["datosAsegurado"], "zona": "11001"}}
+    _cotizar(entorno, socio, json=con_zona)
+    (enviada,) = cotizacion.solicitudes
+    assert json.loads(enviada.read()) == con_zona
+
+
+def test_hu_w24_una_zona_con_otro_formato_es_solicitud_invalida(
+    entorno: Any, socio: dict[str, str], cotizacion: CotizacionFalsa
+) -> None:
+    mala = {**SOLICITUD, "datosAsegurado": {**SOLICITUD["datosAsegurado"], "zona": "bogotá"}}
+    assert _cotizar(entorno, socio, json=mala).status_code == 422
+    assert cotizacion.solicitudes == []
+
+
 def test_misma_clave_devuelve_200(
     entorno: Any, socio: dict[str, str], cotizacion: CotizacionFalsa
 ) -> None:
@@ -292,6 +310,7 @@ def test_la_clave_de_idempotencia_es_obligatoria(
         (422, "REGLAS_NO_VIGENTES"),
         (422, "DATOS_FUERA_DE_RANGO"),
         (422, "COBERTURA_NO_DISPONIBLE"),
+        (422, "ZONA_REQUERIDA"),
         (422, "IDEMPOTENCIA_CONFLICTO"),
         (404, "CLIENTE_NO_ENCONTRADO"),
     ],

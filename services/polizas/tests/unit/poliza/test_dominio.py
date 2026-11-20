@@ -79,9 +79,17 @@ def _firmada() -> Poliza:
 
 
 # --- Tabla de ramos -------------------------------------------------------------------------
+PARAMETRICO = Ramo(codigo="250", nombre="Paramétrico")
+
+
 def test_vida_hipotecario_es_el_ramo_100() -> None:
     assert ramo_de("vida-hipotecario") == VIDA
-    assert dict(RAMOS) == {"vida-hipotecario": VIDA}
+    assert dict(RAMOS) == {"vida-hipotecario": VIDA, "clima-lluvia": PARAMETRICO}
+
+
+def test_el_parametrico_de_qa_es_el_ramo_250() -> None:
+    # HU-W24: `clima-lluvia` (HU-W21) se puede emitir; su número empieza por 250.
+    assert ramo_de("clima-lluvia") == PARAMETRICO
 
 
 def test_la_tabla_de_ramos_no_se_cambia_en_ejecucion() -> None:

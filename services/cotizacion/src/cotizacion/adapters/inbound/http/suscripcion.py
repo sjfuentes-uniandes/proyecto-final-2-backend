@@ -28,6 +28,7 @@ from cotizacion.application.suscripcion.insumos import (
     fuentes_consultadas,
 )
 from cotizacion.domain.cotizacion.errores import CotizacionNoEncontrada, RolNoPermitido
+from cotizacion.domain.cotizacion.modelos import CoberturaParametrica
 from cotizacion.domain.cotizacion.prima import texto
 from cotizacion.domain.perfilamiento.errores import DependenciaNoDisponible
 from cotizacion.domain.perfilamiento.modelos import EstadoIdentidad, EstadoPerfil, NivelRiesgo
@@ -63,6 +64,19 @@ class PerfilInsumosDto(_Dto):
     fuentes_declaradas: int
 
 
+class CoberturaParametricaDto(_Dto):
+    """HU-W24: la regla del producto paramétrico y la zona de la cotización, tal como se cotizaron.
+    `polizas` la publica en `PolizaEmitida.coberturaParametrica`."""
+
+    tipo_evento: str
+    zona: str
+    umbral: TextoDecimal
+    unidad: str
+    valor_pago: TextoDecimal
+    moneda: str
+    version_regla: str
+
+
 class InsumosSuscripcion(_Dto):
     """Resumen de la cotización para la suscripción (HU-W13). Sin fecha de nacimiento: `edad` es
     la cumplida en la fecha de la cotización. Una cotización vencida también se devuelve."""
@@ -93,6 +107,9 @@ class InsumosSuscripcion(_Dto):
     perfil: PerfilInsumosDto | None = Field(description="Null si la cotización no usó perfil")
     coincidencias_listas_restrictivas: int | None = Field(
         description="De DA_REGISTROS_PUBLICOS en el perfil; null si no se consultó"
+    )
+    cobertura_parametrica: CoberturaParametricaDto | None = Field(
+        description="HU-W24: null si el producto no es paramétrico (o en cotizaciones anteriores)",
     )
 
 
@@ -133,6 +150,21 @@ def insumos_de(insumos: Insumos) -> InsumosSuscripcion:
             fuentes_declaradas=len(perfil.fuentes),
         ),
         coincidencias_listas_restrictivas=coincidencias_listas(perfil),
+        cobertura_parametrica=_parametrica(cotizacion.cobertura_parametrica),
+    )
+
+
+def _parametrica(cobertura: CoberturaParametrica | None) -> CoberturaParametricaDto | None:
+    if cobertura is None:
+        return None
+    return CoberturaParametricaDto(
+        tipo_evento=cobertura.tipo_evento,
+        zona=cobertura.zona,
+        umbral=cobertura.umbral,
+        unidad=cobertura.unidad,
+        valor_pago=cobertura.valor_pago,
+        moneda=cobertura.moneda,
+        version_regla=cobertura.version_regla,
     )
 
 

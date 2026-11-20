@@ -42,7 +42,13 @@ from cotizacion.domain.cotizacion import fallback
 from cotizacion.domain.cotizacion import modelos as dominio
 from cotizacion.domain.cotizacion.errores import ProductoNoEncontrado, ReglasNoVigentes
 from cotizacion.domain.cotizacion.fallback import AccionFallback, MensajeFallback, ReglasFallback
-from cotizacion.domain.cotizacion.modelos import Cobertura, EstadoProducto, Producto, ReglasPrima
+from cotizacion.domain.cotizacion.modelos import (
+    Cobertura,
+    EstadoProducto,
+    Producto,
+    ReglaParametrica,
+    ReglasPrima,
+)
 from cotizacion.domain.perfilamiento.errores import DependenciaNoDisponible
 
 DEPENDENCIA = "catalogo.productos"
@@ -180,6 +186,16 @@ class CoberturaDto(_Dto):
     obligatoria: bool
 
 
+class ParametricoDto(_Dto):
+    """HU-W21: la regla de un producto paramétrico (`contracts/openapi/catalogo.yaml`)."""
+
+    tipo_evento: str
+    unidad: str
+    umbral: str
+    valor_pago: str
+    version_regla: str
+
+
 class ProductoDto(_Dto):
     id: str
     version: str
@@ -191,6 +207,8 @@ class ProductoDto(_Dto):
     vigente_desde: datetime
     vigente_hasta: datetime | None
     coberturas: list[CoberturaDto]
+    # HU-W24: se lee para la cobertura paramétrica de la cotización; null en los demás productos.
+    parametrico: ParametricoDto | None = None
 
 
 class ReglasPrimaDto(_Dto):
@@ -243,6 +261,15 @@ def a_producto(dto: ProductoDto) -> Producto:
         vigente_desde=dto.vigente_desde,
         vigente_hasta=dto.vigente_hasta,
         coberturas=tuple(Cobertura(c.codigo, c.nombre, c.obligatoria) for c in dto.coberturas),
+        parametrico=None
+        if dto.parametrico is None
+        else ReglaParametrica(
+            tipo_evento=dto.parametrico.tipo_evento,
+            unidad=dto.parametrico.unidad,
+            umbral=dto.parametrico.umbral,
+            valor_pago=dto.parametrico.valor_pago,
+            version_regla=dto.parametrico.version_regla,
+        ),
     )
 
 

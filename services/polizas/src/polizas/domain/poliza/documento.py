@@ -7,6 +7,9 @@ Puros: sin Pydantic ni E/S.
 - **Sin nombres** (decisión 4; plan §b, decisión 7): el titular y el canal van solo como
   identificadores (`cliente_id`, `socio_id`), porque polizas no llama a clientes ni a api-socios.
   Tampoco lleva lo sensible de los insumos (edad, perfil).
+- HU-W24: `cobertura_parametrica` (la regla y la zona de un producto paramétrico, de la instantánea
+  de la decisión) **no va en el PDF**: viaja con estos datos solo hasta `PolizaEmitida`. Sin ella
+  (productos no paramétricos), el PDF y el evento no cambian.
 - `fecha_documento` es la única fecha que no sale de la aceptación: la elige quien emite, antes de
   generar el PDF, y será `emitida_en` (17.6).
 """
@@ -18,7 +21,7 @@ from uuid import UUID
 
 from polizas.domain.poliza.errores import PolizaInvalida
 from polizas.domain.poliza.modelos import NUMERO, Poliza, Producto, Ramo, Vigencia
-from polizas.domain.suscripcion.modelos import Cobertura
+from polizas.domain.suscripcion.modelos import Cobertura, CoberturaParametrica
 
 
 def _texto(valor: object) -> bool:
@@ -48,6 +51,7 @@ class FuenteDocumento:
     transaccion_id: str
     version_reglas_prima: str
     version_reglas_suscripcion: str
+    cobertura_parametrica: CoberturaParametrica | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +72,8 @@ class DatosDocumento:
     version_reglas_prima: str
     version_reglas_suscripcion: str
     fecha_documento: datetime
+    # HU-W24: solo para PolizaEmitida, no para el PDF.
+    cobertura_parametrica: CoberturaParametrica | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.numero, str) or NUMERO.fullmatch(self.numero) is None:
@@ -116,6 +122,7 @@ def datos_documento(
         version_reglas_prima=fuente.version_reglas_prima,
         version_reglas_suscripcion=fuente.version_reglas_suscripcion,
         fecha_documento=fecha_documento,
+        cobertura_parametrica=fuente.cobertura_parametrica,
     )
 
 
