@@ -142,7 +142,7 @@ Publicar en el tópico es una escritura en AWS: se ejecuta solo con aprobación 
 
 ## 10. Humo R5 en `int` (preparado, sin ejecutar)
 
-Paso 13 de `scripts/plataforma/smoke.sh`: publica 5 `EventoParametricoObservado` sintéticos en el tópico y verifica que cada `eventId` aparezca **una vez** en los objetos `cadena/*.json` de auditoría y que la cola `auditoria` drene. Requiere `auditoria` desplegado con su base.
+Paso 13 de `scripts/plataforma/smoke.sh`: publica 5 eventos sintéticos `HumoAuditoria` en el tópico (solo los admite la cola `auditoria`, así no quedan en `parametricos-eventos`) y verifica que cada `eventId` aparezca **una vez** en los objetos `cadena/*.json` de auditoría y que la cola `auditoria` drene. Requiere `auditoria` desplegado con su base.
 
 ```bash
 make infra-plataforma ENV=int                                     # base y secreto de auditoria (apply: pedir confirmación)
