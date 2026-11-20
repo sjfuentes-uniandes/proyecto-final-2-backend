@@ -252,6 +252,28 @@ def test_el_payload_viaja_tal_cual_sin_pasar_por_float() -> None:
     assert sobre["payload"] == {"monto": Decimal("12345678901234567890.123456789"), "n": "ñ"}
 
 
+def test_con_versiones_agregado_el_sobre_lleva_aggregate_version_solo_de_su_tipo() -> None:
+    versiones = {"PolizaEmitida": 1}
+
+    emitida = json.loads(sobre_json(_evento("PolizaEmitida"), versiones))
+    otra = json.loads(sobre_json(_evento("OfertaAceptada"), versiones))
+
+    assert emitida["aggregateVersion"] == 1
+    assert list(emitida) == [*CAMPOS_SOBRE[:-1], "aggregateVersion", "payload"]
+    assert "aggregateVersion" not in otra
+    assert "aggregateVersion" not in json.loads(sobre_json(_evento("PolizaEmitida")))
+
+
+@pytest.mark.anyio
+async def test_el_publicador_pasa_sus_versiones_al_sobre() -> None:
+    cliente = ClienteSnsFalso()
+    evento = _evento("PolizaEmitida")
+
+    await PublicadorSns(cliente, "arn:t", {"PolizaEmitida": 1}).publicar(evento)
+
+    assert json.loads(cliente.llamadas[0]["Message"])["aggregateVersion"] == 1
+
+
 # --- Publicador SNS -------------------------------------------------------------------------
 class ClienteSnsFalso:
     def __init__(self) -> None:

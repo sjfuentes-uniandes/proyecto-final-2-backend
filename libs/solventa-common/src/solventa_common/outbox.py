@@ -19,6 +19,10 @@ transacción que su efecto (forma de `polizas`: `published_at` nulo, `attempts`,
   la fila deja de reintentarse y queda visible (`published_at` nulo), con un ERROR en el log.
 - El sobre se reconstruye desde las columnas, idéntico al de `contracts/events/`, y el mensaje SNS
   lleva el atributo `eventType` (= `type`), del que dependen los filtros de las colas.
+- `aggregateVersion` (HU-W24): el servicio que lo publica pasa a `PublicadorSns` la versión por
+  `type` (`versiones_agregado`), para los eventos cuya posición en el agregado es fija (por ejemplo,
+  `PolizaEmitida` es la 1); el consumidor la usa con `solventa_common.versionado`. Sin el mapa, o
+  para un `type` que no está, el sobre no la lleva.
 - No lee variables de entorno: el servicio que lo cablea pasa la tabla, el tópico y los tiempos.
   boto3 es síncrono: se llama en un hilo, con timeouts y reintentos explícitos.
 """
@@ -28,7 +32,7 @@ import json
 import logging
 import re
 import time
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -136,23 +140,27 @@ class SobreInvalido(Exception):
     """
 
 
-def sobre_json(evento: EventoPendiente) -> str:
-    """El sobre de `contracts/events/` como JSON, con el payload tal cual (sin pasar por float)."""
+def sobre_json(evento: EventoPendiente, versiones_agregado: Mapping[str, int] | None = None) -> str:
+    """El sobre de `contracts/events/` como JSON, con el payload tal cual (sin pasar por float) y,
+    si `versiones_agregado` tiene su `type`, con `aggregateVersion`."""
     try:
         es_objeto = isinstance(json.loads(evento.payload), dict)
     except ValueError:
         es_objeto = False
     if not es_objeto:
         raise SobreInvalido
+    campos: dict[str, Any] = {
+        "eventId": str(evento.event_id),
+        "aggregateId": str(evento.aggregate_id),
+        "type": evento.event_type,
+        "version": evento.event_version,
+        "occurredAt": _instante(evento.occurred_at),
+        "correlationId": evento.correlation_id,
+    }
+    if versiones_agregado and evento.event_type in versiones_agregado:
+        campos["aggregateVersion"] = versiones_agregado[evento.event_type]
     cabecera = json.dumps(
-        {
-            "eventId": str(evento.event_id),
-            "aggregateId": str(evento.aggregate_id),
-            "type": evento.event_type,
-            "version": evento.event_version,
-            "occurredAt": _instante(evento.occurred_at),
-            "correlationId": evento.correlation_id,
-        },
+        campos,
         ensure_ascii=False,
         separators=(",", ":"),
     )
@@ -289,17 +297,21 @@ def cliente_sns(
 
 
 class PublicadorSns:
-    """Publica el sobre en el tópico con el atributo `eventType`, en un hilo (boto3 es síncrono)."""
+    """Publica el sobre en el tópico con el atributo `eventType`, en un hilo (boto3 es síncrono).
+    `versiones_agregado`: el `aggregateVersion` fijo de cada `type` que lo lleva (ver `sobre_json`)."""
 
-    def __init__(self, cliente: Any, topic_arn: str) -> None:
+    def __init__(
+        self, cliente: Any, topic_arn: str, versiones_agregado: Mapping[str, int] | None = None
+    ) -> None:
         self._cliente = cliente
         self._topic_arn = topic_arn
+        self._versiones = dict(versiones_agregado or {})
 
     async def publicar(self, evento: EventoPendiente) -> None:
         await asyncio.to_thread(
             self._cliente.publish,
             TopicArn=self._topic_arn,
-            Message=sobre_json(evento),
+            Message=sobre_json(evento, self._versiones),
             MessageAttributes={
                 ATRIBUTO_TIPO: {"DataType": "String", "StringValue": evento.event_type}
             },

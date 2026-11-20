@@ -319,6 +319,13 @@
       "title": "Aggregateid",
       "type": "string"
     },
+    "aggregateVersion": {
+      "const": 1,
+      "default": 1,
+      "description": "Posici\u00f3n en el agregado p\u00f3liza: la emisi\u00f3n es la 1",
+      "title": "Aggregateversion",
+      "type": "integer"
+    },
     "correlationId": {
       "title": "Correlationid",
       "type": "string"

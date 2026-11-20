@@ -72,7 +72,11 @@ El manejador escribe su efecto con `tx.conexion` (modo a) o devuelve una continu
 
 Con esto, una `PolizaCancelada` (versión 2) que llega antes que la `PolizaEmitida` (versión 1) deja la cobertura cancelada. La emisión atrasada ya no la reactiva.
 
-**Cómo la usa HU-W21:** `pagos_parametricos/domain/parametrico/orden.py` mantiene `coberturas_activas` con `avanza`: compara `aggregateVersion` si el evento y la fila lo traen y, si no, `occurredAt` (DS3-22). No usa `leer_version`, porque `polizas` todavía no publica `aggregateVersion` (CF-S3-11) y mandaría todas las `PolizaEmitida` a la DLQ. `PolizaCancelada` es sintética (`contracts/datos-sinteticos/eventos-parametricos.json`, `cancelaciones` y `ordenCoberturas`) mientras `polizas` no la publique. Con eso, una cancelación atrasada no reactiva la cobertura ni una emisión atrasada reactiva una cancelada.
+**Cómo la usa HU-W21:** `pagos_parametricos/domain/parametrico/orden.py` mantiene `coberturas_activas` con `avanza`: compara `aggregateVersion` si el evento y la fila lo traen y, si no, `occurredAt` (DS3-22). No usa `leer_version`, porque un evento sin versión (los `PolizaEmitida` ya publicados, la `PolizaCancelada` sintética) iría a la DLQ.
+
+**`aggregateVersion` en `polizas` (HU-W24, sobre lo que entregó HU-W17):** `PolizaEmitida` sale con `aggregateVersion` = 1, porque la emisión es el primer evento del agregado póliza. El outbox no guarda la columna, así que la agrega el relay común: `PublicadorSns(cliente, topico, VERSIONES_AGREGADO)` y `sobre_json(evento, versiones_agregado)`, con `VERSIONES_AGREGADO = {"PolizaEmitida": 1}` en `polizas/adapters/outbound/eventos.py`. Sin el mapa, los demás servicios publican igual que antes. El esquema publicado lo declara opcional (`const` 1). Pruebas: `libs/solventa-common/tests/unit/test_outbox.py` (`…aggregate_version…`) y `services/polizas/tests/contract/test_poliza_emitida_v1.py` (`test_aggregate_version_es_opcional_y_vale_1` y `test_el_relay_publica_aggregate_version_1_y_el_sobre_cumple_el_esquema`).
+
+**`PolizaCancelada`:** ninguna historia del tablero cubre la cancelación de pólizas, así que `polizas` no la publica. Sigue siendo sintética (`contracts/datos-sinteticos/eventos-parametricos.json`, `cancelaciones` y `ordenCoberturas`): llegará con `aggregateVersion` = 2 cuando exista esa historia. Con eso, una cancelación atrasada no reactiva la cobertura ni una emisión atrasada reactiva una cancelada.
 
 ## 4. Auditoría por lotes
 
@@ -137,7 +141,7 @@ Estado tras la integración con `main` (HU-W19 a HU-W23) y `feat/hu-w29/multizon
 - **Póliza referida:** H10 la toma de `payload.numeroPoliza`, `polizaNumero`, `polizaId` o `poliza` (`CAMPOS_POLIZA` en `domain/descarte.py`). Ajustar al esquema de `EventoParametricoObservado`.
 - **Verificación de H11:** hecha (`VerificacionesPg`, pasada a `ColaDescarte` en `armar_cola`).
 - **Migraciones de `pagos-parametricos`:** HU-W24 dejó `001_descartes.sql` (`fallos_consumo`, `resoluciones_descarte` y el `outbox`, que HU-W21 comparte) y `migrar()`. HU-W21 sigue en `002_…`.
-- **Regla de versión:** sección 3 (HU-W21 la aplica con respaldo en `occurredAt`). Sigue faltando que `polizas` publique `aggregateVersion` y `PolizaCancelada`.
+- **Regla de versión:** sección 3. HU-W21 la aplica con respaldo en `occurredAt`; `PolizaEmitida` ya trae `aggregateVersion` = 1. `PolizaCancelada` no tiene historia en el tablero.
 - **HU-W25:** `ejecutar(parada)` ya drena: deja de recibir, libera lo no empezado y espera `plazo_parada_s`. La política `backlog` de `auditoria` y `pagos-parametricos` existe; el escalado por atraso es tuyo.
 
 ## 10. Humo y N3 en `int` (preparados, sin ejecutar)
@@ -169,7 +173,7 @@ Necesita credenciales de AWS con `sns:Publish` y lectura del bucket de auditorí
 ## 11. Pendientes
 
 - La flecha `ServiciosWeb --> PagosParametricos` en `modelo_componentes.puml` y `modelo_despliegue.puml` (decisión B1).
-- `aggregateVersion` y `PolizaCancelada` publicados por `polizas`. Hoy el orden usa `occurredAt` como respaldo (HU-W21).
+- `PolizaCancelada` publicada por `polizas` (con `aggregateVersion` = 2): no hay historia de cancelación en el tablero; hoy es sintética. `PolizaEmitida` ya publica `aggregateVersion` = 1.
 - Ejecutar en `int` el paso 13 del humo y la N3 (sección 10).
 - Pacto del portal (`web-bff-web.json`) para H10 y H11: el contrato del BFF se cubre hoy con la igualdad de DTO frente a `pagos-parametricos.yaml` (`test_openapi.py`).
 - Las E2E del portal solo corrieron en Chromium (Firefox y WebKit no están instalados en esta Mac).

@@ -429,3 +429,39 @@ def test_un_evento_de_una_poliza_no_activa_no_se_produce() -> None:
             datos,
             "corr-emision",
         )
+
+
+# --- HU-W24: aggregateVersion -------------------------------------------------------------------
+def test_aggregate_version_es_opcional_y_vale_1() -> None:
+    """La emisión es el primer evento del agregado póliza; sin el campo, el sobre sigue valiendo
+    (los eventos ya publicados) y con otra versión no."""
+    assert _errores({**_ejemplo(), "aggregateVersion": 1}) == []
+    assert _errores(_ejemplo()) == []
+    assert _errores({**_ejemplo(), "aggregateVersion": 2}) != []
+
+
+def test_el_relay_publica_aggregate_version_1_y_el_sobre_cumple_el_esquema() -> None:
+    """El sobre que arma el relay con `VERSIONES_AGREGADO` (como en `polizas.main`) lleva
+    `aggregateVersion` = 1, el que compara la copia de coberturas de `pagos-parametricos`."""
+    from datetime import datetime
+    from uuid import UUID
+
+    from polizas.adapters.outbound.eventos import VERSIONES_AGREGADO
+    from solventa_common.outbox import EventoPendiente, sobre_json
+
+    ejemplo = _ejemplo()
+    fila = EventoPendiente(
+        event_id=UUID(ejemplo["eventId"]),
+        aggregate_id=UUID(ejemplo["aggregateId"]),
+        event_type=ejemplo["type"],
+        event_version=1,
+        occurred_at=datetime.fromisoformat(ejemplo["occurredAt"]),
+        correlation_id=ejemplo["correlationId"],
+        payload=json.dumps(ejemplo["payload"]),
+        attempts=0,
+    )
+
+    sobre = json.loads(sobre_json(fila, VERSIONES_AGREGADO))
+
+    assert _errores(sobre) == []
+    assert sobre["aggregateVersion"] == 1
