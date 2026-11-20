@@ -2,18 +2,22 @@
 // Corre antes, durante y después de la falla, por el borde real (WAF → API Gateway → bff-web):
 //   R1  cotizar                      POST /web/v1/cotizaciones (Idempotency-Key)
 //   R3  perfil → cotización → decisión → aceptación con Idempotency-Key (HU-W15)
-//   R5  eventos firmados (HMAC-SHA256, D5): desactivado hasta HU-W21/HU-W22 (R5=1 lo activa)
+//   R5  evento de telemetría firmado (HU-W21, D5)  POST /telemetria/v1/eventos → evaluación →
+//       siniestro paramétrico (HU-W22). R5=0 lo desactiva.
 //
 // Cada respuesta queda en la consola como una línea JSON con "hu29"; con --console-output se
 // guarda en resultados/carga.log y reconciliar.py toma las confirmadas (2xx) con su clave.
 // Un reintento usa la MISMA clave: así se prueba que reintentar durante la falla no duplica.
 //
-//   k6 run --console-output=resultados/carga.log \
+//   k6 run --log-format=raw --console-output=resultados/carga.log \
 //     -e CANALES=<api_urls.canales> -e TOKEN=<id token del back-office, grupo asesores> \
-//     -e DURACION=30m experiments/hu-w29/carga.js
+//     -e R5_SECRETO=<hmac_secret del aliado telemetria> -e DURACION=30m experiments/hu-w29/carga.js
+//
+// Como experiments/hu-w09/carga.js: sin imports remotos (si el NAT de la zona caída no responde,
+// k6 igual arranca) y sin imprimir el token ni el secreto.
 //
 // La lógica de los recorridos es la de las N3 (tests/e2e/test_hu_w03_r1_prima.py y
-// test_hu_w13_w15_r3.py). Reutilizable por HU-W09 (Santi-MISO) cambiando las tasas.
+// test_hu_w13_w15_r3.py; R5, la de scripts/dev/firmar_evento.py y test_hu_w21_r5_evaluacion.py).
 import crypto from 'k6/crypto';
 import http from 'k6/http';
 import { sleep } from 'k6';
@@ -23,7 +27,8 @@ const TOKEN = __ENV.TOKEN;
 const DURACION = __ENV.DURACION || '30m';
 const R1_POR_MINUTO = Number(__ENV.R1_POR_MINUTO || 60);
 const R3_POR_MINUTO = Number(__ENV.R3_POR_MINUTO || 6);
-const R5_POR_MINUTO = Number(__ENV.R5_POR_MINUTO || 30);
+const R5_POR_MINUTO = Number(__ENV.R5_POR_MINUTO || 6);
+const R5_ACTIVO = __ENV.R5 !== '0';
 const REINTENTOS = Number(__ENV.REINTENTOS || 3);
 const TIMEOUT = __ENV.TIMEOUT || '10s';
 
@@ -43,7 +48,7 @@ function escenario(exec, porMinuto) {
 export const options = {
   scenarios: Object.assign(
     { r1: escenario('r1', R1_POR_MINUTO), r3: escenario('r3', R3_POR_MINUTO) },
-    __ENV.R5 === '1' ? { r5: escenario('r5', R5_POR_MINUTO) } : {},
+    R5_ACTIVO ? { r5: escenario('r5', R5_POR_MINUTO) } : {},
   ),
   // Sin umbrales: el criterio lo aplican reconciliar.py (AC2) y el informe (AC1, AC3).
   summaryTrendStats: ['avg', 'p(95)', 'p(99)', 'max'],
@@ -51,6 +56,7 @@ export const options = {
 
 export function setup() {
   if (!CANALES || !TOKEN) throw new Error('Indique -e CANALES=<api_urls.canales> -e TOKEN=<id token del back-office>');
+  if (R5_ACTIVO && !__ENV.R5_SECRETO) throw new Error('Indique -e R5_SECRETO=<hmac_secret del aliado telemetria> o -e R5=0');
 }
 
 function uuid() {
@@ -67,7 +73,7 @@ function registrar(recorrido, paso, clave, respuesta, intento, extra) {
   console.log(JSON.stringify(Object.assign({
     hu29: 1, recorrido, paso, clave, intento, status: respuesta.status,
     confirmada: respuesta.status >= 200 && respuesta.status < 300,
-    id: cuerpo && cuerpo.id ? cuerpo.id : null,
+    id: cuerpo ? cuerpo.id || cuerpo.eventoId || null : null,
     correlationId: respuesta.headers['X-Correlation-Id'] || null,
     duracionMs: Math.round(respuesta.timings.duration), instante: new Date().toISOString(),
   }, extra || {})));
@@ -111,26 +117,40 @@ export function r3() {
   }, { cotizacionId: decision.cotizacionId });
 }
 
-// R5: pendiente de HU-W21 (contrato de la entrada firmada). Se configura sin tocar el código:
-//   R5_URL        entrada de telemetría (POST /telemetria/v1/eventos en API Gateway)
-//   R5_SECRETO    hmac_secret del aliado telemetria (ALLY_TELEMETRIA_CREDENTIALS)
-//   R5_PLANTILLA  cuerpo JSON con {{eventId}} y {{instante}}
-//   R5_CABECERA_FIRMA / R5_CABECERA_INSTANTE  nombres de los encabezados de HU-W21
-// La firma es HMAC-SHA256 de "<instante>.<cuerpo>"; ajustar si HU-W21 define otro mensaje.
-const R5_PLANTILLA = __ENV.R5 === '1' ? open(__ENV.R5_PLANTILLA) : '';
+// R5 (HU-W21 §1): cuerpo EventoExterno v1 y firma "sha256=" + HMAC-SHA256(secreto, marca + "." +
+// cuerpo crudo), con la marca en segundos enteros y Z. Por omisión, LLUVIA_ACUMULADA de 135 mm en
+// 05001 (Medellín): supera el umbral (120 mm) de la única cobertura sintética de esa zona
+// (COB-MED-1 de eventos-parametricos.json), así que cada evento activa una póliza y crea un
+// siniestro (HU-W22). La clave es el idExterno: reintentar con el mismo da el mismo eventoId (200).
+const R5_URL = __ENV.R5_URL || `${CANALES}/telemetria/v1/eventos`;
+const R5_FUENTE = __ENV.R5_FUENTE || 'IDEAM-SIM';
+const R5_ZONA = __ENV.R5_ZONA || '05001';
+const R5_VALOR = __ENV.R5_VALOR || '135';
+
+function marcaTiempo() {
+  return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
 
 export function r5() {
-  const eventId = uuid();
-  const instante = new Date().toISOString();
-  const cuerpo = R5_PLANTILLA.replaceAll('{{eventId}}', eventId).replaceAll('{{instante}}', instante);
-  const firma = crypto.hmac('sha256', __ENV.R5_SECRETO, `${instante}.${cuerpo}`, 'hex');
-  const parametros = {
-    headers: { 'Content-Type': 'application/json', [__ENV.R5_CABECERA_FIRMA]: firma, [__ENV.R5_CABECERA_INSTANTE]: instante },
-    timeout: TIMEOUT, tags: { recorrido: 'R5', paso: 'evento' },
-  };
+  const idExterno = `HU29-${uuid().slice(0, 23)}`;
+  const cuerpo = JSON.stringify({
+    versionContrato: '1', idExterno, eventoOrigen: 'EVT-HU29-MULTIZONA', tipoEvento: 'LLUVIA_ACUMULADA',
+    valorObservado: R5_VALOR, unidad: 'mm', zona: R5_ZONA, observadoEn: marcaTiempo(),
+  });
   for (let intento = 1; intento <= REINTENTOS; intento++) {
-    const respuesta = http.post(__ENV.R5_URL, cuerpo, parametros);
-    registrar('R5', 'evento', eventId, respuesta, intento);
+    // Cada intento firma con su propia marca: el adaptador admite ± 300 s de desfase.
+    const marca = marcaTiempo();
+    const parametros = {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Telemetria-Fuente': R5_FUENTE,
+        'X-Telemetria-Marca-Tiempo': marca,
+        'X-Telemetria-Firma': `sha256=${crypto.hmac('sha256', __ENV.R5_SECRETO, `${marca}.${cuerpo}`, 'hex')}`,
+      },
+      timeout: TIMEOUT, tags: { recorrido: 'R5', paso: 'evento' },
+    };
+    const respuesta = http.post(R5_URL, cuerpo, parametros);
+    registrar('R5', 'evento', idExterno, respuesta, intento);
     if (respuesta.status >= 200 && respuesta.status < 300) return;
     if (respuesta.status !== 0 && respuesta.status !== 429 && respuesta.status < 500) return;
     sleep(Math.min(2 ** intento, 8));

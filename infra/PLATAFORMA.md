@@ -397,7 +397,7 @@ Las colas, las DLQ, la retención de 4 días de `parametricos-eventos` y sus ala
 
 ## HU-W29: soporte multizona
 
-Experimento de ARQ-001 en `exp` (D4): pérdida controlada de la zona A con AWS FIS mientras R1 y R3 (R5 cuando HU-W21 y HU-W22 estén en main) siguen por la zona B. Diseño, procedimiento y pruebas: [docs/hu-w29-multizona.md](../docs/hu-w29-multizona.md). Experimento: [experiments/hu-w29/](../experiments/hu-w29/).
+Experimento de ARQ-001 en `exp` (D4): pérdida controlada de la zona A con AWS FIS mientras R1, R3 y R5 siguen por la zona B. Diseño, procedimiento y pruebas: [docs/hu-w29-multizona.md](../docs/hu-w29-multizona.md). Experimento: [experiments/hu-w29/](../experiments/hu-w29/).
 
 | Pieza | Qué cambia | Diagrama que lo respalda |
 | --- | --- | --- |
@@ -406,7 +406,7 @@ Experimento de ARQ-001 en `exp` (D4): pérdida controlada de la zona A con AWS F
 | Cronología del incidente | La regla de HU-W27 (`ECS Task State Change`, `ECS Service Action`, `ECS Deployment State Change`) se completa con `RDS DB Instance Event` de la base del ambiente y, en `exp`, `FIS Experiment State Change`, en el mismo grupo `/ecs/<prefijo>/events`. `moved` conserva el target existente en `int` | `ECS ..> Observability` y `RDS ..> Observability` (`diagrama_despliegue_ecs_fargate.puml`) |
 | Rol de AWS FIS (`solventa-exp-fis`) | `experiments.tf`, solo con `experiments_enabled`. Ver [Mínimo privilegio](#mínimo-privilegio-de-hu-w29) | "Monitor de salud y retiro de réplicas fallidas" (`modelo_concurrencia.puml`): la falla lo ejercita |
 | Bucket `solventa-exp-experimentos-<cuenta>` | Privado, solo TLS, cifrado (`audit_sse`) y `force_destroy`. Guarda `hu-w29/<experimento>/informe.json` y `hu-w29/informe.json` (el último) | Decisión 3 de HU-W29 (bucket propio de `exp`): ningún bucket de la plataforma se abre a los BFF |
-| Tarea `solventa-exp-reconciliacion` | Como `db-bootstrap`: `postgres:16-alpine`, psql con `default_transaction_read_only=on` y el usuario de cada servicio (`cotizacion`, `polizas`, `dinero`, `adaptador-telemetria`, `pagos-parametricos`, `siniestros`), nunca el maestro. El comando lo pasa `experiments/hu-w29/extraer.sh` | Decisión 4 de HU-W29 (reconciliar en la VPC) |
+| Tarea `solventa-exp-reconciliacion` | Como `db-bootstrap`: `postgres:16-alpine`, psql con `default_transaction_read_only=on` y el usuario de cada servicio (`cotizacion`, `polizas`, `dinero`, `adaptador-telemetria`, `pagos-parametricos`, `siniestros`), nunca el maestro. Extrae R1, R3 y R5: del evento recibido al pago del siniestro paramétrico. El comando lo pasa `experiments/hu-w29/extraer.sh` | Decisión 4 de HU-W29 (reconciliar en la VPC) |
 | `bff-web` (Continuidad y Conciliación) | `continuity_readers`: `CONTINUIDAD_EVENTOS`, `CONTINUIDAD_ALB`, `CONTINUIDAD_RECORRIDOS` (recorridos y sus alarmas de HU-W28, solo las que existen) y `CONTINUIDAD_BUCKET` (vacío fuera de `exp`) | "Métricas, trazas, registros y alertas" (`modelo_despliegue.puml`), como HU-W27 y HU-W28 |
 
 **Colas y eventos:** ninguno nuevo. La cronología solo lee eventos de AWS (ECS, RDS y FIS).

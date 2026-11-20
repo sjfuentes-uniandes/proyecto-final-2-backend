@@ -14,7 +14,10 @@ muestra en Operación › Conciliación (I05). Sale con 0 solo si no hay diferen
         --desde 2026-11-20T14:00:00Z --hasta 2026-11-20T14:30:00Z
 
 Sin dependencias fuera de la biblioteca estándar: corre en la máquina de quien ejecuta el
-experimento. R5 (eventos firmados) queda como verificación pendiente hasta HU-W21 y HU-W22.
+experimento.
+
+R1 (cotizaciones), R3 (aceptaciones y su cobro) y R5 (evento de telemetría recibido y evaluado una
+vez, un siniestro paramétrico por activación y un pago por siniestro, HU-W21 a HU-W23).
 """
 
 import argparse
@@ -22,7 +25,7 @@ import json
 import re
 import sys
 from collections import Counter
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -30,7 +33,7 @@ from typing import Any
 VERSION = 1
 COINCIDE, DIFERENCIA, PENDIENTE = "COINCIDE", "DIFERENCIA", "PENDIENTE"
 # Paso de carga.js → tipo de fila de extraer.sh donde debe existir una vez por clave.
-DESTINOS = {"cotizacion": "cotizacion", "aceptacion": "aceptacion"}
+DESTINOS = {"cotizacion": "cotizacion", "aceptacion": "aceptacion", "evento": "evento_recibido"}
 # Objetivo de recuperación de ARQ-001 (manifiesto.md): la carga vuelve a una tasa de error
 # menor o igual a error_rate_percent (1 %, HU-W28) en 10 minutos o menos desde la inyección.
 OBJETIVO_REDIRECCION_S = 600
@@ -98,8 +101,11 @@ def _existencia_unica(
 
 def _recorridos(intentos: list[dict[str, Any]]) -> dict[str, Any]:
     resumen: dict[str, Any] = {}
-    for recorrido in ("R1", "R3"):
+    for recorrido in ("R1", "R3", "R5"):
         propios = [i for i in intentos if i.get("recorrido") == recorrido]
+        if recorrido == "R5" and not propios:
+            resumen["R5"] = {"estado": "SIN_CARGA"}  # carga.js con R5=0
+            continue
         errores = [i for i in propios if not i.get("confirmada")]
         resumen[recorrido] = {
             "intentos": len(propios),
@@ -109,16 +115,6 @@ def _recorridos(intentos: list[dict[str, Any]]) -> dict[str, Any]:
                 sorted(Counter(str(i.get("status")) for i in errores).items())
             ),
         }
-    if any(i.get("recorrido") == "R5" for i in intentos):
-        propios = [i for i in intentos if i.get("recorrido") == "R5"]
-        resumen["R5"] = {
-            "intentos": len(propios),
-            "confirmadas": len({i["clave"] for i in propios if i.get("confirmada")}),
-            "errores": sum(1 for i in propios if not i.get("confirmada")),
-            "estado": "SIN_RECONCILIAR",
-        }
-    else:
-        resumen["R5"] = {"estado": "PENDIENTE_HU_W21_W22"}
     return resumen
 
 
@@ -219,6 +215,82 @@ def _cobros(
     ]
 
 
+def _parametricos(
+    claves: set[str],
+    filas: Callable[[str], list[Fila]],
+    en_transito: bool,
+) -> list[dict[str, Any]]:
+    """R5 después de la entrada: evaluación única, un siniestro por activación (UNIQUE evento-
+    póliza, modelo_concurrencia (9)) y un pago por siniestro (HU-W23)."""
+    evaluacion = _existencia_unica(
+        "eventos_evaluados",
+        "Eventos confirmados (R5) evaluados una vez",
+        claves,
+        filas("evento_evaluado"),
+    )
+    solo_faltantes = all(d["problema"] == "FALTANTE" for d in evaluacion["detalle"])
+    if evaluacion["resultado"] == DIFERENCIA and solo_faltantes and en_transito:
+        evaluacion["resultado"] = PENDIENTE  # el evento sigue en el Outbox o en su DLQ
+    eventos = {str(f["id"]) for f in filas("evento_recibido") if str(f["clave"]) in claves}
+    activaciones = [f for f in filas("activacion") if str(f["id"]) in eventos]
+    siniestros = Counter(
+        (str(f["eventoId"]), str(f["polizaId"]))
+        for f in filas("siniestro")
+        if str(f.get("eventoId")) in eventos
+    )
+    sin_siniestro = [a for a in activaciones if siniestros[(str(a["id"]), str(a["polizaId"]))] == 0]
+    if not sin_siniestro:
+        resultado = COINCIDE
+    elif all(a.get("estado") == "PENDIENTE" for a in sin_siniestro):
+        resultado = PENDIENTE  # pagos-parametricos todavía reintenta la creación (HU-W22)
+    else:
+        resultado = DIFERENCIA
+    duplicados = sorted(par for par, n in siniestros.items() if n > 1)
+    propios = {str(f["id"]) for f in filas("siniestro") if str(f.get("eventoId")) in eventos}
+    pagos = Counter(
+        str(f["siniestroId"]) for f in filas("indemnizacion") if str(f["siniestroId"]) in propios
+    )
+    pagos_duplicados = sorted(s for s, n in pagos.items() if n > 1)
+    return [
+        evaluacion,
+        _verificacion(
+            "siniestro_por_activacion",
+            "Cada activación (R5) tiene un siniestro paramétrico",
+            len(activaciones),
+            len(activaciones) - len(sin_siniestro),
+            resultado,
+            [
+                {"eventoId": a["id"], "polizaId": a["polizaId"], "problema": "SIN_SINIESTRO"}
+                for a in sin_siniestro
+            ],
+        ),
+        _verificacion(
+            "siniestros_duplicados",
+            "Siniestros paramétricos duplicados por reentrega",
+            0,
+            len(duplicados),
+            DIFERENCIA if duplicados else COINCIDE,
+            [
+                {
+                    "eventoId": e,
+                    "polizaId": p,
+                    "problema": "DUPLICADA",
+                    "siniestros": siniestros[(e, p)],
+                }
+                for e, p in duplicados
+            ],
+        ),
+        _verificacion(
+            "pagos_duplicados",
+            "Indemnizaciones duplicadas por siniestro",
+            0,
+            len(pagos_duplicados),
+            DIFERENCIA if pagos_duplicados else COINCIDE,
+            [{"siniestroId": s, "pagos": pagos[s]} for s in pagos_duplicados],
+        ),
+    ]
+
+
 def _estado(verificaciones: list[dict[str, Any]]) -> str:
     resultados = {v["resultado"] for v in verificaciones}
     if DIFERENCIA in resultados:
@@ -261,17 +333,29 @@ def conciliar(
             claves["aceptacion"],
             filas("aceptacion"),
         ),
+        _existencia_unica(
+            "eventos_recibidos",
+            "Eventos de telemetría confirmados (R5) recibidos una vez",
+            claves["evento"],
+            filas("evento_recibido"),
+        ),
     ]
     recaudos = Counter(str(f["clave"]) for f in filas("recaudo"))
     pendientes = {str(f["base"]): int(f["total"]) for f in filas("outbox_pendiente")}
     en_transito = pendientes.get("polizas", 0) > 0 or any(
         str(d.get("cola", "")).endswith("dinero-aceptaciones-dlq") for d in dlq
     )
+    en_transito_r5 = pendientes.get("adaptador_telemetria", 0) > 0 or any(
+        str(d.get("cola", "")).endswith("parametricos-eventos-dlq") for d in dlq
+    )
     sin_explicacion = [d for d in dlq if str(d.get("messageId")) not in explicaciones]
     total_pendientes = sum(pendientes.values())
+    cobros = _cobros(aceptaciones, recaudos, en_transito)
+    parametricos = _parametricos(claves["evento"], filas, en_transito_r5)
     verificaciones = [
         *existencia,
-        *_cobros(aceptaciones, recaudos, en_transito),
+        *cobros,
+        *parametricos,
         _verificacion(
             "dlq_sin_explicacion",
             "Mensajes en DLQ sin explicación",
@@ -297,10 +381,12 @@ def conciliar(
         "ventana": {"desde": desde, "hasta": hasta},
         "estado": _estado(verificaciones),
         "resumen": {
-            "confirmadas": len(claves["cotizacion"]) + len(claves["aceptacion"]),
+            "confirmadas": sum(len(c) for c in claves.values()),
             "perdidas": _contar(existencia, "FALTANTE"),
-            "duplicadas": _contar(existencia, "DUPLICADA"),
-            "cobrosDuplicados": verificaciones[3]["observado"],
+            # Operaciones registradas dos veces y siniestros paramétricos repetidos.
+            "duplicadas": _contar([*existencia, parametricos[2]], "DUPLICADA"),
+            # Movimientos de dinero repetidos: cobros (R3) e indemnizaciones (R5).
+            "cobrosDuplicados": cobros[1]["observado"] + parametricos[3]["observado"],
             "dlqSinExplicacion": len(sin_explicacion),
             "pendientesOutbox": total_pendientes,
             "solicitudes": len(intentos),

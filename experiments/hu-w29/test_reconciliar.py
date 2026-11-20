@@ -209,8 +209,175 @@ def test_un_mensaje_en_dlq_sin_explicacion_es_una_diferencia() -> None:
     }
 
 
-def test_r5_queda_pendiente_hasta_hu_w21() -> None:
-    assert conciliar([], sin_pendientes())["recorridos"]["R5"] == {"estado": "PENDIENTE_HU_W21_W22"}
+def test_sin_carga_de_r5_lo_dice_el_informe() -> None:
+    assert conciliar([], sin_pendientes())["recorridos"]["R5"] == {"estado": "SIN_CARGA"}
+
+
+# --- R5: evento firmado → evaluación → siniestro paramétrico → pago (HU-W21 a HU-W23) ----------
+def r5(id_externo: str, evento_id: str, status: int = 202) -> dict[str, Any]:
+    return intento("evento", id_externo, status=status, recorrido="R5", id=evento_id)
+
+
+def filas_r5(id_externo: str, evento_id: str, siniestros: int = 1, pagos: int = 1) -> list[Any]:
+    """El recorrido completo de un evento que activa una póliza (COB-MED-1)."""
+    filas: list[Any] = [
+        {
+            "base": "adaptador_telemetria",
+            "tipo": "evento_recibido",
+            "id": evento_id,
+            "clave": id_externo,
+        },
+        {
+            "base": "pagos_parametricos",
+            "tipo": "evento_evaluado",
+            "id": evento_id,
+            "clave": id_externo,
+            "decision": "ACTIVA",
+        },
+        {
+            "base": "pagos_parametricos",
+            "tipo": "activacion",
+            "id": evento_id,
+            "polizaId": "p-med",
+            "estado": "SINIESTRO_CREADO",
+        },
+    ]
+    for n in range(siniestros):
+        filas.append(
+            {
+                "base": "siniestros",
+                "tipo": "siniestro",
+                "id": f"s-{evento_id}-{n}",
+                "eventoId": evento_id,
+                "polizaId": "p-med",
+            }
+        )
+    filas += [
+        {
+            "base": "dinero",
+            "tipo": "indemnizacion",
+            "id": f"i-{n}",
+            "siniestroId": f"s-{evento_id}-0",
+            "estado": "CONFIRMADA",
+        }
+        for n in range(pagos)
+    ]
+    return filas
+
+
+def sin_pendientes_r5() -> list[dict[str, Any]]:
+    return [
+        *sin_pendientes(),
+        *(
+            {"base": b, "tipo": "outbox_pendiente", "total": 0}
+            for b in ("adaptador_telemetria", "pagos_parametricos", "siniestros")
+        ),
+    ]
+
+
+def test_r5_sin_diferencias_un_evento_un_siniestro_un_pago() -> None:
+    # El reintento con el mismo idExterno (503 y luego 200) es la misma operación.
+    intentos = [
+        r5("HU29-a", "e-a", status=503),
+        r5("HU29-a", "e-a", status=200),
+        r5("HU29-b", "e-b"),
+    ]
+    informe = conciliar(
+        intentos, [*filas_r5("HU29-a", "e-a"), *filas_r5("HU29-b", "e-b"), *sin_pendientes_r5()]
+    )
+
+    assert informe["estado"] == "SIN_DIFERENCIAS"
+    for id_ in ("eventos_recibidos", "eventos_evaluados", "siniestro_por_activacion"):
+        assert (
+            verificacion(informe, id_)["esperado"],
+            verificacion(informe, id_)["observado"],
+        ) == (2, 2), id_
+    assert informe["resumen"]["confirmadas"] == 2
+    assert informe["recorridos"]["R5"] == {
+        "intentos": 3,
+        "confirmadas": 2,
+        "errores": 1,
+        "erroresPorEstado": {"503": 1},
+    }
+
+
+def test_r5_evento_confirmado_que_no_se_recibio_es_una_perdida() -> None:
+    informe = conciliar([r5("HU29-a", "e-a")], sin_pendientes_r5())
+
+    assert verificacion(informe, "eventos_recibidos")["detalle"] == [
+        {"clave": "HU29-a", "problema": "FALTANTE"}
+    ]
+    assert (informe["estado"], informe["resumen"]["perdidas"]) == ("CON_DIFERENCIAS", 1)
+
+
+def test_r5_evaluacion_pendiente_si_el_evento_sigue_en_el_outbox_o_en_la_dlq() -> None:
+    recibido = filas_r5("HU29-a", "e-a")[:1]
+    en_outbox = [
+        *sin_pendientes(),
+        {"base": "adaptador_telemetria", "tipo": "outbox_pendiente", "total": 1},
+    ]
+    assert (
+        verificacion(conciliar([r5("HU29-a", "e-a")], recibido + en_outbox), "eventos_evaluados")[
+            "resultado"
+        ]
+        == "PENDIENTE"
+    )
+
+    en_dlq = [{"cola": "solventa-exp-parametricos-eventos-dlq", "messageId": "m1"}]
+    con_dlq = conciliar(
+        [r5("HU29-a", "e-a")], recibido + sin_pendientes_r5(), en_dlq, {"m1": "reproceso desde H11"}
+    )
+    assert verificacion(con_dlq, "eventos_evaluados")["resultado"] == "PENDIENTE"
+
+    perdido = conciliar([r5("HU29-a", "e-a")], recibido + sin_pendientes_r5())
+    assert (verificacion(perdido, "eventos_evaluados")["resultado"], perdido["estado"]) == (
+        "DIFERENCIA",
+        "CON_DIFERENCIAS",
+    )
+
+
+def test_r5_activacion_sin_siniestro_pendiente_o_diferencia() -> None:
+    filas = filas_r5("HU29-a", "e-a", siniestros=0, pagos=0)
+    filas[2] = {**filas[2], "estado": "PENDIENTE"}
+    pendiente = conciliar([r5("HU29-a", "e-a")], [*filas, *sin_pendientes_r5()])
+    assert verificacion(pendiente, "siniestro_por_activacion")["resultado"] == "PENDIENTE"
+
+    filas[2] = {**filas[2], "estado": "SINIESTRO_CREADO"}
+    perdido = conciliar([r5("HU29-a", "e-a")], [*filas, *sin_pendientes_r5()])
+    siniestro = verificacion(perdido, "siniestro_por_activacion")
+    assert (siniestro["resultado"], siniestro["detalle"]) == (
+        "DIFERENCIA",
+        [{"eventoId": "e-a", "polizaId": "p-med", "problema": "SIN_SINIESTRO"}],
+    )
+
+
+def test_r5_siniestro_y_pago_duplicados_cuentan_como_duplicadas_y_cobros_duplicados() -> None:
+    informe = conciliar(
+        [r5("HU29-a", "e-a")],
+        [*filas_r5("HU29-a", "e-a", siniestros=2, pagos=2), *sin_pendientes_r5()],
+    )
+
+    assert verificacion(informe, "siniestros_duplicados")["detalle"] == [
+        {"eventoId": "e-a", "polizaId": "p-med", "problema": "DUPLICADA", "siniestros": 2}
+    ]
+    assert verificacion(informe, "pagos_duplicados")["detalle"] == [
+        {"siniestroId": "s-e-a-0", "pagos": 2}
+    ]
+    assert (
+        informe["resumen"]["duplicadas"],
+        informe["resumen"]["cobrosDuplicados"],
+        informe["estado"],
+    ) == (1, 1, "CON_DIFERENCIAS")
+
+
+def test_r5_ignora_siniestros_y_activaciones_de_otros_eventos() -> None:
+    ajenas = [
+        f for f in filas_r5("OTRO", "e-x", siniestros=2, pagos=2) if f["tipo"] != "evento_recibido"
+    ]
+    informe = conciliar(
+        [r5("HU29-a", "e-a")], [*filas_r5("HU29-a", "e-a"), *ajenas, *sin_pendientes_r5()]
+    )
+    assert informe["estado"] == "SIN_DIFERENCIAS"
 
 
 def test_lee_la_consola_de_k6_en_logfmt_y_en_json() -> None:

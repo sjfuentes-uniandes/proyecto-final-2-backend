@@ -1,6 +1,6 @@
 # HU-W29 · Informe del experimento multizona
 
-> **Estado: pendiente de ejecución.** El experimento se ejecuta cuando HU-W21 y HU-W22 (R5) estén en main. Esta plantilla se llena con la evidencia de `resultados/` y se contrasta con el objetivo de [manifiesto.md](manifiesto.md).
+> **Estado: pendiente de ejecución.** El experimento se ejecuta con la confirmación del despliegue de `exp` (guía de verificación de los AC). Esta plantilla se llena con la evidencia de `resultados/` y se contrasta con el objetivo de [manifiesto.md](manifiesto.md).
 
 | | |
 | --- | --- |
@@ -48,7 +48,7 @@ Fuente: `informe.json` (`recorridos`, `continuidad.serie`).
 | --- | --- | --- | --- | --- |
 | R1 | | | | |
 | R3 | | | | |
-| R5 | pendiente de HU-W21/HU-W22 | | | |
+| R5 | | | | |
 
 ## 4. Reconciliación
 
@@ -59,7 +59,12 @@ Fuente: `informe.json` (`verificaciones`, `dlq`).
 | Cotizaciones confirmadas registradas una vez | | | |
 | Aceptaciones confirmadas registradas una vez | | | |
 | Cada aceptación con un cobro | | | |
+| Eventos de telemetría recibidos una vez (R5) | | | |
 | Cobros duplicados | 0 | | |
+| Eventos de telemetría evaluados una vez (R5) | | | |
+| Cada activación con su siniestro paramétrico (R5) | | | |
+| Siniestros paramétricos duplicados | 0 | | |
+| Indemnizaciones duplicadas | 0 | | |
 | DLQ sin explicación | 0 | | |
 | Outbox pendiente | 0 | | |
 

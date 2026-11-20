@@ -214,6 +214,14 @@ run "multizona_hu_w29" {
   }
   assert {
     condition = (
+      jsondecode(local.environment["bff-web"]["CONTINUIDAD_RECORRIDOS"]).R5.alarmas == ["adaptador-telemetria-errores-critica", "pagos-parametricos-errores-critica", "siniestros-errores-critica", "cola-parametricos-eventos-atraso"] &&
+      jsondecode(local.environment["bff-web"]["CONTINUIDAD_RECORRIDOS"]).R1.alarmas == ["cotizacion-p95-critica", "cotizacion-errores-critica", "bff-web-sin-destinos", "api-canales-5xx"] &&
+      contains(jsondecode(local.environment["bff-web"]["CONTINUIDAD_RECORRIDOS"]).R3.alarmas, "recaudos-pendientes")
+    )
+    error_message = "AC1: en exp, I04 sigue R1, R3 y R5 con todas sus alarmas de HU-W28 (ninguna se pierde por nombre)."
+  }
+  assert {
+    condition = (
       local.environment["bff-web"]["CONTINUIDAD_BUCKET"] == "solventa-exp-experimentos-123456789012" &&
       contains([for st in local.task_statements["bff-web"] : st if contains(st.Action, "s3:GetObject")][0].Resource, "arn:aws:s3:::solventa-exp-experimentos-123456789012/hu-w29/*") &&
       length([for st in local.task_statements["bff-web"] : st if contains(st.Action, "s3:GetObject")][0].Resource) == 1 &&

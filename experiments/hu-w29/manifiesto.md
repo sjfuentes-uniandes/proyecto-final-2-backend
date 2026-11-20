@@ -11,9 +11,9 @@ ARQ-001 pide disponibilidad y confiabilidad de punta a punta con un **SLO mensua
 | # | Criterio | Meta | Cómo se mide |
 | --- | --- | --- | --- |
 | O1 | Tiempo de redirección | **≤ 10 min** desde la inyección | `continuidad.redireccionSegundos` de `informe.json`: inicio del primer minuto desde el cual la carga se mantiene con tasa de error ≤ 1 % (`error_rate_percent` de HU-W28) |
-| O2 | Operaciones confirmadas perdidas | **0** | `resumen.perdidas` |
-| O3 | Operaciones confirmadas duplicadas | **0** | `resumen.duplicadas` |
-| O4 | Cobros duplicados | **0** | `resumen.cobrosDuplicados` |
+| O2 | Operaciones confirmadas perdidas (R1, R3 y R5) | **0** | `resumen.perdidas` y `eventos_evaluados`, `siniestro_por_activacion` sin `DIFERENCIA` |
+| O3 | Operaciones confirmadas o siniestros paramétricos duplicados | **0** | `resumen.duplicadas` |
+| O4 | Cobros (R3) o indemnizaciones (R5) duplicados | **0** | `resumen.cobrosDuplicados` |
 | O5 | Mensajes en DLQ sin explicación | **0** | `resumen.dlqSinExplicacion` |
 | O6 | Cronología | Detección, failover y recuperación con hora | `cronologia.ndjson`, `alarmas.json` y `fis-experimento.json` |
 
@@ -23,7 +23,7 @@ ARQ-001 pide disponibilidad y confiabilidad de punta a punta con un **SLO mensua
 1. saca del balanceo a las tareas de A (ALB interno y Service Connect, "Monitor de salud y retiro de réplicas fallidas" de `modelo_concurrencia.puml`);
 2. promueve el standby de RDS en B ("El standby atiende fallas de instancia o zona", `diagrama_estrategia_replicacion_recuperacion.puml`);
 3. mantiene R1 y R3 operando por la zona B ("operación activa-activa entre dos zonas de una región", `modelo_despliegue.puml`);
-4. no pierde ni duplica operaciones confirmadas: `Idempotency-Key` en el borde, unicidad por clave en las bases, Outbox e Inbox.
+4. no pierde ni duplica operaciones confirmadas: `Idempotency-Key` en el borde, `eventoId` determinista de la telemetría, unicidad por clave en las bases, Outbox e Inbox.
 
 ## 2. Falla inyectada
 
@@ -34,7 +34,7 @@ ARQ-001 pide disponibilidad y confiabilidad de punta a punta con un **SLO mensua
 
 - **Condición de parada:** alarma crítica `solventa-exp-api-canales-5xx` (HU-W28). Si la tasa de 5XX del API de canales supera `api_5xx_rate` (5 %) en 3 de 5 minutos, FIS restaura las ACL y termina. Una parada así se reporta como **no cumplido**: indica que la zona sana no absorbió la carga.
 - **Caché:** Valkey tiene un solo nodo. Si quedó en la zona A, se pierde la caché (Cache-Aside): sube la latencia y no se pierden datos. Se registra la zona del nodo en la evidencia.
-- **Fuera de alcance:** falla regional (arquitectura objetivo, `modelo_despliegue.puml`) y R5 hasta que HU-W21 y HU-W22 estén en main.
+- **Fuera de alcance:** falla regional (arquitectura objetivo, `modelo_despliegue.puml`).
 
 ## 3. Carga de fondo
 
@@ -44,7 +44,7 @@ ARQ-001 pide disponibilidad y confiabilidad de punta a punta con un **SLO mensua
 | --- | --- | --- |
 | R1 cotizar | 60/min | Cotización 201 (`cotizaciones.idempotency_key`) |
 | R3 aceptar | 6/min (perfil → cotización → decisión → aceptación) | Aceptación 201 (`aceptaciones.idempotency_key`) y su cobro (`recaudos.clave_recaudo = aceptacionId`) |
-| R5 eventos firmados | 30/min | **Pendiente de HU-W21 y HU-W22** (`R5=1`) |
+| R5 evento de telemetría firmado | 6/min (`LLUVIA_ACUMULADA` de 135 mm en `05001`) | Evento 202/200 (`eventos_recibidos.id_externo`), evaluado una vez (`eventos_evaluados`), un siniestro por activación (`siniestros`, UNIQUE evento-póliza) y un pago por siniestro (`indemnizaciones`) |
 
 Duración: 30 min (≥ 5 min antes de la inyección, 10 min de falla y ≥ 15 min de recuperación). Ventana de la reconciliación: inicio de la carga − 1 min a fin + 1 min.
 
@@ -61,6 +61,8 @@ Duración: 30 min (≥ 5 min antes de la inyección, 10 min de falla y ≥ 15 mi
 | Base | `db.t4g.small` Multi-AZ, primaria en `<zona>` y standby en `<zona>` |
 | Nodo de caché | `<zona del nodo Valkey>` |
 | k6 | `<k6 version>` |
+| Secreto de telemetría | Cargado en `solventa-exp/aliados/telemetria` (no se versiona; solo la fecha de carga) |
+| Coberturas R5 | `COB-*` de `contracts/datos-sinteticos/eventos-parametricos.json` publicadas (fecha) |
 | Inicio de la carga / inyección / fin | `<UTC>` |
 
 ```bash
@@ -90,7 +92,7 @@ Una corrida completa (desplegar, humo, 30 min de carga, recolectar y destruir) t
 
 Cada paso con AWS requiere confirmación; detalle en [docs/hu-w29-multizona.md](../../docs/hu-w29-multizona.md#3-experimento-en-exp).
 
-1. `make infra-desplegar ENV=exp` → `make infra-probar ENV=exp` → `./distribucion.sh antes` (N2: cada servicio crítico con tareas saludables en dos zonas) y R1 y R3 en verde (`make test-e2e` con `-k "hu_w03 or hu_w13_w15"`).
+1. `make infra-desplegar ENV=exp` → secreto `hmac_secret` de prueba en `solventa-exp/aliados/telemetria` → `make infra-probar ENV=exp` → `./distribucion.sh antes` (N2: cada servicio crítico con tareas saludables en dos zonas) → coberturas sintéticas (E2E de HU-W21 con `E2E_PUBLICAR_COBERTURAS=1`) → R1, R3 y R5 en verde (`make test-e2e` con `-k "hu_w03 or hu_w13_w15 or hu_w21 or hu_w22"`).
 2. `./preparar-fis.sh` y crear la plantilla.
 3. Iniciar `carga.js` (30 min). A los 5 min, iniciar el experimento FIS; `./distribucion.sh durante` a los 5 min de la inyección.
 4. Al terminar la carga: `./distribucion.sh despues`, `./recolectar.sh`, `./extraer.sh`, revisar la DLQ (`explicaciones.json`) y `reconciliar.py --inyeccion <startTime de la acción>`.

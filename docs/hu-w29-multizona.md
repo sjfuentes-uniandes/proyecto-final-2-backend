@@ -2,14 +2,14 @@
 
 Issue: [sjfuentes-uniandes/proyecto-final#71](https://github.com/sjfuentes-uniandes/proyecto-final/issues/71). ASR: [ARQ-001](https://github.com/sjfuentes-uniandes/proyecto-final/issues/28). Recorridos R1, R3 y R5 en `exp` (D4). Pantallas I04 e I05 del portal. Infraestructura: [infra/PLATAFORMA.md, HU-W29](../infra/PLATAFORMA.md#hu-w29-soporte-multizona). Experimento: [experiments/hu-w29/](../experiments/hu-w29/).
 
-> **Estado.** La implementación está completa y validada sin AWS: N1, unitarias, contrato, Jasmine y Playwright. **R5 queda pendiente**: `adaptador-telemetria` todavía es el esqueleto de HU-S03 (solo `/health`) y `pagos-parametricos` no consume `parametricos-eventos`. La entrada firmada es HU-W21 y la creación del siniestro es HU-W22, ambas de capbmaster. El experimento en `exp` se ejecuta cuando las dos estén en main (sección 5).
+> **Estado.** La implementación está completa, R5 incluido (HU-W21 y HU-W22 ya están en main), y validada sin AWS: N1, unitarias, contrato, Jasmine, Playwright y la carga contra un simulador que usa el dominio real de `adaptador-telemetria`. Lo único que falta es **ejecutar el experimento en `exp`** (sección 5), que requiere confirmar el despliegue y su costo. La guía paso a paso de cada criterio está en `Proyecto Final/HU-W29_verificacion_AC.md`, fuera de los repos.
 
 ## 1. Diseño en una página
 
 - **Dos zonas reales en `exp`:** `high_availability = true` (RDS Multi-AZ y un NAT Gateway por zona), FARGATE sin Spot, `min_replicas = 2` y `availability_zone_rebalancing` en todos los servicios. En `int` hay tres puntos únicos de falla en la zona A (NAT instance, RDS Single-AZ y Valkey de un nodo), por eso el experimento no corre allí.
 - **Falla controlada:** AWS FIS (`experiments/hu-w29/fis.json`) corta toda la red de las subredes privadas y de datos de la zona A durante 10 min (`aws:network:disrupt-connectivity`) y fuerza el failover de RDS (`aws:rds:reboot-db-instances`, `forceFailover = true`). La condición de parada es la alarma crítica `api-canales-5xx` de HU-W28.
-- **Carga de fondo:** `carga.js` (k6) hace R1 (cotizar) y R3 (perfil → cotización → decisión → aceptación) por el borde real, con `Idempotency-Key` y reintento con la **misma** clave. Registra cada intento con su clave. R5 está escrito y desactivado (`R5=1`).
-- **Reconciliación (AC2):** `extraer.sh` ejecuta una tarea ECS de solo lectura que extrae las filas de la ventana. `reconciliar.py` comprueba que cada operación confirmada (2xx) existe exactamente una vez, que cada aceptación tiene un solo cobro, que no queda nada en DLQ sin explicación y cuánto queda en el Outbox. También calcula el tiempo de redirección (AC3).
+- **Carga de fondo:** `carga.js` (k6) hace R1 (cotizar), R3 (perfil → cotización → decisión → aceptación) y R5 (evento de telemetría firmado: `LLUVIA_ACUMULADA` de 135 mm en `05001`, que activa la cobertura sintética `COB-MED-1` y crea un siniestro paramétrico) por el borde real, con `Idempotency-Key` (R1 y R3) o `idExterno` (R5) y reintento con la **misma** clave. Registra cada intento con su clave.
+- **Reconciliación (AC2):** `extraer.sh` ejecuta una tarea ECS de solo lectura que extrae las filas de la ventana. `reconciliar.py` comprueba que cada operación confirmada (2xx) existe exactamente una vez; que cada aceptación tiene un solo cobro; que cada evento de R5 se recibió y se evaluó una vez, que cada activación tiene un siniestro y que ningún siniestro ni pago se duplicó; que no queda nada en DLQ sin explicación, y cuánto queda en el Outbox. También calcula el tiempo de redirección (AC3).
 - **Pantallas:** I04 Continuidad (`/operacion/continuidad`) e I05 Conciliación (`/operacion/continuidad/conciliacion`), grupo `operacion`. `bff-web` solo lee CloudWatch (cronología, tráfico del ALB y alarmas) y el informe del bucket de `exp`.
 
 ## 2. Decisiones
@@ -41,32 +41,37 @@ Issue: [sjfuentes-uniandes/proyecto-final#71](https://github.com/sjfuentes-unian
 
 ## 4. Pruebas sin AWS
 
-| Nivel | Comando | Qué cubre | Resultado (2026-11-11) |
+| Nivel | Comando | Qué cubre | Resultado (2026-11-20, después de traer main) |
 | --- | --- | --- | --- |
-| N1 Terraform | `TF_DATA_DIR=<tmp> make infra-validar` | `tests/exp` de platform (`multizona_hu_w29`): Multi-AZ, 2 NAT y cada subred por el de su zona, subredes en dos zonas, mínimo privilegio de FIS, bucket, cronología y reconciliación en solo lectura. `tests/exp` de apps (catálogo completo): mínimo ≥ 2, rebalanceo y FARGATE en los 8 críticos; solo `bff-web` lee `hu-w29/*`. `minimo_costo` y `todos_los_servicios` (`int`): sin recursos de FIS; cronología de ECS y RDS | platform 8/8 y exp 2/2; apps 10/10 y exp 2/2; Trivy sin críticos |
-| Reconciliador | `uv run pytest experiments/hu-w29` | Operación faltante, duplicada, reintento con la misma clave, solicitud sin confirmar, cobro duplicado, aceptación sin cobro (pendiente o diferencia), DLQ con y sin explicación, R5 pendiente, consola de k6 (logfmt y JSON), redirección dentro y fuera del objetivo | 14 passed |
-| bff-web unitarias | `make test-cov SERVICE=bff-web` | Dominio, adaptadores con Logs, CloudWatch y S3 simulados, caso de uso y rutas (`tests/unit/test_continuidad.py`) | 761 passed; módulos nuevos 99–100 % |
-| bff-web contrato | `make test-contract SERVICE=bff-web` | OpenAPI publicado = app; esquemas de I04 e I05; **el informe que genera `reconciliar.py` valida contra el DTO de I05** | 51 passed |
-| Web Jasmine | `npm run test:ci` (en `proyecto-final-2-frontend/web`) | I04 e I05 en es-CO y en-US, estados vacío y de error, exportación del JSON, axe-core, i18n (claves, pseudo) | 1070 SUCCESS |
+| N1 Terraform | `TF_DATA_DIR=<tmp> make infra-validar` | `tests/exp` de platform (`multizona_hu_w29`): Multi-AZ, 2 NAT y cada subred por el de su zona, subredes en dos zonas, mínimo privilegio de FIS, bucket, cronología y reconciliación en solo lectura. `tests/exp` de apps (catálogo completo): mínimo ≥ 2, rebalanceo y FARGATE en los 8 críticos; R1, R3 y R5 con todas sus alarmas; solo `bff-web` lee `hu-w29/*`. `minimo_costo` y `todos_los_servicios` (`int`): sin recursos de FIS; cronología de ECS y RDS | platform 8/8 y exp 2/2; apps 19/19, exp 2/2 e int 1/1; Trivy sin críticos |
+| Reconciliador | `uv run pytest experiments/hu-w29` | Operación faltante, duplicada, reintento con la misma clave, solicitud sin confirmar, cobro duplicado, aceptación sin cobro (pendiente o diferencia), DLQ con y sin explicación, R5 (evento perdido, evaluación en tránsito o perdida, activación sin siniestro, siniestro y pago duplicados, filas de otros eventos), consola de k6 (logfmt y JSON), redirección dentro y fuera del objetivo | 20 passed |
+| bff-web unitarias | `make test-cov SERVICE=bff-web` | Dominio, adaptadores con Logs, CloudWatch y S3 simulados, caso de uso y rutas (`tests/unit/test_continuidad.py`) | 839 passed (con HU-W08 y HU-W22); 98,8 % de líneas |
+| bff-web contrato | `make test-contract SERVICE=bff-web` | OpenAPI publicado = app; esquemas de I04 e I05; **el informe que genera `reconciliar.py` valida contra el DTO de I05** | 52 passed |
+| Web Jasmine | `npm run test:ci` (en `proyecto-final-2-frontend/web`) | I04 e I05 en es-CO y en-US, estados vacío y de error, exportación del JSON, axe-core, i18n (claves, pseudo) | 1183 SUCCESS |
 | Web Playwright | `npx playwright test e2e/i04-i05-continuidad.spec.ts --project=chromium-escritorio --project=chromium-tableta` | Menú, ventana, error 502 con correlación, acceso por grupo, exportación y axe en la página completa (es-CO y en-US) | 12 passed |
-| Carga | k6 contra un simulador local (sin AWS) | `carga.js` registra cada intento y reintenta el 503 con la misma clave; `reconciliar.py` lee la consola real de k6 | OK |
+| Carga | k6 contra un simulador local (sin AWS) que valida R5 con `verificar_firma`, `dentro_de_desfase` y `validar_contrato` del dominio de `adaptador-telemetria` | R1 y R3 con reintento del 503 con la misma clave; R5 aceptado (202) con su `eventoId`; `reconciliar.py` lee la consola real de k6 | OK |
+| Servicios de R5 | `make test-unit SERVICE=…` | `adaptador-telemetria`, `pagos-parametricos` y `siniestros` siguen en verde con el merge | 172, 297 y 867 passed |
 
-## 5. Experimento en `exp` (cuando HU-W21 y HU-W22 estén en main)
+## 5. Experimento en `exp`
 
 Cada paso con AWS requiere la confirmación del responsable. El costo estimado es ≈ 1,0 USD/h con el ambiente encendido, más ≈ 1,1 USD por ejecución de FIS (manifiesto, sección 5). Si algo falla a mitad: detenerse, recolectar lo que haya y consultar antes de destruir.
 
 ```bash
 export ENV=exp
-# 0. Antes de ejecutar: completar el manifiesto (commit, digests, tfvars) y activar R5 en carga.js.
+# 0. Antes de ejecutar: completar el manifiesto (commit, digests, tfvars).
 make infra-desplegar ENV=exp                       # ~30 min; confirmar antes (costo por hora)
+aws secretsmanager put-secret-value --secret-id solventa-exp/aliados/telemetria \
+  --secret-string '{"hmac_secret":"<secreto de prueba>"}'   # y redesplegar adaptador-telemetria
 make infra-probar ENV=exp                          # N2: humo
+E2E_TELEMETRIA_SECRETO=<secreto> E2E_PUBLICAR_COBERTURAS=1 make test-e2e  # -k hu_w21: siembra COB-* (R5)
 experiments/hu-w29/distribucion.sh antes           # N2: cada crítico con tareas saludables en 2 zonas
-E2E_CANALES_URL=... make test-e2e                  # R1 y R3 en verde (-k "hu_w03 or hu_w13_w15")
+E2E_CANALES_URL=... make test-e2e                  # R1, R3 y R5 en verde (-k "hu_w03 or hu_w13_w15 or hu_w22")
 experiments/hu-w29/preparar-fis.sh                 # llena resultados/fis.json; imprime los comandos de FIS
 
 # 1. Carga de 30 min; a los 5 min, iniciar FIS (comandos que imprime preparar-fis.sh)
-k6 run --console-output=experiments/hu-w29/resultados/carga.log \
-  -e CANALES=<api_urls.canales> -e TOKEN=<id token del back-office, grupo asesores> experiments/hu-w29/carga.js
+k6 run --log-format=raw --console-output=experiments/hu-w29/resultados/carga.log \
+  -e CANALES=<api_urls.canales> -e TOKEN=<id token del back-office, grupo asesores> \
+  -e R5_SECRETO=<secreto> experiments/hu-w29/carga.js
 experiments/hu-w29/distribucion.sh durante         # a los 5 min de la inyección
 experiments/hu-w29/distribucion.sh despues         # al terminar la carga
 
@@ -90,24 +95,24 @@ make infra-destruir ENV=exp                        # confirmar; luego verificar 
 
 | Pendiente | Depende de | Qué falta |
 | --- | --- | --- |
-| R5 en la carga y en la reconciliación | HU-W21 y HU-W22 (capbmaster) en main | Encabezados de la firma, plantilla del evento (`R5_PLANTILLA`) y las consultas por `eventId` en `extraer.sh` (evento recibido en `adaptador_telemetria` y evaluación en `pagos_parametricos`); una verificación `eventos_parametricos` en `reconciliar.py` |
-| Experimento en `exp` y `informe.md` | R5, y confirmación de despliegue | Sección 5 |
+| Experimento en `exp` e `informe.md` | Confirmación del despliegue y su costo | Sección 5 |
+| Sincronizar `contracts/openapi/bff-web.yaml` en el frontend | Push del backend | `scripts/sync-contracts.sh <commit>` en `proyecto-final-2-frontend` |
 | Réplica de Valkey en la zona B | Aprobación | Propuesta en PLATAFORMA.md |
-| Shellcheck de `experiments/hu-w29/*.sh` | CI | No está instalado en la Mac de desarrollo (se revisó con `bash -n`). El workflow **Infra - Validar** ahora lo corre, junto con las pruebas del reconciliador |
+| Shellcheck de `experiments/hu-w29/*.sh` | CI | No está instalado en la Mac de desarrollo (se revisó con `bash -n`). El workflow **Infra - Validar** lo corre, junto con las pruebas del reconciliador |
 
 ## 7. Coordinación
 
 | Con | Tema | Acuerdo |
 | --- | --- | --- |
-| Santi-MISO (HU-W08 y HU-W09) | Rutas y menú de Operación | HU-W29 ocupa `/operacion/continuidad` y `/operacion/continuidad/conciliacion`, y activa "Continuidad" en el menú. **`/operacion/tablero` queda para el panel I01 de HU-W08**: hoy el ítem "Tablero" abre CloudWatch (`dashboardUrl`) y se cambia a `ruta: 'tablero'` en esa historia. Orden del menú: Tablero, Trazas, Alertas, Continuidad |
-| Santi-MISO (HU-W09) | Carga | No había scripts k6 de HU-W09. `experiments/hu-w29/carga.js` sirve de base: tasas por variable (`R1_POR_MINUTO`, `R3_POR_MINUTO`), registro por intento con su clave y reintento idempotente |
+| Santi-MISO (HU-W08 y HU-W09) | Rutas y menú de Operación | Hecho: HU-W08 usa `/operacion/tablero` y `/operacion/capacidad`; HU-W29, `/operacion/continuidad` y `/operacion/continuidad/conciliacion`. Menú: Tablero, Trazas, Alertas, Continuidad. Al traer main se unieron los dos lados en `operacion.py`, `config.py`, `ecs.tf`, `iam.tf`, el contrato y las pruebas de rutas y menú |
+| Santi-MISO (HU-W09) | Carga | `experiments/hu-w09/carga.js` mide la capacidad de la cotización con una rampa de hasta 50 000/min dentro de la VPC (tarea Fargate). HU-W29 necesita otra cosa: carga baja por el borde real, con R1, R3 y R5 y la clave de cada operación confirmada. Por eso conserva su `carga.js` y adopta sus convenciones (sin imports remotos y `--log-format=raw`) |
 | Santi-MISO (HU-W25 y escalado) | `exp` en dos zonas | Listo para usar: `exp` valida en N1 que cada servicio crítico tiene mínimo 2 réplicas repartidas entre A y B sin Spot. Si HU-W08 o HU-W25 cambian el escalado antes del experimento, el manifiesto registra el commit con que se corrió |
-| capbmaster (HU-W21 y HU-W22) | R5 | Al terminar, avisar los encabezados de la firma HMAC, el cuerpo del evento y las tablas por `eventId` (sección 6) |
+| capbmaster (HU-W21 y HU-W22) | R5 | Hecho con lo que está en main: encabezados `X-Telemetria-*` y firma de `docs/hu-w21-evento-parametrico.md` §1, cobertura `COB-MED-1` de `eventos-parametricos.json` (sembrada con la E2E de HU-W21, `E2E_PUBLICAR_COBERTURAS=1`) y tablas `eventos_recibidos`, `eventos_evaluados`, `activaciones`, `siniestros` (UNIQUE evento-póliza) e `indemnizaciones` |
 
 ## 8. Archivos
 
 - Infraestructura: `infra/envs/exp/platform.tfvars`, `infra/platform/{experiments,observability,outputs,variables}.tf`, `infra/apps/{iam,ecs}.tf`, `infra/apps/modules/ecs-service/main.tf` y sus pruebas (`tests/exp`, `platform.tftest.hcl`, `apps.tftest.hcl`).
-- Experimento: `experiments/hu-w29/` (`fis.json`, `carga.js`, `reconciliar.py` y sus pruebas, `lib.sh`, `preparar-fis.sh`, `distribucion.sh`, `recolectar.sh`, `extraer.sh`, `publicar.sh`, `manifiesto.md`, `informe.md` y `resultados/`).
+- Experimento: `experiments/hu-w29/` (`fis.json`, `carga.js`, `reconciliar.py` y sus pruebas, `simulador.py`, `lib.sh`, `preparar-fis.sh`, `distribucion.sh`, `recolectar.sh`, `extraer.sh`, `publicar.sh`, `manifiesto.md`, `informe.md` y `resultados/`).
 - `bff-web`: `domain/continuidad.py`, `application/consultar_continuidad.py`, `adapters/outbound/continuidad_aws.py`, rutas en `adapters/inbound/operacion.py` y `config.py`.
 - Contratos: `contracts/openapi/bff-web.yaml` y `contracts/operaciones.md`.
 - Portal (`proyecto-final-2-frontend/web`): `src/app/features/operacion/continuidad/`, `operacion.routes.ts`, `operacion-layout.component.ts`, `e2e/i04-i05-continuidad.spec.ts`, `eslint.config.mjs` y `package.json` (`lint:continuidad`).

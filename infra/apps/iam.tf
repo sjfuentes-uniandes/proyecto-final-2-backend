@@ -48,7 +48,7 @@ locals {
     for id, route in {
       R1 = { nombre = "Cotización", alarmas = ["cotizacion-p95-critica", "cotizacion-errores-critica", "bff-web-sin-destinos", "api-canales-5xx"] }
       R3 = { nombre = "Suscripción, aceptación y recaudo", alarmas = ["polizas-errores-critica", "emision-p95-critica", "dinero-errores-critica", "recaudos-pendientes", "api-canales-5xx"] }
-      R5 = { nombre = "Siniestros paramétricos", alarmas = ["adaptador-telemetria-errores-critica", "pagos-parametricos-errores-critica", "cola-parametricos-eventos-atraso"] }
+      R5 = { nombre = "Siniestros paramétricos", alarmas = ["adaptador-telemetria-errores-critica", "pagos-parametricos-errores-critica", "siniestros-errores-critica", "cola-parametricos-eventos-atraso"] }
     } : id => { nombre = route.nombre, alarmas = [for a in route.alarmas : a if contains(keys(local.alert_catalog), a)] }
   }
   # HU-W08: panel «Cotizaciones por minuto y capacidad» de Operación › Tablero. Lee el scalable

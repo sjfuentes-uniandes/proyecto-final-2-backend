@@ -5,9 +5,8 @@
 # Escribe resultados/observadas.ndjson: una línea JSON por fila. Ejecuta una tarea ECS:
 # pedir confirmación antes (docs/hu-w29-multizona.md, paso 7).
 #
-# R5 (eventos firmados) queda pendiente de HU-W21 y HU-W22: cuando estén en main, agregar sus
-# consultas abajo (tabla del evento recibido en adaptador_telemetria y de la evaluación en
-# pagos_parametricos, ambas por eventId).
+# R1, R3 y R5: cotizaciones, aceptaciones y cobros; eventos de telemetría recibidos y evaluados,
+# activaciones, siniestros paramétricos y sus pagos. Cada base con el usuario de su servicio.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 require terraform aws jq
 require_env
@@ -49,6 +48,27 @@ q dinero "$USER_DINERO" "$PW_DINERO" "SELECT json_build_object('base', 'dinero',
   'id', recaudo_id, 'clave', clave_recaudo, 'cotizacionId', cotizacion_id, 'estado', estado,
   'instante', creado_en) FROM recaudos WHERE creado_en >= '$DESDE'"
 pendientes dinero "$USER_DINERO" "$PW_DINERO"
+# R5: evento recibido (HU-W21, por idExterno), su evaluación, la activación, el siniestro
+# paramétrico (HU-W22, uno por evento y póliza) y su pago (HU-W23, uno por siniestro).
+q adaptador_telemetria "$USER_ADAPTADOR_TELEMETRIA" "$PW_ADAPTADOR_TELEMETRIA" "SELECT json_build_object(
+  'base', 'adaptador_telemetria', 'tipo', 'evento_recibido', 'id', evento_id, 'clave', id_externo,
+  'instante', recibido_en) FROM eventos_recibidos WHERE recibido_en >= '$DESDE' AND recibido_en < '$HASTA'"
+pendientes adaptador_telemetria "$USER_ADAPTADOR_TELEMETRIA" "$PW_ADAPTADOR_TELEMETRIA"
+q pagos_parametricos "$USER_PAGOS_PARAMETRICOS" "$PW_PAGOS_PARAMETRICOS" "SELECT json_build_object(
+  'base', 'pagos_parametricos', 'tipo', 'evento_evaluado', 'id', evento_id, 'clave', id_externo,
+  'decision', decision, 'instante', evaluado_en) FROM eventos_evaluados WHERE evaluado_en >= '$DESDE'"
+q pagos_parametricos "$USER_PAGOS_PARAMETRICOS" "$PW_PAGOS_PARAMETRICOS" "SELECT json_build_object(
+  'base', 'pagos_parametricos', 'tipo', 'activacion', 'id', evento_id, 'polizaId', poliza_id,
+  'estado', estado, 'siniestroId', siniestro_id, 'instante', creada_en) FROM activaciones
+  WHERE creada_en >= '$DESDE'"
+pendientes pagos_parametricos "$USER_PAGOS_PARAMETRICOS" "$PW_PAGOS_PARAMETRICOS"
+q siniestros "$USER_SINIESTROS" "$PW_SINIESTROS" "SELECT json_build_object('base', 'siniestros',
+  'tipo', 'siniestro', 'id', id, 'eventoId', evento_id, 'polizaId', poliza_id, 'instante', reportado_en)
+  FROM siniestros WHERE origen = 'PARAMETRICO' AND reportado_en >= '$DESDE'"
+pendientes siniestros "$USER_SINIESTROS" "$PW_SINIESTROS"
+q dinero "$USER_DINERO" "$PW_DINERO" "SELECT json_build_object('base', 'dinero', 'tipo', 'indemnizacion',
+  'id', indemnizacion_id, 'siniestroId', siniestro_id, 'estado', estado, 'instante', creado_en)
+  FROM indemnizaciones WHERE creado_en >= '$DESDE'"
 echo "extraccion terminada"
 SH
 
