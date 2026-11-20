@@ -140,10 +140,25 @@ TITULAR = {
 schema_titular = schemathesis.openapi.from_asgi("/openapi.json", app_titular)
 
 
+def _altera_solo_cabeceras_del_titular(case: schemathesis.Case) -> bool:
+    """Si el caso negativo solo altera cabeceras que la prueba reemplaza con las del titular
+    (`Authorization` y `X-Authenticated-*`), el valor inválido nunca llega a la API: responde 200
+    con el token válido y `negative_data_rejection` lo tomaría por un dato inválido aceptado."""
+    if case.meta is None or not case.meta.generation.mode.is_negative:
+        return False
+    datos = case.meta.phase.data
+    alterados = {datos.parameter} if getattr(datos, "parameter", None) else set()
+    alterados |= {m.parameter for m in getattr(datos, "mutations", ()) if m.parameter}
+    inyectadas = {nombre.lower() for nombre in TITULAR}
+    return bool(alterados) and {nombre.lower() for nombre in alterados} <= inyectadas
+
+
 @schema_titular.include(path_regex="consentimientos").parametrize()
 @settings(max_examples=60, deadline=None)
 def test_consentimientos_cumplen_su_contrato_con_un_titular(case: schemathesis.Case) -> None:
     excluidos = list(EXCLUIDOS)
+    if _altera_solo_cabeceras_del_titular(case):
+        excluidos.append(negative_data_rejection)
     if case.path.endswith("/texto-vigente"):
         # FastAPI ignora los parámetros de consulta desconocidos (`?=true`) en todo el servicio;
         # proposito e idioma los valida `clientes` (422), cubierto en unitarias y de módulo.

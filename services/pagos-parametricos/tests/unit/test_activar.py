@@ -1,6 +1,8 @@
 """Crear los siniestros de las activaciones pendientes (HU-W22, W22-B08)."""
 
 import asyncio
+import json
+import re
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
@@ -190,6 +192,39 @@ async def test_la_medicion_distingue_ok_timeout_y_error(telemetria: Any) -> None
     assert resultados == ["error", "ok", "timeout"]
 
 
+# Campos que el sistema genera al azar o con el reloj: un centinela numérico corto («135») puede
+# aparecer dentro de ellos por casualidad (falló así en CI: un `trace_id` «…ec135d…»).
+_CAMPOS_GENERADOS = {"timestamp", "trace_id", "span_id", "correlation_id", "duration_ms"}
+_UBICACION_EN_TRAZA = re.compile(r'File "[^"]*", line \d+')
+
+
+def _es_uuid(valor: Any) -> bool:
+    try:
+        UUID(str(valor))
+    except ValueError:
+        return False
+    return isinstance(valor, str)
+
+
+def _contenido_de_los_registros(texto: str) -> str:
+    """Los registros JSON sin los campos generados, los UUID ni las rutas y líneas de las trazas:
+    solo lo que el código escribió, donde no debe estar la medición."""
+    lineas = []
+    for linea in texto.splitlines():
+        try:
+            registro = json.loads(linea)
+        except ValueError:
+            lineas.append(linea)
+            continue
+        propio = {
+            clave: _UBICACION_EN_TRAZA.sub("", valor) if isinstance(valor, str) else valor
+            for clave, valor in registro.items()
+            if clave not in _CAMPOS_GENERADOS and not _es_uuid(valor)
+        }
+        lineas.append(json.dumps(propio, ensure_ascii=False))
+    return "\n".join(lineas)
+
+
 async def test_los_registros_llevan_identificadores_y_no_la_medicion(
     telemetria: Any,
 ) -> None:
@@ -198,7 +233,7 @@ async def test_los_registros_llevan_identificadores_y_no_la_medicion(
     with pytest.raises(ActivacionFallida):
         await ActivarSiniestros(repo, siniestros).ejecutar(OBSERVADO)  # type: ignore[arg-type]
 
-    texto = telemetria.texto_logs()
+    texto = _contenido_de_los_registros(telemetria.texto_logs())
     assert (
         "parametrico: activacion procesada" in texto
         and "parametrico: activacion pendiente" in texto
