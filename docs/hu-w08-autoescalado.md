@@ -49,6 +49,14 @@ Toma el nombre de las alarmas de la respuesta de `DescribeScalingPolicies` (`pol
 
 **Riesgo:** una política de *target tracking* calcula la capacidad con el valor real de la métrica, y con poca carga la CPU está por debajo del objetivo. Forzar la alarma alta podría no subir `desiredCount`. La N2 lo demuestra o lo descarta: si no sube en la espera, falla con lo observado (estado e historial de la alarma, actividades de escalado), sin intentar otra vía. La bajada puede tardar más que la espera, por el enfriamiento de 300 s y la evaluación de la alarma baja. En ese caso la prueba no falla: el autoescalado devuelve el servicio al mínimo por su cuenta.
 
+**Cambio del 2026-11-20 (`StateReasonData`):** en la primera corrida en INT (2026-11-20), la N2 falló sin escalar. El historial de la alarma alta decía «Failed to execute AutoScaling action: StateReasonData must be provided.» y no hubo actividades de escalado. Según la API `SetAlarmState`, en las acciones de Application Auto Scaling «the Auto Scaling policy uses the information in this field to take the correct action» (`StateReasonData`, un string JSON de hasta 4000 caracteres). Desde entonces la N2 manda `StateReasonData`, armado por `datos_de_estado` con la forma del ejemplo de esa API:
+- `Version` «1.0»;
+- `QueryDate` y `StartDate` con el formato `2018-10-31T14:32:52.031+0000` (el inicio es el periodo anterior al de la consulta);
+- `Statistic`, `Period` y `Threshold` leídos de la alarma alta con `DescribeAlarms`;
+- en `RecentDatapoints`, un solo valor: `valor_para_una_tarea_mas(umbral, min)`.
+
+Con ese valor, target tracking pide una sola tarea más. Ajusta en proporción a la métrica (tareas × valor / objetivo), y en la alarma alta el umbral es el objetivo. Con `umbral × (min + 0,75) / min` la cuenta da `min + 0,75`. En INT (2 tareas, objetivo 60) son 82,5 %: 2 × 82,5 / 60 = 2,75, que da 3 tareas tanto redondeando hacia arriba como al más cercano, sin llegar al máximo de 4. Así, el riesgo de arriba cambia: la política no calcula con el valor real de la métrica, sino con el valor que mandamos. Las guardas, las esperas y el `finally` no cambiaron.
+
 ## 6. Pruebas
 
 | Nivel | Prueba | Qué cubre |
@@ -59,4 +67,4 @@ Toma el nombre de las alarmas de la respuesta de `DescribeScalingPolicies` (`pol
 | Unitarias | `services/bff-web/tests/unit/test_capacidad.py` | Dominio, adaptador con `botocore.stub.Stubber`, caso de uso, autorización por grupo y 503 ante fallos (§4) |
 | Contrato | `services/bff-web/tests/contract/test_openapi.py::test_contrato_de_capacidad` | El OpenAPI de la ruta y sus esquemas (§4) |
 | Contrato | `services/bff-web/tests/contract/test_pact_web.py`, con `contracts/pact/web-bff-web.json` (paso 8.7) | Las dos interacciones `GET /operacion/capacidad` del pacto del portal, en sus estados «la capacidad de cotizacion tiene un escalado terminado en la ventana» y «la capacidad de cotizacion no tiene escalados ni dato de tareas en la ventana» (`tareas_activas` y `ultimo_escalado` null). Un doble del adaptador (`RepositorioCapacidad`, sin AWS) alimenta el caso de uso, el dominio y el DTO reales con un reloj fijo. El grupo `operacion` se agrega a `X-Authenticated-Groups` solo durante esos dos estados; las demás interacciones pasan sin cambios (§4) |
-| N2 | `tests/e2e/test_hu_w08_escalado.py`, escrita y no ejecutada; se lanza por `e2e.yml` con `-k hu_w08` | En INT: la alarma alta forzada sube `desiredCount` sin pasar del máximo y vuelve al mínimo sin bajar de él, con la línea de tiempo, las actividades y la tarea retirada (§5). Sus unitarios (`politica_de`, `linea_de_tiempo`, `seleccionada`) corren sin AWS |
+| N2 | `tests/e2e/test_hu_w08_escalado.py`, escrita y no ejecutada; se lanza por `e2e.yml` con `-k hu_w08` | En INT: la alarma alta forzada sube `desiredCount` sin pasar del máximo y vuelve al mínimo sin bajar de él, con la línea de tiempo, las actividades y la tarea retirada (§5). Sus unitarios (`politica_de`, `linea_de_tiempo`, `seleccionada` y, desde el 2026-11-20, `valor_para_una_tarea_mas` y `datos_de_estado`) corren sin AWS |

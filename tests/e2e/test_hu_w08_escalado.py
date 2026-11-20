@@ -15,7 +15,9 @@ Guardas, antes de tocar AWS:
    motivo (o falla con `E2E_REQUERIDO=1`) sin tocar nada.
 
 Recorrido: lee la política y sus alarmas (`politica_de`, sin construir el nombre de la alarma),
-lleva la alarma alta a `ALARM` con `set_alarm_state` y muestrea `desiredCount` y `runningCount`:
+lleva la alarma alta a `ALARM` con `set_alarm_state` y un `StateReasonData` que pide una sola tarea
+más (`datos_de_estado` y `valor_para_una_tarea_mas`; sin él, App Auto Scaling no ejecuta la política)
+y muestrea `desiredCount` y `runningCount`:
 (a) AC1: `desiredCount` sube en `E2E_W08_ESPERA_SUBIDA_S` y nunca pasa de `MaxCapacity`. Si no sube,
     falla con lo observado: es el riesgo del plan (target tracking puede ignorar la alarma forzada).
 (b) AC2: vuelve a `MinCapacity` en `E2E_W08_ESPERA_BAJADA_S` sin bajar de él. Si no vuelve a
@@ -25,16 +27,18 @@ lleva la alarma alta a `ALARM` con `set_alarm_state` y muestrea `desiredCount` y
 Nunca cambia el scalable target ni la política, y no vuelve a tocar la alarma: vuelve sola a su
 estado en la siguiente evaluación.
 
-Las funciones puras (`seleccionada`, `politica_de`, `linea_de_tiempo`) tienen sus unitarios al
-final de este archivo y no tocan AWS.
+Las funciones puras (`seleccionada`, `politica_de`, `linea_de_tiempo`, `valor_para_una_tarea_mas`,
+`datos_de_estado`) tienen sus unitarios al final de este archivo y no tocan AWS.
 """
 
+import json
+import math
 import os
 import re
 import time
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -131,6 +135,58 @@ def linea_de_tiempo(muestras: Iterable[Muestra]) -> list[Muestra]:
     if lista and cambios[-1] is not lista[-1]:
         cambios.append(lista[-1])
     return cambios
+
+
+def valor_para_una_tarea_mas(umbral: float, tareas: int) -> float:
+    """El valor de CPU que se informa al forzar la alarma alta para que target tracking pida una
+    sola tarea más que `tareas`.
+
+    Target tracking ajusta la capacidad en proporción a la métrica (capacidad × valor / objetivo) y
+    redondea; en la alarma alta, el umbral es el objetivo. Con `umbral × (tareas + 0,75) / tareas`
+    la cuenta da `tareas + 0,75`, que es `tareas + 1` tanto si redondea hacia arriba como si redondea
+    al más cercano (de 2 tareas con objetivo 60: 82,5 % → 2,75 → 3, sin llegar a 4)."""
+    if tareas < 1:
+        raise ValueError(f"hacen falta tareas >= 1 (tareas = {tareas})")
+    return umbral * (tareas + 0.75) / tareas
+
+
+def _fecha_aws(momento: datetime) -> str:
+    """`2018-10-31T14:32:52.031+0000`, el formato del ejemplo de `SetAlarmState`."""
+    utc = momento.astimezone(UTC)
+    return f"{utc:%Y-%m-%dT%H:%M:%S}.{utc.microsecond // 1000:03d}+0000"
+
+
+def datos_de_estado(alarma: dict[str, Any], ahora: datetime, valor: float) -> str:
+    """`StateReasonData` para forzar `alarma` (la de `DescribeAlarms`) a `ALARM` con `valor`.
+
+    App Auto Scaling lo exige cuando la alarma invoca una política ("StateReasonData must be
+    provided") y calcula el ajuste con él. Sigue el ejemplo de la API `SetAlarmState`: `Statistic`,
+    `Period` y `Threshold` salen de la alarma, `RecentDatapoints` es un único valor por encima del
+    umbral y `StartDate` es el inicio del periodo anterior al de la consulta. `ValueError` si a la
+    alarma le falta alguno de esos campos, si `ahora` no tiene zona o si `valor` no supera el
+    umbral."""
+    faltan = [c for c in ("Statistic", "Period", "Threshold") if alarma.get(c) is None]
+    if faltan:
+        raise ValueError(f"a la alarma {alarma.get('AlarmName')!r} le faltan {faltan}")
+    if ahora.tzinfo is None:
+        raise ValueError("`ahora` necesita zona horaria")
+    periodo, umbral = int(alarma["Period"]), float(alarma["Threshold"])
+    if not valor > umbral:
+        raise ValueError(f"el valor {valor} no supera el umbral {umbral}")
+    segundos = int(ahora.timestamp())
+    inicio = datetime.fromtimestamp(segundos - segundos % periodo - periodo, UTC)
+    return json.dumps(
+        {
+            "Version": "1.0",
+            "QueryDate": _fecha_aws(ahora),
+            "StartDate": _fecha_aws(inicio),
+            "Statistic": alarma["Statistic"],
+            "Period": periodo,
+            "RecentDatapoints": [valor],
+            "Threshold": umbral,
+        },
+        separators=(",", ":"),
+    )
 
 
 # --- Guardas ---------------------------------------------------------------------------------
@@ -244,6 +300,14 @@ def _alarmas(cloudwatch: Any, politica: Politica) -> dict[str, dict[str, Any]]:
             "acciones": alarma.get("ActionsEnabled"),
         }
     return resultado
+
+
+def _alarma(cloudwatch: Any, nombre: str) -> dict[str, Any]:
+    """La alarma `nombre` tal como la devuelve `DescribeAlarms` (para `datos_de_estado`)."""
+    alarmas = cloudwatch.describe_alarms(AlarmNames=[nombre]).get("MetricAlarms", [])
+    if len(alarmas) != 1:
+        pytest.fail(f"{len(alarmas)} alarmas {nombre!r} en DescribeAlarms")
+    return alarmas[0]
 
 
 def _historial(cloudwatch: Any, alarma: str, desde: datetime) -> list[tuple[str, str, str]]:
@@ -384,10 +448,16 @@ def test_hu_w08_n2_alarma_alta_escala_cotizacion(guardas: dict[str, Any]) -> Non
     if not str(antes["alta"]["operador"]).startswith("GreaterThan"):
         pytest.fail(f"la alarma {politica.alarma_alta} no es la alta: {antes['alta']}")
 
-    # (a) Forzar la alarma alta: la única escritura de la prueba.
+    # (a) Forzar la alarma alta: la única escritura de la prueba. Sin `StateReasonData`, App Auto
+    # Scaling no ejecuta la política ("StateReasonData must be provided", N2 del 2026-11-20).
+    alta = _alarma(aws.cloudwatch, politica.alarma_alta)
+    valor = valor_para_una_tarea_mas(float(alta["Threshold"]), minimo)
     hora, t0 = datetime.now(UTC), time.monotonic()
     aws.cloudwatch.set_alarm_state(
-        AlarmName=politica.alarma_alta, StateValue="ALARM", StateReason=RAZON_ALARMA
+        AlarmName=politica.alarma_alta,
+        StateValue="ALARM",
+        StateReason=RAZON_ALARMA,
+        StateReasonData=datos_de_estado(alta, hora, valor),
     )
     guardas["forzada"] = hora
 
@@ -577,3 +647,91 @@ def test_hu_w08_linea_de_tiempo_deja_los_cambios_y_la_ultima() -> None:
     ]
     assert linea_de_tiempo([]) == []
     assert linea_de_tiempo([Muestra(0, 2, 2, 0)]) == [Muestra(0, 2, 2, 0)]
+
+
+# La alarma alta tal como la devuelve `DescribeAlarms` (target tracking de CPU de ECS: el umbral es el
+# objetivo de la política).
+ALARMA_ALTA = {
+    "AlarmName": ALTA,
+    "ComparisonOperator": "GreaterThanThreshold",
+    "Threshold": 60.0,
+    "Statistic": "Average",
+    "Period": 60,
+    "EvaluationPeriods": 3,
+    "MetricName": "CPUUtilization",
+    "Namespace": "AWS/ECS",
+}
+AHORA = datetime(2026, 11, 20, 14, 32, 52, 31000, tzinfo=UTC)
+
+
+def _capacidad(tareas: int, valor: float, objetivo: float, redondeo: Callable[[float], int]) -> int:
+    """La capacidad que pediría target tracking con un ajuste proporcional al valor de la métrica."""
+    return redondeo(tareas * valor / objetivo)
+
+
+def test_hu_w08_valor_supera_el_umbral_y_pide_una_sola_tarea_mas() -> None:
+    valor = valor_para_una_tarea_mas(60.0, 2)
+    assert valor > 60.0
+    # De 2 a 3 tareas sin llegar al máximo de INT (4), redondee hacia arriba o al más cercano.
+    assert _capacidad(2, valor, 60.0, math.ceil) == 3
+    assert _capacidad(2, valor, 60.0, round) == 3
+    for tareas in (1, 2, 3, 5):
+        for umbral in (50.0, 60.0, 70.0):
+            valor = valor_para_una_tarea_mas(umbral, tareas)
+            assert valor > umbral
+            assert _capacidad(tareas, valor, umbral, math.ceil) == tareas + 1
+            assert _capacidad(tareas, valor, umbral, round) == tareas + 1
+
+
+def test_hu_w08_valor_para_una_tarea_mas_sin_tareas() -> None:
+    with pytest.raises(ValueError):
+        valor_para_una_tarea_mas(60.0, 0)
+
+
+def test_hu_w08_datos_de_estado_es_json_valido_y_coincide_con_la_alarma() -> None:
+    valor = valor_para_una_tarea_mas(60.0, 2)
+    texto = datos_de_estado(ALARMA_ALTA, AHORA, valor)
+    assert isinstance(texto, str)
+    assert len(texto) <= 4000
+    datos = json.loads(texto)
+    assert datos == {
+        "Version": "1.0",
+        "QueryDate": "2026-11-20T14:32:52.031+0000",
+        "StartDate": "2026-11-20T14:31:00.000+0000",
+        "Statistic": "Average",
+        "Period": 60,
+        "RecentDatapoints": [valor],
+        "Threshold": 60.0,
+    }
+    assert datos["RecentDatapoints"][0] > datos["Threshold"]
+
+
+def test_hu_w08_datos_de_estado_toma_estadistica_periodo_y_umbral_de_la_alarma() -> None:
+    alarma = {**ALARMA_ALTA, "Statistic": "Maximum", "Period": 300, "Threshold": 45.5}
+    datos = json.loads(datos_de_estado(alarma, AHORA, 50.0))
+    assert (datos["Statistic"], datos["Period"], datos["Threshold"]) == ("Maximum", 300, 45.5)
+    assert datos["RecentDatapoints"] == [50.0]
+    # El inicio es el periodo anterior al de la consulta, alineado al periodo (como en AWS).
+    assert datos["StartDate"] == "2026-11-20T14:25:00.000+0000"
+    otra_zona = AHORA.astimezone(timezone(timedelta(hours=-5)))
+    assert json.loads(datos_de_estado(ALARMA_ALTA, otra_zona, 80.0))["QueryDate"] == (
+        "2026-11-20T14:32:52.031+0000"
+    )
+
+
+@pytest.mark.parametrize("valor", [60.0, 59.9])
+def test_hu_w08_datos_de_estado_rechaza_un_valor_que_no_supera_el_umbral(valor: float) -> None:
+    with pytest.raises(ValueError):
+        datos_de_estado(ALARMA_ALTA, AHORA, valor)
+
+
+@pytest.mark.parametrize("falta", ["Statistic", "Period", "Threshold"])
+def test_hu_w08_datos_de_estado_rechaza_una_alarma_incompleta(falta: str) -> None:
+    alarma = {k: v for k, v in ALARMA_ALTA.items() if k != falta}
+    with pytest.raises(ValueError):
+        datos_de_estado(alarma, AHORA, 80.0)
+
+
+def test_hu_w08_datos_de_estado_rechaza_una_hora_sin_zona() -> None:
+    with pytest.raises(ValueError):
+        datos_de_estado(ALARMA_ALTA, AHORA.replace(tzinfo=None), 80.0)
