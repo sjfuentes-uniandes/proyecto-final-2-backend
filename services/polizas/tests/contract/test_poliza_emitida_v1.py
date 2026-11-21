@@ -432,12 +432,15 @@ def test_un_evento_de_una_poliza_no_activa_no_se_produce() -> None:
 
 
 # --- HU-W24: aggregateVersion -------------------------------------------------------------------
-def test_aggregate_version_es_opcional_y_vale_1() -> None:
-    """La emisión es el primer evento del agregado póliza; sin el campo, el sobre sigue valiendo
-    (los eventos ya publicados) y con otra versión no."""
+def test_aggregate_version_es_opcional_y_positivo() -> None:
+    """Sin el campo, el sobre sigue valiendo (los eventos ya publicados). Es un entero >= 1, no
+    `const: 1`: los datos sintéticos de HU-W21 (ORDEN-4) usan una emisión con versión 2 para probar
+    el orden del consumidor."""
     assert _errores({**_ejemplo(), "aggregateVersion": 1}) == []
+    assert _errores({**_ejemplo(), "aggregateVersion": 2}) == []
     assert _errores(_ejemplo()) == []
-    assert _errores({**_ejemplo(), "aggregateVersion": 2}) != []
+    assert _errores({**_ejemplo(), "aggregateVersion": 0}) != []
+    assert _errores({**_ejemplo(), "aggregateVersion": "1"}) != []
 
 
 def test_el_relay_publica_aggregate_version_1_y_el_sobre_cumple_el_esquema() -> None:

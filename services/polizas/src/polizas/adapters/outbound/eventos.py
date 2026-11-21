@@ -220,8 +220,12 @@ class SobrePolizaEmitidaV1(SobreEvento[PolizaEmitidaV1]):
 
     type: Literal["PolizaEmitida"]
     # HU-W24: opcional y aditivo, como en los consentimientos (ADR 0009); lo agrega el relay.
-    aggregate_version: Literal[1] = Field(
-        default=1, description="Posición en el agregado póliza: la emisión es la 1"
+    # Entero >= 1 y no `const: 1`: el consumidor ordena por versión (HU-W21, ORDEN-4 de
+    # `contracts/datos-sinteticos/eventos-parametricos.json`); hoy `polizas` publica siempre 1.
+    aggregate_version: int = Field(
+        default=1,
+        ge=1,
+        description="Posición en el agregado póliza; la emisión que publica polizas es la 1",
     )
 
 
