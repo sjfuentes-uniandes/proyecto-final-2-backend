@@ -1,4 +1,5 @@
-"""El original en S3 (HU-W21, DS3-16; HU-S03): cifrado exigido, checksum, corte y sin reintentos."""
+"""El original en S3 (HU-W21, DS3-16; HU-S03): cifrado exigido, checksum, corte y un solo
+reintento de transporte dentro de los 700 ms (R-225)."""
 
 import base64
 import hashlib
@@ -12,7 +13,7 @@ from adaptador_telemetria.adapters.outbound.archivo_s3 import (
     cliente_s3,
 )
 from adaptador_telemetria.application.telemetria.puertos import DependenciaNoDisponible
-from botocore.exceptions import ClientError, EndpointConnectionError
+from botocore.exceptions import ClientError, ConnectionClosedError, EndpointConnectionError
 
 pytestmark = pytest.mark.anyio
 CLAVE = "telemetria/2026/11/10/bafc2b26-7c88-5ae3-b5ac-26fdf5427a09.json"
@@ -87,13 +88,90 @@ async def test_pasado_el_corte_la_dependencia_no_esta_disponible() -> None:
     assert time.perf_counter() - inicio < 0.4
 
 
+class ClientePorIntento:
+    """Cada `put_object` sigue el guion de su intento: una demora (s) o un error."""
+
+    def __init__(self, *guion: float | Exception | None) -> None:
+        self.guion = list(guion)
+        self.intentos = 0
+        self.escritos: list[str] = []
+
+    def put_object(self, **argumentos: Any) -> dict[str, Any]:
+        paso = self.guion[self.intentos] if self.intentos < len(self.guion) else None
+        self.intentos += 1
+        if isinstance(paso, Exception):
+            raise paso
+        if paso:
+            time.sleep(paso)
+        self.escritos.append(argumentos["Key"])
+        return {}
+
+
+async def test_si_el_primer_intento_se_pasa_del_corte_reintenta_una_vez_y_archiva(
+    capturar_logs: Any,
+) -> None:
+    """R-225: tras unos minutos sin envíos, la conexión reutilizada no responde; otra sí."""
+    salida = capturar_logs()
+    cliente = ClientePorIntento(0.5, None)
+    await ArchivoS3(cliente, "b", "AES256", 100).guardar(CLAVE, CUERPO, METADATOS)
+    assert cliente.intentos == 2
+    assert CLAVE in cliente.escritos
+    texto = salida.getvalue()
+    assert "se reintenta una vez" in texto and "TimeoutError" in texto
+    assert "no se pudo archivar" not in texto
+    assert CLAVE not in texto and "valor-sensible" not in texto
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        EndpointConnectionError(endpoint_url="http://interno"),
+        ConnectionClosedError(endpoint_url="http://interno"),
+    ],
+)
+async def test_una_conexion_caida_se_reintenta_una_vez(error: Exception) -> None:
+    cliente = ClientePorIntento(error, None)
+    await ArchivoS3(cliente, "b", "AES256", 300).guardar(CLAVE, CUERPO, METADATOS)
+    assert (cliente.intentos, cliente.escritos) == (2, [CLAVE])
+
+
+async def test_un_error_de_s3_no_se_reintenta() -> None:
+    cliente = ClientePorIntento(
+        ClientError({"Error": {"Code": "AccessDenied", "Message": "x"}}, "PutObject")
+    )
+    with pytest.raises(DependenciaNoDisponible):
+        await ArchivoS3(cliente, "b", "AES256", 300).guardar(CLAVE, CUERPO, METADATOS)
+    assert cliente.intentos == 1
+
+
+async def test_si_los_dos_intentos_fallan_no_pasa_de_700_ms() -> None:
+    """§13, regla 7: con el corte por omisión (300 ms) son dos intentos y nunca un tercero."""
+    cliente = ClientePorIntento(1.0, 1.0, None)
+    inicio = time.perf_counter()
+    with pytest.raises(DependenciaNoDisponible):
+        await ArchivoS3(cliente, "b", "AES256", 300).guardar(CLAVE, CUERPO, METADATOS)
+    assert time.perf_counter() - inicio < 0.7
+    assert cliente.intentos == 2
+
+
+async def test_sin_tiempo_para_otra_conexion_no_reintenta() -> None:
+    """Con un corte por intento de 650 ms quedan 50 ms: no alcanza y responde 503 enseguida."""
+    cliente = ClientePorIntento(1.0, None)
+    inicio = time.perf_counter()
+    with pytest.raises(DependenciaNoDisponible):
+        await ArchivoS3(cliente, "b", "AES256", 650).guardar(CLAVE, CUERPO, METADATOS)
+    assert time.perf_counter() - inicio < 0.7
+    assert cliente.intentos == 1
+
+
 async def test_sin_bucket_no_se_acepta_ningun_evento() -> None:
     with pytest.raises(DependenciaNoDisponible):
         await ArchivoSinConfigurar().guardar(CLAVE, CUERPO, METADATOS)
 
 
 def test_el_cliente_no_reintenta_y_corta_a_los_milisegundos_configurados() -> None:
-    """R-28: `total_max_attempts: 1` (con `max_attempts: 1` boto3 haría dos intentos)."""
+    """R-28: `total_max_attempts: 1` (con `max_attempts: 1` boto3 haría dos intentos). El único
+    reintento lo decide `ArchivoS3` (R-225)."""
     cliente = cliente_s3("us-east-1", 300, "http://localhost:4566")
     config = cliente.meta.config
     assert config.retries["total_max_attempts"] == 1
