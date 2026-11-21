@@ -86,7 +86,11 @@ Con esto, una `PolizaCancelada` (versión 2) que llega antes que la `PolizaEmiti
 3. `polizas` la guarda con los insumos de la decisión. La forma canónica solo la incluye si existe, así que la huella de los insumos ya guardados no cambia. De ahí pasa a los datos de la emisión (no al PDF) y a `PolizaEmitida.coberturaParametrica`.
 4. Para que `clima-lluvia` se pueda contratar y emitir de punta a punta se agregaron:
    - su ramo en `polizas` (`RAMOS`: `250` "Paramétrico", el de los datos sintéticos de HU-W21);
-   - sus reglas de suscripción en la semilla QA del catálogo (`qa/reglas_suscripcion_qa_clima_lluvia.json`, las mismas de `vida-hipotecario` sin alternativas). Se publican con `CATALOGO_PRODUCTOS_QA`.
+   - sus reglas de suscripción en la semilla QA del catálogo. Se publican con `CATALOGO_PRODUCTOS_QA`.
+     - La versión vigente es la `2026.11.2` (`qa/reglas_suscripcion_qa_clima_lluvia_2026_11_2.json`, desde el 2026-11-21) y tiene solo edad, suma asegurada y plazo.
+     - Un producto paramétrico se cotiza sin perfil, porque no tiene modelo de riesgo. Con las reglas de nivel de riesgo, confianza del perfil y listas restrictivas, que salen del perfil, el motor de `polizas` las dejaba sin evaluar y toda solicitud quedaba en la bandeja del suscriptor.
+     - La `2026.11.1` (una copia de las de `vida-hipotecario`) se conserva, porque una versión publicada no cambia.
+     - Pruebas: `test_clima_lluvia_se_suscribe_sin_reglas_del_perfil` (catalogo) y `test_clima_lluvia_sin_perfil_se_aprueba_sin_pasar_por_revision` (polizas).
 
 Pruebas: `services/cotizacion/tests/unit/cotizacion/test_hu_w24_cobertura_parametrica.py`, `services/polizas/tests/unit/poliza/test_hu_w24_cobertura_parametrica.py`, `test_hu_w24_*` en `services/api-socios/tests/unit/test_ofertas.py` y `services/bff-web/tests/unit/test_cotizaciones.py`, y `ZONA_REQUERIDA` en `contracts/codigos-error.md`. Las condiciones del producto (`GET /v1/productos/{id}/condiciones` en `cotizacion` y `bff-web`) traen `parametrico`, la regla del catálogo, o `null`. Con ella, el formulario «Nueva cotización» del portal ofrece el ramo paramétrico, pide la zona del riesgo, muestra la regla y deja solo «Cotizar sin perfilar», porque el producto no tiene modelo de riesgo.
 

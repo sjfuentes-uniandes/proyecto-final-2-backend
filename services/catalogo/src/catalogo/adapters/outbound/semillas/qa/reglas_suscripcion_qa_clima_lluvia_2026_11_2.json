@@ -1,0 +1,42 @@
+{
+  "productoId": "clima-lluvia",
+  "alternativas": [],
+  "reglas": [
+    {
+      "codigo": "SUS-001",
+      "orden": 1,
+      "tipo": "EXCLUYENTE",
+      "descripcion": "regla.edad.entre",
+      "campo": "edad",
+      "operador": "entre",
+      "valor": [
+        "18",
+        "65"
+      ],
+      "visibilidad": "EXPLICABLE",
+      "motivoCliente": "EDAD_FUERA_DE_RANGO"
+    },
+    {
+      "codigo": "SUS-004",
+      "orden": 2,
+      "tipo": "REVISION",
+      "descripcion": "regla.suma_asegurada.maximo",
+      "campo": "suma_asegurada",
+      "operador": "<=",
+      "valor": "500000000",
+      "visibilidad": "EXPLICABLE",
+      "motivoCliente": "SUMA_REQUIERE_REVISION"
+    },
+    {
+      "codigo": "SUS-019",
+      "orden": 3,
+      "tipo": "EXCLUYENTE",
+      "descripcion": "regla.plazo_credito_meses.maximo",
+      "campo": "plazo_credito_meses",
+      "operador": "<=",
+      "valor": "240",
+      "visibilidad": "EXPLICABLE",
+      "motivoCliente": "PLAZO_FUERA_DE_RANGO"
+    }
+  ]
+}

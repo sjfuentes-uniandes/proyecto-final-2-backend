@@ -15,6 +15,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from jsonschema import Draft202012Validator
+from polizas.adapters.outbound.catalogo_http import a_reglas
 from polizas.adapters.outbound.cotizacion_http import a_insumos
 from polizas.adapters.outbound.eventos import POLIZA_EMITIDA
 from polizas.adapters.outbound.outbox_pg import OutboxPolizasPg, evento_de_emision
@@ -22,7 +23,8 @@ from polizas.adapters.outbound.polizas_pg import TransaccionPolizasPg
 from polizas.domain.poliza.documento import FuenteDocumento, datos_documento
 from polizas.domain.poliza.modelos import Documento, Firma, OrigenPoliza, Poliza, Producto
 from polizas.domain.suscripcion.insumos import hash_insumos, insumos_canonicos, insumos_de
-from polizas.domain.suscripcion.modelos import Cobertura, CoberturaParametrica
+from polizas.domain.suscripcion.modelos import Cobertura, CoberturaParametrica, ResultadoDecision
+from polizas.domain.suscripcion.motor import evaluar
 
 pytestmark = pytest.mark.anyio
 RAIZ = Path(__file__).parents[5]
@@ -157,3 +159,28 @@ def test_una_regla_fuera_del_contrato_no_se_publica() -> None:
     invalida = replace(COBERTURA, tipo_evento="GRANIZO")
     with pytest.raises(ValueError):
         evento_de_emision(activa, datos_documento(activa, _fuente(invalida), CREADA), "c")
+
+
+# --- Suscripción del paramétrico (sin perfil) ------------------------------------------------
+REGLAS_CLIMA = (
+    RAIZ
+    / "services/catalogo/src/catalogo/adapters/outbound/semillas/qa"
+    / "reglas_suscripcion_qa_clima_lluvia_2026_11_2.json"
+)
+
+
+def test_clima_lluvia_sin_perfil_se_aprueba_sin_pasar_por_revision() -> None:
+    """Las reglas vigentes de `clima-lluvia` (semilla QA del catálogo) solo usan datos de la
+    cotización: un cliente cotizado sin perfil queda APROBADO, no en la bandeja del suscriptor."""
+    definicion = json.loads(REGLAS_CLIMA.read_text(encoding="utf-8"))
+    respuesta = {
+        "productoId": "clima-lluvia",
+        "version": "2026.11.2",
+        "vigenteDesde": "2026-11-21T00:00:00Z",
+        "hash": "sha256:" + "0" * 64,
+        "definicion": definicion,
+    }
+    reglas = a_reglas(json.dumps(respuesta).encode())
+    sin_perfil = replace(insumos_de(INSUMOS), perfil=None, coincidencias_listas_restrictivas=None)
+    evaluacion = evaluar(sin_perfil, reglas.reglas)
+    assert evaluacion.resultado is ResultadoDecision.APROBADA, evaluacion

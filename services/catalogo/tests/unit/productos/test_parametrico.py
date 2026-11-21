@@ -272,3 +272,27 @@ async def test_la_cache_conserva_el_bloque(productos_repo: ProductosMemoria) -> 
     cache.valores[clave_producto("clima-lluvia")] = json.dumps(antiguo).encode()
     leido = await con_cache.producto("clima-lluvia")
     assert leido is not None and leido.parametrico is None
+
+
+# --- HU-W24: suscripción del paramétrico sin perfil ------------------------------------------
+def test_clima_lluvia_se_suscribe_sin_reglas_del_perfil() -> None:
+    """Un producto paramétrico se cotiza sin perfil (no tiene modelo de riesgo): sus reglas
+    vigentes solo usan lo que trae la cotización. Con nivel de riesgo, confianza o listas
+    restrictivas, el motor de `polizas` dejaría la regla NO_EVALUABLE y la decisión siempre en
+    revisión. La versión 2026.11.1 se conserva (las versiones publicadas no cambian)."""
+    from catalogo.adapters.outbound.reglas_suscripcion_pg import semillas as semillas_suscripcion
+    from catalogo.domain.suscripcion.validacion import validar_reglas_suscripcion
+
+    versiones = sorted(
+        (vigente, version, definicion)
+        for producto_id, version, vigente, definicion in semillas_suscripcion(PRODUCTOS_QA)
+        if producto_id == "clima-lluvia"
+    )
+    assert [v for _, v, _ in versiones] == ["2026.11.1", "2026.11.2"]
+    *_, (_, _, vigente) = versiones
+    assert validar_reglas_suscripcion(vigente, "clima-lluvia") == ()
+    assert [r["campo"] for r in vigente["reglas"]] == [
+        "edad",
+        "suma_asegurada",
+        "plazo_credito_meses",
+    ]
