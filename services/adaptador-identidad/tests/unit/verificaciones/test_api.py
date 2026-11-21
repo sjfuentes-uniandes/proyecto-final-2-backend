@@ -90,6 +90,36 @@ def test_422_solicitud_invalida(cliente_con: Any, cambios: dict[str, Any]) -> No
     assert recibidas == []
 
 
+# Solo la forma; el cuerpo es el de test_documento.py.
+_DOCUMENTO = {
+    "clienteId": "00000000-0000-4000-8000-000000000001",
+    "tipoDocumento": "CC",
+    "numeroDocumento": "1020456789",
+    "nombreCompleto": "Natalia González Ruiz",
+    "fechaNacimiento": "1990-04-18",
+}
+
+
+@pytest.mark.parametrize("valor", ["69 ", " 69", "+69", "6_9", "069", "0", "701"])
+def test_422_deadline_fuera_de_su_forma_o_rango(cliente_con: Any, valor: str) -> None:
+    """Solo un entero canónico de 1 a 700: Schemathesis envió "69 " y la API lo aceptaba."""
+    cliente, recibidas = cliente_con(_nominal)
+    for ruta, cuerpo in (
+        ("/v1/verificaciones", _cuerpo()),
+        ("/v1/verificaciones/documento", _DOCUMENTO),
+    ):
+        respuesta = cliente.post(ruta, json=cuerpo, headers={"X-Deadline-Ms": valor})
+        assert respuesta.status_code == 422, (ruta, respuesta.text)
+    assert recibidas == []
+
+
+def test_el_deadline_canonico_se_acepta(cliente_con: Any) -> None:
+    cliente, recibidas = cliente_con(_nominal)
+    respuesta = cliente.post("/v1/verificaciones", json=_cuerpo(), headers={"X-Deadline-Ms": "690"})
+    assert respuesta.status_code == 200
+    assert len(recibidas) == 1
+
+
 def test_504_tiempo_agotado(cliente_con: Any) -> None:
     cliente, _ = cliente_con(lambda r: httpx.ReadTimeout("lento", request=r))
     _error(cliente.post("/v1/verificaciones", json=_cuerpo()), 504, "TIEMPO_AGOTADO")

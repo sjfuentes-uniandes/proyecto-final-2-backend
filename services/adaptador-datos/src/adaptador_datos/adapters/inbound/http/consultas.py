@@ -5,7 +5,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Header, Request
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 from solventa_common.errors import ErrorNegocio
 from solventa_common.resiliencia import CORTE_DURO_MS, DependenciaNoDisponible, TiempoAgotado
@@ -23,9 +23,25 @@ from adaptador_datos.domain.consultas.modelos import (
 
 router = APIRouter(prefix="/v1/consultas", tags=["consultas"])
 
+
+def _entero_canonico(valor: object) -> object:
+    """Un encabezado entero solo en su forma canónica: `int()` aceptaría "69 ", "+69" o "6_9", que
+    el contrato (`type: integer`) no admite (Schemathesis los envía como datos inválidos)."""
+    if isinstance(valor, str) and not (
+        valor.isascii() and valor.isdigit() and str(int(valor)) == valor
+    ):
+        raise ValueError("X-Deadline-Ms debe ser un entero sin signo, espacios ni separadores")
+    return valor
+
+
 # Tipo int con valor por defecto None: el contrato publica un entero opcional y no anulable
 # (con `int | None`, Schemathesis envía "null", que el esquema permitiría).
-DeadlineMs = Annotated[int, Header(alias="X-Deadline-Ms", ge=1, le=CORTE_DURO_MS)]
+DeadlineMs = Annotated[
+    int,
+    # Header antes que el validador: así FastAPI publica minimum/maximum en el contrato.
+    Header(alias="X-Deadline-Ms", ge=1, le=CORTE_DURO_MS),
+    BeforeValidator(_entero_canonico),
+]
 
 
 class _Dto(BaseModel):
