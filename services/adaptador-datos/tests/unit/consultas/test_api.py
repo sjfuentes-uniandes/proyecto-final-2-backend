@@ -131,6 +131,11 @@ def test_200_valores_decimales_en_texto_y_no_disponible(cliente_con: Any) -> Non
         ({"clienteId": "no-uuid"}, {}, ["clienteId"]),
         ({}, {"X-Deadline-Ms": "701"}, ["X-Deadline-Ms"]),
         ({}, {"X-Deadline-Ms": "0"}, ["X-Deadline-Ms"]),
+        # Solo la forma canónica del entero (Schemathesis envió "69 " y la API lo aceptaba).
+        ({}, {"X-Deadline-Ms": "69 "}, ["X-Deadline-Ms"]),
+        ({}, {"X-Deadline-Ms": "+69"}, ["X-Deadline-Ms"]),
+        ({}, {"X-Deadline-Ms": "6_9"}, ["X-Deadline-Ms"]),
+        ({}, {"X-Deadline-Ms": "069"}, ["X-Deadline-Ms"]),
     ],
 )
 def test_422_solicitud_invalida(

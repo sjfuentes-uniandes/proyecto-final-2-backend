@@ -142,6 +142,8 @@ def test_no_lleva_nombres_ni_datos_sensibles_de_los_insumos() -> None:
         "version_reglas_prima",
         "version_reglas_suscripcion",
         "fecha_documento",
+        # HU-W24: no va en el PDF, solo en PolizaEmitida (la regla y la zona, sin datos personales).
+        "cobertura_parametrica",
     ]
 
 

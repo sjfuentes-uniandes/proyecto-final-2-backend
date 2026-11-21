@@ -1,7 +1,8 @@
 """Reglas de suscripción en PostgreSQL (HU-W13). catalogo es el único escritor de su base.
 
 `sembrar` publica las versiones listadas en `reglasSuscripcion` de cada producto de
-`semillas/productos.json`, con el mismo mecanismo que las reglas de prima (HU-W03): el esquema del
+`semillas/productos.json` (y, con CATALOGO_PRODUCTOS_QA, de `semillas/qa/productos_qa.json`: HU-W24,
+las de `clima-lluvia`, para que el producto paramétrico se pueda suscribir y emitir), con el mismo mecanismo que las reglas de prima (HU-W03): el esquema del
 borde, la validación del dominio y el hash canónico. Una semilla inválida impide arrancar. Es
 idempotente: una versión existente no cambia.
 """
@@ -38,13 +39,13 @@ _POR_VERSION = f"SELECT {_COLUMNAS} FROM reglas_suscripcion WHERE producto_id = 
 Semilla = tuple[str, str, datetime, dict[str, Any]]
 
 
-def semillas() -> list[Semilla]:
+def semillas(archivo: str = "productos.json") -> list[Semilla]:
     """(producto, versión, vigente desde, definición) de cada versión sembrada.
 
     Lanza ReglasSuscripcionInvalidas si una definición no cumple sus validaciones.
     """
     productos: list[dict[str, Any]] = json.loads(
-        _SEMILLAS.joinpath("productos.json").read_text(encoding="utf-8")
+        _SEMILLAS.joinpath(archivo).read_text(encoding="utf-8")
     )
     resultado: list[Semilla] = []
     for producto in productos:
@@ -59,9 +60,9 @@ def semillas() -> list[Semilla]:
     return resultado
 
 
-def sembrar(conexion: psycopg.Connection[Any]) -> None:
+def sembrar(conexion: psycopg.Connection[Any], archivo: str = "productos.json") -> None:
     """Inserta las versiones de la semilla que aún no existen (después de los productos)."""
-    for producto_id, version, vigente_desde, definicion in semillas():
+    for producto_id, version, vigente_desde, definicion in semillas(archivo):
         conexion.execute(
             _INSERTAR,
             (

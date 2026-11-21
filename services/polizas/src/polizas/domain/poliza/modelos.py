@@ -63,7 +63,11 @@ class Ramo:
 
 # ADR 0014, decisión 2: convención de Solventa, no un dato del catálogo.
 RAMOS: Mapping[str, Ramo] = MappingProxyType(
-    {"vida-hipotecario": Ramo(codigo="100", nombre="Vida hipotecario")}
+    {
+        "vida-hipotecario": Ramo(codigo="100", nombre="Vida hipotecario"),
+        # HU-W24: el producto paramétrico de QA (HU-W21), con el ramo de sus datos sintéticos.
+        "clima-lluvia": Ramo(codigo="250", nombre="Paramétrico"),
+    }
 )
 
 

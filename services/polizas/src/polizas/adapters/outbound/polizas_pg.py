@@ -338,6 +338,7 @@ class PolizasPg:
             transaccion_id=fila["transaccion_id"],
             version_reglas_prima=insumos.version_reglas_prima,
             version_reglas_suscripcion=fila["version_reglas"],
+            cobertura_parametrica=insumos.cobertura_parametrica,
         )
 
 

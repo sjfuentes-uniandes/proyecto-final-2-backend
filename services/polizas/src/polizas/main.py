@@ -23,6 +23,7 @@ from polizas.adapters.outbound.catalogo_http import CatalogoHttp
 from polizas.adapters.outbound.cotizacion_http import CotizacionHttp
 from polizas.adapters.outbound.documento_pdf import GeneradorPdf
 from polizas.adapters.outbound.documentos_s3 import almacen_desde
+from polizas.adapters.outbound.eventos import VERSIONES_AGREGADO
 from polizas.adapters.outbound.firma_http import AdaptadorFirmaHttp
 from polizas.adapters.outbound.outbox_pg import OutboxPolizasPg
 from polizas.adapters.outbound.polizas_pg import PolizasLecturaPg, PolizasPg, TransaccionesPg
@@ -249,7 +250,7 @@ def _relay_outbox(app: FastAPI, settings: Settings, reloj: Reloj) -> _Fondo | No
         return None
     relay = RelayOutbox(
         OutboxPg(pool),
-        PublicadorSns(cliente, topico),
+        PublicadorSns(cliente, topico, VERSIONES_AGREGADO),
         lote=settings.outbox_lote,
         max_intentos=settings.outbox_max_intentos,
         intervalo_s=settings.outbox_intervalo_s,

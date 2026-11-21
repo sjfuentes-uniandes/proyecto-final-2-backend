@@ -28,6 +28,8 @@ class SolicitudOferta:
     plazo_credito_meses: int
     suma_asegurada: int
     coberturas_opcionales: tuple[str, ...]
+    # HU-W24: zona del riesgo; la exige cotizacion en un producto paramétrico.
+    zona: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

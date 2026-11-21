@@ -84,6 +84,7 @@ from cotizacion.domain.cotizacion.errores import (
     ProductoNoEncontrado,
     ReglasNoVigentes,
     RolNoPermitido,
+    ZonaRequerida,
 )
 from cotizacion.domain.cotizacion.fallback import (
     CotizacionPendiente,
@@ -103,6 +104,7 @@ from cotizacion.domain.cotizacion.modelos import (
     RolActor,
 )
 from cotizacion.domain.cotizacion.oferta import crear_oferta
+from cotizacion.domain.cotizacion.parametrico import cobertura_parametrica
 from cotizacion.domain.cotizacion.prima import (
     CAMPO_NACIMIENTO,
     CAMPO_PLAZO,
@@ -155,6 +157,7 @@ ERRORES_DE_NEGOCIO: tuple[type[Exception], ...] = (
     ReglasNoVigentes,
     DatosFueraDeRango,
     CoberturaNoDisponible,
+    ZonaRequerida,
     PerfilNoCorresponde,
     PerfilNoEncontrado,
     ClienteNoEncontrado,
@@ -182,6 +185,9 @@ class ComandoCotizacion:
     correlation_id: str
     # X-Deadline-Ms recibido (api-socios, bff-web): acota el presupuesto propio.
     deadline_ms: int | None = None
+    # HU-W24: zona del riesgo (municipio DANE o código de vuelo); obligatoria en un producto
+    # paramétrico, sin uso en los demás.
+    zona: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -253,7 +259,7 @@ class _Dependencias:
 
 def huella_solicitud(cmd: ComandoCotizacion) -> str:
     """sha256 del JSON canónico de lo que identifica la solicitud (DT-26)."""
-    contenido = {
+    contenido: dict[str, Any] = {
         "clienteId": str(cmd.cliente_id),
         "productoId": cmd.producto_id,
         "perfilId": str(cmd.perfil_id) if cmd.perfil_id else None,
@@ -265,6 +271,9 @@ def huella_solicitud(cmd: ComandoCotizacion) -> str:
         },
         "coberturasOpcionales": sorted(set(cmd.coberturas_opcionales)),
     }
+    # HU-W24: solo si viene, para que la huella de las solicitudes sin zona no cambie.
+    if cmd.zona is not None:
+        contenido["datosAsegurado"]["zona"] = cmd.zona
     canonico = json.dumps(contenido, sort_keys=True, separators=(",", ":"))
     return "sha256:" + hashlib.sha256(canonico.encode("utf-8")).hexdigest()
 
@@ -370,6 +379,7 @@ class CalcularPrima:
             coberturas_opcionales=tuple(sorted(set(cmd.coberturas_opcionales))),
         )
         validar_entradas(producto.valor, reglas.valor, entradas)
+        parametrica = cobertura_parametrica(producto.valor, cmd.zona)
         registro = await self._decidir(cmd, producto.valor.id, perfil, ahora, huella, dependencias)
         desglose = calcular_prima(
             reglas.valor, entradas, registro.decision.ajustes if registro else ()
@@ -399,6 +409,7 @@ class CalcularPrima:
             duracion_ms=round((time.perf_counter() - inicio) * 1000),
             correlation_id=cmd.correlation_id,
             actor=cmd.actor,
+            cobertura_parametrica=parametrica,
         )
         cotizacion = replace(
             cotizacion,

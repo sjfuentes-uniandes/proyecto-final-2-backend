@@ -57,6 +57,7 @@ from cotizacion.domain.cotizacion.errores import (
     ProductoNoEncontrado,
     ReglasNoVigentes,
     RolNoPermitido,
+    ZonaRequerida,
 )
 from cotizacion.domain.cotizacion.fallback import (
     AccionSugerida,
@@ -148,6 +149,13 @@ class DatosAseguradoDto(_Dto):
     fecha_nacimiento: date
     plazo_credito_meses: Annotated[int, Field(ge=1, le=600)]
     suma_asegurada: Annotated[int, Field(ge=0, le=1_000_000_000_000)]
+    zona: Annotated[str, Field(pattern=r"^[A-Z0-9]{2,16}$")] | None = Field(
+        default=None,
+        description=(
+            "HU-W24: zona del riesgo (municipio DANE o código de vuelo). Obligatoria en un "
+            "producto paramétrico (ZONA_REQUERIDA); sin uso en los demás"
+        ),
+    )
 
 
 class SolicitudCotizacion(_Dto):
@@ -313,6 +321,16 @@ class LimitesDto(_Dto):
     edad: RangoDto
 
 
+class ReglaParametricaDto(_Dto):
+    """Regla del producto paramétrico (HU-W21): paga `valorPago` si `tipoEvento` llega a `umbral`."""
+
+    tipo_evento: str
+    unidad: str
+    umbral: TextoDecimal
+    valor_pago: TextoDecimal
+    version_regla: str
+
+
 class CondicionesProducto(_Dto):
     producto_id: str
     nombre: str
@@ -325,6 +343,14 @@ class CondicionesProducto(_Dto):
     vigente_hasta: datetime | None
     coberturas: list[CoberturaProductoDto]
     limites: LimitesDto
+    # HU-W24: aditivo; el portal pide `datosAsegurado.zona` solo si el producto es paramétrico.
+    parametrico: ReglaParametricaDto | None = Field(
+        default=None,
+        description=(
+            "HU-W24: la regla del producto paramétrico (HU-W21); null si no lo es. Con regla, la "
+            "cotización exige datosAsegurado.zona (ZONA_REQUERIDA)"
+        ),
+    )
 
 
 class ResumenCotizacionDto(_Dto):
@@ -531,6 +557,15 @@ def condiciones_de(condiciones: Condiciones) -> CondicionesProducto:
             ),
             edad=RangoDto(minimo=texto(limites.edad.minimo), maximo=texto(limites.edad.maximo)),
         ),
+        parametrico=None
+        if producto.parametrico is None
+        else ReglaParametricaDto(
+            tipo_evento=producto.parametrico.tipo_evento,
+            unidad=producto.parametrico.unidad,
+            umbral=producto.parametrico.umbral,
+            valor_pago=producto.parametrico.valor_pago,
+            version_regla=producto.parametrico.version_regla,
+        ),
     )
 
 
@@ -568,6 +603,13 @@ def error_cotizacion(error: Exception, producto_en_ruta: bool = False) -> ErrorN
             return ErrorNegocio(
                 "COBERTURA_NO_DISPONIBLE",
                 "Una cobertura no es opcional en el producto",
+                422,
+                {"campos": list(campos)},
+            )
+        case ZonaRequerida(campos=campos):
+            return ErrorNegocio(
+                "ZONA_REQUERIDA",
+                "El producto es paramétrico y requiere la zona del riesgo",
                 422,
                 {"campos": list(campos)},
             )
@@ -624,6 +666,7 @@ ERRORES_TRADUCIBLES = (
     ReglasNoVigentes,
     DatosFueraDeRango,
     CoberturaNoDisponible,
+    ZonaRequerida,
     PerfilNoCorresponde,
     PerfilNoEncontrado,
     ClienteNoEncontrado,
@@ -688,8 +731,8 @@ DeadlineMs = Annotated[
         422: _error(
             "SOLICITUD_INVALIDA, IDEMPOTENCIA_CONFLICTO, PRODUCTO_NO_ENCONTRADO, "
             "PRODUCTO_INACTIVO, PRODUCTO_FUERA_DE_VIGENCIA, REGLAS_NO_VIGENTES, "
-            "DATOS_FUERA_DE_RANGO, COBERTURA_NO_DISPONIBLE o PERFIL_NO_CORRESPONDE "
-            "(detalles.campos, sin valores)"
+            "DATOS_FUERA_DE_RANGO, COBERTURA_NO_DISPONIBLE, ZONA_REQUERIDA o "
+            "PERFIL_NO_CORRESPONDE (detalles.campos, sin valores)"
         ),
         503: _error(
             "DEPENDENCIA_NO_DISPONIBLE (detalles.dependencia). HU-W06: con dependencia "
@@ -721,6 +764,7 @@ async def cotizar(
         actor=actor,
         correlation_id=correlation.obtener() or "",
         deadline_ms=x_deadline_ms,
+        zona=datos.zona,
     )
     try:
         cotizacion, pasos, creada = await calcular.ejecutar(comando)

@@ -16,6 +16,7 @@ from polizas.adapters.outbound.eventos import (
     DECISION_SUSCRIPCION_REGISTRADA,
     OFERTA_ACEPTADA,
     POLIZA_EMITIDA,
+    CoberturaParametricaV1,
     CoberturaV1,
     DecisionSuscripcionRegistradaV1,
     DocumentoV1,
@@ -27,6 +28,8 @@ from polizas.adapters.outbound.eventos import (
     RamoV1,
     SobreEvento,
     SobrePolizaEmitidaV1,
+    TipoEventoParametrico,
+    UnidadParametrica,
     VigenciaV1,
 )
 from polizas.adapters.outbound.polizas_pg import TransaccionPg
@@ -34,7 +37,7 @@ from polizas.domain.aceptacion.modelos import Aceptacion
 from polizas.domain.poliza.documento import DatosDocumento
 from polizas.domain.poliza.modelos import EstadoPoliza, Poliza
 from polizas.domain.suscripcion.insumos import texto
-from polizas.domain.suscripcion.modelos import Decision
+from polizas.domain.suscripcion.modelos import CoberturaParametrica, Decision
 
 _INSERTAR = (
     "INSERT INTO outbox (event_id, aggregate_id, event_type, event_version, occurred_at, "
@@ -149,7 +152,25 @@ def evento_de_emision(
             ),
             firma=FirmaV1(firma_id=firma.firma_id, sello_tiempo=firma.sello_tiempo),
             emitida_en=emitida_en,
+            cobertura_parametrica=_cobertura_parametrica(datos.cobertura_parametrica),
         ),
+    )
+
+
+def _cobertura_parametrica(
+    cobertura: CoberturaParametrica | None,
+) -> CoberturaParametricaV1 | None:
+    """HU-W24: la instantánea de la cotización de un producto paramétrico; None en los demás."""
+    if cobertura is None:
+        return None
+    return CoberturaParametricaV1(
+        tipo_evento=TipoEventoParametrico(cobertura.tipo_evento),
+        zona=cobertura.zona,
+        umbral=cobertura.umbral,
+        unidad=UnidadParametrica(cobertura.unidad),
+        valor_pago=cobertura.valor_pago,
+        moneda=cobertura.moneda,
+        version_regla=cobertura.version_regla,
     )
 
 

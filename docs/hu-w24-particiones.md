@@ -72,7 +72,25 @@ El manejador escribe su efecto con `tx.conexion` (modo a) o devuelve una continu
 
 Con esto, una `PolizaCancelada` (versión 2) que llega antes que la `PolizaEmitida` (versión 1) deja la cobertura cancelada. La emisión atrasada ya no la reactiva.
 
-**Dependencia abierta:** hoy `polizas` no publica `aggregateVersion` en `PolizaEmitida` ni existe `PolizaCancelada`. La regla solo tiene efecto cuando el productor publique la versión del agregado. Queda anotado para capbmaster (HU-W21) y para quien sea responsable de `polizas`.
+**Cómo la usa HU-W21:** `pagos_parametricos/domain/parametrico/orden.py` mantiene `coberturas_activas` con `avanza`: compara `aggregateVersion` si el evento y la fila lo traen y, si no, `occurredAt` (DS3-22). No usa `leer_version`, porque un evento sin versión (los `PolizaEmitida` ya publicados, la `PolizaCancelada` sintética) iría a la DLQ.
+
+**`aggregateVersion` en `polizas` (HU-W24, sobre lo que entregó HU-W17):** `PolizaEmitida` sale con `aggregateVersion` = 1, porque la emisión es el primer evento del agregado póliza. El outbox no guarda la columna, así que la agrega el relay común: `PublicadorSns(cliente, topico, VERSIONES_AGREGADO)` y `sobre_json(evento, versiones_agregado)`, con `VERSIONES_AGREGADO = {"PolizaEmitida": 1}` en `polizas/adapters/outbound/eventos.py`. Sin el mapa, los demás servicios publican igual que antes. El esquema publicado lo declara opcional y entero ≥ 1, no `const` 1, porque los datos sintéticos de HU-W21 (ORDEN-4) usan una emisión con versión 2 para probar el orden del consumidor (`test_eventos_w21.py` de `pagos-parametricos` valida cada cobertura contra este esquema). Pruebas: `libs/solventa-common/tests/unit/test_outbox.py` (`…aggregate_version…`) y `services/polizas/tests/contract/test_poliza_emitida_v1.py` (`test_aggregate_version_es_opcional_y_positivo` y `test_el_relay_publica_aggregate_version_1_y_el_sobre_cumple_el_esquema`).
+
+**`coberturaParametrica` en `PolizaEmitida` (HU-W24, sobre lo que entregaron HU-W17 y HU-W21):** hasta ahora `polizas` la publicaba siempre en `null`, así que `pagos-parametricos` no tenía coberturas reales que evaluar. La regla está en el producto del catálogo (HU-W21, `clima-lluvia` en QA), pero la zona es de cada póliza y nadie la capturaba. Ahora la zona viaja así:
+
+1. `POST /v1/cotizaciones` (en `cotizacion`, y pasada tal cual por `bff-web` y `api-socios`) acepta `datosAsegurado.zona` (`^[A-Z0-9]{2,16}$`: municipio DANE o código de vuelo).
+   - Si el producto del catálogo trae `parametrico`, la zona es obligatoria: sin ella responde `422 ZONA_REQUERIDA`, con `detalles.campos = ["datosAsegurado.zona"]`.
+   - En los demás productos la zona se ignora.
+   - La huella de idempotencia solo la incluye si viene, así que las solicitudes sin zona conservan su huella.
+2. La cotización guarda la instantánea de la regla y la zona (`cotizaciones.cobertura_parametrica`, migración `007`), como ya guarda sus coberturas, y la entrega en `GET …/insumos-suscripcion` (`coberturaParametrica`, null si no aplica).
+3. `polizas` la guarda con los insumos de la decisión. La forma canónica solo la incluye si existe, así que la huella de los insumos ya guardados no cambia. De ahí pasa a los datos de la emisión (no al PDF) y a `PolizaEmitida.coberturaParametrica`.
+4. Para que `clima-lluvia` se pueda contratar y emitir de punta a punta se agregaron:
+   - su ramo en `polizas` (`RAMOS`: `250` "Paramétrico", el de los datos sintéticos de HU-W21);
+   - sus reglas de suscripción en la semilla QA del catálogo (`qa/reglas_suscripcion_qa_clima_lluvia.json`, las mismas de `vida-hipotecario` sin alternativas). Se publican con `CATALOGO_PRODUCTOS_QA`.
+
+Pruebas: `services/cotizacion/tests/unit/cotizacion/test_hu_w24_cobertura_parametrica.py`, `services/polizas/tests/unit/poliza/test_hu_w24_cobertura_parametrica.py`, `test_hu_w24_*` en `services/api-socios/tests/unit/test_ofertas.py` y `services/bff-web/tests/unit/test_cotizaciones.py`, y `ZONA_REQUERIDA` en `contracts/codigos-error.md`. Las condiciones del producto (`GET /v1/productos/{id}/condiciones` en `cotizacion` y `bff-web`) traen `parametrico`, la regla del catálogo, o `null`. Con ella, el formulario «Nueva cotización» del portal ofrece el ramo paramétrico, pide la zona del riesgo, muestra la regla y deja solo «Cotizar sin perfilar», porque el producto no tiene modelo de riesgo.
+
+**`PolizaCancelada`:** ninguna historia del tablero cubre la cancelación de pólizas, así que `polizas` no la publica. Sigue siendo sintética (`contracts/datos-sinteticos/eventos-parametricos.json`, `cancelaciones` y `ordenCoberturas`): llegará con `aggregateVersion` = 2 cuando exista esa historia. Con eso, una cancelación atrasada no reactiva la cobertura ni una emisión atrasada reactiva una cancelada.
 
 ## 4. Auditoría por lotes
 
@@ -93,7 +111,7 @@ Con esto, una `PolizaCancelada` (versión 2) que llega antes que la `PolizaEmiti
 | Ruta (`pagos-parametricos` / `bff-web`) | Pantalla | Qué hace |
 | --- | --- | --- |
 | `GET /v1/parametricos/descartes` / `GET /v1/siniestros/parametricos/descartes` | H10 | Hasta 100 mensajes de `parametricos-eventos-dlq` **sin consumirlos**: los recibe con visibilidad de 30 s y los libera. Causa, intentos, póliza referida, resumen por causa, retención de la DLQ (14 días) y `maxIntentos` (5) |
-| `GET …/{messageId}` | H11 | Contenido recibido, clave de idempotencia (= `eventId`), causa y verificación de HU-W21 (null mientras no exista) |
+| `GET …/{messageId}` | H11 | Contenido recibido, clave de idempotencia (= `eventId`), causa y verificación de HU-W21 (`VerificacionesPg`: póliza vigente, cobertura activa, pago previo, umbral y valor a indemnizar, desde la copia local de coberturas) |
 | `POST …/reproceso` `{messageIds}` | H10 "Reprocesar seleccionados" y H11 "Reprocesar sin cambios" | Reenvía cada uno a `parametricos-eventos` con el **mismo `eventId`** y el atributo `eventType`, y lo borra de la DLQ |
 | `POST …/{messageId}/correccion` `{cambios, motivo?}` | H11 "Corregir y reprocesar" | Cambia campos que ya existen en el `payload` (solo valores simples) y reenvía el cuerpo corregido con el mismo `eventId` |
 | `POST …/{messageId}/descarte` `{motivo}` | H11 "Descartar definitivamente" | Lo borra de la DLQ sin reenviar |
@@ -102,7 +120,7 @@ Con esto, una `PolizaCancelada` (versión 2) que llega antes que la `PolizaEmiti
 - **Auditoría (decisión B2):** cada resolución se guarda en `resoluciones_descarte` y publica `DescarteParametricoResuelto.v1` por el Outbox **en la misma transacción y antes del efecto**. El evento lleva el **original** y, si se corrigió, la **corrección**, y lo recibe solo `auditoria`. Esquema: `contracts/events/DescarteParametricoResuelto.v1.schema.json`.
 - **Idempotencia:** repetir la misma acción sobre un mensaje ya resuelto devuelve la resolución registrada; otra acción es 409 `DESCARTE_YA_RESUELTO`. Si el reenvío falla, el mensaje se libera y sigue en la DLQ, y la resolución ya registrada permite completarla. Si el borrado falla después de reenviar, el mensaje queda en las dos colas: el consumidor lo deduplica por `eventId`. Un mensaje tomado por otro analista (oculto por su lectura) es 404.
 - **"Pago previo por este evento":** el mismo `eventId` evita un segundo pago aunque se reprocese dos veces (Inbox del consumidor y clave única evento-póliza de HU-W21). La N2 lo prueba.
-- **Llamada `bff-web → pagos-parametricos` (decisión B1):** no tiene flecha en los diagramas (`ServiciosWeb` solo llega a `ClientesIdentidad`, `SuscripcionPolizas` y `AtencionSiniestros`). Se aprobó como excepción para HU-W24 y la necesita también H09 (HU-W22). La revisión de la DLQ es la (8) de `modelo_componentes.puml`: "Tras reintentos acotados, el mensaje pasa a revisión". **Pendiente para quien mantiene los diagramas:** agregar `ServiciosWeb --> PagosParametricos`.
+- **Llamada `bff-web → pagos-parametricos` (decisión B1):** no tiene flecha en los diagramas (`ServiciosWeb` solo llega a `ClientesIdentidad`, `SuscripcionPolizas` y `AtencionSiniestros`). Se aprobó como excepción para HU-W24 y la usa también H09 (HU-W22). La revisión de la DLQ es la (8) de `modelo_componentes.puml`: "Tras reintentos acotados, el mensaje pasa a revisión". **Pendiente para quien mantiene los diagramas:** agregar `ServiciosWeb --> PagosParametricos`.
 - **Discrepancias con los mockups:** H10 dice "tras tres intentos", pero se muestra el `maxReceiveCount` real (5). H10 no tiene casillas de selección, pero "Reprocesar seleccionados" las necesita: se agregaron. "Proporción sobre el total" no se muestra, porque el total de procesados es de H09 (HU-W22).
 
 ## 6. Infraestructura
@@ -122,25 +140,25 @@ Publicar en el tópico es una escritura en AWS: se ejecuta solo con aprobación 
 
 ## 8. Portal (H10 y H11)
 
-`proyecto-final-2-frontend/web/src/app/features/siniestros/parametricos/descarte/`: `descarte.routes.ts` (ruta `/siniestros/parametricos/descarte` y `/:messageId`, guarda `analistas-siniestros`), `descarte.service.ts`, `descarte.i18n.ts` (es-CO, en-US y pseudo), `descarte.errores.ts`, `descarte.fixtures.ts`/`.testing.ts`, las páginas `cola-descarte` (H10) y `reproceso` (H11) y un layout mínimo (`descarte-layout.component.ts`).
+`proyecto-final-2-frontend/web/src/app/features/siniestros/parametricos/descarte/`: `descarte.routes.ts` (H10 en `/siniestros/parametricos/descarte` y H11 en `/:messageId`), `descarte.service.ts`, `descarte.i18n.ts` (es-CO, en-US y pseudo), `descarte.errores.ts`, `descarte.fixtures.ts`/`.testing.ts` y las páginas `cola-descarte` (H10) y `reproceso` (H11).
 
-**Lo mínimo para no interferir con HU-W19 a HU-W23 (capbmaster):**
-- Una sola ruta nueva en `app.routes.ts`. No se tocan el menú superior ("Siniestros" sigue sin enlace), `inicio()` ni un `siniestros.routes.ts`.
-- El layout mínimo tiene "Mi bandeja" y "Sin asignar" como próximamente. Cuando exista el layout de Siniestros: mover `descarte.routes.ts` como hijo de `siniestros/parametricos/descarte`, quitar la ruta de `app.routes.ts` y retirar `descarte-layout.component.ts`.
+- Son hijas de la sección Siniestros de HU-W19 (`features/siniestros/siniestros.routes.ts`, antes de `:siniestroId`), que pone el menú lateral («Mi bandeja», «Sin asignar», «Paramétricos» activo) y exige `analistas-siniestros`. Se retiraron la ruta propia de `app.routes.ts` y el layout provisional (`descarte-layout.component.ts`).
+- Se llega desde el menú superior «Siniestros» (HU-W19), «Paramétricos» del menú lateral y el botón «Ver la cola de descarte» de H09 (HU-W22). La miga «Paramétricos» de H10 y H11 vuelve a H09.
 - ESLint cubre `src/app/features/siniestros` (`eslint.config.mjs` y `npm run lint:siniestros`).
-- H09 ("Ver la cola de descarte") debe enlazar a `/siniestros/parametricos/descarte`.
 
 ## 9. Para capbmaster (HU-W21 a HU-W23) y Santi-MISO (HU-W25)
 
-- **Consumidor:** sección 2. Para `parametricos-eventos`: `ConsumidorInbox(ReceptorSqs(..., max_mensajes=10), InboxPg(pool), manejador, concurrencia=settings.sqs_concurrencia, visibilidad_s=30, al_fallar=RegistroFallosPg(pool, reloj).al_fallar)`. Sin `al_fallar`, H10 muestra "Causa no registrada".
+Estado tras la integración con `main` (HU-W19 a HU-W23) y `feat/hu-w29/multizona`:
+
+- **Consumidor:** hecho. `armar_consumidores` (`pagos_parametricos/main.py`) arma los dos consumidores con `concurrencia=settings.sqs_concurrencia`, latido y `plazo_parada_s`; el de `parametricos-eventos` con `al_fallar=RegistroFallosPg(pool, reloj).al_fallar` (H10 muestra la causa) y la continuación y `reanudar` de HU-W22.
 - **Causas:** para que H10 diga "La póliza referida no existe", el manejador lanza una excepción llamada `PolizaInexistente` o `CoberturaInexistente`. Un evento que no valida contra su esquema lanza `EventoInvalido`.
 - **Póliza referida:** H10 la toma de `payload.numeroPoliza`, `polizaNumero`, `polizaId` o `poliza` (`CAMPOS_POLIZA` en `domain/descarte.py`). Ajustar al esquema de `EventoParametricoObservado`.
-- **Verificación de H11:** implementar `Verificaciones` (`application/descartes.py`) con `polizaVigente`, `coberturaActiva`, `pagoPrevio`, `umbral` y `valorIndemnizar`, y pasarla a `ColaDescarte` en `armar_cola` de `main.py`.
+- **Verificación de H11:** hecha (`VerificacionesPg`, pasada a `ColaDescarte` en `armar_cola`).
 - **Migraciones de `pagos-parametricos`:** HU-W24 dejó `001_descartes.sql` (`fallos_consumo`, `resoluciones_descarte` y el `outbox`, que HU-W21 comparte) y `migrar()`. HU-W21 sigue en `002_…`.
-- **Regla de versión:** sección 3. Falta que `polizas` publique `aggregateVersion` (y `PolizaCancelada`).
+- **Regla de versión:** sección 3. HU-W21 la aplica con respaldo en `occurredAt`; `PolizaEmitida` ya trae `aggregateVersion` = 1. `PolizaCancelada` no tiene historia en el tablero.
 - **HU-W25:** `ejecutar(parada)` ya drena: deja de recibir, libera lo no empezado y espera `plazo_parada_s`. La política `backlog` de `auditoria` y `pagos-parametricos` existe; el escalado por atraso es tuyo.
 
-## 10. Humo R5 en `int` (preparado, sin ejecutar)
+## 10. Humo y N3 en `int` (preparados, sin ejecutar)
 
 Paso 13 de `scripts/plataforma/smoke.sh`: publica 5 eventos sintéticos `HumoAuditoria` en el tópico (solo los admite la cola `auditoria`, así no quedan en `parametricos-eventos`) y verifica que cada `eventId` aparezca **una vez** en los objetos `cadena/*.json` de auditoría y que la cola `auditoria` drene. Requiere `auditoria` desplegado con su base.
 
@@ -151,14 +169,29 @@ make infra-microservicios ENV=int SERVICES=auditoria,pagos-parametricos,bff-web
 make infra-probar ENV=int SMOKE_DLQ=0                             # pasos 1-13; SMOKE_W24_EVENTOS=5
 ```
 
-Luego, en el portal con un usuario de `analistas-siniestros`: un mensaje envenenado enviado a `solventa-int-parametricos-eventos-dlq` aparece en H10 y se descarta en H11.
+**N3** (`tests/e2e/test_hu_w24_r5_particiones.py`, mismo estilo que las de HU-W21 y HU-W22; se omite sin su configuración):
+
+- C01 (AC1, AC4, D3): 30 `HumoAuditoria` publicados dos veces quedan una vez cada uno en `auditoria`, y los lotes desde el inicio verifican como una sola cadena (`auditoria.domain.registro.verificar_cadena`).
+- C02 (AC2, AC3): un `EventoParametricoObservado` sin `zona` (caso `envenenadoSinZona` de los datos sintéticos, con `eventId` nuevo) llega a `auditoria` mientras `pagos-parametricos` lo reintenta; tras 5 recepciones H10 lo lista con causa `FORMATO_INVALIDO`, 14 días y 5 intentos, y listar no lo consume.
+- C03 (H11): detalle con la clave de idempotencia; descartar responde 200 y repetirlo da la misma resolución; corregirlo después es 409; sale de H10 y `auditoria` recibe un solo `DescarteParametricoResuelto` con el analista como actor.
+
+```bash
+# Escribe en el tópico de eventos de INT: ejecutar solo con aprobación.
+E2E_PUBLICAR_W24=1 E2E_ADMIN_TOKEN=<id token de un analista> uv run pytest tests/e2e/test_hu_w24_r5_particiones.py -v
+```
+
+Necesita credenciales de AWS con `sns:Publish` y lectura del bucket de auditoría. El usuario E2E del back-office debe estar en `analistas-siniestros`. Tarda unos 10 minutos: el envenenado agota 5 recepciones (`E2E_DLQ_ESPERA_S`, 600 s).
+
+
 
 ## 11. Pendientes
 
 - La flecha `ServiciosWeb --> PagosParametricos` en `modelo_componentes.puml` y `modelo_despliegue.puml` (decisión B1).
-- `aggregateVersion` y `PolizaCancelada` en `polizas`; la proyección `coberturas_activas` y la verificación de H11 (HU-W21).
-- Pacto del portal (`web-bff-web.json`) para H10 y H11: el contrato del BFF se cubre hoy con la igualdad de DTO frente a `pagos-parametricos.yaml` (`test_openapi.py`). Agregarlo junto con el de H09 (HU-W22).
-- Las E2E solo corrieron en Chromium (Firefox y WebKit no están instalados en esta Mac).
+- `PolizaCancelada` publicada por `polizas` (con `aggregateVersion` = 2): no hay historia de cancelación en el tablero; hoy es sintética. `PolizaEmitida` ya publica `aggregateVersion` = 1.
+- Ejecutar en `int` el paso 13 del humo y la N3 (sección 10).
+- Pacto del portal (`web-bff-web.json`) para H10 y H11: el contrato del BFF se cubre hoy con la igualdad de DTO frente a `pagos-parametricos.yaml` (`test_openapi.py`).
+- Las E2E del portal solo corrieron en Chromium (Firefox y WebKit no están instalados en esta Mac).
+
 ## 12. Pruebas
 
 | Nivel | Archivo | Qué cubre |
@@ -174,7 +207,8 @@ Luego, en el portal con un usuario de `analistas-siniestros`: un mensaje envenen
 | Contrato | `services/pagos-parametricos/tests/contract/`, `services/bff-web/tests/contract/test_openapi.py` | OpenAPI publicado, esquema de `DescarteParametricoResuelto.v1` y DTO de `bff-web` iguales a los de `pagos-parametricos` |
 | N1 | `services/bff-web/tests/unit/test_descartes.py` | Grupo `analistas-siniestros`, actor y correlación hacia `pagos-parametricos`, 4xx de la lista blanca y falla cerrada (503) |
 | IaC | `infra/apps/tests/apps.tftest.hcl` (run `sprint3`), `infra/platform/tests/platform.tftest.hcl` | IAM de la DLQ solo para `pagos-parametricos`, `PAGOS_PARAMETRICOS_URL`, base y escalado de `auditoria` |
-| Web | `features/siniestros/parametricos/descarte/**/*.spec.ts` (Jasmine) y `e2e/r5-descarte.spec.ts` (Playwright con axe) | H10 y H11 en es-CO y en-US, selección, corrección, descarte, vacío, 503, 404, acceso por grupo y axe sin violaciones críticas ni serias |
+| N3 | `tests/e2e/test_hu_w24_r5_particiones.py` | En `int`: ráfaga con duplicados una vez en una cadena que verifica; envenenado que no frena a `auditoria`, llega a H10 con su causa y se descarta en H11 de forma idempotente y auditada |
+| Web | `features/siniestros/parametricos/descarte/**/*.spec.ts` (Jasmine) y `e2e/r5-descarte.spec.ts` (Playwright con axe) | H10 y H11 en es-CO y en-US dentro de la sección Siniestros (menú y miga hacia H09), selección, corrección, descarte, vacío, 503, 404, acceso por grupo y axe sin violaciones críticas ni serias |
 
 ```bash
 make test-unit                                          # incluye libs/*/tests/unit

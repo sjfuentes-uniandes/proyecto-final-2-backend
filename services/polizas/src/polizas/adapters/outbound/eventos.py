@@ -15,8 +15,14 @@
   (instantánea de la decisión, DS2-10), no las del catálogo vigente: `consulta` no llama a
   `catalogo`.
   HU-W21 (DS3-20, opción A), aditivo y opcional: `coberturaParametrica`, la regla de una póliza
-  paramétrica para `pagos-parametricos`. **`polizas` todavía no la llena** (siempre `null`): la
-  emisión de la cobertura paramétrica queda para la sincronización final del Sprint 3.
+  paramétrica para `pagos-parametricos`. Desde HU-W24 se llena en los productos paramétricos con la
+  instantánea de la cotización (la regla del catálogo y la zona del riesgo, `datosAsegurado.zona`),
+  que llega en los insumos de la decisión; en los demás productos es `null`.
+  HU-W24 (aditivo y opcional en el esquema): `aggregateVersion` = 1 en el sobre. La emisión es el
+  primer evento del agregado póliza (HU-W17: "la póliza tiene … versión"); un evento posterior de la
+  misma póliza llevará una versión mayor. Lo agrega el relay (`VERSIONES_AGREGADO`), porque el outbox
+  no guarda la columna, y lo usa la copia local de coberturas de `pagos-parametricos`
+  (`solventa_common.versionado`) para que un evento atrasado no reactive ni cancele una cobertura.
 
 Los esquemas publicados se regeneran con:
     uv run python -m polizas.adapters.outbound.eventos
@@ -38,6 +44,8 @@ from polizas.domain.suscripcion.modelos import ResultadoDecision, TipoDecision
 DECISION_SUSCRIPCION_REGISTRADA = "DecisionSuscripcionRegistrada"
 OFERTA_ACEPTADA = "OfertaAceptada"
 POLIZA_EMITIDA = "PolizaEmitida"
+# HU-W24: `aggregateVersion` fijo por `type`, que el relay agrega al sobre (`PublicadorSns`).
+VERSIONES_AGREGADO: dict[str, int] = {POLIZA_EMITIDA: 1}
 
 # Como `RecaudoConfirmado` (dinero) y la huella de la evidencia (aceptaciones).
 _TEXTO_DECIMAL = r"^[0-9]+(\.[0-9]{1,2})?$"
@@ -211,6 +219,14 @@ class SobrePolizaEmitidaV1(SobreEvento[PolizaEmitidaV1]):
     """El sobre de siempre, con `type` fijo: los filtros de las colas dependen del nombre exacto."""
 
     type: Literal["PolizaEmitida"]
+    # HU-W24: opcional y aditivo, como en los consentimientos (ADR 0009); lo agrega el relay.
+    # Entero >= 1 y no `const: 1`: el consumidor ordena por versión (HU-W21, ORDEN-4 de
+    # `contracts/datos-sinteticos/eventos-parametricos.json`); hoy `polizas` publica siempre 1.
+    aggregate_version: int = Field(
+        default=1,
+        ge=1,
+        description="Posición en el agregado póliza; la emisión que publica polizas es la 1",
+    )
 
 
 ESQUEMAS: dict[str, type[BaseModel]] = {

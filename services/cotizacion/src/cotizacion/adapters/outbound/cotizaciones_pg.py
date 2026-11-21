@@ -44,6 +44,7 @@ from cotizacion.domain.cotizacion.modelos import (
     Actor,
     Cobertura,
     CoberturaOfertada,
+    CoberturaParametrica,
     Cotizacion,
     Desglose,
     EntradasPrima,
@@ -87,6 +88,8 @@ COLUMNAS = (
     "correlation_id",
     "actor_id",
     "actor_rol",
+    # HU-W24 (007): null fuera de los productos paramétricos.
+    "cobertura_parametrica",
 )
 
 
@@ -212,6 +215,36 @@ def resumen_de(fila: Mapping[str, Any]) -> ResumenCotizacion:
     )
 
 
+def _parametrica_canonica(cobertura: CoberturaParametrica | None) -> Jsonb | None:
+    if cobertura is None:
+        return None
+    return Jsonb(
+        {
+            "tipoEvento": cobertura.tipo_evento,
+            "zona": cobertura.zona,
+            "umbral": cobertura.umbral,
+            "unidad": cobertura.unidad,
+            "valorPago": cobertura.valor_pago,
+            "moneda": cobertura.moneda,
+            "versionRegla": cobertura.version_regla,
+        }
+    )
+
+
+def _parametrica_de(valor: Mapping[str, Any] | None) -> CoberturaParametrica | None:
+    if valor is None:
+        return None
+    return CoberturaParametrica(
+        tipo_evento=valor["tipoEvento"],
+        zona=valor["zona"],
+        umbral=valor["umbral"],
+        unidad=valor["unidad"],
+        valor_pago=valor["valorPago"],
+        moneda=valor["moneda"],
+        version_regla=valor["versionRegla"],
+    )
+
+
 def fila_cotizacion(cotizacion: Cotizacion) -> dict[str, Any]:
     entradas = cotizacion.entradas
     return {
@@ -242,6 +275,7 @@ def fila_cotizacion(cotizacion: Cotizacion) -> dict[str, Any]:
         "calculado_en": cotizacion.calculado_en,
         "duracion_ms": cotizacion.duracion_ms,
         "correlation_id": cotizacion.correlation_id,
+        "cobertura_parametrica": _parametrica_canonica(cotizacion.cobertura_parametrica),
         "actor_id": cotizacion.actor.id,
         "actor_rol": cotizacion.actor.rol.value,
     }
@@ -438,6 +472,7 @@ def cotizacion_de(fila: Mapping[str, Any]) -> Cotizacion:
         actor=Actor(fila["actor_id"], RolActor(fila["actor_rol"])),
         oferta=oferta_de(fila),
         decision=decision_de(fila, "decision_"),
+        cobertura_parametrica=_parametrica_de(fila.get("cobertura_parametrica")),
     )
 
 

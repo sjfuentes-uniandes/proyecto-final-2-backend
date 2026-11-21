@@ -1,6 +1,7 @@
 """HU-W03: rutas /v1/cotizaciones y /v1/productos/{id}/condiciones del portal con cotizacion
 simulada: solo asesores, el actor es el asesor, los B2 de cotizacion pasan y el resto es 503."""
 
+import json
 from collections.abc import Iterator
 from typing import Any
 
@@ -90,13 +91,14 @@ class CotizacionFalsa:
     def __init__(self) -> None:
         self.solicitudes: list[httpx.Request] = []
         self.respuesta: httpx.Response | Exception = httpx.Response(201, json=COTIZACION)
+        self.condiciones: dict[str, Any] = CONDICIONES
 
     def __call__(self, solicitud: httpx.Request) -> httpx.Response:
         self.solicitudes.append(solicitud)
         if isinstance(self.respuesta, Exception):
             raise self.respuesta
         if solicitud.url.path.endswith("/condiciones"):
-            return httpx.Response(200, json=CONDICIONES)
+            return httpx.Response(200, json=self.condiciones)
         if solicitud.method == "GET":
             return httpx.Response(200, json=COTIZACION)
         return self.respuesta
@@ -134,6 +136,17 @@ def test_reenvia_como_asesor_con_la_clave(cotizacion: CotizacionFalsa) -> None:
     assert b'"perfilId"' not in cuerpo and b'"socioId"' not in cuerpo
 
 
+def test_hu_w24_la_zona_del_riesgo_llega_a_cotizacion(cotizacion: CotizacionFalsa) -> None:
+    con_zona = {**SOLICITUD, "datosAsegurado": {**SOLICITUD["datosAsegurado"], "zona": "11001"}}
+    TestClient(app).post(
+        "/v1/cotizaciones", json=con_zona, headers={**ASESOR, "Idempotency-Key": CLAVE}
+    )
+    (enviada,) = cotizacion.solicitudes
+    assert json.loads(enviada.read())["datosAsegurado"]["zona"] == "11001"
+    _cotizar()
+    assert "zona" not in json.loads(cotizacion.solicitudes[1].read())["datosAsegurado"]
+
+
 def test_misma_clave_devuelve_200(cotizacion: CotizacionFalsa) -> None:
     cotizacion.respuesta = httpx.Response(200, json=COTIZACION)
     assert _cotizar().status_code == 200
@@ -144,11 +157,25 @@ def test_lectura_y_condiciones(cotizacion: CotizacionFalsa) -> None:
     leida = cliente.get(f"/v1/cotizaciones/{COTIZACION_ID}", headers=ASESOR)
     condiciones = cliente.get("/v1/productos/vida-hipotecario/condiciones", headers=ASESOR)
     assert leida.json()["primaTotal"] == "97460"
-    assert condiciones.json() == CONDICIONES
+    # HU-W24: un producto que no es paramétrico llega con `parametrico: null`.
+    assert condiciones.json() == CONDICIONES | {"parametrico": None}
     assert [s.url.path for s in cotizacion.solicitudes] == [
         f"/v1/cotizaciones/{COTIZACION_ID}",
         "/v1/productos/vida-hipotecario/condiciones",
     ]
+
+
+def test_hu_w24_las_condiciones_traen_la_regla_parametrica(cotizacion: CotizacionFalsa) -> None:
+    regla = {
+        "tipoEvento": "LLUVIA_ACUMULADA",
+        "unidad": "mm",
+        "umbral": "120",
+        "valorPago": "1400000.00",
+        "versionRegla": "2026.11.1",
+    }
+    cotizacion.condiciones = CONDICIONES | {"productoId": "clima-lluvia", "parametrico": regla}
+    respuesta = TestClient(app).get("/v1/productos/clima-lluvia/condiciones", headers=ASESOR)
+    assert respuesta.json()["parametrico"] == regla
 
 
 @pytest.mark.parametrize(

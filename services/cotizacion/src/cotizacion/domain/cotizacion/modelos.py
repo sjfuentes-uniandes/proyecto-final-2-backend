@@ -58,6 +58,33 @@ class Cobertura:
 
 
 @dataclass(frozen=True, slots=True)
+class ReglaParametrica:
+    """La regla de un producto paramétrico del catálogo (HU-W21, W21-B04): paga `valor_pago`
+    cuando un evento de `tipo_evento` alcanza `umbral` en `unidad`. Decimales como texto. La zona no
+    es del producto: es de cada cotización (y de su póliza)."""
+
+    tipo_evento: str
+    unidad: str
+    umbral: str
+    valor_pago: str
+    version_regla: str
+
+
+@dataclass(frozen=True, slots=True)
+class CoberturaParametrica:
+    """Instantánea de la regla paramétrica y la zona de la cotización (HU-W24): viaja en los
+    insumos de la oferta a `polizas`, que la publica en `PolizaEmitida.coberturaParametrica`."""
+
+    tipo_evento: str
+    zona: str
+    umbral: str
+    unidad: str
+    valor_pago: str
+    moneda: str
+    version_regla: str
+
+
+@dataclass(frozen=True, slots=True)
 class Producto:
     id: str
     version: str
@@ -70,6 +97,8 @@ class Producto:
     # Vigencia semiabierta [vigente_desde, vigente_hasta); None = sin fin.
     vigente_hasta: datetime | None
     coberturas: tuple[Cobertura, ...]
+    # HU-W21: solo los productos paramétricos la traen.
+    parametrico: ReglaParametrica | None = None
 
     @property
     def opcionales(self) -> frozenset[str]:
@@ -252,6 +281,8 @@ class Cotizacion:
     # None en el recorrido nominal. Es una `fallback.DecisionRegistrada` (import diferido: el
     # módulo de fallback depende de este).
     decision: "DecisionRegistrada | None" = None
+    # HU-W24: la regla y la zona de un producto paramétrico; None en los demás y en las anteriores.
+    cobertura_parametrica: CoberturaParametrica | None = None
 
     @property
     def degradada(self) -> bool:

@@ -16,6 +16,7 @@ from uuid import UUID
 
 from polizas.domain.suscripcion.modelos import (
     Cobertura,
+    CoberturaParametrica,
     EstadoIdentidad,
     InsumosSuscripcion,
     NivelRiesgo,
@@ -38,7 +39,7 @@ def _uuid(valor: UUID | None) -> str | None:
 
 def insumos_canonicos(insumos: InsumosSuscripcion) -> dict[str, Any]:
     perfil = insumos.perfil
-    return {
+    canonicos: dict[str, Any] = {
         "cotizacionId": str(insumos.cotizacion_id),
         "ofertaId": _uuid(insumos.oferta_id),
         "codigo": insumos.codigo,
@@ -73,6 +74,33 @@ def insumos_canonicos(insumos: InsumosSuscripcion) -> dict[str, Any]:
         },
         "coincidenciasListasRestrictivas": insumos.coincidencias_listas_restrictivas,
     }
+    # HU-W24: solo si existe, para que la huella de los insumos ya guardados no cambie.
+    if insumos.cobertura_parametrica is not None:
+        canonicos["coberturaParametrica"] = _parametrica_canonica(insumos.cobertura_parametrica)
+    return canonicos
+
+
+_CAMPOS_PARAMETRICA = (
+    ("tipoEvento", "tipo_evento"),
+    ("zona", "zona"),
+    ("umbral", "umbral"),
+    ("unidad", "unidad"),
+    ("valorPago", "valor_pago"),
+    ("moneda", "moneda"),
+    ("versionRegla", "version_regla"),
+)
+
+
+def _parametrica_canonica(cobertura: CoberturaParametrica) -> dict[str, str]:
+    return {clave: getattr(cobertura, atributo) for clave, atributo in _CAMPOS_PARAMETRICA}
+
+
+def _parametrica_de(datos: Mapping[str, Any] | None) -> CoberturaParametrica | None:
+    if datos is None:
+        return None
+    return CoberturaParametrica(
+        **{atributo: datos[clave] for clave, atributo in _CAMPOS_PARAMETRICA}
+    )
 
 
 def insumos_de(datos: Mapping[str, Any]) -> InsumosSuscripcion:
@@ -112,6 +140,7 @@ def insumos_de(datos: Mapping[str, Any]) -> InsumosSuscripcion:
             fuentes_declaradas=perfil["fuentesDeclaradas"],
         ),
         coincidencias_listas_restrictivas=datos["coincidenciasListasRestrictivas"],
+        cobertura_parametrica=_parametrica_de(datos.get("coberturaParametrica")),
     )
 
 

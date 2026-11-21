@@ -122,6 +122,20 @@ class PerfilInsumos:
 
 
 @dataclass(frozen=True, slots=True)
+class CoberturaParametrica:
+    """HU-W24: la regla paramétrica y la zona que `cotizacion` guardó al cotizar un producto
+    paramétrico. Decimales como texto. Llega a `PolizaEmitida.coberturaParametrica`."""
+
+    tipo_evento: str
+    zona: str
+    umbral: str
+    unidad: str
+    valor_pago: str
+    moneda: str
+    version_regla: str
+
+
+@dataclass(frozen=True, slots=True)
 class InsumosSuscripcion:
     """Lo que `cotizacion` entrega de la oferta: sin fecha de nacimiento (solo la edad)."""
 
@@ -146,6 +160,8 @@ class InsumosSuscripcion:
     vigente_hasta: datetime
     perfil: PerfilInsumos | None
     coincidencias_listas_restrictivas: int | None
+    # HU-W24: solo en los productos paramétricos.
+    cobertura_parametrica: CoberturaParametrica | None = None
 
 
 @dataclass(frozen=True, slots=True)

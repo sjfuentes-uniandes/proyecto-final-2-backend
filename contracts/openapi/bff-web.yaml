@@ -1240,8 +1240,8 @@ paths:
         '422':
           description: SOLICITUD_INVALIDA, IDEMPOTENCIA_CONFLICTO, PRODUCTO_NO_ENCONTRADO,
             PRODUCTO_INACTIVO, PRODUCTO_FUERA_DE_VIGENCIA, REGLAS_NO_VIGENTES, DATOS_FUERA_DE_RANGO,
-            COBERTURA_NO_DISPONIBLE o PERFIL_NO_CORRESPONDE (detalles.campos, sin
-            valores)
+            COBERTURA_NO_DISPONIBLE, ZONA_REQUERIDA o PERFIL_NO_CORRESPONDE (detalles.campos,
+            sin valores)
           content:
             application/json:
               schema:
@@ -4776,6 +4776,12 @@ components:
           title: Coberturas
         limites:
           $ref: '#/components/schemas/LimitesDto'
+        parametrico:
+          anyOf:
+          - $ref: '#/components/schemas/ReglaParametricaDto'
+          - type: 'null'
+          description: 'HU-W24: la regla del producto paramétrico (HU-W21); null si
+            no lo es. Con regla, la cotización exige datosAsegurado.zona (ZONA_REQUERIDA)'
       type: object
       required:
       - productoId
@@ -5167,6 +5173,15 @@ components:
           maximum: 1000000000000.0
           minimum: 0.0
           title: Sumaasegurada
+        zona:
+          anyOf:
+          - type: string
+            pattern: ^[A-Z0-9]{2,16}$
+          - type: 'null'
+          title: Zona
+          description: 'HU-W24: zona del riesgo (municipio DANE o código de vuelo).
+            Obligatoria en un producto paramétrico (ZONA_REQUERIDA); sin uso en los
+            demás'
       type: object
       required:
       - fechaNacimiento
@@ -9560,3 +9575,32 @@ components:
       - trafico_pct
       - estado
       title: ZonaRespuesta
+    ReglaParametricaDto:
+      properties:
+        tipoEvento:
+          type: string
+          title: Tipoevento
+        unidad:
+          type: string
+          title: Unidad
+        umbral:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Umbral
+        valorPago:
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          title: Valorpago
+        versionRegla:
+          type: string
+          title: Versionregla
+      type: object
+      required:
+      - tipoEvento
+      - unidad
+      - umbral
+      - valorPago
+      - versionRegla
+      title: ReglaParametricaDto
+      description: 'Regla del producto paramétrico (HU-W21): paga `valorPago` si `tipoEvento`
+        llega a `umbral`.'
