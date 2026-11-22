@@ -1,8 +1,10 @@
 """El cableado de los consumidores de HU-W21 en `main.py`: la forma obligatoria de HU-W24 (§9), el
-pool dimensionado, el arranque y la parada ordenada (consumidores antes que el relay, R-77)."""
+pool dimensionado, el arranque y la parada ordenada (consumidores antes que el relay, R-77; los dos
+consumidores a la vez y con un solo límite, HU-W25)."""
 
 import asyncio
 import logging
+import time
 from typing import Any, ClassVar
 
 import pytest
@@ -223,6 +225,61 @@ def test_un_consumidor_que_no_para_a_tiempo_se_cancela(
     with caplog.at_level(logging.WARNING), TestClient(construir(caplog, pool=PoolInerte())):  # type: ignore[arg-type]
         pass
     assert any(r.getMessage() == main.MENSAJE_CONSUMO_SIN_PARAR for r in caplog.records)
+
+
+# --- El drenaje al retirar la tarea (HU-W25, §b-14) -----------------------------------------------
+def test_los_dos_consumidores_reciben_la_parada_a_la_vez(
+    falsos: type[ConsumidorFalso], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ninguno sigue recibiendo mientras el otro drena: lo que recibiera ya no se liberaría."""
+
+    async def recibe_hasta_la_parada(self: ConsumidorFalso, parada: asyncio.Event) -> None:
+        self.corrio = True
+        cola = self.cola.rsplit("-", 1)[-1]
+        while not parada.is_set():
+            ConsumidorFalso.bitacora.append(f"recibe:{cola}")
+            await asyncio.sleep(0.005)
+        ConsumidorFalso.bitacora.append(f"detenido:{cola}")
+        await asyncio.sleep(0.2)  # termina lo que tiene en curso
+        ConsumidorFalso.bitacora.append(f"para:{cola}")
+
+    monkeypatch.setattr(ConsumidorFalso, "ejecutar", recibe_hasta_la_parada)
+    monkeypatch.setenv("SQS_PARAMETRICOS_EVENTOS_URL", EVENTOS)
+    monkeypatch.setenv("SQS_PARAMETRICOS_POLIZAS_URL", POLIZAS)
+    with TestClient(crear_app(pool=PoolInerte())):  # type: ignore[arg-type]
+        time.sleep(0.05)
+    bitacora = falsos.bitacora
+    primera_parada = min(i for i, e in enumerate(bitacora) if e.startswith("detenido:"))
+    despues = bitacora[primera_parada:]
+    assert not [e for e in despues if e.startswith("recibe:")], despues
+    assert sorted(despues[:2]) == ["detenido:eventos", "detenido:polizas"], despues
+    assert sorted(despues[2:]) == ["para:eventos", "para:polizas"], despues
+
+
+def test_el_cierre_de_los_dos_consumidores_no_pasa_de_parada_consumidor_s(
+    falsos: type[ConsumidorFalso],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Un solo límite para los dos: si ninguno para, el cierre dura un PARADA_CONSUMIDOR_S, no dos."""
+
+    async def no_para(self: ConsumidorFalso, parada: asyncio.Event) -> None:
+        await asyncio.sleep(60)
+
+    limite_s = 0.4
+    monkeypatch.setattr(ConsumidorFalso, "ejecutar", no_para)
+    monkeypatch.setattr(main, "PARADA_CONSUMIDOR_S", limite_s)
+    monkeypatch.setenv("SQS_PARAMETRICOS_EVENTOS_URL", EVENTOS)
+    monkeypatch.setenv("SQS_PARAMETRICOS_POLIZAS_URL", POLIZAS)
+    app = construir(caplog, pool=PoolInerte())  # type: ignore[arg-type]
+    with caplog.at_level(logging.WARNING), TestClient(app):
+        tareas = [app.state.consumidor_eventos, app.state.consumidor_polizas]
+        inicio = time.monotonic()
+    duracion = time.monotonic() - inicio
+    assert limite_s <= duracion < 1.5 * limite_s, duracion
+    assert all(t.cancelled() for t in tareas)
+    avisos = [r for r in caplog.records if r.getMessage() == main.MENSAJE_CONSUMO_SIN_PARAR]
+    assert len(avisos) == 2
 
 
 def test_con_base_el_pool_se_abre_con_el_tamano_dimensionado(

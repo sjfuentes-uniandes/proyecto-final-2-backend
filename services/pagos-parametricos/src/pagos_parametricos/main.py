@@ -55,6 +55,7 @@ if TYPE_CHECKING:
 PARADA_RELAY_S = 5.0
 # HU-W24 (§9): la visibilidad de las colas `parametricos-*` (catalog.tf) y el plazo de los mensajes
 # en curso al parar. Los consumidores paran antes que el relay: lo último que escriban se publica.
+# HU-W25: los dos consumidores paran a la vez, y `PARADA_CONSUMIDOR_S` es el límite del conjunto.
 VISIBILIDAD_S = 30
 PLAZO_PARADA_S = 10.0
 PARADA_CONSUMIDOR_S = PLAZO_PARADA_S + 5.0
@@ -76,30 +77,37 @@ Ejecutar = Callable[[asyncio.Event], Awaitable[None]]
 @asynccontextmanager
 async def _en_fondo(
     app: FastAPI,
-    atributo: str,
-    ejecutar: Ejecutar,
+    ejecutores: dict[str, Ejecutar],
     limite_s: float = PARADA_RELAY_S,
     mensaje_sin_parar: str = MENSAJE_RELAY_SIN_PARAR,
 ) -> AsyncIterator[None]:
-    """Corre `ejecutar` como tarea mientras dura el contexto; al cerrar, la para con su límite."""
+    """Corre cada `ejecutar` como tarea (en `app.state.<atributo>`) mientras dura el contexto. Al
+    cerrar, los para **a la vez**, con una sola `parada` y un solo `limite_s` para el conjunto; el
+    que no termina a tiempo se cancela. HU-W25: así ningún consumidor sigue recibiendo mientras otro
+    drena, y el cierre dura como mucho un `limite_s`, no uno por tarea. `ejecutores` no puede estar
+    vacío (`_consumidores` no llega aquí sin colas)."""
 
-    async def correr(parada: asyncio.Event) -> None:
+    async def correr(ejecutar: Ejecutar, parada: asyncio.Event) -> None:
         try:
             await ejecutar(parada)
         except Exception as error:  # noqa: BLE001 - el mensaje puede traer datos
             logger.error(MENSAJE_RELAY_DETENIDO, extra={"error_type": type(error).__name__})
 
     parada = asyncio.Event()
-    tarea = asyncio.create_task(correr(parada), name=atributo.replace("_", "-"))
-    setattr(app.state, atributo, tarea)
+    tareas: list[asyncio.Task[None]] = []
+    for atributo, ejecutar in ejecutores.items():
+        tarea = asyncio.create_task(correr(ejecutar, parada), name=atributo.replace("_", "-"))
+        setattr(app.state, atributo, tarea)
+        tareas.append(tarea)
     try:
         yield
     finally:
         parada.set()
-        try:
-            await asyncio.wait_for(tarea, limite_s)
-        except TimeoutError:
-            logger.warning(mensaje_sin_parar, extra={"limit_s": limite_s})
+        _, pendientes = await asyncio.wait(tareas, timeout=limite_s)
+        for tarea in pendientes:
+            logger.warning(mensaje_sin_parar, extra={"limit_s": limite_s, "task": tarea.get_name()})
+            tarea.cancel()
+        await asyncio.gather(*pendientes, return_exceptions=True)
 
 
 def armar_cola(
@@ -244,16 +252,16 @@ async def _consumidores(
             http = await pila.enter_async_context(correlation.cliente_async())
             siniestros = armar_siniestros(http, settings)
         consumidores = armar_consumidores(pool, cliente, reloj, settings, siniestros)
-        for atributo, consumidor in consumidores.items():
-            await pila.enter_async_context(
-                _en_fondo(
-                    app,
-                    atributo,
-                    consumidor.ejecutar,
-                    PARADA_CONSUMIDOR_S,
-                    MENSAJE_CONSUMO_SIN_PARAR,
-                )
+        # HU-W25 (§b-14): una sola parada para los dos. Cada uno abandona su espera larga, libera lo
+        # recibido sin empezar y da `PLAZO_PARADA_S` a lo que tiene en curso, a la vez que el otro.
+        await pila.enter_async_context(
+            _en_fondo(
+                app,
+                {atributo: consumidor.ejecutar for atributo, consumidor in consumidores.items()},
+                PARADA_CONSUMIDOR_S,
+                MENSAJE_CONSUMO_SIN_PARAR,
             )
+        )
         yield
 
 
@@ -284,7 +292,7 @@ async def _relay(app: FastAPI, settings: Settings, reloj: Reloj) -> AsyncIterato
         intervalo_s=settings.outbox_intervalo_s,
         reloj=reloj.ahora,
     )
-    async with _en_fondo(app, "relay_outbox", relay.ejecutar):
+    async with _en_fondo(app, {"relay_outbox": relay.ejecutar}):
         yield
 
 
