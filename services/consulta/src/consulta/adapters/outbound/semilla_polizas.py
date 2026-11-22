@@ -1,6 +1,6 @@
 """Semilla de pólizas de prueba para la proyección (`poliza_cliente`).
 
-Solo corre con `CONSULTA_SEMILLA_POLIZAS=true` (int y local), después de `migrar()`. Lee
+Solo corre con `CONSULTA_SEMILLA_POLIZAS=true` (int, exp y local), después de `migrar()`. Lee
 `semillas/polizas_semilla.json`. Idempotente (`ON CONFLICT DO NOTHING`): no pisa lo existente y
 no escribe en el inbox, porque no es una operación de negocio.
 """

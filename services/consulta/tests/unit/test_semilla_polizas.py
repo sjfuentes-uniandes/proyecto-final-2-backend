@@ -25,10 +25,12 @@ def test_sembrar_inserta_y_cuenta_creadas() -> None:
     assert "ON CONFLICT DO NOTHING" in conexion.execute.call_args.args[0]
 
 
-def test_semilla_no_se_permite_fuera_de_int_y_local(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_semilla_no_se_permite_fuera_de_int_exp_y_local(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CONSULTA_SEMILLA_POLIZAS", "true")
     monkeypatch.setenv("ENVIRONMENT", "prod")
     with pytest.raises(ValueError, match="CONSULTA_SEMILLA_POLIZAS"):
         Settings()
     monkeypatch.setenv("ENVIRONMENT", "int")
+    assert Settings().semilla_polizas is True
+    monkeypatch.setenv("ENVIRONMENT", "exp")
     assert Settings().semilla_polizas is True
