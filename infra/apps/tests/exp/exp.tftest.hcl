@@ -35,6 +35,7 @@ override_data {
         kms_key_arn          = null
         cluster              = { id = "arn:aws:ecs:us-east-1:123456789012:cluster/solventa-exp", arn = "arn:aws:ecs:us-east-1:123456789012:cluster/solventa-exp", name = "solventa-exp" }
         namespace_arn        = "arn:aws:servicediscovery:us-east-1:123456789012:namespace/ns-1"
+        container_insights   = true # HU-W25 (25.1): la precondición de backlog por tarea
         catalog = {
           "bff-web"              = { tier = "acceso", listener_port = 8081, database = false, publishes = false, cache = false, calls = ["clientes", "cotizacion", "api-socios", "polizas", "consulta", "siniestros", "pagos-parametricos"], consumes = [], allies = [], stories = [], discoverable = false, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-exp/bff-web", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-exp/bff-web", name = "solventa-exp/bff-web" } }
           "bff-movil"            = { tier = "acceso", listener_port = 8082, database = false, publishes = false, cache = false, calls = ["clientes", "consulta", "avisos", "siniestros"], consumes = [], allies = [], stories = [], discoverable = false, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-exp/bff-movil", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-exp/bff-movil", name = "solventa-exp/bff-movil" } }
@@ -228,5 +229,43 @@ run "multizona_hu_w29" {
       alltrue([for name, statements in local.task_statements : !strcontains(jsonencode(statements), "experimentos") || name == "bff-web"])
     )
     error_message = "Conciliación (I05): solo bff-web lee, y solo el prefijo hu-w29/, del bucket de experimentos de exp."
+  }
+}
+
+# HU-W25 (§c.3): pagos-parametricos escala por tarea con el objetivo global (100) hasta que HU-W26
+# mida, y por antigüedad con 180 s; auditoria y avisos siguen sumando sus colas.
+run "escalado_hu_w25" {
+  command = plan
+
+  assert {
+    condition = !var.queue_backlog_per_task && (
+      one([for m in aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m.expression if m.id == "backlog"]) == "(m0 + m1) / tareas" &&
+      one([
+        for m in aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics :
+        { for d in one(one(m.metric_stat).metric).dimensions : d.name => d.value } if m.id == "tareas"
+      ]) == { ClusterName = "solventa-exp", ServiceName = "pagos-parametricos" }
+    )
+    error_message = "HU-W25: en exp, la backlog de pagos-parametricos es (m0 + m1) / tareas con RunningTaskCount de solventa-exp/pagos-parametricos, encendida en su service_overrides y sin queue_backlog_per_task global."
+  }
+  assert {
+    condition     = aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].target_value == 100
+    error_message = "HU-W25 (§b-5): en exp, pagos-parametricos usa el objetivo global de 100 mensajes por tarea."
+  }
+  assert {
+    condition = toset([for key, policy in aws_appautoscaling_policy.backlog_age : key]) == toset(["pagos-parametricos/parametricos-eventos", "pagos-parametricos/parametricos-polizas"]) && alltrue([
+      for policy in aws_appautoscaling_policy.backlog_age :
+      policy.target_tracking_scaling_policy_configuration[0].target_value == 180 &&
+      policy.target_tracking_scaling_policy_configuration[0].disable_scale_in == true
+    ])
+    error_message = "HU-W25: en exp, solo pagos-parametricos tiene políticas por antigüedad: 180 s en cada una de sus dos colas, solo de salida."
+  }
+  assert {
+    # §b-2: auditoria y avisos siguen sumando sus colas, sin la métrica tareas.
+    condition = alltrue([
+      for name in ["auditoria", "avisos"] :
+      one([for m in aws_appautoscaling_policy.backlog[name].target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m.expression if m.id == "backlog"]) == join(" + ", [for index, queue in local.deployed[name].consumes : "m${index}"]) &&
+      length([for m in aws_appautoscaling_policy.backlog[name].target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m if m.id == "tareas"]) == 0
+    ])
+    error_message = "HU-W25 (§b-2): en exp, la backlog de auditoria y la de avisos siguen sumando los mensajes visibles de sus colas, no por tarea."
   }
 }

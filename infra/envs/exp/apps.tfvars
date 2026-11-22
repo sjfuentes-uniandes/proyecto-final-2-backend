@@ -19,7 +19,7 @@ service_overrides = {
   adaptador-datos      = { cpu = 512, memory = 1024 }
   cotizacion           = { cpu = 512, memory = 1024 }
   adaptador-telemetria = { cpu = 512, memory = 1024 }
-  pagos-parametricos   = { cpu = 512, memory = 1024, max = 10 }
+  pagos-parametricos   = { cpu = 512, memory = 1024, max = 10, queue_backlog_per_task = true, queue_age_target = 180 } # HU-W25
   siniestros           = { cpu = 512, memory = 1024 }
 }
 
