@@ -1,0 +1,288 @@
+{
+  "version": 1,
+  "experimento": "EXPUgo7WL3XpdCvDmc",
+  "generado": "2026-11-22T01:51:26Z",
+  "ventana": {
+    "desde": "2026-11-22T01:27:16Z",
+    "hasta": "2026-11-22T01:49:56Z"
+  },
+  "estado": "CON_DIFERENCIAS",
+  "resumen": {
+    "confirmadas": 1385,
+    "perdidas": 0,
+    "duplicadas": 0,
+    "cobrosDuplicados": 0,
+    "dlqSinExplicacion": 1,
+    "pendientesOutbox": 206,
+    "solicitudes": 2069,
+    "solicitudesConError": 482,
+    "porcentajeError": 23.3
+  },
+  "verificaciones": [
+    {
+      "id": "cotizaciones",
+      "descripcion": "Cotizaciones confirmadas (R1 y R3) registradas una vez",
+      "esperado": 1176,
+      "observado": 1176,
+      "resultado": "COINCIDE",
+      "detalle": []
+    },
+    {
+      "id": "aceptaciones",
+      "descripcion": "Aceptaciones confirmadas (R3) registradas una vez",
+      "esperado": 101,
+      "observado": 101,
+      "resultado": "COINCIDE",
+      "detalle": []
+    },
+    {
+      "id": "eventos_recibidos",
+      "descripcion": "Eventos de telemetría confirmados (R5) recibidos una vez",
+      "esperado": 108,
+      "observado": 108,
+      "resultado": "COINCIDE",
+      "detalle": []
+    },
+    {
+      "id": "cobro_por_aceptacion",
+      "descripcion": "Cada aceptación confirmada tiene un cobro",
+      "esperado": 101,
+      "observado": 101,
+      "resultado": "COINCIDE",
+      "detalle": []
+    },
+    {
+      "id": "cobros_duplicados",
+      "descripcion": "Cobros duplicados por reintento",
+      "esperado": 0,
+      "observado": 0,
+      "resultado": "COINCIDE",
+      "detalle": []
+    },
+    {
+      "id": "eventos_evaluados",
+      "descripcion": "Eventos confirmados (R5) evaluados una vez",
+      "esperado": 108,
+      "observado": 108,
+      "resultado": "COINCIDE",
+      "detalle": []
+    },
+    {
+      "id": "siniestro_por_activacion",
+      "descripcion": "Cada activación (R5) tiene un siniestro paramétrico",
+      "esperado": 0,
+      "observado": 0,
+      "resultado": "COINCIDE",
+      "detalle": []
+    },
+    {
+      "id": "siniestros_duplicados",
+      "descripcion": "Siniestros paramétricos duplicados por reentrega",
+      "esperado": 0,
+      "observado": 0,
+      "resultado": "COINCIDE",
+      "detalle": []
+    },
+    {
+      "id": "pagos_duplicados",
+      "descripcion": "Indemnizaciones duplicadas por siniestro",
+      "esperado": 0,
+      "observado": 0,
+      "resultado": "COINCIDE",
+      "detalle": []
+    },
+    {
+      "id": "dlq_sin_explicacion",
+      "descripcion": "Mensajes en DLQ sin explicación",
+      "esperado": 0,
+      "observado": 1,
+      "resultado": "DIFERENCIA",
+      "detalle": [
+        {
+          "cola": "solventa-exp-consulta-proyeccion-dlq",
+          "messageId": "51fed36b-1a55-4db3-b164-90178e8783ab"
+        }
+      ]
+    },
+    {
+      "id": "outbox_pendiente",
+      "descripcion": "Eventos pendientes de entrega (Outbox)",
+      "esperado": 0,
+      "observado": 206,
+      "resultado": "PENDIENTE",
+      "detalle": [
+        {
+          "base": "cotizacion",
+          "pendientes": 206
+        }
+      ]
+    }
+  ],
+  "recorridos": {
+    "R1": {
+      "intentos": 1464,
+      "confirmadas": 1075,
+      "errores": 389,
+      "erroresPorEstado": {
+        "0": 122,
+        "503": 267
+      }
+    },
+    "R3": {
+      "intentos": 460,
+      "confirmadas": 404,
+      "errores": 56,
+      "erroresPorEstado": {
+        "0": 10,
+        "503": 46
+      }
+    },
+    "R5": {
+      "intentos": 145,
+      "confirmadas": 108,
+      "errores": 37,
+      "erroresPorEstado": {
+        "504": 37
+      }
+    }
+  },
+  "continuidad": {
+    "inyeccion": "2026-11-21T20:31:41-05:00",
+    "umbralErrorPorcentaje": 1.0,
+    "objetivoSegundos": 600,
+    "redireccionSegundos": 259,
+    "cumpleObjetivo": true,
+    "serie": [
+      {
+        "minuto": "2026-11-22T01:28Z",
+        "solicitudes": 69,
+        "errores": 0,
+        "porcentajeError": 0.0
+      },
+      {
+        "minuto": "2026-11-22T01:29Z",
+        "solicitudes": 90,
+        "errores": 0,
+        "porcentajeError": 0.0
+      },
+      {
+        "minuto": "2026-11-22T01:30Z",
+        "solicitudes": 90,
+        "errores": 0,
+        "porcentajeError": 0.0
+      },
+      {
+        "minuto": "2026-11-22T01:31Z",
+        "solicitudes": 78,
+        "errores": 17,
+        "porcentajeError": 21.79
+      },
+      {
+        "minuto": "2026-11-22T01:32Z",
+        "solicitudes": 156,
+        "errores": 138,
+        "porcentajeError": 88.46
+      },
+      {
+        "minuto": "2026-11-22T01:33Z",
+        "solicitudes": 180,
+        "errores": 155,
+        "porcentajeError": 86.11
+      },
+      {
+        "minuto": "2026-11-22T01:34Z",
+        "solicitudes": 166,
+        "errores": 133,
+        "porcentajeError": 80.12
+      },
+      {
+        "minuto": "2026-11-22T01:35Z",
+        "solicitudes": 134,
+        "errores": 39,
+        "porcentajeError": 29.1
+      },
+      {
+        "minuto": "2026-11-22T01:36Z",
+        "solicitudes": 90,
+        "errores": 0,
+        "porcentajeError": 0.0
+      },
+      {
+        "minuto": "2026-11-22T01:37Z",
+        "solicitudes": 90,
+        "errores": 0,
+        "porcentajeError": 0.0
+      },
+      {
+        "minuto": "2026-11-22T01:38Z",
+        "solicitudes": 90,
+        "errores": 0,
+        "porcentajeError": 0.0
+      },
+      {
+        "minuto": "2026-11-22T01:39Z",
+        "solicitudes": 90,
+        "errores": 0,
+        "porcentajeError": 0.0
+      },
+      {
+        "minuto": "2026-11-22T01:40Z",
+        "solicitudes": 90,
+        "errores": 0,
+        "porcentajeError": 0.0
+      },
+      {
+        "minuto": "2026-11-22T01:41Z",
+        "solicitudes": 90,
+        "errores": 0,
+        "porcentajeError": 0.0
+      },
+      {
+        "minuto": "2026-11-22T01:42Z",
+        "solicitudes": 90,
+        "errores": 0,
+        "porcentajeError": 0.0
+      },
+      {
+        "minuto": "2026-11-22T01:43Z",
+        "solicitudes": 90,
+        "errores": 0,
+        "porcentajeError": 0.0
+      },
+      {
+        "minuto": "2026-11-22T01:44Z",
+        "solicitudes": 90,
+        "errores": 0,
+        "porcentajeError": 0.0
+      },
+      {
+        "minuto": "2026-11-22T01:45Z",
+        "solicitudes": 90,
+        "errores": 0,
+        "porcentajeError": 0.0
+      },
+      {
+        "minuto": "2026-11-22T01:46Z",
+        "solicitudes": 90,
+        "errores": 0,
+        "porcentajeError": 0.0
+      },
+      {
+        "minuto": "2026-11-22T01:47Z",
+        "solicitudes": 90,
+        "errores": 0,
+        "porcentajeError": 0.0
+      },
+      {
+        "minuto": "2026-11-22T01:48Z",
+        "solicitudes": 26,
+        "errores": 0,
+        "porcentajeError": 0.0
+      }
+    ]
+  },
+  "dlq": {
+    "total": 1,
+    "explicados": []
+  }
+}

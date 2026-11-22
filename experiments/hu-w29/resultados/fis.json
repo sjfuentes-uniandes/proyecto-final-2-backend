@@ -1,0 +1,59 @@
+{
+  "description": "HU-W29 ARQ-001: perdida controlada de la zona A durante 10 minutos y failover de RDS al standby de la zona B",
+  "roleArn": "arn:aws:iam::882567899411:role/solventa-exp-fis",
+  "stopConditions": [
+    {
+      "source": "aws:cloudwatch:alarm",
+      "value": "arn:aws:cloudwatch:us-east-1:882567899411:alarm:solventa-exp-api-canales-5xx"
+    }
+  ],
+  "targets": {
+    "SubredesZonaA": {
+      "resourceType": "aws:ec2:subnet",
+      "resourceArns": [
+        "arn:aws:ec2:us-east-1:882567899411:subnet/subnet-0f475cff9eaeed13e",
+        "arn:aws:ec2:us-east-1:882567899411:subnet/subnet-0bbb6014f37d4a677"
+      ],
+      "selectionMode": "ALL"
+    },
+    "BasePrincipal": {
+      "resourceType": "aws:rds:db",
+      "resourceArns": [
+        "arn:aws:rds:us-east-1:882567899411:db:solventa-exp"
+      ],
+      "selectionMode": "ALL"
+    }
+  },
+  "actions": {
+    "InterrumpirZonaA": {
+      "description": "Toda la red de las subredes privadas y de datos de la zona A (ACL de FIS); se restaura al terminar",
+      "actionId": "aws:network:disrupt-connectivity",
+      "parameters": {
+        "duration": "PT10M",
+        "scope": "all"
+      },
+      "targets": {
+        "Subnets": "SubredesZonaA"
+      }
+    },
+    "FailoverBase": {
+      "description": "Reinicio con failover forzado: el standby de la zona B pasa a ser la base principal",
+      "actionId": "aws:rds:reboot-db-instances",
+      "parameters": {
+        "forceFailover": "true"
+      },
+      "targets": {
+        "DBInstances": "BasePrincipal"
+      }
+    }
+  },
+  "experimentOptions": {
+    "accountTargeting": "single-account",
+    "emptyTargetResolutionMode": "fail"
+  },
+  "tags": {
+    "Name": "solventa-exp-hu-w29-multizona",
+    "Historia": "HU-W29",
+    "Environment": "exp"
+  }
+}
