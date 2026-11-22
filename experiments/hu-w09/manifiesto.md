@@ -20,7 +20,7 @@ ASR ARQ-002 (cotización p95 ≤ 250 ms) y ARQ-003 (escala de 500 a 50.000 cotiz
 
 En la validación local de la 9.3, con un servidor a 1,9 s, k6 llegó a los 2.501 VUs y descartó entre el 1,3 % y el 2,8 % por etapa: así se ve el primer caso.
 
-> **Pendiente:** C2, C3 y C4 son una propuesta de la 9.3; se confirman antes de ejecutar.
+> **Confirmados** (2026-11-22, antes de ejecutar): C2, C3 y C4 quedan fijados tal como están arriba (propuestos en la 9.3).
 
 ## 2. Carga
 
@@ -68,7 +68,7 @@ Si se despliegan más servicios que esos cuatro, se listan aquí con su digest.
 | Dato | Valor |
 | --- | --- |
 | CPU y memoria (`load_test_cpu`, `load_test_memory`) | `<2048>` / `<4096>` |
-| Comando | `k6 run --log-format=raw <URL prefirmada de carga.js>` |
+| Comando | `entryPoint = ["sh", "-c"]` y `command = ["echo \"$HU_W09_SCRIPT\" \| base64 -d > /tmp/s.js && exec k6 run --log-format=raw -q /tmp/s.js"]`: el script viaja en base64 en la variable `HU_W09_SCRIPT` de la definición de tarea, sin S3 ni URL prefirmada (`infra/apps/carga.tf:68-69`) |
 | Variables no secretas | `ALB_URL`, `SOCIO_SCOPES`, `CLIENTES`, `PRODUCTO_ID`, `APIGW_URL`, `APIGW_TOKEN_URL`, `APIGW_SCOPE`, `APIGW_TASA` (`ESCALA` y `DURACION_ETAPA` no se pasan: valen 1 y 5m) |
 | Variables que no se registran | `SOCIO_CLIENT_ID`, `SOCIO_KEY_ID`, `APIGW_CLIENT_SECRET` y `APIGW_API_KEY` |
 
@@ -77,12 +77,15 @@ Si se despliegan más servicios que esos cuatro, se listan aquí con su digest.
 | Variable | Valor |
 | --- | --- |
 | `db_instance_class` | `<db.t4g.small>` |
-| `high_availability` (NAT) | `<false: un NAT>` |
+| `high_availability` | `true`: RDS Multi-AZ (standby en la zona B) y un NAT Gateway por zona, 2 en total (#84; `infra/envs/exp/platform.tfvars:13`) |
+| `experiments_enabled` | `true`: rol de AWS FIS, bucket de informes y tarea de reconciliación de HU-W29, sin ejecutarse durante la corrida (#84; `infra/envs/exp/platform.tfvars:18`) |
 | `cache_enabled` / `cache_node_type` | `<true>` / `<cache.t3.micro>` |
 | `waf_rate_limit` (por IP en 5 min) | `<50000>` |
 | `api_throttle` | `<{ rate = 1000, burst = 2000 }>` |
 | `partner_tiers.experimento` | `<{ rate = 500, burst = 1000, quota_limit = 5000000, quota_period = "DAY" }>` |
 | `alert_emails` | `<confirmada / PendingConfirmation>` (no se copia el correo: decisión 11) |
+
+> **Multizona:** la medición se hace con EXP en dos zonas (RDS Multi-AZ, con escritura síncrona al standby, y 2 NAT Gateway, desde #84), mientras que el plan (`docs/plan-experimento-hu-w09.md` y la exploración D.12) suponía una sola zona. El informe lo declara al comparar con ARQ-002.
 
 ### `infra/envs/exp/apps.tfvars` (líneas relevantes)
 
