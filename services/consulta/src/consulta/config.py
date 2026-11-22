@@ -2,7 +2,7 @@ from pydantic import AliasChoices, Field, model_validator
 from solventa_common import inbox
 from solventa_common.settings import ServiceSettings
 
-AMBIENTES_CON_SEMILLA = frozenset({"int", "local"})
+AMBIENTES_CON_SEMILLA = frozenset({"int", "exp", "local"})
 
 
 def _env(nombre: str) -> AliasChoices:
@@ -27,7 +27,7 @@ class Settings(ServiceSettings):
     )
     # HU-W18: una póliza vigente con este número de días o menos para terminar está POR_VENCER.
     dias_por_vencer: int = Field(30, ge=1, le=365, validation_alias=_env("DIAS_POR_VENCER"))
-    # Siembra pólizas de prueba al arrancar. Solo int y local.
+    # Siembra pólizas de prueba al arrancar. Solo int, exp y local (envs/*/apps.tfvars).
     semilla_polizas: bool = Field(False, validation_alias=_env("CONSULTA_SEMILLA_POLIZAS"))
     consumidor_max_mensajes: int = Field(inbox.MAX_MENSAJES, ge=1, le=10)
     consumidor_espera_larga_s: int = Field(10, ge=1, le=10)
@@ -35,7 +35,7 @@ class Settings(ServiceSettings):
     @model_validator(mode="after")
     def _semilla_solo_en_pruebas(self) -> "Settings":
         if self.semilla_polizas and self.environment not in AMBIENTES_CON_SEMILLA:
-            raise ValueError("CONSULTA_SEMILLA_POLIZAS solo se permite en int o local")
+            raise ValueError("CONSULTA_SEMILLA_POLIZAS solo se permite en int, exp o local")
         return self
 
 
