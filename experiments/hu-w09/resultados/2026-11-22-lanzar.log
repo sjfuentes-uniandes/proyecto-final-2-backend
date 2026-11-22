@@ -1,0 +1,41 @@
+2026-11-22T18:03:19.7010944Z ##[group]Run uv run pytest tests/e2e -v -rA ${FILTRO:+-k "$FILTRO"} --junitxml=e2e.xml
+2026-11-22T18:03:19.7011462Z uv run pytest tests/e2e -v -rA ${FILTRO:+-k "$FILTRO"} --junitxml=e2e.xml
+2026-11-22T18:03:19.7040871Z shell: /usr/bin/bash -e {0}
+2026-11-22T18:03:19.7041097Z env:
+2026-11-22T18:03:19.7041276Z   ENV: exp
+2026-11-22T18:03:19.7041457Z   AWS_REGION: us-east-1
+2026-11-22T18:03:19.7041661Z   UV_PYTHON: 3.12
+2026-11-22T18:03:19.7041994Z   VIRTUAL_ENV: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv
+2026-11-22T18:03:19.7042398Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-11-22T18:03:19.7042679Z   AWS_DEFAULT_REGION: us-east-1
+2026-11-22T18:03:19.7043023Z   AWS_ACCESS_KEY_ID: ***
+2026-11-22T18:03:19.7043312Z   AWS_SECRET_ACCESS_KEY: ***
+2026-11-22T18:03:19.7047061Z   AWS_SESSION_TOKEN: ***
+2026-11-22T18:03:19.7047270Z   E2E_REQUERIDO: 1
+2026-11-22T18:03:19.7047492Z   E2E_ADMIN_USUARIO: ***
+2026-11-22T18:03:19.7047705Z   E2E_ADMIN_CLAVE: ***
+2026-11-22T18:03:19.7048194Z   E2E_ADMIN_TOTP: ***
+2026-11-22T18:03:19.7048395Z   FILTRO: hu_w09_lanzar
+2026-11-22T18:03:19.7048788Z ##[endgroup]
+2026-11-22T18:03:21.4465954Z ============================= test session starts ==============================
+2026-11-22T18:03:21.4467038Z platform linux -- Python 3.12.16, pytest-9.1.1, pluggy-1.6.0 -- /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv/bin/python
+2026-11-22T18:03:21.4467936Z cachedir: .pytest_cache
+2026-11-22T18:03:21.4468849Z hypothesis profile 'ci' -> database=None, deadline=None, print_blob=True, derandomize=True, suppress_health_check=(HealthCheck.too_slow,)
+2026-11-22T18:03:21.4469817Z rootdir: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend
+2026-11-22T18:03:21.4470380Z configfile: pyproject.toml
+2026-11-22T18:03:21.4470927Z plugins: hypothesis-6.168.5, anyio-4.15.1, respx-0.23.1, schemathesis-4.29.4, cov-7.1.0
+2026-11-22T18:03:21.8467055Z collecting ... collected 206 items / 205 deselected / 1 selected
+2026-11-22T18:03:21.8467551Z 
+2026-11-22T18:03:23.7725365Z tests/e2e/test_hu_w09_carga.py::test_hu_w09_lanzar ::add-mask::***
+2026-11-22T18:04:02.0427829Z PASSED                [100%]
+2026-11-22T18:04:02.0428159Z 
+2026-11-22T18:04:02.0428367Z ==================================== PASSES ====================================
+2026-11-22T18:04:02.0429052Z ______________________________ test_hu_w09_lanzar ______________________________
+2026-11-22T18:04:02.0429627Z ----------------------------- Captured stdout call -----------------------------
+2026-11-22T18:04:02.0430009Z 
+2026-11-22T18:04:02.0430575Z HU-W09 lanzar: tarea arn:aws:ecs:us-east-1:<cuenta>:task/solventa-exp/e6a6ae81e7a44869a824ea03509a9209 lanzada a las 2026-11-22T18:03:25+00:00
+2026-11-22T18:04:02.0433902Z HU-W09 lanzar, resumen: {"Tarea k6": "arn:aws:ecs:us-east-1:<cuenta>:task/solventa-exp/e6a6ae81e7a44869a824ea03509a9209", "Definición": "arn:aws:ecs:us-east-1:<cuenta>:task-definition/solventa-exp-carga:2", "Estado": "RUNNING", "t0 (UTC)": "2026-11-22T18:03:48+00:00 (HU-W09-INICIO)", "Recoger desde (UTC)": "2026-11-22T18:43:48+00:00", "Tramos": "alb, apigw", "Socio": "SOC-000001", "Plan efectivo de la API key": "experimento", "Tramo gw": "tramo gw en experimento (decisión 2): APIGW_TASA por omisión de carga.js, 6.000/min (el 60 % del límite del WAF por IP)", "URL del ALB": "http://internal-solventa-exp-access-1524001600.us-east-1.elb.amazonaws.com:8083 — DNS de describe_load_balancers del ALB solventa-exp-access (infra/platform/edge.tf:43); puerto 8083, el listener_port de api-socios en la salida platform.catalog (infra/platform/catalog.tf:36)"}
+2026-11-22T18:04:02.0436334Z - generated xml file: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/e2e.xml -
+2026-11-22T18:04:02.0436807Z =========================== short test summary info ============================
+2026-11-22T18:04:02.0437194Z PASSED tests/e2e/test_hu_w09_carga.py::test_hu_w09_lanzar
+2026-11-22T18:04:02.0437535Z ====================== 1 passed, 205 deselected in 40.50s ======================
