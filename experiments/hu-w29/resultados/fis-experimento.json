@@ -1,0 +1,81 @@
+{
+    "experiment": {
+        "id": "EXPUgo7WL3XpdCvDmc",
+        "arn": "arn:aws:fis:us-east-1:882567899411:experiment/EXPUgo7WL3XpdCvDmc",
+        "experimentTemplateId": "EXT2rbSe1JUJmefa",
+        "roleArn": "arn:aws:iam::882567899411:role/solventa-exp-fis",
+        "state": {
+            "status": "stopped",
+            "reason": "Experiment halted by stop condition."
+        },
+        "targets": {
+            "BasePrincipal": {
+                "resourceType": "aws:rds:db",
+                "resourceArns": [
+                    "arn:aws:rds:us-east-1:882567899411:db:solventa-exp"
+                ],
+                "selectionMode": "ALL"
+            },
+            "SubredesZonaA": {
+                "resourceType": "aws:ec2:subnet",
+                "resourceArns": [
+                    "arn:aws:ec2:us-east-1:882567899411:subnet/subnet-0f475cff9eaeed13e",
+                    "arn:aws:ec2:us-east-1:882567899411:subnet/subnet-0bbb6014f37d4a677"
+                ],
+                "selectionMode": "ALL"
+            }
+        },
+        "actions": {
+            "FailoverBase": {
+                "actionId": "aws:rds:reboot-db-instances",
+                "description": "Reinicio con failover forzado: el standby de la zona B pasa a ser la base principal",
+                "parameters": {
+                    "forceFailover": "true"
+                },
+                "targets": {
+                    "DBInstances": "BasePrincipal"
+                },
+                "state": {
+                    "status": "completed",
+                    "reason": "Action was completed."
+                },
+                "startTime": "2026-11-21T20:31:40.983000-05:00",
+                "endTime": "2026-11-21T20:31:41.393000-05:00"
+            },
+            "InterrumpirZonaA": {
+                "actionId": "aws:network:disrupt-connectivity",
+                "description": "Toda la red de las subredes privadas y de datos de la zona A (ACL de FIS); se restaura al terminar",
+                "parameters": {
+                    "duration": "PT10M",
+                    "scope": "all"
+                },
+                "targets": {
+                    "Subnets": "SubredesZonaA"
+                },
+                "state": {
+                    "status": "stopped",
+                    "reason": "Action was stopped."
+                },
+                "startTime": "2026-11-21T20:31:41.499000-05:00",
+                "endTime": "2026-11-21T20:35:13.552000-05:00"
+            }
+        },
+        "stopConditions": [
+            {
+                "source": "aws:cloudwatch:alarm",
+                "value": "arn:aws:cloudwatch:us-east-1:882567899411:alarm:solventa-exp-api-canales-5xx"
+            }
+        ],
+        "creationTime": "2026-11-21T20:31:19.738000-05:00",
+        "startTime": "2026-11-21T20:31:20.115000-05:00",
+        "endTime": "2026-11-21T20:35:14.031000-05:00",
+        "tags": {
+            "Historia": "HU-W29"
+        },
+        "experimentOptions": {
+            "accountTargeting": "single-account",
+            "emptyTargetResolutionMode": "fail",
+            "actionsMode": "run-all"
+        }
+    }
+}

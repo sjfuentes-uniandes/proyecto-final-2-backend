@@ -1,0 +1,203 @@
+{
+  "etiqueta": "antes",
+  "instante": "2026-11-22T01:01:37Z",
+  "zonaFalla": "us-east-1a",
+  "base": {
+    "principal": "us-east-1a",
+    "standby": "us-east-1b",
+    "multiAz": true,
+    "estado": "available"
+  },
+  "servicios": {
+    "adaptador-datos": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    },
+    "adaptador-firma": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    },
+    "adaptador-identidad": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    },
+    "adaptador-pagos": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    },
+    "adaptador-telemetria": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    },
+    "api-socios": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    },
+    "auditoria": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    },
+    "avisos": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    },
+    "bff-movil": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    },
+    "bff-web": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    },
+    "catalogo": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    },
+    "clientes": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    },
+    "consulta": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    },
+    "cotizacion": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    },
+    "dinero": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    },
+    "pagos-parametricos": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    },
+    "polizas": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    },
+    "simulador-aliados": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    },
+    "siniestros": {
+      "us-east-1a": {
+        "running": 1,
+        "saludables": 1
+      },
+      "us-east-1b": {
+        "running": 1,
+        "saludables": 1
+      }
+    }
+  }
+}

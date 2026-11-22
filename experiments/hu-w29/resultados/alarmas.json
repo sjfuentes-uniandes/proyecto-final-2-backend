@@ -1,0 +1,93 @@
+[
+  {
+    "alarma": "solventa-exp-cola-consulta-proyeccion-dlq",
+    "instante": "2026-11-22T01:27:42.883000+00:00",
+    "resumen": "Alarm updated from OK to ALARM",
+    "de": "OK",
+    "a": "ALARM"
+  },
+  {
+    "alarma": "solventa-exp-consulta-errores-critica",
+    "instante": "2026-11-22T01:28:47.204000+00:00",
+    "resumen": "Alarm updated from ALARM to OK",
+    "de": "ALARM",
+    "a": "OK"
+  },
+  {
+    "alarma": "solventa-exp-cola-avisos-atraso",
+    "instante": "2026-11-22T01:29:16.917000+00:00",
+    "resumen": "Alarm updated from OK to ALARM",
+    "de": "OK",
+    "a": "ALARM"
+  },
+  {
+    "alarma": "solventa-exp-api-canales-5xx",
+    "instante": "2026-11-22T01:35:11.676000+00:00",
+    "resumen": "Alarm updated from OK to ALARM",
+    "de": "OK",
+    "a": "ALARM"
+  },
+  {
+    "alarma": "solventa-exp-api-canales-p95",
+    "instante": "2026-11-22T01:35:33.209000+00:00",
+    "resumen": "Alarm updated from OK to ALARM",
+    "de": "OK",
+    "a": "ALARM"
+  },
+  {
+    "alarma": "solventa-exp-bff-web-errores-critica",
+    "instante": "2026-11-22T01:36:00.099000+00:00",
+    "resumen": "Alarm updated from OK to ALARM",
+    "de": "OK",
+    "a": "ALARM"
+  },
+  {
+    "alarma": "solventa-exp-cotizacion-p95-critica",
+    "instante": "2026-11-22T01:36:24.319000+00:00",
+    "resumen": "Alarm updated from OK to ALARM",
+    "de": "OK",
+    "a": "ALARM"
+  },
+  {
+    "alarma": "solventa-exp-cotizacion-errores-critica",
+    "instante": "2026-11-22T01:36:33.669000+00:00",
+    "resumen": "Alarm updated from OK to ALARM",
+    "de": "OK",
+    "a": "ALARM"
+  },
+  {
+    "alarma": "solventa-exp-bff-web-errores-critica",
+    "instante": "2026-11-22T01:39:00.099000+00:00",
+    "resumen": "Alarm updated from ALARM to OK",
+    "de": "ALARM",
+    "a": "OK"
+  },
+  {
+    "alarma": "solventa-exp-api-canales-5xx",
+    "instante": "2026-11-22T01:39:11.677000+00:00",
+    "resumen": "Alarm updated from ALARM to OK",
+    "de": "ALARM",
+    "a": "OK"
+  },
+  {
+    "alarma": "solventa-exp-api-canales-p95",
+    "instante": "2026-11-22T01:39:33.216000+00:00",
+    "resumen": "Alarm updated from ALARM to OK",
+    "de": "ALARM",
+    "a": "OK"
+  },
+  {
+    "alarma": "solventa-exp-cotizacion-errores-critica",
+    "instante": "2026-11-22T01:39:33.681000+00:00",
+    "resumen": "Alarm updated from ALARM to OK",
+    "de": "ALARM",
+    "a": "OK"
+  },
+  {
+    "alarma": "solventa-exp-perfilamiento-p95-critica",
+    "instante": "2026-11-22T01:49:15.003000+00:00",
+    "resumen": "Alarm updated from ALARM to OK",
+    "de": "ALARM",
+    "a": "OK"
+  }
+]

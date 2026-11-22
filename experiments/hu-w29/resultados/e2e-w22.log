@@ -1,0 +1,14 @@
+uv run pytest tests/e2e
+============================= test session starts ==============================
+platform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0 -- /Users/sjfuentes/Maestria/Proyecto Final/proyecto-final-2-backend/.venv/bin/python
+cachedir: .pytest_cache
+hypothesis profile 'default'
+rootdir: /Users/sjfuentes/Maestria/Proyecto Final/proyecto-final-2-backend
+configfile: pyproject.toml
+plugins: hypothesis-6.168.5, cov-7.1.0, schemathesis-4.29.4, anyio-4.15.1, respx-0.23.1
+collecting ... collected 177 items / 173 deselected / 4 selected
+
+tests/e2e/test_hu_w22_r5_siniestro.py::test_hu_w22_r5_c01_el_evento_enviado_dos_veces_crea_un_solo_siniestro PASSED [ 25%]
+tests/e2e/test_hu_w22_r5_siniestro.py::test_hu_w22_r5_c02_el_detalle_nace_aprobado_con_el_evento_y_la_regla PASSED [ 50%]
+tests/e2e/test_hu_w22_r5_siniestro.py::test_hu_w22_r5_c03_h09_cuenta_el_evento_y_lista_el_pago_activado PASSED [ 75%]
+tests/e2e/test_hu_w22_r5_siniestro.py::test_hu_w22_r5_c04_auditoria_recibe_un_solo_siniestro_aprobado 
