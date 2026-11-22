@@ -172,6 +172,26 @@ run "ambiente_int" {
     ])
     error_message = "El objetivo y los enfriamientos de cada política cpu deben salir de service_overrides o, sin él, de las variables del ambiente."
   }
+  assert {
+    # HU-W25: el objetivo y los enfriamientos de cada política backlog salen de service_overrides
+    # o, sin él, de queue_backlog_target, queue_scale_out_cooldown_seconds y
+    # queue_scale_in_cooldown_seconds (nunca de los de CPU). auditoria la tiene en el fixture.
+    condition = length(aws_appautoscaling_policy.backlog) > 0 && alltrue([
+      for name, policy in aws_appautoscaling_policy.backlog :
+      policy.target_tracking_scaling_policy_configuration[0].target_value == coalesce(try(var.service_overrides[name].queue_backlog_target, null), var.queue_backlog_target) &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == coalesce(try(var.service_overrides[name].queue_scale_out_cooldown, null), var.queue_scale_out_cooldown_seconds) &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_in_cooldown == coalesce(try(var.service_overrides[name].queue_scale_in_cooldown, null), var.queue_scale_in_cooldown_seconds)
+    ])
+    error_message = "El objetivo y los enfriamientos de cada política backlog deben salir de service_overrides o, sin él, de las variables de cola del ambiente."
+  }
+  assert {
+    # HU-W25: el objetivo de antigüedad solo existe si el servicio lo define en service_overrides.
+    condition = alltrue([
+      for name, sizing in local.sizing :
+      sizing.queue_age_target == try(var.service_overrides[name].queue_age_target, null)
+    ])
+    error_message = "queue_age_target debe salir de service_overrides; sin él, el servicio no tiene objetivo de antigüedad."
+  }
 
   # --- HU-W09: la tarea k6 del experimento de carga no existe en int -----
   assert {

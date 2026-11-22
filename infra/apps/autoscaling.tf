@@ -35,9 +35,9 @@ resource "aws_appautoscaling_policy" "backlog" {
   scalable_dimension = aws_appautoscaling_target.service[each.key].scalable_dimension
   service_namespace  = aws_appautoscaling_target.service[each.key].service_namespace
   target_tracking_scaling_policy_configuration {
-    target_value       = var.queue_backlog_target
-    scale_out_cooldown = 60
-    scale_in_cooldown  = 300
+    target_value       = local.sizing[each.key].queue_backlog_target
+    scale_out_cooldown = local.sizing[each.key].queue_scale_out_cooldown
+    scale_in_cooldown  = local.sizing[each.key].queue_scale_in_cooldown
     customized_metric_specification {
       metrics {
         id          = "backlog"

@@ -32,6 +32,14 @@ locals {
         # Política de CPU (HU-W08): los globales del ambiente, que service_overrides reemplaza.
         cpu_target = var.cpu_target, scale_out_cooldown = var.scale_out_cooldown_seconds, scale_in_cooldown = var.scale_in_cooldown_seconds
       },
+      {
+        # Política backlog (HU-W25): los globales de cola, separados de los de CPU, que
+        # service_overrides reemplaza. Sin queue_age_target no hay política por antigüedad.
+        queue_backlog_target     = var.queue_backlog_target
+        queue_age_target         = null
+        queue_scale_out_cooldown = var.queue_scale_out_cooldown_seconds
+        queue_scale_in_cooldown  = var.queue_scale_in_cooldown_seconds
+      },
       { for key, value in try(var.service_overrides[name], {}) : key => value if value != null },
       var.paused ? { min = 0, max = 0 } : {}
     )

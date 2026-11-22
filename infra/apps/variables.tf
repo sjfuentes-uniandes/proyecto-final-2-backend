@@ -55,7 +55,7 @@ variable "max_replicas" {
 }
 
 variable "service_overrides" {
-  description = "Ajustes por servicio: cpu, memory, min, max y, para la política de CPU (HU-W08), cpu_target (%), scale_out_cooldown y scale_in_cooldown (s). Un campo sin valor toma el global del ambiente."
+  description = "Ajustes por servicio: cpu, memory, min, max; para la política de CPU (HU-W08), cpu_target (%), scale_out_cooldown y scale_in_cooldown (s); para la de cola (HU-W25), queue_backlog_target, queue_scale_out_cooldown y queue_scale_in_cooldown (s), y queue_age_target (s; sin valor, no hay política por antigüedad). Un campo sin valor toma el global del ambiente."
   type = map(object({
     cpu                = optional(number)
     memory             = optional(number)
@@ -64,6 +64,11 @@ variable "service_overrides" {
     cpu_target         = optional(number)
     scale_out_cooldown = optional(number)
     scale_in_cooldown  = optional(number)
+    # Política backlog y por antigüedad (HU-W25).
+    queue_backlog_target     = optional(number)
+    queue_age_target         = optional(number)
+    queue_scale_out_cooldown = optional(number)
+    queue_scale_in_cooldown  = optional(number)
   }))
   default = {}
   validation {
@@ -74,6 +79,16 @@ variable "service_overrides" {
       (override.scale_in_cooldown == null ? true : override.scale_in_cooldown >= 0 && floor(override.scale_in_cooldown) == override.scale_in_cooldown)
     ])
     error_message = "En service_overrides, cpu_target va de 1 a 100 y los enfriamientos son enteros mayores o iguales a 0."
+  }
+  validation {
+    condition = alltrue([
+      for override in values(var.service_overrides) :
+      (override.queue_backlog_target == null ? true : override.queue_backlog_target > 0) &&
+      (override.queue_age_target == null ? true : override.queue_age_target >= 1 && floor(override.queue_age_target) == override.queue_age_target) &&
+      (override.queue_scale_out_cooldown == null ? true : override.queue_scale_out_cooldown >= 0 && floor(override.queue_scale_out_cooldown) == override.queue_scale_out_cooldown) &&
+      (override.queue_scale_in_cooldown == null ? true : override.queue_scale_in_cooldown >= 0 && floor(override.queue_scale_in_cooldown) == override.queue_scale_in_cooldown)
+    ])
+    error_message = "En service_overrides, queue_backlog_target es mayor que 0, queue_age_target es un entero mayor o igual a 1 y los enfriamientos de cola son enteros mayores o iguales a 0."
   }
 }
 
@@ -114,9 +129,39 @@ variable "scale_in_cooldown_seconds" {
 }
 
 variable "queue_backlog_target" {
-  description = "Mensajes visibles por cola que disparan escalado de los workers."
+  description = "Objetivo de la política backlog de los workers: mensajes visibles por tarea con queue_backlog_per_task; si no, la suma de las colas del servicio. service_overrides lo ajusta por servicio."
   type        = number
   default     = 100
+  validation {
+    condition     = var.queue_backlog_target > 0
+    error_message = "Use un número mayor que 0."
+  }
+}
+
+variable "queue_backlog_per_task" {
+  description = "HU-W25: divide los mensajes visibles de la política backlog por las tareas en ejecución (ECS/ContainerInsights RunningTaskCount). Requiere Container Insights en platform. false = la suma de las colas, como antes."
+  type        = bool
+  default     = false
+}
+
+variable "queue_scale_out_cooldown_seconds" {
+  description = "Enfriamiento (s) tras escalar hacia fuera por cola (backlog y antigüedad), antes de volver a escalar hacia fuera. service_overrides lo ajusta por servicio."
+  type        = number
+  default     = 60
+  validation {
+    condition     = var.queue_scale_out_cooldown_seconds >= 0 && floor(var.queue_scale_out_cooldown_seconds) == var.queue_scale_out_cooldown_seconds
+    error_message = "Use un entero mayor o igual a 0."
+  }
+}
+
+variable "queue_scale_in_cooldown_seconds" {
+  description = "Enfriamiento (s) tras escalar hacia dentro por cola (backlog), antes de volver a retirar tareas. service_overrides lo ajusta por servicio."
+  type        = number
+  default     = 300
+  validation {
+    condition     = var.queue_scale_in_cooldown_seconds >= 0 && floor(var.queue_scale_in_cooldown_seconds) == var.queue_scale_in_cooldown_seconds
+    error_message = "Use un entero mayor o igual a 0."
+  }
 }
 
 variable "health_check_command" {

@@ -934,6 +934,206 @@ run "politica_cpu_invalida" {
   expect_failures = [var.cpu_target, var.scale_out_cooldown_seconds, var.scale_in_cooldown_seconds, var.service_overrides]
 }
 
+# HU-W25 (25.2): objetivo y enfriamientos de la política backlog por servicio y ambiente,
+# separados de los de CPU. queue_backlog_per_task todavía no cambia nada (lo usa la 25.3).
+run "politica_cola_por_omision" {
+  command = plan
+
+  # Sin valores por servicio ni globales nuevos, backlog queda como antes de parametrizarla:
+  # 100 mensajes y 60/300 s en los tres workers, y ningún servicio tiene objetivo de antigüedad.
+  assert {
+    condition = length(aws_appautoscaling_policy.backlog) == 3 && alltrue([
+      for policy in aws_appautoscaling_policy.backlog :
+      policy.target_tracking_scaling_policy_configuration[0].target_value == 100 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 60 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 300
+    ])
+    error_message = "HU-W25: con los valores por omisión, cada política backlog queda en 100 y 60/300 s."
+  }
+  assert {
+    condition     = !var.queue_backlog_per_task && alltrue([for name, sizing in local.sizing : sizing.queue_age_target == null])
+    error_message = "HU-W25: por omisión, el interruptor por tarea está apagado y ningún servicio define queue_age_target."
+  }
+}
+
+run "politica_cola_por_servicio" {
+  command = plan
+
+  # pagos-parametricos ajusta los cuatro campos de cola; auditoria ajusta solo los de CPU (que en
+  # un worker no tienen política); cotizacion (no worker) ajusta los de cola, que no usa.
+  variables {
+    service_overrides = {
+      pagos-parametricos = { queue_backlog_target = 10, queue_age_target = 180, queue_scale_out_cooldown = 30, queue_scale_in_cooldown = 600 }
+      auditoria          = { cpu_target = 45, scale_out_cooldown = 15, scale_in_cooldown = 900 }
+      cotizacion         = { queue_backlog_target = 5, queue_scale_out_cooldown = 1, queue_scale_in_cooldown = 2 }
+    }
+  }
+
+  assert {
+    condition = (
+      aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].target_value == 10 &&
+      aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 30 &&
+      aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 600 &&
+      local.sizing["pagos-parametricos"].queue_age_target == 180
+    )
+    error_message = "HU-W25: el objetivo, la antigüedad y los enfriamientos de cola de service_overrides llegan a su servicio."
+  }
+  assert {
+    condition = alltrue([
+      for name, policy in aws_appautoscaling_policy.backlog :
+      policy.target_tracking_scaling_policy_configuration[0].target_value == 100 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 60 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 300
+      if name != "pagos-parametricos"
+    ]) && alltrue([for name, sizing in local.sizing : sizing.queue_age_target == null if name != "pagos-parametricos"])
+    error_message = "HU-W25: el ajuste de cola de un servicio no cambia la política backlog de los demás, y un override de CPU no mueve la de cola."
+  }
+  assert {
+    condition = alltrue([
+      for name, policy in aws_appautoscaling_policy.cpu :
+      policy.target_tracking_scaling_policy_configuration[0].target_value == 60 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 30 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 300
+    ])
+    error_message = "HU-W25: los campos de cola de service_overrides no mueven la política cpu (ni la de cotizacion)."
+  }
+  assert {
+    condition     = aws_appautoscaling_target.service["pagos-parametricos"].min_capacity == 1 && aws_appautoscaling_target.service["pagos-parametricos"].max_capacity == 3
+    error_message = "HU-W25: los campos de cola no cambian el mínimo ni el máximo del servicio."
+  }
+}
+
+run "politica_cola_por_ambiente" {
+  command = plan
+
+  # Globales de cola del ambiente más un servicio que fija solo uno de los campos: el resto sale
+  # de los globales. Los globales de cola no mueven la política cpu.
+  variables {
+    queue_backlog_target             = 50
+    queue_scale_out_cooldown_seconds = 90
+    queue_scale_in_cooldown_seconds  = 120
+    service_overrides = {
+      auditoria = { queue_scale_in_cooldown = 900 }
+    }
+  }
+
+  assert {
+    condition = (
+      aws_appautoscaling_policy.backlog["auditoria"].target_tracking_scaling_policy_configuration[0].target_value == 50 &&
+      aws_appautoscaling_policy.backlog["auditoria"].target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 90 &&
+      aws_appautoscaling_policy.backlog["auditoria"].target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 900
+    )
+    error_message = "HU-W25: un campo de cola de service_overrides reemplaza solo ese campo; el resto sale de los globales."
+  }
+  assert {
+    condition = alltrue([
+      for name, policy in aws_appautoscaling_policy.backlog :
+      policy.target_tracking_scaling_policy_configuration[0].target_value == 50 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 90 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 120
+      if name != "auditoria"
+    ])
+    error_message = "HU-W25: sin ajuste por servicio, la política backlog toma el objetivo y los enfriamientos de cola del ambiente."
+  }
+  assert {
+    condition = alltrue([
+      for policy in aws_appautoscaling_policy.cpu :
+      policy.target_tracking_scaling_policy_configuration[0].target_value == 60 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 30 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 300
+    ])
+    error_message = "HU-W25: los globales de cola no cambian la política cpu."
+  }
+}
+
+run "politica_cola_limites" {
+  command = plan
+
+  # Los límites válidos: objetivo apenas sobre 0, enfriamientos en 0 y antigüedad de 1 s.
+  variables {
+    queue_backlog_target             = 0.5
+    queue_scale_out_cooldown_seconds = 0
+    queue_scale_in_cooldown_seconds  = 0
+    service_overrides = {
+      pagos-parametricos = { queue_backlog_target = 0.1, queue_age_target = 1, queue_scale_out_cooldown = 0, queue_scale_in_cooldown = 0 }
+    }
+  }
+
+  assert {
+    condition = (
+      aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].target_value == 0.1 &&
+      aws_appautoscaling_policy.backlog["auditoria"].target_tracking_scaling_policy_configuration[0].target_value == 0.5 &&
+      aws_appautoscaling_policy.backlog["auditoria"].target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 0 &&
+      aws_appautoscaling_policy.backlog["auditoria"].target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 0 &&
+      local.sizing["pagos-parametricos"].queue_age_target == 1
+    )
+    error_message = "HU-W25: objetivo > 0, enfriamientos de 0 y antigüedad de 1 s son válidos."
+  }
+}
+
+run "politica_cola_globales_invalidos" {
+  command = plan
+
+  variables {
+    queue_backlog_target             = 0
+    queue_scale_out_cooldown_seconds = -1
+    queue_scale_in_cooldown_seconds  = 1.5
+  }
+
+  expect_failures = [var.queue_backlog_target, var.queue_scale_out_cooldown_seconds, var.queue_scale_in_cooldown_seconds]
+}
+
+# Un campo inválido por run, para que cada validación de service_overrides falle por sí sola.
+run "politica_cola_objetivo_invalido" {
+  command = plan
+
+  variables {
+    service_overrides = { pagos-parametricos = { queue_backlog_target = 0 } }
+  }
+
+  expect_failures = [var.service_overrides]
+}
+
+run "politica_cola_antiguedad_no_entera" {
+  command = plan
+
+  variables {
+    service_overrides = { pagos-parametricos = { queue_age_target = 180.5 } }
+  }
+
+  expect_failures = [var.service_overrides]
+}
+
+run "politica_cola_antiguedad_cero" {
+  command = plan
+
+  variables {
+    service_overrides = { pagos-parametricos = { queue_age_target = 0 } }
+  }
+
+  expect_failures = [var.service_overrides]
+}
+
+run "politica_cola_enfriamiento_salida_invalido" {
+  command = plan
+
+  variables {
+    service_overrides = { pagos-parametricos = { queue_scale_out_cooldown = -1 } }
+  }
+
+  expect_failures = [var.service_overrides]
+}
+
+run "politica_cola_enfriamiento_entrada_invalido" {
+  command = plan
+
+  variables {
+    service_overrides = { pagos-parametricos = { queue_scale_in_cooldown = 1.5 } }
+  }
+
+  expect_failures = [var.service_overrides]
+}
+
 # HU-W08: panel «Cotizaciones por minuto y capacidad» de Operación › Tablero (bff-web).
 run "capacidad_bff_web" {
   command = plan
