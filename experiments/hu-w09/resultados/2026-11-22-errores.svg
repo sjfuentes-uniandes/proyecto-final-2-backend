@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="348" viewBox="0 0 720 348" role="img" aria-label="Resultado de las solicitudes de k6 por etapa">
+<title>Resultado de las solicitudes de k6 por etapa</title>
+<style>
+  svg { --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --grid:#e4e3df; --ref:#8a8984;
+        --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; }
+  @media (prefers-color-scheme: dark) {
+    svg { --surface:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --grid:#383835; --ref:#8f8e88;
+          --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; }
+  }
+  .bg { fill: var(--surface); }
+  text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--ink2); font-size: 12px; }
+  .t { fill: var(--ink); font-size: 14px; font-weight: 600; }
+  .v { fill: var(--ink); }
+  .grid { stroke: var(--grid); stroke-width: 1; }
+  .ref { stroke: var(--ref); stroke-width: 1; stroke-dasharray: 4 4; }
+  .s1 { stroke: var(--s1); } .s2 { stroke: var(--s2); } .s3 { stroke: var(--s3); } .s4 { stroke: var(--s4); }
+  .f1 { fill: var(--s1); } .f2 { fill: var(--s2); } .f3 { fill: var(--s3); } .f4 { fill: var(--s4); }
+  .line { fill: none; stroke-width: 2; stroke-linejoin: round; }
+  .dot { stroke: var(--surface); stroke-width: 2; }
+</style>
+<rect class="bg" width="720" height="348" rx="8"/>
+<text class="t" x="16" y="26">Resultado de las solicitudes de k6 por etapa (% del total)</text>
+<line x1="16" y1="46" x2="38" y2="46" class="line s1"/>
+<text x="44" y="50">respuesta 2xx en menos de 3 s</text>
+<line x1="255" y1="46" x2="277" y2="46" class="line s2"/>
+<text x="283" y="50">5xx</text>
+<line x1="312" y1="46" x2="334" y2="46" class="line s3"/>
+<text x="340" y="50">error de red (timeout de 3 s)</text>
+<text x="140" y="87" text-anchor="end" class="v">e1 · 500/min</text>
+<rect x="150.0" y="74" width="540.7" height="20" rx="2" class="f1"><title>e1: 2.466 de 2.481 (99.4 %)</title></rect>
+<text x="421.3" y="88" text-anchor="middle" style="fill:#fff;font-weight:600">99 %</text>
+<rect x="692.7" y="74" width="1.3" height="20" rx="2" class="f2"><title>e1: 15 de 2.481 (0.6 %)</title></rect>
+<text x="140" y="121" text-anchor="end" class="v">e2 · 2.000/min</text>
+<rect x="150.0" y="108" width="0.5" height="20" rx="2" class="f1"><title>e2: 1 de 6.652 (0.0 %)</title></rect>
+<rect x="150.1" y="108" width="0.5" height="20" rx="2" class="f2"><title>e2: 26 de 6.652 (0.4 %)</title></rect>
+<rect x="152.2" y="108" width="541.8" height="20" rx="2" class="f3"><title>e2: 6.625 de 6.652 (99.6 %)</title></rect>
+<text x="424.1" y="122" text-anchor="middle" style="fill:#fff;font-weight:600">100 %</text>
+<text x="140" y="155" text-anchor="end" class="v">e3 · 5.000/min</text>
+<rect x="150.0" y="142" width="121.5" height="20" rx="2" class="f2"><title>e3: 4.612 de 20.388 (22.6 %)</title></rect>
+<text x="211.8" y="156" text-anchor="middle" style="fill:#fff;font-weight:600">23 %</text>
+<rect x="273.5" y="142" width="420.5" height="20" rx="2" class="f3"><title>e3: 15.776 de 20.388 (77.4 %)</title></rect>
+<text x="484.8" y="156" text-anchor="middle" style="fill:#fff;font-weight:600">77 %</text>
+<text x="140" y="189" text-anchor="end" class="v">e4 · 10.000/min</text>
+<rect x="150.0" y="176" width="0.5" height="20" rx="2" class="f1"><title>e4: 12 de 42.723 (0.0 %)</title></rect>
+<rect x="150.2" y="176" width="229.2" height="20" rx="2" class="f2"><title>e4: 18.087 de 42.723 (42.3 %)</title></rect>
+<text x="265.7" y="190" text-anchor="middle" style="fill:#fff;font-weight:600">42 %</text>
+<rect x="381.3" y="176" width="312.7" height="20" rx="2" class="f3"><title>e4: 24.624 de 42.723 (57.6 %)</title></rect>
+<text x="538.7" y="190" text-anchor="middle" style="fill:#fff;font-weight:600">58 %</text>
+<text x="140" y="223" text-anchor="end" class="v">e5 · 25.000/min</text>
+<rect x="150.0" y="210" width="419.8" height="20" rx="2" class="f2"><title>e5: 91.586 de 118.554 (77.3 %)</title></rect>
+<text x="360.9" y="224" text-anchor="middle" style="fill:#fff;font-weight:600">77 %</text>
+<rect x="571.8" y="210" width="122.2" height="20" rx="2" class="f3"><title>e5: 26.968 de 118.554 (22.7 %)</title></rect>
+<text x="633.9" y="224" text-anchor="middle" style="fill:#fff;font-weight:600">23 %</text>
+<text x="140" y="257" text-anchor="end" class="v">e6 · 50.000/min</text>
+<rect x="150.0" y="244" width="0.5" height="20" rx="2" class="f1"><title>e6: 1 de 229.484 (0.0 %)</title></rect>
+<rect x="150.0" y="244" width="427.7" height="20" rx="2" class="f2"><title>e6: 180.588 de 229.484 (78.7 %)</title></rect>
+<text x="364.8" y="258" text-anchor="middle" style="fill:#fff;font-weight:600">79 %</text>
+<rect x="579.7" y="244" width="114.3" height="20" rx="2" class="f3"><title>e6: 48.895 de 229.484 (21.3 %)</title></rect>
+<text x="637.8" y="258" text-anchor="middle" style="fill:#fff;font-weight:600">21 %</text>
+<text x="140" y="291" text-anchor="end" class="v">gw · 6.000/min</text>
+<rect x="150.0" y="278" width="0.5" height="20" rx="2" class="f1"><title>gw: 26 de 20.250 (0.1 %)</title></rect>
+<rect x="150.7" y="278" width="10.6" height="20" rx="2" class="f2"><title>gw: 466 de 20.250 (2.3 %)</title></rect>
+<rect x="163.3" y="278" width="530.7" height="20" rx="2" class="f3"><title>gw: 19.758 de 20.250 (97.6 %)</title></rect>
+<text x="429.6" y="292" text-anchor="middle" style="fill:#fff;font-weight:600">98 %</text>
+<text x="16" y="336">gw es el tramo apigw (6.000/min pedidas). Datos: 2026-11-22-recogida.json, «etapas».</text>
+</svg>

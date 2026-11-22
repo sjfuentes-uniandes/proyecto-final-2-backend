@@ -1,0 +1,130 @@
+# HU-W09 · Infra - Desplegar (exp), 2026-11-22: extractos del archivo de logs del run.
+# Por trabajo: la primera línea, el checkout, los hitos (==>), los resúmenes de Terraform y la
+# prueba rápida completa. Cuenta, correos, IDs de API Gateway y valores enmascarados, redactados.
+
+# --- trabajo: plan-plataforma ---
+2026-11-22T16:55:14.3642190Z Current runner version: '2.338.2'
+2026-11-22T16:55:15.4151788Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +0f7045e70e0fb2c6a96430b7e0b06099338c3564:refs/remotes/origin/main
+2026-11-22T16:55:39.1421185Z Plan: 342 to add, 0 to change, 0 to destroy.
+2026-11-22T16:55:48.0214166Z Cleaning up orphan processes
+
+# --- trabajo: plataforma ---
+2026-11-22T16:55:52.6531819Z Current runner version: '2.338.2'
+2026-11-22T16:55:58.6275678Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +0f7045e70e0fb2c6a96430b7e0b06099338c3564:refs/remotes/origin/main
+2026-11-22T16:56:02.2609901Z ==> Plataforma del ambiente exp: terraform apply
+2026-11-22T17:13:01.1705663Z Apply complete! Resources: 342 added, 0 changed, 0 destroyed.
+2026-11-22T17:13:01.5009099Z Cleaning up orphan processes
+
+# --- trabajo: bases ---
+2026-11-22T17:13:05.6498451Z Current runner version: '2.338.2'
+2026-11-22T17:13:06.7208585Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +0f7045e70e0fb2c6a96430b7e0b06099338c3564:refs/remotes/origin/main
+2026-11-22T17:13:24.3023347Z ==> Preparando bases por servicio (exp)
+2026-11-22T17:14:18.7979260Z ==> Bases listas
+2026-11-22T17:14:19.0545357Z Cleaning up orphan processes
+
+# --- trabajo: imagenes ---
+2026-11-22T17:14:24.6481547Z Current runner version: '2.338.2'
+2026-11-22T17:14:30.0493614Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +0f7045e70e0fb2c6a96430b7e0b06099338c3564:refs/remotes/origin/main
+2026-11-22T17:15:00.4695666Z ==> Publicando api-socios cotizacion catalogo clientes con etiqueta 0f7045e70e0f (exp)
+2026-11-22T17:15:47.6456440Z ==> Imágenes publicadas
+2026-11-22T17:15:48.9905842Z Cleaning up orphan processes
+
+# --- trabajo: plan-aplicaciones ---
+2026-11-22T17:15:54.7452206Z Current runner version: '2.338.2'
+2026-11-22T17:15:55.8165987Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +0f7045e70e0fb2c6a96430b7e0b06099338c3564:refs/remotes/origin/main
+2026-11-22T17:16:42.1549352Z Plan: 123 to add, 0 to change, 0 to destroy.
+2026-11-22T17:16:49.4144737Z Cleaning up orphan processes
+
+# --- trabajo: aplicaciones ---
+2026-11-22T17:16:54.9890931Z Current runner version: '2.338.2'
+2026-11-22T17:16:56.5435680Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +0f7045e70e0fb2c6a96430b7e0b06099338c3564:refs/remotes/origin/main
+2026-11-22T17:17:05.6669610Z ==> Aplicaciones del ambiente exp: terraform apply
+2026-11-22T17:17:39.9107215Z Apply complete! Resources: 123 added, 0 changed, 0 destroyed.
+2026-11-22T17:17:44.9639829Z ==> Esperando a que 4 servicios queden estables
+2026-11-22T17:20:22.9225622Z ##[group]Run make infra-probar
+2026-11-22T17:20:22.9225960Z make infra-probar
+2026-11-22T17:20:22.9258058Z shell: /usr/bin/bash -e {0}
+2026-11-22T17:20:22.9258332Z env:
+2026-11-22T17:20:22.9258549Z   ENV: exp
+2026-11-22T17:20:22.9258762Z   AWS_REGION: us-east-1
+2026-11-22T17:20:22.9259017Z   AUTO_APPROVE: 1
+2026-11-22T17:20:22.9259295Z   SERVICES: api-socios,cotizacion,catalogo,clientes
+2026-11-22T17:20:22.9259654Z   AWS_DEFAULT_REGION: us-east-1
+2026-11-22T17:20:22.9260036Z   AWS_ACCESS_KEY_ID: ***
+2026-11-22T17:20:22.9260389Z   AWS_SECRET_ACCESS_KEY: ***
+2026-11-22T17:20:22.9265239Z   AWS_SESSION_TOKEN: ***
+2026-11-22T17:20:22.9265503Z ##[endgroup]
+2026-11-22T17:20:45.2937611Z 
+2026-11-22T17:20:45.2938390Z ==> 1. Servicios ECS (exp)
+2026-11-22T17:20:46.2113441Z   OK   api-socios: 2/2 tareas
+2026-11-22T17:20:46.2117716Z   OK   catalogo: 2/2 tareas
+2026-11-22T17:20:46.2118811Z   OK   clientes: 2/2 tareas
+2026-11-22T17:20:46.2119611Z   OK   cotizacion: 2/2 tareas
+2026-11-22T17:20:46.3159419Z 
+2026-11-22T17:20:46.3161402Z ==> 2. Destinos del ALB interno
+2026-11-22T17:20:47.3579959Z   OK   api-socios: 2 destino(s) saludable(s)
+2026-11-22T17:20:47.3580371Z 
+2026-11-22T17:20:47.3580939Z ==> 3. API de canales (https://<api-id>.execute-api.us-east-1.amazonaws.com/v1)
+2026-11-22T17:20:47.6218963Z   OK   sin token -> 401
+2026-11-22T17:20:47.6260515Z   OK   la respuesta del borde incluye X-Correlation-Id
+2026-11-22T17:20:47.8598023Z   OK   token inválido -> 401
+2026-11-22T17:20:47.8598357Z 
+2026-11-22T17:20:47.8599414Z ==> 4. API de socios (https://<api-id>.execute-api.us-east-1.amazonaws.com/v1)
+2026-11-22T17:20:52.1305204Z   OK   socio-exp: token client_credentials obtenido
+2026-11-22T17:20:52.4153153Z   OK   token sin API key -> 401 (rechazado en el borde)
+2026-11-22T17:20:52.6931114Z   OK   token + API key -> 200 desde api-socios (WAF, VPC Link, ALB y ECS)
+2026-11-22T17:20:52.6932639Z 
+2026-11-22T17:20:52.6933014Z ==> 6. Servicios del Sprint 2: GET /health
+2026-11-22T17:20:52.6969757Z   OMITE polizas: sin imagen publicada (make infra-microservicios SERVICES=polizas).
+2026-11-22T17:20:52.7001760Z   OMITE dinero: sin imagen publicada (make infra-microservicios SERVICES=dinero).
+2026-11-22T17:20:52.7034902Z   OMITE adaptador-pagos: sin imagen publicada (make infra-microservicios SERVICES=adaptador-pagos).
+2026-11-22T17:20:52.7067141Z   OMITE adaptador-firma: sin imagen publicada (make infra-microservicios SERVICES=adaptador-firma).
+2026-11-22T17:20:52.7098699Z   OMITE consulta: sin imagen publicada (make infra-microservicios SERVICES=consulta).
+2026-11-22T17:20:52.7130946Z   OMITE avisos: sin imagen publicada (make infra-microservicios SERVICES=avisos).
+2026-11-22T17:20:52.7131612Z 
+2026-11-22T17:20:52.7131943Z ==> 7. Enrutamiento de OfertaAceptada
+2026-11-22T17:20:54.6476561Z   OK   OfertaAceptada llegó a dinero-aceptaciones
+2026-11-22T17:21:04.0709336Z   OK   avisos: no recibió OfertaAceptada
+2026-11-22T17:21:12.9456954Z   OK   consentimientos-cotizacion: no recibió OfertaAceptada
+2026-11-22T17:21:21.5417841Z   OK   consulta-proyeccion: no recibió OfertaAceptada
+2026-11-22T17:21:30.1412761Z   OK   dinero-indemnizaciones: no recibió OfertaAceptada
+2026-11-22T17:21:38.6949812Z   OK   parametricos-eventos: no recibió OfertaAceptada
+2026-11-22T17:21:47.2570201Z   OK   parametricos-polizas: no recibió OfertaAceptada
+2026-11-22T17:21:55.8230092Z   OK   polizas-recaudos: no recibió OfertaAceptada
+2026-11-22T17:22:04.3723578Z   OK   siniestros-indemnizaciones: no recibió OfertaAceptada
+2026-11-22T17:22:04.3724476Z 
+2026-11-22T17:22:04.3724999Z ==> 8. Mensaje envenenado en avisos -> DLQ con alarma
+2026-11-22T17:24:16.2115648Z   OK   tras 1 recepciones (maxReceiveCount 5) el mensaje quedó en la DLQ de avisos
+2026-11-22T17:24:47.2221791Z   OK   solventa-exp-cola-avisos-dlq en ALARM
+2026-11-22T17:24:48.9671782Z   mensaje envenenado borrado de la DLQ; la alarma vuelve a OK en unos minutos
+2026-11-22T17:24:48.9673265Z 
+2026-11-22T17:24:48.9674238Z ==> 9. Caché de catálogo y reglas (HU-W03)
+2026-11-22T17:24:49.9990309Z   OK   solventa-exp-cache: available
+2026-11-22T17:24:50.8896934Z   OK   catalogo: CACHE_URL con TLS
+2026-11-22T17:24:51.7747444Z   OK   cotizacion: CACHE_URL con TLS
+2026-11-22T17:24:51.7748067Z 
+2026-11-22T17:24:51.7748563Z ==> 10. Servicios del Sprint 3: GET /health
+2026-11-22T17:24:51.7782304Z   OMITE siniestros: sin imagen publicada (make infra-microservicios SERVICES=siniestros).
+2026-11-22T17:24:51.7814520Z   OMITE pagos-parametricos: sin imagen publicada (make infra-microservicios SERVICES=pagos-parametricos).
+2026-11-22T17:24:51.7846961Z   OMITE adaptador-telemetria: sin imagen publicada (make infra-microservicios SERVICES=adaptador-telemetria).
+2026-11-22T17:24:51.7847840Z 
+2026-11-22T17:24:51.7848247Z ==> 11. Enrutamiento de SiniestroAprobado
+2026-11-22T17:24:53.5716708Z   OK   SiniestroAprobado llegó a dinero-indemnizaciones
+2026-11-22T17:24:55.3019461Z   OK   SiniestroAprobado llegó a consulta-proyeccion
+2026-11-22T17:25:04.7203418Z   OK   avisos: no recibió SiniestroAprobado
+2026-11-22T17:25:13.3148110Z   OK   consentimientos-cotizacion: no recibió SiniestroAprobado
+2026-11-22T17:25:21.9498503Z   OK   dinero-aceptaciones: no recibió SiniestroAprobado
+2026-11-22T17:25:30.5082245Z   OK   parametricos-eventos: no recibió SiniestroAprobado
+2026-11-22T17:25:39.0809917Z   OK   parametricos-polizas: no recibió SiniestroAprobado
+2026-11-22T17:25:47.6348145Z   OK   polizas-recaudos: no recibió SiniestroAprobado
+2026-11-22T17:25:56.2090607Z   OK   siniestros-indemnizaciones: no recibió SiniestroAprobado
+2026-11-22T17:25:56.2091236Z 
+2026-11-22T17:25:56.2092583Z ==> 12. Entrada de telemetría (https://<api-id>.execute-api.us-east-1.amazonaws.com/v1/telemetria/v1/eventos)
+2026-11-22T17:25:56.2124806Z   OMITE adaptador-telemetria: sin imagen publicada (make infra-microservicios SERVICES=adaptador-telemetria).
+2026-11-22T17:25:56.2125569Z 
+2026-11-22T17:25:56.2125946Z ==> 13. Auditoría por lotes (HU-W24, R5)
+2026-11-22T17:25:56.2159634Z   OMITE auditoria: sin imagen publicada (make infra-microservicios SERVICES=auditoria).
+2026-11-22T17:25:56.2160339Z 
+2026-11-22T17:25:56.2160664Z ==> Resultado: 34 OK, 0 con falla
+2026-11-22T17:25:56.2250287Z   SERVICES: api-socios,cotizacion,catalogo,clientes
+2026-11-22T17:25:58.4027932Z Cleaning up orphan processes

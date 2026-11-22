@@ -1,0 +1,43 @@
+2026-11-22T17:59:34.2396059Z ##[group]Run uv run pytest tests/e2e -v -rA ${FILTRO:+-k "$FILTRO"} --junitxml=e2e.xml
+2026-11-22T17:59:34.2397338Z uv run pytest tests/e2e -v -rA ${FILTRO:+-k "$FILTRO"} --junitxml=e2e.xml
+2026-11-22T17:59:34.2425544Z shell: /usr/bin/bash -e {0}
+2026-11-22T17:59:34.2425897Z env:
+2026-11-22T17:59:34.2426126Z   ENV: exp
+2026-11-22T17:59:34.2426352Z   AWS_REGION: us-east-1
+2026-11-22T17:59:34.2426608Z   UV_PYTHON: 3.12
+2026-11-22T17:59:34.2427030Z   VIRTUAL_ENV: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv
+2026-11-22T17:59:34.2427535Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-11-22T17:59:34.2427874Z   AWS_DEFAULT_REGION: us-east-1
+2026-11-22T17:59:34.2428331Z   AWS_ACCESS_KEY_ID: ***
+2026-11-22T17:59:34.2428691Z   AWS_SECRET_ACCESS_KEY: ***
+2026-11-22T17:59:34.2433645Z   AWS_SESSION_TOKEN: ***
+2026-11-22T17:59:34.2433915Z   E2E_REQUERIDO: 1
+2026-11-22T17:59:34.2434199Z   E2E_ADMIN_USUARIO: ***
+2026-11-22T17:59:34.2434465Z   E2E_ADMIN_CLAVE: ***
+2026-11-22T17:59:34.2435160Z   E2E_ADMIN_TOTP: ***
+2026-11-22T17:59:34.2435629Z   FILTRO: hu_w09_preparar
+2026-11-22T17:59:34.2435903Z ##[endgroup]
+2026-11-22T17:59:36.7328439Z ============================= test session starts ==============================
+2026-11-22T17:59:36.7329912Z platform linux -- Python 3.12.16, pytest-9.1.1, pluggy-1.6.0 -- /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv/bin/python
+2026-11-22T17:59:36.7331131Z cachedir: .pytest_cache
+2026-11-22T17:59:36.7332298Z hypothesis profile 'ci' -> database=None, deadline=None, print_blob=True, derandomize=True, suppress_health_check=(HealthCheck.too_slow,)
+2026-11-22T17:59:36.7333683Z rootdir: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend
+2026-11-22T17:59:36.7334558Z configfile: pyproject.toml
+2026-11-22T17:59:36.7335501Z plugins: hypothesis-6.168.5, anyio-4.15.1, respx-0.23.1, schemathesis-4.29.4, cov-7.1.0
+2026-11-22T17:59:37.3285672Z collecting ... collected 206 items / 205 deselected / 1 selected
+2026-11-22T17:59:37.3286330Z 
+2026-11-22T18:00:27.0465448Z tests/e2e/test_hu_w09_carga.py::test_hu_w09_preparar ::add-mask::***
+2026-11-22T18:00:28.0634611Z PASSED              [100%]
+2026-11-22T18:00:28.0634918Z 
+2026-11-22T18:00:28.0635097Z ==================================== PASSES ====================================
+2026-11-22T18:00:28.0635893Z _____________________________ test_hu_w09_preparar _____________________________
+2026-11-22T18:00:28.0636378Z ----------------------------- Captured stdout call -----------------------------
+2026-11-22T18:00:28.0636674Z 
+2026-11-22T18:00:28.0638576Z HU-W09 preparar: cadena [{"servicio": "api-socios", "estado": "ACTIVE", "deseadas": 2, "corriendo": 2, "despliegues": 1, "estable": true}, {"servicio": "cotizacion", "estado": "ACTIVE", "deseadas": 2, "corriendo": 2, "despliegues": 1, "estable": true}, {"servicio": "catalogo", "estado": "ACTIVE", "deseadas": 2, "corriendo": 2, "despliegues": 1, "estable": true}, {"servicio": "clientes", "estado": "ACTIVE", "deseadas": 2, "corriendo": 2, "despliegues": 1, "estable": true}]; suscripción de alertas: 1 PendingConfirmation
+2026-11-22T18:00:28.0644803Z HU-W09 preparar: vCPU de Fargate {"Cuota Fargate On-Demand vCPU resource count (L-3032A538)": "64 vCPU (aplicada)", "Cuota Fargate Spot vCPU resource count (L-36FBB829)": "64 vCPU (aplicada)", "vCPU estimadas (cadena y k6)": "4.5 ahora · 9.5 con la cadena al máximo (k6: 2)", "Holgura On-Demand": "alcanza: 9.5 de 64 vCPU"}
+2026-11-22T18:00:28.0646328Z HU-W09 preparar: tarea del alta arn:aws:ecs:us-east-1:<cuenta>:task/solventa-exp/a5993aa72531490bba75340c95df1357
+2026-11-22T18:00:28.0649964Z HU-W09 preparar, resumen: {"Socio": "SOC-000001", "Plan efectivo de la API key": "experimento", "Movimiento de plan": "movida de estandar a experimento (delete_usage_plan_key y create_usage_plan_key)", "Suscripción de alertas (decisión 11)": "1 PendingConfirmation (email)", "URL del ALB": "http://internal-solventa-exp-access-1524001600.us-east-1.elb.amazonaws.com:8083 — DNS de describe_load_balancers del ALB solventa-exp-access (infra/platform/edge.tf:43); puerto 8083, el listener_port de api-socios en la salida platform.catalog (infra/platform/catalog.tf:36)", "Tarea del alta": "a5993aa72531490bba75340c95df1357", "Cuota Fargate On-Demand vCPU resource count (L-3032A538)": "64 vCPU (aplicada)", "Cuota Fargate Spot vCPU resource count (L-36FBB829)": "64 vCPU (aplicada)", "vCPU estimadas (cadena y k6)": "4.5 ahora · 9.5 con la cadena al máximo (k6: 2)", "Holgura On-Demand": "alcanza: 9.5 de 64 vCPU"}
+2026-11-22T18:00:28.0653586Z - generated xml file: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/e2e.xml -
+2026-11-22T18:00:28.0654177Z =========================== short test summary info ============================
+2026-11-22T18:00:28.0654681Z PASSED tests/e2e/test_hu_w09_carga.py::test_hu_w09_preparar
+2026-11-22T18:00:28.0655120Z ====================== 1 passed, 205 deselected in 51.13s ======================
