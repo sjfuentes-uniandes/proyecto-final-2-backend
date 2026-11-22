@@ -1,0 +1,61 @@
+2026-11-20T17:44:04.1475051Z ##[group]Run uv run pytest tests/e2e -v -rA ${FILTRO:+-k "$FILTRO"} --junitxml=e2e.xml
+2026-11-20T17:44:04.1476159Z uv run pytest tests/e2e -v -rA ${FILTRO:+-k "$FILTRO"} --junitxml=e2e.xml
+2026-11-20T17:44:04.1519251Z shell: /usr/bin/bash -e {0}
+2026-11-20T17:44:04.1519709Z env:
+2026-11-20T17:44:04.1520039Z   ENV: int
+2026-11-20T17:44:04.1520387Z   AWS_REGION: us-east-1
+2026-11-20T17:44:04.1520794Z   UV_PYTHON: 3.12
+2026-11-20T17:44:04.1521488Z   VIRTUAL_ENV: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv
+2026-11-20T17:44:04.1522374Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-11-20T17:44:04.1522955Z   AWS_DEFAULT_REGION: us-east-1
+2026-11-20T17:44:04.1523549Z   AWS_ACCESS_KEY_ID: ***
+2026-11-20T17:44:04.1524133Z   AWS_SECRET_ACCESS_KEY: ***
+2026-11-20T17:44:04.1533473Z   AWS_SESSION_TOKEN: ***
+2026-11-20T17:44:04.1533908Z   E2E_REQUERIDO: 1
+2026-11-20T17:44:04.1534351Z   E2E_ADMIN_USUARIO: ***
+2026-11-20T17:44:04.1534786Z   E2E_ADMIN_CLAVE: ***
+2026-11-20T17:44:04.1535702Z   E2E_ADMIN_TOTP: ***
+2026-11-20T17:44:04.1536098Z   FILTRO: hu_w07
+2026-11-20T17:44:04.1536468Z ##[endgroup]
+2026-11-20T17:44:06.4307939Z ============================= test session starts ==============================
+2026-11-20T17:44:06.4309683Z platform linux -- Python 3.12.16, pytest-9.1.1, pluggy-1.6.0 -- /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv/bin/python
+2026-11-20T17:44:06.4310956Z cachedir: .pytest_cache
+2026-11-20T17:44:06.4312072Z hypothesis profile 'ci' -> database=None, deadline=None, print_blob=True, derandomize=True, suppress_health_check=(HealthCheck.too_slow,)
+2026-11-20T17:44:06.4313506Z rootdir: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend
+2026-11-20T17:44:06.4314350Z configfile: pyproject.toml
+2026-11-20T17:44:06.4315116Z plugins: hypothesis-6.168.5, anyio-4.15.1, respx-0.23.1, schemathesis-4.29.4, cov-7.1.0
+2026-11-20T17:44:06.8711532Z collecting ... collected 164 items / 159 deselected / 5 selected
+2026-11-20T17:44:06.8712193Z 
+2026-11-20T17:48:45.0969705Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_r1_rafaga_con_retiro_de_una_tarea PASSED [ 20%]
+2026-11-20T17:48:45.0978423Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_seleccionada_solo_con_el_filtro PASSED [ 40%]
+2026-11-20T17:48:45.0986418Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_task_ids_en_metadatos_y_anotaciones_a_cualquier_profundidad PASSED [ 60%]
+2026-11-20T17:48:45.0994192Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_task_ids_tolera_documentos_raros PASSED [ 80%]
+2026-11-20T17:48:45.1779438Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_clasificar_cuenta_y_separa_por_ventana PASSED [100%]
+2026-11-20T17:48:45.1780253Z 
+2026-11-20T17:48:45.1780534Z =============================== warnings summary ===============================
+2026-11-20T17:48:45.1781360Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_r1_rafaga_con_retiro_de_una_tarea
+2026-11-20T17:48:45.1783760Z   /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv/lib/python3.12/site-packages/pycognito/aws_srp.py:310: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+2026-11-20T17:48:45.1786217Z     timestamp = self.get_cognito_formatted_timestamp(datetime.datetime.utcnow())
+2026-11-20T17:48:45.1786751Z 
+2026-11-20T17:48:45.1787096Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2026-11-20T17:48:45.1787793Z ==================================== PASSES ====================================
+2026-11-20T17:48:45.1788649Z ________________ test_hu_w07_r1_rafaga_con_retiro_de_una_tarea _________________
+2026-11-20T17:48:45.1789392Z ----------------------------- Captured stdout call -----------------------------
+2026-11-20T17:48:45.1789827Z 
+2026-11-20T17:48:45.1790005Z HU-W07 N3, resumen para la evidencia:
+2026-11-20T17:48:45.1790804Z - antes: [('2f5e1c02a3ed46708a716d03ce54a128', 'us-east-1b'), ('d3be1c592b794308bd5d1bd9bfaca50a', 'us-east-1a')]
+2026-11-20T17:48:45.1792703Z - detenida: 2f5e1c02a3ed46708a716d03ce54a128 (us-east-1b) a las 2026-11-20T17:44:49.355201+00:00, stoppedReason ['HU-W07 N3']
+2026-11-20T17:48:45.1793591Z - otras detenidas en la ventana: []
+2026-11-20T17:48:45.1794744Z - después: [('2431a1e200d54dd09d6a113f0a75b757', 'us-east-1b'), ('d3be1c592b794308bd5d1bd9bfaca50a', 'us-east-1a')]
+2026-11-20T17:48:45.1795602Z - reemplazo: listo en 71 s
+2026-11-20T17:48:45.1796190Z - ráfaga: 160 solicitudes cada 0.5 s; por código {'201': 160}
+2026-11-20T17:48:45.1796969Z - fallas: 0 (permitidas 1); fuera de la ventana de 30 s: 0; []
+2026-11-20T17:48:45.1797799Z - task_id vistos en X-Ray: ['2f5e1c02a3ed46708a716d03ce54a128', 'd3be1c592b794308bd5d1bd9bfaca50a']
+2026-11-20T17:48:45.1799055Z - generated xml file: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/e2e.xml -
+2026-11-20T17:48:45.1799945Z =========================== short test summary info ============================
+2026-11-20T17:48:45.1801234Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_r1_rafaga_con_retiro_de_una_tarea
+2026-11-20T17:48:45.1802177Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_seleccionada_solo_con_el_filtro
+2026-11-20T17:48:45.1803264Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_task_ids_en_metadatos_y_anotaciones_a_cualquier_profundidad
+2026-11-20T17:48:45.1804345Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_task_ids_tolera_documentos_raros
+2026-11-20T17:48:45.1805324Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_clasificar_cuenta_y_separa_por_ventana
+2026-11-20T17:48:45.1806199Z =========== 5 passed, 159 deselected, 1 warning in 278.67s (0:04:38) ===========

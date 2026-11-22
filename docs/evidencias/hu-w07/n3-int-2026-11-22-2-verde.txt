@@ -1,0 +1,101 @@
+2026-11-22T13:40:02.1435662Z ##[group]Run uv run pytest tests/e2e -v -rA ${FILTRO:+-k "$FILTRO"} --junitxml=e2e.xml
+2026-11-22T13:40:02.1436269Z uv run pytest tests/e2e -v -rA ${FILTRO:+-k "$FILTRO"} --junitxml=e2e.xml
+2026-11-22T13:40:02.1466450Z shell: /usr/bin/bash -e {0}
+2026-11-22T13:40:02.1466634Z env:
+2026-11-22T13:40:02.1466768Z   ENV: int
+2026-11-22T13:40:02.1466904Z   AWS_REGION: us-east-1
+2026-11-22T13:40:02.1467058Z   UV_PYTHON: 3.12
+2026-11-22T13:40:02.1467310Z   VIRTUAL_ENV: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv
+2026-11-22T13:40:02.1467618Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-11-22T13:40:02.1467821Z   AWS_DEFAULT_REGION: us-east-1
+2026-11-22T13:40:02.1468184Z   AWS_ACCESS_KEY_ID: ***
+2026-11-22T13:40:02.1468409Z   AWS_SECRET_ACCESS_KEY: ***
+2026-11-22T13:40:02.1471390Z   AWS_SESSION_TOKEN: ***
+2026-11-22T13:40:02.1471857Z   E2E_REQUERIDO: 1
+2026-11-22T13:40:02.1472036Z   E2E_ADMIN_USUARIO: ***
+2026-11-22T13:40:02.1472208Z   E2E_ADMIN_CLAVE: ***
+2026-11-22T13:40:02.1472477Z   E2E_ADMIN_TOTP: ***
+2026-11-22T13:40:02.1472618Z   FILTRO: hu_w07
+2026-11-22T13:40:02.1472757Z ##[endgroup]
+2026-11-22T13:40:04.1812306Z ============================= test session starts ==============================
+2026-11-22T13:40:04.1813204Z platform linux -- Python 3.12.16, pytest-9.1.1, pluggy-1.6.0 -- /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv/bin/python
+2026-11-22T13:40:04.1813912Z cachedir: .pytest_cache
+2026-11-22T13:40:04.1814646Z hypothesis profile 'ci' -> database=None, deadline=None, print_blob=True, derandomize=True, suppress_health_check=(HealthCheck.too_slow,)
+2026-11-22T13:40:04.1815217Z rootdir: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend
+2026-11-22T13:40:04.1815530Z configfile: pyproject.toml
+2026-11-22T13:40:04.1815824Z plugins: hypothesis-6.168.5, anyio-4.15.1, respx-0.23.1, schemathesis-4.29.4, cov-7.1.0
+2026-11-22T13:40:04.6546465Z collecting ... collected 196 items / 172 deselected / 24 selected
+2026-11-22T13:40:04.6546891Z 
+2026-11-22T13:42:38.4469796Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_r1_rafaga_con_retiro_de_una_tarea PASSED [  4%]
+2026-11-22T13:42:38.4478090Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_seleccionada_solo_con_el_filtro PASSED [  8%]
+2026-11-22T13:42:38.4484054Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_task_ids_en_metadatos_y_anotaciones_a_cualquier_profundidad PASSED [ 12%]
+2026-11-22T13:42:38.4504462Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_task_ids_tolera_documentos_raros PASSED [ 16%]
+2026-11-22T13:42:38.4509963Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_clasificar_cuenta_y_separa_por_ventana PASSED [ 20%]
+2026-11-22T13:42:38.4515462Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentamiento_listo_con_racha_de_201_al_final PASSED [ 25%]
+2026-11-22T13:42:38.4520405Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentamiento_un_5xx_o_un_transporte_reinicia_la_racha PASSED [ 29%]
+2026-11-22T13:42:38.4524747Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentamiento_agotado_al_llegar_al_maximo PASSED [ 33%]
+2026-11-22T13:42:38.4528852Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentamiento_un_4xx_es_rechazo_inmediato PASSED [ 37%]
+2026-11-22T13:42:38.4533155Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentar_secuencial_hasta_listo_con_su_pausa PASSED [ 41%]
+2026-11-22T13:42:38.4537464Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentar_agotado_y_rechazo PASSED [ 45%]
+2026-11-22T13:42:38.4542910Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_el_calentamiento_no_entra_a_clasificar_ni_a_task_ids PASSED [ 50%]
+2026-11-22T13:42:38.4547271Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_resumen_del_calentamiento_por_codigo_y_latencia PASSED [ 54%]
+2026-11-22T13:42:38.4557767Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_portal_guarda_quien_respondio_si_no_es_201 PASSED [ 58%]
+2026-11-22T13:42:38.4565221Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_portal_sin_cuerpo_ni_cabecera_y_201_sin_texto PASSED [ 62%]
+2026-11-22T13:42:38.4569870Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_trazas_de_fallas_sin_traza_aun_no_falla PASSED [ 66%]
+2026-11-22T13:42:38.4573947Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_trazas_de_fallas_con_error_de_xray_no_falla PASSED [ 70%]
+2026-11-22T13:42:38.4579155Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_trazas_de_fallas_resume_la_traza_encontrada PASSED [ 75%]
+2026-11-22T13:42:38.4583400Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_resumen_traza_toma_la_hoja_mas_larga_y_tolera_documentos_raros PASSED [ 79%]
+2026-11-22T13:42:38.4598359Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_detenida_en_stopping_sin_stopped_at_se_espera_hasta_stopped PASSED [ 83%]
+2026-11-22T13:42:38.4614415Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_detenida_que_no_llega_a_stopped_falla_con_su_estado_y_razon PASSED [ 87%]
+2026-11-22T13:42:38.4617566Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_detenida_con_otra_razon_o_sin_describir_falla PASSED [ 91%]
+2026-11-22T13:42:38.4631343Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_otras_detenidas_incluye_las_que_siguen_deteniendose PASSED [ 95%]
+2026-11-22T13:42:38.6590124Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_resumen_de_la_detenida PASSED [100%]
+2026-11-22T13:42:38.6590620Z 
+2026-11-22T13:42:38.6590793Z =============================== warnings summary ===============================
+2026-11-22T13:42:38.6591263Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_r1_rafaga_con_retiro_de_una_tarea
+2026-11-22T13:42:38.6592583Z   /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv/lib/python3.12/site-packages/pycognito/aws_srp.py:310: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+2026-11-22T13:42:38.6593974Z     timestamp = self.get_cognito_formatted_timestamp(datetime.datetime.utcnow())
+2026-11-22T13:42:38.6594446Z 
+2026-11-22T13:42:38.6594691Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2026-11-22T13:42:38.6595117Z ==================================== PASSES ====================================
+2026-11-22T13:42:38.6595512Z ________________ test_hu_w07_r1_rafaga_con_retiro_de_una_tarea _________________
+2026-11-22T13:42:38.6595949Z ----------------------------- Captured stdout call -----------------------------
+2026-11-22T13:42:38.6596214Z 
+2026-11-22T13:42:38.6596336Z HU-W07 N3, resumen para la evidencia:
+2026-11-22T13:42:38.6597640Z - calentamiento: listo en 4 intentos; por código {'201': 4}; latencias [('e2e-hu-w07-13136fd6-cal-0000', 201, 0.24), ('e2e-hu-w07-13136fd6-cal-0001', 201, 0.36), ('e2e-hu-w07-13136fd6-cal-0002', 201, 0.28), ('e2e-hu-w07-13136fd6-cal-0003', 201, 0.21)]
+2026-11-22T13:42:38.6598707Z - antes: [('1771c1db5da545139527c57c4aadd90f', 'us-east-1b'), ('1dee2089554a479bb0270aaebd90f68e', 'us-east-1a')]
+2026-11-22T13:42:38.6600041Z - detenida: 1771c1db5da545139527c57c4aadd90f (us-east-1b) a las 2026-11-22T13:40:50.410098+00:00; lastStatus STOPPED, stoppedReason 'HU-W07 N3', stoppedAt 2026-11-22T13:42:36.404000+00:00, STOPPED 106 s después del stop_task; espera tras el reemplazo: 25 s
+2026-11-22T13:42:38.6600945Z - otras detenidas en la ventana: []
+2026-11-22T13:42:38.6601521Z - después: [('0b15886c9b7745b388ba30cf86a71ece', 'us-east-1b'), ('1dee2089554a479bb0270aaebd90f68e', 'us-east-1a')]
+2026-11-22T13:42:38.6602059Z - reemplazo: listo en 42 s
+2026-11-22T13:42:38.6602432Z - ráfaga: 160 solicitudes cada 0.5 s; por código {'201': 160}
+2026-11-22T13:42:38.6603019Z - fallas: 0 (permitidas 1); fuera de la ventana de 30 s: 0; []
+2026-11-22T13:42:38.6603574Z - task_id vistos en X-Ray: ['1771c1db5da545139527c57c4aadd90f', '1dee2089554a479bb0270aaebd90f68e']
+2026-11-22T13:42:38.6604120Z - respuestas distintas de 201: ninguna
+2026-11-22T13:42:38.6604861Z - generated xml file: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/e2e.xml -
+2026-11-22T13:42:38.6605501Z =========================== short test summary info ============================
+2026-11-22T13:42:38.6606703Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_r1_rafaga_con_retiro_de_una_tarea
+2026-11-22T13:42:38.6607314Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_seleccionada_solo_con_el_filtro
+2026-11-22T13:42:38.6607960Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_task_ids_en_metadatos_y_anotaciones_a_cualquier_profundidad
+2026-11-22T13:42:38.6608599Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_task_ids_tolera_documentos_raros
+2026-11-22T13:42:38.6609284Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_clasificar_cuenta_y_separa_por_ventana
+2026-11-22T13:42:38.6609924Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentamiento_listo_con_racha_de_201_al_final
+2026-11-22T13:42:38.6610613Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentamiento_un_5xx_o_un_transporte_reinicia_la_racha
+2026-11-22T13:42:38.6611572Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentamiento_agotado_al_llegar_al_maximo
+2026-11-22T13:42:38.6612267Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentamiento_un_4xx_es_rechazo_inmediato
+2026-11-22T13:42:38.6612960Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentar_secuencial_hasta_listo_con_su_pausa
+2026-11-22T13:42:38.6613622Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentar_agotado_y_rechazo
+2026-11-22T13:42:38.6614383Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_el_calentamiento_no_entra_a_clasificar_ni_a_task_ids
+2026-11-22T13:42:38.6615052Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_resumen_del_calentamiento_por_codigo_y_latencia
+2026-11-22T13:42:38.6615684Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_portal_guarda_quien_respondio_si_no_es_201
+2026-11-22T13:42:38.6616283Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_portal_sin_cuerpo_ni_cabecera_y_201_sin_texto
+2026-11-22T13:42:38.6616895Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_trazas_de_fallas_sin_traza_aun_no_falla
+2026-11-22T13:42:38.6617492Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_trazas_de_fallas_con_error_de_xray_no_falla
+2026-11-22T13:42:38.6618090Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_trazas_de_fallas_resume_la_traza_encontrada
+2026-11-22T13:42:38.6618758Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_resumen_traza_toma_la_hoja_mas_larga_y_tolera_documentos_raros
+2026-11-22T13:42:38.6619462Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_detenida_en_stopping_sin_stopped_at_se_espera_hasta_stopped
+2026-11-22T13:42:38.6620250Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_detenida_que_no_llega_a_stopped_falla_con_su_estado_y_razon
+2026-11-22T13:42:38.6620917Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_detenida_con_otra_razon_o_sin_describir_falla
+2026-11-22T13:42:38.6621571Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_otras_detenidas_incluye_las_que_siguen_deteniendose
+2026-11-22T13:42:38.6622152Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_resumen_de_la_detenida
+2026-11-22T13:42:38.6622638Z ========== 24 passed, 172 deselected, 1 warning in 154.30s (0:02:34) ===========

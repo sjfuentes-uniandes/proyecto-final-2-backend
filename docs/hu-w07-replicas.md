@@ -148,7 +148,10 @@ Identifica en X-Ray qué réplica atendió cada cotización (AC1; plan §b, deci
 - **AC2** (retiro de una tarea no saludable) se cubre con la configuración existente y con la observación del reemplazo en la N3. No se provoca un fallo de salud real en INT (plan §b, decisión 9).
 - **Arranque en frío (hallazgo del 2026-11-20 en INT).** La N3 falló dos veces por la misma razón:
   - Las 2 primeras solicitudes de la ráfaga dieron 503 de `bff-web`, una por tarea de `cotizacion`. Cada una tardó unos 2 s y terminó unos 38 s antes del retiro, fuera de la ventana de 30 s. El resto fue 201, y el retiro no causó ninguna falla.
-  - La primera corrida fue justo después de desplegar; la segunda, tras 39 minutos sin tráfico.
+  - La primera corrida (run `121205364984`) fue justo después de desplegar.
+  - La segunda fue el intento 1 del run `121222199535`, tras 39 minutos sin tráfico, y falló de nuevo por el arranque en frío.
+  - El intento 2, re-ejecutado en el mismo run, pasó con 160 de 160 respuestas 201.
+  - El archivo de logs del run solo guarda el último intento (`docs/evidencias/hu-w07/`).
   - **Lo que encaja:** los 2 s coinciden con el corte de `bff-web`, que responde 503 `SERVICIO_NO_DISPONIBLE`. El presupuesto `portal.cotizar` es de 1600 ms (`infra/envs/int/apps.tfvars:71`) y `cotizacion_timeout_ms` de 1500 (`services/bff-web/src/bff_web/config.py:46`), con un corte duro en `services/bff-web/src/bff_web/adapters/outbound/cotizacion.py:97-98`.
   - **Hipótesis sin confirmar:** en `cotizacion`, el presupuesto de 700 ms acota las dependencias HTTP pero no PostgreSQL (`application/cotizacion/calcular_prima.py:331`, `:356` y `:412`). El pool tiene `min_size=1` y no usa `check` (`main.py:150-156`).
   - Que el 503 sea de `bff-web` y que haya uno por tarea queda por confirmar con la evidencia que la N3 deja ahora (§6).

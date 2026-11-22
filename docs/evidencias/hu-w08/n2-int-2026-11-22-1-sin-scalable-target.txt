@@ -1,0 +1,114 @@
+2026-11-22T01:44:54.7792273Z ##[group]Run uv run pytest tests/e2e -v -rA ${FILTRO:+-k "$FILTRO"} --junitxml=e2e.xml
+2026-11-22T01:44:54.7793202Z uv run pytest tests/e2e -v -rA ${FILTRO:+-k "$FILTRO"} --junitxml=e2e.xml
+2026-11-22T01:44:54.7822464Z shell: /usr/bin/bash -e {0}
+2026-11-22T01:44:54.7822869Z env:
+2026-11-22T01:44:54.7823343Z   ENV: int
+2026-11-22T01:44:54.7823893Z   AWS_REGION: us-east-1
+2026-11-22T01:44:54.7824274Z   UV_PYTHON: 3.12
+2026-11-22T01:44:54.7825163Z   VIRTUAL_ENV: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv
+2026-11-22T01:44:54.7825947Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-11-22T01:44:54.7826456Z   AWS_DEFAULT_REGION: us-east-1
+2026-11-22T01:44:54.7827027Z   AWS_ACCESS_KEY_ID: ***
+2026-11-22T01:44:54.7827554Z   AWS_SECRET_ACCESS_KEY: ***
+2026-11-22T01:44:54.7836207Z   AWS_SESSION_TOKEN: ***
+2026-11-22T01:44:54.7836675Z   E2E_REQUERIDO: 1
+2026-11-22T01:44:54.7837100Z   E2E_ADMIN_USUARIO: ***
+2026-11-22T01:44:54.7837490Z   E2E_ADMIN_CLAVE: ***
+2026-11-22T01:44:54.7838400Z   E2E_ADMIN_TOTP: ***
+2026-11-22T01:44:54.7838748Z   FILTRO: hu_w08
+2026-11-22T01:44:54.7839088Z ##[endgroup]
+2026-11-22T01:44:56.9199081Z ============================= test session starts ==============================
+2026-11-22T01:44:56.9200521Z platform linux -- Python 3.12.16, pytest-9.1.1, pluggy-1.6.0 -- /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv/bin/python
+2026-11-22T01:44:56.9201559Z cachedir: .pytest_cache
+2026-11-22T01:44:56.9202539Z hypothesis profile 'ci' -> database=None, deadline=None, print_blob=True, derandomize=True, suppress_health_check=(HealthCheck.too_slow,)
+2026-11-22T01:44:56.9203922Z rootdir: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend
+2026-11-22T01:44:56.9204670Z configfile: pyproject.toml
+2026-11-22T01:44:56.9205388Z plugins: hypothesis-6.168.5, anyio-4.15.1, respx-0.23.1, schemathesis-4.29.4, cov-7.1.0
+2026-11-22T01:44:57.3559234Z collecting ... collected 177 items / 153 deselected / 24 selected
+2026-11-22T01:44:57.3560373Z 
+2026-11-22T01:44:59.5054285Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_n2_alarma_alta_escala_cotizacion ERROR [  4%]
+2026-11-22T01:44:59.5538157Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_seleccionada_solo_con_el_filtro PASSED [  8%]
+2026-11-22T01:44:59.5545304Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_elige_la_alta_y_la_baja_por_el_nombre_devuelto PASSED [ 12%]
+2026-11-22T01:44:59.5552242Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_sin_la_politica PASSED [ 16%]
+2026-11-22T01:44:59.5560221Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[None] PASSED [ 20%]
+2026-11-22T01:44:59.5568081Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas1] PASSED [ 25%]
+2026-11-22T01:44:59.5575573Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas2] PASSED [ 29%]
+2026-11-22T01:44:59.5583016Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas3] PASSED [ 33%]
+2026-11-22T01:44:59.5590398Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas4] PASSED [ 37%]
+2026-11-22T01:44:59.5598053Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas5] PASSED [ 41%]
+2026-11-22T01:44:59.5605390Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas6] PASSED [ 45%]
+2026-11-22T01:44:59.5612327Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas7] PASSED [ 50%]
+2026-11-22T01:44:59.5619052Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_lo_que_no_es_target_tracking PASSED [ 54%]
+2026-11-22T01:44:59.5625371Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_linea_de_tiempo_deja_los_cambios_y_la_ultima PASSED [ 58%]
+2026-11-22T01:44:59.5631636Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_valor_supera_el_umbral_y_pide_una_sola_tarea_mas PASSED [ 62%]
+2026-11-22T01:44:59.5638107Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_valor_para_una_tarea_mas_sin_tareas PASSED [ 66%]
+2026-11-22T01:44:59.5645299Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_datos_de_estado_es_json_valido_y_coincide_con_la_alarma PASSED [ 70%]
+2026-11-22T01:44:59.5652427Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_datos_de_estado_toma_estadistica_periodo_y_umbral_de_la_alarma PASSED [ 75%]
+2026-11-22T01:44:59.5659937Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_datos_de_estado_rechaza_un_valor_que_no_supera_el_umbral[60.0] PASSED [ 79%]
+2026-11-22T01:44:59.5667363Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_datos_de_estado_rechaza_un_valor_que_no_supera_el_umbral[59.9] PASSED [ 83%]
+2026-11-22T01:44:59.5674335Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_datos_de_estado_rechaza_una_alarma_incompleta[Statistic] PASSED [ 87%]
+2026-11-22T01:44:59.5681674Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_datos_de_estado_rechaza_una_alarma_incompleta[Period] PASSED [ 91%]
+2026-11-22T01:44:59.5689741Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_datos_de_estado_rechaza_una_alarma_incompleta[Threshold] PASSED [ 95%]
+2026-11-22T01:44:59.6194821Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_datos_de_estado_rechaza_una_hora_sin_zona PASSED [100%]
+2026-11-22T01:44:59.6195879Z 
+2026-11-22T01:44:59.6196198Z ==================================== ERRORS ====================================
+2026-11-22T01:44:59.6197258Z ________ ERROR at setup of test_hu_w08_n2_alarma_alta_escala_cotizacion ________
+2026-11-22T01:44:59.6197923Z 
+2026-11-22T01:44:59.6198510Z request = <SubRequest 'guardas' for <Function test_hu_w08_n2_alarma_alta_escala_cotizacion>>
+2026-11-22T01:44:59.6199284Z 
+2026-11-22T01:44:59.6199509Z     @pytest.fixture
+2026-11-22T01:44:59.6200320Z     def guardas(request: pytest.FixtureRequest) -> Iterator[dict[str, Any]]:
+2026-11-22T01:44:59.6201900Z         """Las guardas, en orden, antes de tocar AWS; y al final, el estado en que quedó."""
+2026-11-22T01:44:59.6202968Z         if not seleccionada(request.config.getoption("keyword")):
+2026-11-22T01:44:59.6203932Z             pytest.skip(MOTIVO_FILTRO)
+2026-11-22T01:44:59.6204547Z         if os.getenv("ENV") != AMBIENTE:
+2026-11-22T01:44:59.6205390Z             pytest.skip(f"HU-W08 N2: solo corre con ENV=int (ENV={os.getenv('ENV')!r})")
+2026-11-22T01:44:59.6206477Z         cluster, prefijo = _cluster(request.getfixturevalue("ambiente").salidas)
+2026-11-22T01:44:59.6207365Z         recurso = f"service/{cluster}/{SERVICIO}"
+2026-11-22T01:44:59.6208043Z         aws, objetivos = _clientes_aws(recurso)
+2026-11-22T01:44:59.6208650Z     
+2026-11-22T01:44:59.6209118Z         nombre = f"{prefijo}-{SERVICIO}-cpu"
+2026-11-22T01:44:59.6209742Z         if len(objetivos) != 1:
+2026-11-22T01:44:59.6210573Z >           _requerido(f"N2 {HISTORIA}: {recurso} no tiene scalable target ({len(objetivos)})")
+2026-11-22T01:44:59.6211287Z 
+2026-11-22T01:44:59.6211560Z tests/e2e/test_hu_w08_escalado.py:378: 
+2026-11-22T01:44:59.6212281Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-11-22T01:44:59.6212796Z 
+2026-11-22T01:44:59.6213271Z motivo = 'N2 HU-W08: service/solventa-int/cotizacion no tiene scalable target (0)'
+2026-11-22T01:44:59.6214179Z 
+2026-11-22T01:44:59.6214415Z     def _requerido(motivo: str) -> None:
+2026-11-22T01:44:59.6215730Z         """Falta de configuración o precondición: falla con E2E_REQUERIDO=1, si no se omite."""
+2026-11-22T01:44:59.6216697Z         if os.getenv("E2E_REQUERIDO") == "1":
+2026-11-22T01:44:59.6217311Z >           pytest.fail(motivo)
+2026-11-22T01:44:59.6218113Z E           Failed: N2 HU-W08: service/solventa-int/cotizacion no tiene scalable target (0)
+2026-11-22T01:44:59.6218794Z 
+2026-11-22T01:44:59.6219042Z tests/e2e/test_hu_w08_escalado.py:198: Failed
+2026-11-22T01:44:59.6219725Z ==================================== PASSES ====================================
+2026-11-22T01:44:59.6220818Z - generated xml file: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/e2e.xml -
+2026-11-22T01:44:59.6222367Z =========================== short test summary info ============================
+2026-11-22T01:44:59.6223430Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_seleccionada_solo_con_el_filtro
+2026-11-22T01:44:59.6224906Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_elige_la_alta_y_la_baja_por_el_nombre_devuelto
+2026-11-22T01:44:59.6225864Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_sin_la_politica
+2026-11-22T01:44:59.6226781Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[None]
+2026-11-22T01:44:59.6227835Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas1]
+2026-11-22T01:44:59.6229088Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas2]
+2026-11-22T01:44:59.6230189Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas3]
+2026-11-22T01:44:59.6231471Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas4]
+2026-11-22T01:44:59.6232585Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas5]
+2026-11-22T01:44:59.6233858Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas6]
+2026-11-22T01:44:59.6234930Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas7]
+2026-11-22T01:44:59.6235930Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_lo_que_no_es_target_tracking
+2026-11-22T01:44:59.6236852Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_linea_de_tiempo_deja_los_cambios_y_la_ultima
+2026-11-22T01:44:59.6237758Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_valor_supera_el_umbral_y_pide_una_sola_tarea_mas
+2026-11-22T01:44:59.6238678Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_valor_para_una_tarea_mas_sin_tareas
+2026-11-22T01:44:59.6239597Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_datos_de_estado_es_json_valido_y_coincide_con_la_alarma
+2026-11-22T01:44:59.6240622Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_datos_de_estado_toma_estadistica_periodo_y_umbral_de_la_alarma
+2026-11-22T01:44:59.6241675Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_datos_de_estado_rechaza_un_valor_que_no_supera_el_umbral[60.0]
+2026-11-22T01:44:59.6242713Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_datos_de_estado_rechaza_un_valor_que_no_supera_el_umbral[59.9]
+2026-11-22T01:44:59.6243965Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_datos_de_estado_rechaza_una_alarma_incompleta[Statistic]
+2026-11-22T01:44:59.6245112Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_datos_de_estado_rechaza_una_alarma_incompleta[Period]
+2026-11-22T01:44:59.6246133Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_datos_de_estado_rechaza_una_alarma_incompleta[Threshold]
+2026-11-22T01:44:59.6247095Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_datos_de_estado_rechaza_una_hora_sin_zona
+2026-11-22T01:44:59.6248356Z ERROR tests/e2e/test_hu_w08_escalado.py::test_hu_w08_n2_alarma_alta_escala_cotizacion - Failed: N2 HU-W08: service/solventa-int/cotizacion no tiene scalable target (0)
+2026-11-22T01:44:59.6249487Z ================= 23 passed, 153 deselected, 1 error in 2.65s ==================
+2026-11-22T01:44:59.7393222Z ##[error]Process completed with exit code 1.

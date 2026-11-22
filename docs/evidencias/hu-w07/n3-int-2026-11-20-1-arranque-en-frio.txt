@@ -1,0 +1,127 @@
+2026-11-20T17:02:28.8773912Z ##[group]Run uv run pytest tests/e2e -v -rA ${FILTRO:+-k "$FILTRO"} --junitxml=e2e.xml
+2026-11-20T17:02:28.8774525Z uv run pytest tests/e2e -v -rA ${FILTRO:+-k "$FILTRO"} --junitxml=e2e.xml
+2026-11-20T17:02:28.8796710Z shell: /usr/bin/bash -e {0}
+2026-11-20T17:02:28.8797020Z env:
+2026-11-20T17:02:28.8797426Z   ENV: int
+2026-11-20T17:02:28.8797673Z   AWS_REGION: us-east-1
+2026-11-20T17:02:28.8797939Z   UV_PYTHON: 3.12
+2026-11-20T17:02:28.8798345Z   VIRTUAL_ENV: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv
+2026-11-20T17:02:28.8798839Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-11-20T17:02:28.8799181Z   AWS_DEFAULT_REGION: us-east-1
+2026-11-20T17:02:28.8799608Z   AWS_ACCESS_KEY_ID: ***
+2026-11-20T17:02:28.8799960Z   AWS_SECRET_ACCESS_KEY: ***
+2026-11-20T17:02:28.8804497Z   AWS_SESSION_TOKEN: ***
+2026-11-20T17:02:28.8804768Z   E2E_REQUERIDO: 1
+2026-11-20T17:02:28.8805054Z   E2E_ADMIN_USUARIO: ***
+2026-11-20T17:02:28.8805324Z   E2E_ADMIN_CLAVE: ***
+2026-11-20T17:02:28.8805933Z   E2E_ADMIN_TOTP: ***
+2026-11-20T17:02:28.8806213Z   FILTRO: hu_w07
+2026-11-20T17:02:28.8806468Z ##[endgroup]
+2026-11-20T17:02:31.0341652Z ============================= test session starts ==============================
+2026-11-20T17:02:31.0342934Z platform linux -- Python 3.12.16, pytest-9.1.1, pluggy-1.6.0 -- /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv/bin/python
+2026-11-20T17:02:31.0343632Z cachedir: .pytest_cache
+2026-11-20T17:02:31.0344182Z hypothesis profile 'ci' -> database=None, deadline=None, print_blob=True, derandomize=True, suppress_health_check=(HealthCheck.too_slow,)
+2026-11-20T17:02:31.0344857Z rootdir: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend
+2026-11-20T17:02:31.0345284Z configfile: pyproject.toml
+2026-11-20T17:02:31.0345703Z plugins: hypothesis-6.168.5, anyio-4.15.1, respx-0.23.1, schemathesis-4.29.4, cov-7.1.0
+2026-11-20T17:02:31.4395768Z collecting ... collected 164 items / 159 deselected / 5 selected
+2026-11-20T17:02:31.4396487Z 
+2026-11-20T17:05:09.4821240Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_r1_rafaga_con_retiro_de_una_tarea FAILED [ 20%]
+2026-11-20T17:05:09.4829461Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_seleccionada_solo_con_el_filtro PASSED [ 40%]
+2026-11-20T17:05:09.4836466Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_task_ids_en_metadatos_y_anotaciones_a_cualquier_profundidad PASSED [ 60%]
+2026-11-20T17:05:09.4843227Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_task_ids_tolera_documentos_raros PASSED [ 80%]
+2026-11-20T17:05:09.4866821Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_clasificar_cuenta_y_separa_por_ventana PASSED [100%]
+2026-11-20T17:05:09.4867866Z 
+2026-11-20T17:05:09.4868347Z =================================== FAILURES ===================================
+2026-11-20T17:05:09.4869289Z ________________ test_hu_w07_r1_rafaga_con_retiro_de_una_tarea _________________
+2026-11-20T17:05:09.4869918Z 
+2026-11-20T17:05:09.4871619Z guardas = {'ecs': <botocore.client.ECS object at 0x7ede5f7a2420>, 'xray': <botocore.client.XRay object at 0x7ede5fbfa6f0>, 'clus...sk/solventa-int/c3293e5e03d74235b4e4e848eca503c4', zona='us-east-1b', estado='RUNNING', razon='', detenida=None)], ...}
+2026-11-20T17:05:09.4873656Z 
+2026-11-20T17:05:09.4874151Z     def test_hu_w07_r1_rafaga_con_retiro_de_una_tarea(guardas: dict[str, Any]) -> None:
+2026-11-20T17:05:09.4875266Z         ecs, xray, cluster = guardas["ecs"], guardas["xray"], guardas["cluster"]
+2026-11-20T17:05:09.4876130Z         antes: list[Tarea] = guardas["antes"]
+2026-11-20T17:05:09.4877583Z         # (d) Antes de detener: las tareas están en zonas distintas (guarda 4).
+2026-11-20T17:05:09.4878436Z         objetivo = antes[0]
+2026-11-20T17:05:09.4879003Z         hora_inicio = datetime.now(UTC)
+2026-11-20T17:05:09.4879966Z         resultados, retiro, hora_stop = _rafaga(guardas["portal"], ecs, cluster, objetivo, guardas)
+2026-11-20T17:05:09.4880923Z     
+2026-11-20T17:05:09.4881526Z         # (c) AC2: reemplazo con una tarea nueva y nuestro stoppedReason.
+2026-11-20T17:05:09.4883156Z         logrado, segundos = _esperar_estable(ecs, cluster, {objetivo.arn}, ESPERA_REEMPLAZO_S)
+2026-11-20T17:05:09.4884360Z         despues = [t for t in _tareas(ecs, cluster, "RUNNING") if t.estado == "RUNNING"]
+2026-11-20T17:05:09.4885231Z         detenidas = [
+2026-11-20T17:05:09.4886037Z             t for t in _tareas(ecs, cluster, "STOPPED") if t.detenida and t.detenida >= hora_inicio
+2026-11-20T17:05:09.4886955Z         ]
+2026-11-20T17:05:09.4887665Z         nuestra = [t for t in detenidas if t.arn == objetivo.arn]
+2026-11-20T17:05:09.4888525Z         otras = [t for t in detenidas if t.arn != objetivo.arn]
+2026-11-20T17:05:09.4889219Z     
+2026-11-20T17:05:09.4889634Z         # (b) 5xx.
+2026-11-20T17:05:09.4890379Z         clasificacion = clasificar(resultados, retiro, VENTANA_5XX_S, MAX_5XX_PCT)
+2026-11-20T17:05:09.4891483Z         creadas = [r.cuerpo for r in resultados if r.estado == 201 and r.cuerpo]
+2026-11-20T17:05:09.4892281Z     
+2026-11-20T17:05:09.4892919Z         # (e) Trazas.
+2026-11-20T17:05:09.4893740Z         task_ids = _task_ids_en_xray(xray, [r.correlacion for r in resultados if r.estado == 201])
+2026-11-20T17:05:09.4894674Z     
+2026-11-20T17:05:09.4895077Z         print(
+2026-11-20T17:05:09.4895604Z             "\nHU-W07 N3, resumen para la evidencia:"
+2026-11-20T17:05:09.4896337Z             f"\n- antes: {[(t.id, t.zona) for t in antes]}"
+2026-11-20T17:05:09.4897432Z             f"\n- detenida: {objetivo.id} ({objetivo.zona}) a las {hora_stop.isoformat()}, "
+2026-11-20T17:05:09.4898415Z             f"stoppedReason {[t.razon for t in nuestra]}"
+2026-11-20T17:05:09.4899355Z             f"\n- otras detenidas en la ventana: {[(t.id, t.zona, t.razon) for t in otras]}"
+2026-11-20T17:05:09.4900538Z             f"\n- después: {[(t.id, t.zona) for t in despues]}"
+2026-11-20T17:05:09.4903484Z             f"\n- reemplazo: {'listo' if logrado else 'NO listo'} en {segundos:.0f} s"
+2026-11-20T17:05:09.4904829Z             f"\n- ráfaga: {len(resultados)} solicitudes cada {INTERVALO_S} s; por código "
+2026-11-20T17:05:09.4905809Z             f"{clasificacion.por_codigo}"
+2026-11-20T17:05:09.4906768Z             f"\n- fallas: {len(clasificacion.fallas)} (permitidas {clasificacion.permitidas}); "
+2026-11-20T17:05:09.4908160Z             f"fuera de la ventana de {VENTANA_5XX_S:.0f} s: {len(clasificacion.fuera_de_ventana)}; "
+2026-11-20T17:05:09.4909559Z             f"{[(r.correlacion, r.estado or r.error, round(r.fin - retiro, 1)) for r in clasificacion.fallas]}"
+2026-11-20T17:05:09.4910710Z             f"\n- task_id vistos en X-Ray: {sorted(task_ids)}"
+2026-11-20T17:05:09.4911428Z         )
+2026-11-20T17:05:09.4911860Z     
+2026-11-20T17:05:09.4912334Z         # (a) AC1, equivalencia.
+2026-11-20T17:05:09.4913185Z         assert creadas, "ninguna cotización 201 en la ráfaga"
+2026-11-20T17:05:09.4914081Z         for campo in ("primaTotal", "desglose", "versionReglas"):
+2026-11-20T17:05:09.4915095Z             valores = {json.dumps(c[campo], sort_keys=True) for c in creadas}
+2026-11-20T17:05:09.4916016Z             assert len(valores) == 1, (campo, valores)
+2026-11-20T17:05:09.4917189Z         # Ningún 4xx: un rechazo funcional o del borde no es parte del retiro.
+2026-11-20T17:05:09.4918339Z         cuatro = {k: v for k, v in clasificacion.por_codigo.items() if k.startswith("4")}
+2026-11-20T17:05:09.4919278Z         assert not cuatro, cuatro
+2026-11-20T17:05:09.4919979Z         # (b) 5xx dentro del presupuesto y solo en la ventana.
+2026-11-20T17:05:09.4921052Z >       assert len(clasificacion.fallas) <= clasificacion.permitidas, clasificacion.fallas
+2026-11-20T17:05:09.4923183Z E       AssertionError: [Resultado(correlacion='e2e-hu-w07-8585def8-0000', inicio=87.006514618, fin=88.997452517, estado=503, cuerpo=None, error=''), Resultado(correlacion='e2e-hu-w07-8585def8-0001', inicio=87.50635823, fin=89.293767091, estado=503, cuerpo=None, error='')]
+2026-11-20T17:05:09.4925455Z E       assert 2 <= 1
+2026-11-20T17:05:09.4927650Z E        +  where 2 = len([Resultado(correlacion='e2e-hu-w07-8585def8-0000', inicio=87.006514618, fin=88.997452517, estado=503, cuerpo=None, error=''), Resultado(correlacion='e2e-hu-w07-8585def8-0001', inicio=87.50635823, fin=89.293767091, estado=503, cuerpo=None, error='')])
+2026-11-20T17:05:09.4935425Z E        +    where [Resultado(correlacion='e2e-hu-w07-8585def8-0000', inicio=87.006514618, fin=88.997452517, estado=503, cuerpo=None, error=''), Resultado(correlacion='e2e-hu-w07-8585def8-0001', inicio=87.50635823, fin=89.293767091, estado=503, cuerpo=None, error='')] = Clasificacion(por_codigo={'201': 158, '503': 2}, fallas=[Resultado(correlacion='e2e-hu-w07-8585def8-0000', inicio=87.006514618, fin=88.997452517, estado=503, cuerpo=None, error=''), Resultado(correlacion='e2e-hu-w07-8585def8-0001', inicio=87.50635823, fin=89.293767091, estado=503, cuerpo=None, error='')], fuera_de_ventana=[Resultado(correlacion='e2e-hu-w07-8585def8-0000', inicio=87.006514618, fin=88.997452517, estado=503, cuerpo=None, error=''), Resultado(correlacion='e2e-hu-w07-8585def8-0001', inicio=87.50635823, fin=89.293767091, estado=503, cuerpo=None, error='')], permitidas=1).fallas
+2026-11-20T17:05:09.4945821Z E        +  and   1 = Clasificacion(por_codigo={'201': 158, '503': 2}, fallas=[Resultado(correlacion='e2e-hu-w07-8585def8-0000', inicio=87.006514618, fin=88.997452517, estado=503, cuerpo=None, error=''), Resultado(correlacion='e2e-hu-w07-8585def8-0001', inicio=87.50635823, fin=89.293767091, estado=503, cuerpo=None, error='')], fuera_de_ventana=[Resultado(correlacion='e2e-hu-w07-8585def8-0000', inicio=87.006514618, fin=88.997452517, estado=503, cuerpo=None, error=''), Resultado(correlacion='e2e-hu-w07-8585def8-0001', inicio=87.50635823, fin=89.293767091, estado=503, cuerpo=None, error='')], permitidas=1).permitidas
+2026-11-20T17:05:09.4950206Z 
+2026-11-20T17:05:09.4950545Z tests/e2e/test_hu_w07_r1_replicas.py:413: AssertionError
+2026-11-20T17:05:09.4951477Z ----------------------------- Captured stdout call -----------------------------
+2026-11-20T17:05:09.4952096Z 
+2026-11-20T17:05:09.4952372Z HU-W07 N3, resumen para la evidencia:
+2026-11-20T17:05:09.4953440Z - antes: [('55bfd215c13b458e9b8872d20c108335', 'us-east-1a'), ('c3293e5e03d74235b4e4e848eca503c4', 'us-east-1b')]
+2026-11-20T17:05:09.4955081Z - detenida: 55bfd215c13b458e9b8872d20c108335 (us-east-1a) a las 2026-11-20T17:03:15.488261+00:00, stoppedReason ['HU-W07 N3']
+2026-11-20T17:05:09.4956303Z - otras detenidas en la ventana: []
+2026-11-20T17:05:09.4957791Z - después: [('c3293e5e03d74235b4e4e848eca503c4', 'us-east-1b'), ('d3be1c592b794308bd5d1bd9bfaca50a', 'us-east-1a')]
+2026-11-20T17:05:09.4958930Z - reemplazo: listo en 73 s
+2026-11-20T17:05:09.4959814Z - ráfaga: 160 solicitudes cada 0.5 s; por código {'201': 158, '503': 2}
+2026-11-20T17:05:09.4961213Z - fallas: 2 (permitidas 1); fuera de la ventana de 30 s: 2; [('e2e-hu-w07-8585def8-0000', 503, -38.0), ('e2e-hu-w07-8585def8-0001', 503, -37.7)]
+2026-11-20T17:05:09.4962798Z - task_id vistos en X-Ray: ['55bfd215c13b458e9b8872d20c108335', 'c3293e5e03d74235b4e4e848eca503c4']
+2026-11-20T17:05:09.4963940Z =============================== warnings summary ===============================
+2026-11-20T17:05:09.4964967Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_r1_rafaga_con_retiro_de_una_tarea
+2026-11-20T17:05:09.4968251Z   /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv/lib/python3.12/site-packages/pycognito/aws_srp.py:310: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+2026-11-20T17:05:09.4971406Z     timestamp = self.get_cognito_formatted_timestamp(datetime.datetime.utcnow())
+2026-11-20T17:05:09.4972104Z 
+2026-11-20T17:05:09.4972562Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2026-11-20T17:05:09.4973484Z ==================================== PASSES ====================================
+2026-11-20T17:05:09.4974689Z - generated xml file: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/e2e.xml -
+2026-11-20T17:05:09.4976156Z =========================== short test summary info ============================
+2026-11-20T17:05:09.4977357Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_seleccionada_solo_con_el_filtro
+2026-11-20T17:05:09.4978833Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_task_ids_en_metadatos_y_anotaciones_a_cualquier_profundidad
+2026-11-20T17:05:09.4980202Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_task_ids_tolera_documentos_raros
+2026-11-20T17:05:09.4980935Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_clasificar_cuenta_y_separa_por_ventana
+2026-11-20T17:05:09.4982741Z FAILED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_r1_rafaga_con_retiro_de_una_tarea - AssertionError: [Resultado(correlacion='e2e-hu-w07-8585def8-0000', inicio=87.006514618, fin=88.997452517, estado=503, cuerpo=None, error=''), Resultado(correlacion='e2e-hu-w07-8585def8-0001', inicio=87.50635823, fin=89.293767091, estado=503, cuerpo=None, error='')]
+2026-11-20T17:05:09.4984524Z assert 2 <= 1
+2026-11-20T17:05:09.4985710Z  +  where 2 = len([Resultado(correlacion='e2e-hu-w07-8585def8-0000', inicio=87.006514618, fin=88.997452517, estado=503, cuerpo=None, error=''), Resultado(correlacion='e2e-hu-w07-8585def8-0001', inicio=87.50635823, fin=89.293767091, estado=503, cuerpo=None, error='')])
+2026-11-20T17:05:09.4990073Z  +    where [Resultado(correlacion='e2e-hu-w07-8585def8-0000', inicio=87.006514618, fin=88.997452517, estado=503, cuerpo=None, error=''), Resultado(correlacion='e2e-hu-w07-8585def8-0001', inicio=87.50635823, fin=89.293767091, estado=503, cuerpo=None, error='')] = Clasificacion(por_codigo={'201': 158, '503': 2}, fallas=[Resultado(correlacion='e2e-hu-w07-8585def8-0000', inicio=87.006514618, fin=88.997452517, estado=503, cuerpo=None, error=''), Resultado(correlacion='e2e-hu-w07-8585def8-0001', inicio=87.50635823, fin=89.293767091, estado=503, cuerpo=None, error='')], fuera_de_ventana=[Resultado(correlacion='e2e-hu-w07-8585def8-0000', inicio=87.006514618, fin=88.997452517, estado=503, cuerpo=None, error=''), Resultado(correlacion='e2e-hu-w07-8585def8-0001', inicio=87.50635823, fin=89.293767091, estado=503, cuerpo=None, error='')], permitidas=1).fallas
+2026-11-20T17:05:09.5886185Z  +  and   1 = Clasificacion(por_codigo={'201': 158, '503': 2}, fallas=[Resultado(correlacion='e2e-hu-w07-8585def8-0000', inicio=87.006514618, fin=88.997452517, estado=503, cuerpo=None, error=''), Resultado(correlacion='e2e-hu-w07-8585def8-0001', inicio=87.50635823, fin=89.293767091, estado=503, cuerpo=None, error='')], fuera_de_ventana=[Resultado(correlacion='e2e-hu-w07-8585def8-0000', inicio=87.006514618, fin=88.997452517, estado=503, cuerpo=None, error=''), Resultado(correlacion='e2e-hu-w07-8585def8-0001', inicio=87.50635823, fin=89.293767091, estado=503, cuerpo=None, error='')], permitidas=1).permitidas
+2026-11-20T17:05:09.5891466Z ====== 1 failed, 4 passed, 159 deselected, 1 warning in 158.46s (0:02:38) ======
+2026-11-20T17:05:09.7385483Z ##[error]Process completed with exit code 1.
