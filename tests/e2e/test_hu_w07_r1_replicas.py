@@ -29,7 +29,10 @@ Ráfaga: N cotizaciones idénticas, cada una con su Idempotency-Key y su X-Corre
 (a) AC1, equivalencia: todas las 201 tienen la misma prima, el mismo desglose y la misma versión.
 (b) 5xx dentro del presupuesto y solo en la ventana posterior al retiro.
 (c) AC2, reemplazo: el servicio vuelve a sus tareas deseadas con una tarea nueva; la detenida
-    tiene nuestro stoppedReason (otras detenidas, p. ej. por Spot, se informan aparte).
+    tiene nuestro stoppedReason (otras detenidas, p. ej. por Spot, se informan aparte). La
+    detenida se consulta por su ARN hasta que su lastStatus sea STOPPED (tope
+    `ESPERA_DETENIDA_S`): tras un reemplazo rápido puede seguir en STOPPING, sin stoppedAt
+    (corrida del 2026-11-22).
 (d) Zonas antes y después.
 (e) AC1, trazas: al menos 2 `solventa.task_id` distintos en X-Ray.
 
@@ -86,6 +89,11 @@ LISTO, SEGUIR, AGOTADO, RECHAZO = "listo", "seguir", "agotado", "rechazo"
 # Trazas de las respuestas distintas de 201: tope compartido de espera y texto si no hay.
 ESPERA_TRAZA_FALLAS_S = 30
 SIN_TRAZA = "sin traza aún"
+# La detenida (2026-11-22): tras StopTask, desiredStatus pasa a STOPPED y stoppedReason queda
+# fijado, pero stoppedAt solo aparece cuando lastStatus llega a STOPPED, tras el drenaje. Se consulta
+# por su ARN, sondeando, hasta ese estado o hasta el tope. Constantes, como las del calentamiento.
+ESPERA_DETENIDA_S = 90
+SONDEO_DETENIDA_S = 5
 
 
 # --- Funciones puras (con unitarios al final) --------------------------------------------------
@@ -294,24 +302,88 @@ class Tarea:
         return self.arn.rsplit("/", 1)[-1]
 
 
+def _tarea(t: dict[str, Any]) -> Tarea:
+    """Una tarea de describe_tasks. `detenida` es stoppedAt: None mientras no llegue a STOPPED."""
+    return Tarea(
+        t["taskArn"],
+        t.get("availabilityZone", "?"),
+        t.get("lastStatus", "?"),
+        t.get("stoppedReason", ""),
+        t.get("stoppedAt"),
+    )
+
+
 def _tareas(ecs: Any, cluster: str, estado: str) -> list[Tarea]:
+    """Las tareas del servicio por `desiredStatus` (no por lastStatus): con "STOPPED" incluye las
+    que siguen deteniéndose, sin stoppedAt."""
     arns = ecs.list_tasks(cluster=cluster, serviceName=SERVICIO, desiredStatus=estado)["taskArns"]
     if not arns:
         return []
     tareas = ecs.describe_tasks(cluster=cluster, tasks=arns)["tasks"]
-    return sorted(
-        (
-            Tarea(
-                t["taskArn"],
-                t.get("availabilityZone", "?"),
-                t.get("lastStatus", "?"),
-                t.get("stoppedReason", ""),
-                t.get("stoppedAt"),
-            )
-            for t in tareas
-        ),
-        key=lambda t: t.arn,
+    return sorted((_tarea(t) for t in tareas), key=lambda t: t.arn)
+
+
+def _describir(ecs: Any, cluster: str, arn: str) -> Tarea | None:
+    """La tarea por su ARN, en el estado en que esté; None si describe_tasks no la devuelve."""
+    tareas = ecs.describe_tasks(cluster=cluster, tasks=[arn])["tasks"]
+    return _tarea(tareas[0]) if tareas else None
+
+
+def _esperar_detenida(
+    ecs: Any,
+    cluster: str,
+    arn: str,
+    tope_s: float = ESPERA_DETENIDA_S,
+    sondeo_s: float = SONDEO_DETENIDA_S,
+    dormir: Callable[[float], None] = time.sleep,
+    reloj: Callable[[], float] = time.monotonic,
+) -> tuple[Tarea | None, float]:
+    """Consulta la detenida por su ARN cada `sondeo_s` hasta que lastStatus sea STOPPED o se
+    cumpla `tope_s`. Devuelve su último estado y cuánto se esperó."""
+    inicio = reloj()
+    while True:
+        tarea = _describir(ecs, cluster, arn)
+        transcurrido = reloj() - inicio
+        if (tarea is not None and tarea.estado == "STOPPED") or transcurrido >= tope_s:
+            return tarea, transcurrido
+        dormir(sondeo_s)
+
+
+def problema_detenida(tarea: Tarea | None, tope_s: float) -> str | None:
+    """Por qué la detenida no cumple AC2 (STOPPED y con nuestro stoppedReason), o None."""
+    if tarea is None:
+        return "describe_tasks no devolvió la tarea detenida"
+    if tarea.estado != "STOPPED":
+        return (
+            f"la tarea detenida no llegó a STOPPED en {tope_s:.0f} s: lastStatus {tarea.estado}, "
+            f"stoppedReason {tarea.razon!r}"
+        )
+    if tarea.razon != RAZON_STOP:
+        return (
+            f"stoppedReason {tarea.razon!r}, se esperaba {RAZON_STOP!r} (lastStatus {tarea.estado})"
+        )
+    return None
+
+
+def resumen_detenida(tarea: Tarea | None, hora_stop: datetime, espera_s: float) -> str:
+    """La detenida para el resumen: lastStatus, stoppedReason, stoppedAt y cuánto tardó en STOPPED."""
+    espera = f"espera tras el reemplazo: {espera_s:.0f} s"
+    if tarea is None:
+        return f"describe_tasks no la devolvió; {espera}"
+    estado = f"lastStatus {tarea.estado}, stoppedReason {tarea.razon!r}"
+    if tarea.detenida is None:
+        return f"{estado}, sin stoppedAt; {espera}"
+    segundos = (tarea.detenida - hora_stop).total_seconds()
+    return (
+        f"{estado}, stoppedAt {tarea.detenida.isoformat()}, "
+        f"STOPPED {segundos:.0f} s después del stop_task; {espera}"
     )
+
+
+def otras_detenidas(tareas: Iterable[Tarea], arn: str, desde: datetime) -> list[Tarea]:
+    """Las demás tareas con desiredStatus STOPPED en la ventana: las que llegaron a STOPPED desde
+    `desde` y las que siguen deteniéndose (sin stoppedAt)."""
+    return [t for t in tareas if t.arn != arn and (t.detenida is None or t.detenida >= desde)]
 
 
 def _servicio(ecs: Any, cluster: str) -> dict[str, Any]:
@@ -597,11 +669,9 @@ def test_hu_w07_r1_rafaga_con_retiro_de_una_tarea(guardas: dict[str, Any]) -> No
     # (c) AC2: reemplazo con una tarea nueva y nuestro stoppedReason.
     logrado, segundos = _esperar_estable(ecs, cluster, {objetivo.arn}, ESPERA_REEMPLAZO_S)
     despues = [t for t in _tareas(ecs, cluster, "RUNNING") if t.estado == "RUNNING"]
-    detenidas = [
-        t for t in _tareas(ecs, cluster, "STOPPED") if t.detenida and t.detenida >= hora_inicio
-    ]
-    nuestra = [t for t in detenidas if t.arn == objetivo.arn]
-    otras = [t for t in detenidas if t.arn != objetivo.arn]
+    # La detenida, por su ARN: tras un reemplazo rápido puede seguir en STOPPING, sin stoppedAt.
+    nuestra, espera_detenida = _esperar_detenida(ecs, cluster, objetivo.arn)
+    otras = otras_detenidas(_tareas(ecs, cluster, "STOPPED"), objetivo.arn, hora_inicio)
 
     # (b) 5xx.
     clasificacion = clasificar(resultados, retiro, VENTANA_5XX_S, MAX_5XX_PCT)
@@ -614,9 +684,9 @@ def test_hu_w07_r1_rafaga_con_retiro_de_una_tarea(guardas: dict[str, Any]) -> No
         "\nHU-W07 N3, resumen para la evidencia:"
         f"{evidencia_calentamiento}"
         f"\n- antes: {[(t.id, t.zona) for t in antes]}"
-        f"\n- detenida: {objetivo.id} ({objetivo.zona}) a las {hora_stop.isoformat()}, "
-        f"stoppedReason {[t.razon for t in nuestra]}"
-        f"\n- otras detenidas en la ventana: {[(t.id, t.zona, t.razon) for t in otras]}"
+        f"\n- detenida: {objetivo.id} ({objetivo.zona}) a las {hora_stop.isoformat()}; "
+        f"{resumen_detenida(nuestra, hora_stop, espera_detenida)}"
+        f"\n- otras detenidas en la ventana: {[(t.id, t.zona, t.estado, t.razon) for t in otras]}"
         f"\n- después: {[(t.id, t.zona) for t in despues]}"
         f"\n- reemplazo: {'listo' if logrado else 'NO listo'} en {segundos:.0f} s"
         f"\n- ráfaga: {len(resultados)} solicitudes cada {INTERVALO_S} s; por código "
@@ -641,7 +711,8 @@ def test_hu_w07_r1_rafaga_con_retiro_de_una_tarea(guardas: dict[str, Any]) -> No
     assert not clasificacion.fuera_de_ventana, clasificacion.fuera_de_ventana
     # (c) AC2.
     assert logrado, f"{SERVICIO} no volvió a sus tareas deseadas en {ESPERA_REEMPLAZO_S} s"
-    assert nuestra and nuestra[0].razon == RAZON_STOP, nuestra
+    problema = problema_detenida(nuestra, ESPERA_DETENIDA_S)
+    assert problema is None, problema
     assert objetivo.arn not in {t.arn for t in despues}
     assert {t.arn for t in despues} - {t.arn for t in antes}, "sin tarea nueva"
     # (e) AC1, trazas de réplicas distintas.
@@ -932,3 +1003,129 @@ def test_hu_w07_resumen_traza_toma_la_hoja_mas_larga_y_tolera_documentos_raros()
     ]
     assert resumen_traza([]) == ["traza sin segmentos legibles"]
     assert resumen_traza(["texto", None]) == ["traza sin segmentos legibles"]
+
+
+ARN_DETENIDA = "arn:aws:ecs:us-east-1:000000000000:task/solventa-int/032185c0aaaa"
+HORA_STOP = datetime(2026, 11, 22, 15, 0, 0, tzinfo=UTC)
+
+
+class _ECSFalso:
+    """ECS tras StopTask: list_tasks con desiredStatus=STOPPED ya la incluye, y describe_tasks
+    devuelve un estado por consulta (el último se repite; sin estados, ninguna tarea)."""
+
+    def __init__(self, estados: list[dict[str, Any]]) -> None:
+        self._estados = estados
+        self.descripciones = 0
+
+    def list_tasks(self, **kwargs: Any) -> dict[str, Any]:
+        assert kwargs["desiredStatus"] == "STOPPED"
+        return {"taskArns": [ARN_DETENIDA]}
+
+    def describe_tasks(self, cluster: str, tasks: list[str]) -> dict[str, Any]:
+        self.descripciones += 1
+        if not self._estados:
+            return {"tasks": [], "failures": [{"arn": tasks[0], "reason": "MISSING"}]}
+        estado = self._estados[min(self.descripciones, len(self._estados)) - 1]
+        return {
+            "tasks": [{"taskArn": t, "availabilityZone": "us-east-1a", **estado} for t in tasks]
+        }
+
+
+class _Reloj:
+    """Reloj monotónico falso: `dormir` lo adelanta y anota cada pausa."""
+
+    def __init__(self) -> None:
+        self.ahora = 0.0
+        self.pausas: list[float] = []
+
+    def __call__(self) -> float:
+        return self.ahora
+
+    def dormir(self, segundos: float) -> None:
+        self.pausas.append(segundos)
+        self.ahora += segundos
+
+
+DETENIENDOSE = {"lastStatus": "STOPPING", "stoppedReason": RAZON_STOP}
+
+
+def test_hu_w07_detenida_en_stopping_sin_stopped_at_se_espera_hasta_stopped() -> None:
+    parada = HORA_STOP + timedelta(seconds=38)
+    ecs = _ECSFalso(
+        [DETENIENDOSE, DETENIENDOSE, {**DETENIENDOSE, "lastStatus": "STOPPED", "stoppedAt": parada}]
+    )
+    reloj = _Reloj()
+    tarea, espera = _esperar_detenida(
+        ecs, "solventa-int", ARN_DETENIDA, tope_s=90, sondeo_s=5, dormir=reloj.dormir, reloj=reloj
+    )
+    assert tarea is not None
+    assert (tarea.estado, tarea.razon, tarea.detenida) == ("STOPPED", RAZON_STOP, parada)
+    assert (espera, reloj.pausas, ecs.descripciones) == (10, [5, 5], 3)
+    assert problema_detenida(tarea, tope_s=90) is None
+    # El filtro de antes (STOPPED con stoppedAt en la ventana) no la veía en la primera consulta.
+    ecs_antes = _ECSFalso([DETENIENDOSE])
+    assert [t for t in _tareas(ecs_antes, "solventa-int", "STOPPED") if t.detenida] == []
+
+
+def test_hu_w07_detenida_que_no_llega_a_stopped_falla_con_su_estado_y_razon() -> None:
+    ecs = _ECSFalso([DETENIENDOSE])
+    reloj = _Reloj()
+    tarea, espera = _esperar_detenida(
+        ecs, "solventa-int", ARN_DETENIDA, tope_s=90, sondeo_s=5, dormir=reloj.dormir, reloj=reloj
+    )
+    assert tarea is not None
+    assert (tarea.estado, tarea.razon, tarea.detenida) == ("STOPPING", RAZON_STOP, None)
+    assert (espera, ecs.descripciones) == (90, 19)
+    assert problema_detenida(tarea, tope_s=90) == (
+        "la tarea detenida no llegó a STOPPED en 90 s: lastStatus STOPPING, "
+        "stoppedReason 'HU-W07 N3'"
+    )
+
+
+def test_hu_w07_detenida_con_otra_razon_o_sin_describir_falla() -> None:
+    spot = Tarea(
+        ARN_DETENIDA, "us-east-1a", "STOPPED", "Your Spot Task was interrupted.", HORA_STOP
+    )
+    assert problema_detenida(spot, tope_s=90) == (
+        "stoppedReason 'Your Spot Task was interrupted.', se esperaba 'HU-W07 N3' "
+        "(lastStatus STOPPED)"
+    )
+    reloj = _Reloj()
+    tarea, espera = _esperar_detenida(
+        _ECSFalso([]),
+        "solventa-int",
+        ARN_DETENIDA,
+        tope_s=10,
+        sondeo_s=5,
+        dormir=reloj.dormir,
+        reloj=reloj,
+    )
+    assert (tarea, espera) == (None, 10)
+    assert problema_detenida(None, tope_s=10) == "describe_tasks no devolvió la tarea detenida"
+
+
+def test_hu_w07_otras_detenidas_incluye_las_que_siguen_deteniendose() -> None:
+    desde = HORA_STOP - timedelta(seconds=40)
+    nuestra = Tarea(ARN_DETENIDA, "us-east-1a", "STOPPING", RAZON_STOP)
+    deteniendose = Tarea("arn:t/bbb", "us-east-1b", "DEACTIVATING", "Spot")
+    en_la_ventana = Tarea("arn:t/ccc", "us-east-1b", "STOPPED", "Spot", HORA_STOP)
+    vieja = Tarea("arn:t/ddd", "us-east-1a", "STOPPED", "Scaling", desde - timedelta(seconds=1))
+    tareas = [nuestra, deteniendose, en_la_ventana, vieja]
+    assert otras_detenidas(tareas, ARN_DETENIDA, desde) == [deteniendose, en_la_ventana]
+
+
+def test_hu_w07_resumen_de_la_detenida() -> None:
+    parada = HORA_STOP + timedelta(seconds=38)
+    detenida = Tarea(ARN_DETENIDA, "us-east-1a", "STOPPED", RAZON_STOP, parada)
+    assert resumen_detenida(detenida, HORA_STOP, 0.4) == (
+        "lastStatus STOPPED, stoppedReason 'HU-W07 N3', stoppedAt 2026-11-22T15:00:38+00:00, "
+        "STOPPED 38 s después del stop_task; espera tras el reemplazo: 0 s"
+    )
+    deteniendose = Tarea(ARN_DETENIDA, "us-east-1a", "STOPPING", RAZON_STOP)
+    assert resumen_detenida(deteniendose, HORA_STOP, 90) == (
+        "lastStatus STOPPING, stoppedReason 'HU-W07 N3', sin stoppedAt; "
+        "espera tras el reemplazo: 90 s"
+    )
+    assert resumen_detenida(None, HORA_STOP, 90) == (
+        "describe_tasks no la devolvió; espera tras el reemplazo: 90 s"
+    )
