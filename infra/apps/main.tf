@@ -36,6 +36,7 @@ locals {
         # Política backlog (HU-W25): los globales de cola, separados de los de CPU, que
         # service_overrides reemplaza. Sin queue_age_target no hay política por antigüedad.
         queue_backlog_target     = var.queue_backlog_target
+        queue_backlog_per_task   = var.queue_backlog_per_task
         queue_age_target         = null
         queue_scale_out_cooldown = var.queue_scale_out_cooldown_seconds
         queue_scale_in_cooldown  = var.queue_scale_in_cooldown_seconds

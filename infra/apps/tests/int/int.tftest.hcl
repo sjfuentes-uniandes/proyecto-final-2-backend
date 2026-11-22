@@ -185,12 +185,40 @@ run "ambiente_int" {
     error_message = "El objetivo y los enfriamientos de cada política backlog deben salir de service_overrides o, sin él, de las variables de cola del ambiente."
   }
   assert {
+    # HU-W25 (25.3b): backlog divide sus colas por las tareas si y solo si el servicio enciende
+    # queue_backlog_per_task en service_overrides o, sin él, lo enciende el global.
+    condition = alltrue([
+      for name, policy in aws_appautoscaling_policy.backlog :
+      one([for m in policy.target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m.expression if m.id == "backlog"]) == format(
+        coalesce(try(var.service_overrides[name].queue_backlog_per_task, null), var.queue_backlog_per_task) ? "(%s) / tareas" : "%s",
+        join(" + ", [for index, queue in local.deployed[name].consumes : "m${index}"])
+      )
+    ])
+    error_message = "La expresión de cada política backlog debe ser por tarea si y solo si service_overrides o, sin él, queue_backlog_per_task lo encienden."
+  }
+  assert {
     # HU-W25: el objetivo de antigüedad solo existe si el servicio lo define en service_overrides.
     condition = alltrue([
       for name, sizing in local.sizing :
       sizing.queue_age_target == try(var.service_overrides[name].queue_age_target, null)
     ])
     error_message = "queue_age_target debe salir de service_overrides; sin él, el servicio no tiene objetivo de antigüedad."
+  }
+  assert {
+    # HU-W25: hay una política por antigüedad por cola si y solo si el servicio tiene backlog y
+    # define queue_age_target (avisos no puede: lo rechaza la validación). Es solo de salida, con
+    # su objetivo y el enfriamiento de salida de cola del servicio o del ambiente.
+    condition = toset(keys(aws_appautoscaling_policy.backlog_age)) == toset(flatten([
+      for name, policy in aws_appautoscaling_policy.backlog : [
+        for queue in local.deployed[name].consumes : "${name}/${queue}"
+      ] if try(var.service_overrides[name].queue_age_target, null) != null
+      ])) && alltrue([
+      for key, policy in aws_appautoscaling_policy.backlog_age :
+      policy.target_tracking_scaling_policy_configuration[0].disable_scale_in == true &&
+      policy.target_tracking_scaling_policy_configuration[0].target_value == var.service_overrides[split("/", key)[0]].queue_age_target &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == coalesce(try(var.service_overrides[split("/", key)[0]].queue_scale_out_cooldown, null), var.queue_scale_out_cooldown_seconds)
+    ])
+    error_message = "La política por antigüedad debe existir por cola si y solo si el servicio tiene backlog y define queue_age_target, solo de salida y con sus valores."
   }
 
   # --- HU-W09: la tarea k6 del experimento de carga no existe en int -----
