@@ -1,0 +1,166 @@
+2026-11-20T17:51:28.1907884Z ##[group]Run uv run pytest tests/e2e -v -rA ${FILTRO:+-k "$FILTRO"} --junitxml=e2e.xml
+2026-11-20T17:51:28.1908666Z uv run pytest tests/e2e -v -rA ${FILTRO:+-k "$FILTRO"} --junitxml=e2e.xml
+2026-11-20T17:51:28.1933392Z shell: /usr/bin/bash -e {0}
+2026-11-20T17:51:28.1933888Z env:
+2026-11-20T17:51:28.1934262Z   ENV: int
+2026-11-20T17:51:28.1934581Z   AWS_REGION: us-east-1
+2026-11-20T17:51:28.1934961Z   UV_PYTHON: 3.12
+2026-11-20T17:51:28.1935561Z   VIRTUAL_ENV: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv
+2026-11-20T17:51:28.1936202Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-11-20T17:51:28.1936714Z   AWS_DEFAULT_REGION: us-east-1
+2026-11-20T17:51:28.1937243Z   AWS_ACCESS_KEY_ID: ***
+2026-11-20T17:51:28.1937797Z   AWS_SECRET_ACCESS_KEY: ***
+2026-11-20T17:51:28.1944117Z   AWS_SESSION_TOKEN: ***
+2026-11-20T17:51:28.1944550Z   E2E_REQUERIDO: 1
+2026-11-20T17:51:28.1944943Z   E2E_ADMIN_USUARIO: ***
+2026-11-20T17:51:28.1945351Z   E2E_ADMIN_CLAVE: ***
+2026-11-20T17:51:28.1945960Z   E2E_ADMIN_TOTP: ***
+2026-11-20T17:51:28.1946487Z   FILTRO: hu_w08
+2026-11-20T17:51:28.1946872Z ##[endgroup]
+2026-11-20T17:51:29.9629082Z ============================= test session starts ==============================
+2026-11-20T17:51:29.9629909Z platform linux -- Python 3.12.16, pytest-9.1.1, pluggy-1.6.0 -- /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv/bin/python
+2026-11-20T17:51:29.9630501Z cachedir: .pytest_cache
+2026-11-20T17:51:29.9631211Z hypothesis profile 'ci' -> database=None, deadline=None, print_blob=True, derandomize=True, suppress_health_check=(HealthCheck.too_slow,)
+2026-11-20T17:51:29.9631814Z rootdir: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend
+2026-11-20T17:51:29.9632258Z configfile: pyproject.toml
+2026-11-20T17:51:29.9632658Z plugins: anyio-4.15.1, hypothesis-6.168.5, cov-7.1.0, respx-0.23.1, schemathesis-4.29.4
+2026-11-20T17:51:30.2918946Z collecting ... collected 164 items / 150 deselected / 14 selected
+2026-11-20T17:51:30.2919525Z 
+2026-11-20T17:54:39.5747395Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_n2_alarma_alta_escala_cotizacion FAILED [  7%]
+2026-11-20T17:54:39.5753371Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_seleccionada_solo_con_el_filtro PASSED [ 14%]
+2026-11-20T17:54:39.5758666Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_elige_la_alta_y_la_baja_por_el_nombre_devuelto PASSED [ 21%]
+2026-11-20T17:54:39.5764275Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_sin_la_politica PASSED [ 28%]
+2026-11-20T17:54:39.5770910Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[None] PASSED [ 35%]
+2026-11-20T17:54:39.5776430Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas1] PASSED [ 42%]
+2026-11-20T17:54:39.5782144Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas2] PASSED [ 50%]
+2026-11-20T17:54:39.5787476Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas3] PASSED [ 57%]
+2026-11-20T17:54:39.5793009Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas4] PASSED [ 64%]
+2026-11-20T17:54:39.5798656Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas5] PASSED [ 71%]
+2026-11-20T17:54:39.5804335Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas6] PASSED [ 78%]
+2026-11-20T17:54:39.5809507Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas7] PASSED [ 85%]
+2026-11-20T17:54:39.5814167Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_lo_que_no_es_target_tracking PASSED [ 92%]
+2026-11-20T17:54:39.5832901Z tests/e2e/test_hu_w08_escalado.py::test_hu_w08_linea_de_tiempo_deja_los_cambios_y_la_ultima PASSED [100%]
+2026-11-20T17:54:39.5833904Z 
+2026-11-20T17:54:39.5834511Z =================================== FAILURES ===================================
+2026-11-20T17:54:39.5835492Z _________________ test_hu_w08_n2_alarma_alta_escala_cotizacion _________________
+2026-11-20T17:54:39.5836052Z 
+2026-11-20T17:54:39.5837571Z guardas = {'aws': Aws(autoscaling=<botocore.client.ApplicationAutoScaling object at 0x78fb2078d760>, cloudwatch=<botocore.client...e6e', alarma_baja='TargetTracking-service/solventa-int/cotizacion-AlarmLow-6b2b0243-6dbd-4a88-8319-574154fbec8a'), ...}
+2026-11-20T17:54:39.5839424Z 
+2026-11-20T17:54:39.5839919Z     def test_hu_w08_n2_alarma_alta_escala_cotizacion(guardas: dict[str, Any]) -> None:
+2026-11-20T17:54:39.5841011Z         aws: Aws = guardas["aws"]
+2026-11-20T17:54:39.5841767Z         cluster, recurso = guardas["cluster"], guardas["recurso"]
+2026-11-20T17:54:39.5842514Z         politica: Politica = guardas["politica"]
+2026-11-20T17:54:39.5843258Z         minimo, maximo = guardas["minimo"], guardas["maximo"]
+2026-11-20T17:54:39.5843934Z     
+2026-11-20T17:54:39.5844689Z         antes = _alarmas(aws.cloudwatch, politica)
+2026-11-20T17:54:39.5845458Z         if not str(antes["alta"]["operador"]).startswith("GreaterThan"):
+2026-11-20T17:54:39.5846418Z             pytest.fail(f"la alarma {politica.alarma_alta} no es la alta: {antes['alta']}")
+2026-11-20T17:54:39.5847287Z     
+2026-11-20T17:54:39.5848216Z         # (a) Forzar la alarma alta: la única escritura de la prueba.
+2026-11-20T17:54:39.5849016Z         hora, t0 = datetime.now(UTC), time.monotonic()
+2026-11-20T17:54:39.5849705Z         aws.cloudwatch.set_alarm_state(
+2026-11-20T17:54:39.5850749Z             AlarmName=politica.alarma_alta, StateValue="ALARM", StateReason=RAZON_ALARMA
+2026-11-20T17:54:39.5851616Z         )
+2026-11-20T17:54:39.5852091Z         guardas["forzada"] = hora
+2026-11-20T17:54:39.5852990Z     
+2026-11-20T17:54:39.5853481Z         muestras: list[Muestra] = []
+2026-11-20T17:54:39.5854081Z         _observar(
+2026-11-20T17:54:39.5854549Z             aws.ecs,
+2026-11-20T17:54:39.5855065Z             cluster,
+2026-11-20T17:54:39.5855561Z             t0,
+2026-11-20T17:54:39.5856034Z             ESPERA_SUBIDA_S,
+2026-11-20T17:54:39.5856577Z             muestras,
+2026-11-20T17:54:39.5857371Z             lambda m: m.deseadas > minimo and m.corriendo >= m.deseadas and m.pendientes == 0,
+2026-11-20T17:54:39.5858209Z         )
+2026-11-20T17:54:39.5858823Z         subida = next((m for m in muestras if m.deseadas > minimo), None)
+2026-11-20T17:54:39.5859869Z         lista = next((m for m in muestras if m.deseadas > minimo and m.corriendo >= m.deseadas), None)
+2026-11-20T17:54:39.5861039Z     
+2026-11-20T17:54:39.5861673Z         # (b) Bajada, solo si subió.
+2026-11-20T17:54:39.5862286Z         regreso = vuelta = None
+2026-11-20T17:54:39.5862878Z         if subida is not None:
+2026-11-20T17:54:39.5863460Z             _observar(
+2026-11-20T17:54:39.5863962Z                 aws.ecs,
+2026-11-20T17:54:39.5864456Z                 cluster,
+2026-11-20T17:54:39.5865000Z                 t0,
+2026-11-20T17:54:39.5865535Z                 ESPERA_BAJADA_S,
+2026-11-20T17:54:39.5866102Z                 muestras,
+2026-11-20T17:54:39.5866714Z                 lambda m: m.deseadas == minimo and m.corriendo == minimo,
+2026-11-20T17:54:39.5867479Z             )
+2026-11-20T17:54:39.5868027Z             despues = [m for m in muestras if m.t > subida.t]
+2026-11-20T17:54:39.5868865Z             regreso = next((m for m in despues if m.deseadas == minimo), None)
+2026-11-20T17:54:39.5869831Z             vuelta = next((m for m in despues if m.deseadas == m.corriendo == minimo), None)
+2026-11-20T17:54:39.5870797Z     
+2026-11-20T17:54:39.5871268Z         # (c) Evidencia.
+2026-11-20T17:54:39.5871863Z         alarmas = _alarmas(aws.cloudwatch, politica)
+2026-11-20T17:54:39.5872691Z         historial = _historial(aws.cloudwatch, politica.alarma_alta, hora)
+2026-11-20T17:54:39.5873642Z         actividades = _actividades(aws.autoscaling, recurso, hora)
+2026-11-20T17:54:39.5874442Z         retiradas = _retiradas(aws.ecs, cluster, hora)
+2026-11-20T17:54:39.5875977Z         print(
+2026-11-20T17:54:39.5876493Z             "\nHU-W08 N2, resumen para la evidencia:"
+2026-11-20T17:54:39.5877618Z             f"\n- política {politica.nombre}: objetivo {politica.objetivo}, enfriamientos "
+2026-11-20T17:54:39.5878811Z             f"{politica.enfriamiento_salida} s (salida) y {politica.enfriamiento_entrada} s (entrada); "
+2026-11-20T17:54:39.5879993Z             f"MinCapacity {minimo}, MaxCapacity {maximo}, suspendido {guardas['suspendido']}"
+2026-11-20T17:54:39.5881175Z             f"\n- alarma alta {politica.alarma_alta}; baja {politica.alarma_baja}"
+2026-11-20T17:54:39.5882010Z             f"\n- alarmas antes: {antes}"
+2026-11-20T17:54:39.5882743Z             f"\n- alarma alta forzada a ALARM a las {_hora(hora)}"
+2026-11-20T17:54:39.5883681Z             f"\n- línea de tiempo (t s, deseadas, corriendo, pendientes): "
+2026-11-20T17:54:39.5884675Z             f"{[(m.t, m.deseadas, m.corriendo, m.pendientes) for m in linea_de_tiempo(muestras)]}"
+2026-11-20T17:54:39.5885951Z             f"\n- subida: deseadas > {minimo} a los {subida.t if subida else None} s; tareas "
+2026-11-20T17:54:39.5886888Z             f"corriendo a los {lista.t if lista else None} s"
+2026-11-20T17:54:39.5887832Z             f"\n- bajada: deseadas = {minimo} a los {regreso.t if regreso else None} s; corriendo = "
+2026-11-20T17:54:39.5888775Z             f"{minimo} a los {vuelta.t if vuelta else None} s"
+2026-11-20T17:54:39.5889915Z             f"{f' ({round(regreso.t - subida.t, 1)} s después de la subida)' if regreso and subida else ''}"
+2026-11-20T17:54:39.5891031Z             f"\n- actividades de escalado: {actividades}"
+2026-11-20T17:54:39.5891769Z             f"\n- historial de la alarma alta: {historial}"
+2026-11-20T17:54:39.5892552Z             f"\n- alarmas después: {alarmas}"
+2026-11-20T17:54:39.5893253Z             f"\n- tareas detenidas desde la alarma: {retiradas}"
+2026-11-20T17:54:39.5893927Z         )
+2026-11-20T17:54:39.5894394Z     
+2026-11-20T17:54:39.5894808Z         # (a) AC1.
+2026-11-20T17:54:39.5895357Z         if subida is None:
+2026-11-20T17:54:39.5895917Z >           pytest.fail(
+2026-11-20T17:54:39.5896851Z                 f"forzar la alarma alta no disparó el escalado: desiredCount siguió en {minimo} "
+2026-11-20T17:54:39.5897908Z                 f"durante {ESPERA_SUBIDA_S} s. Alarma alta: {alarmas['alta']['estado']} desde "
+2026-11-20T17:54:39.5898813Z                 f"{alarmas['alta']['desde']} "
+2026-11-20T17:54:39.5899812Z                 f"({'volvió sola' if alarmas['alta']['estado'] != 'ALARM' else 'sigue en ALARM'}); "
+2026-11-20T17:54:39.5901020Z                 f"historial {historial}; actividades {actividades}"
+2026-11-20T17:54:39.5901752Z             )
+2026-11-20T17:54:39.5904939Z E           Failed: forzar la alarma alta no disparó el escalado: desiredCount siguió en 2 durante 180 s. Alarma alta: OK desde 2026-11-20T17:52:26+00:00 (volvió sola); historial [('2026-11-20T17:51:33+00:00', 'StateUpdate', 'Alarm updated from OK to ALARM'), ('2026-11-20T17:51:33+00:00', 'Action', 'Failed to execute AutoScaling action: StateReasonData must be provided.'), ('2026-11-20T17:52:26+00:00', 'StateUpdate', 'Alarm updated from ALARM to OK')]; actividades []
+2026-11-20T17:54:39.5907578Z 
+2026-11-20T17:54:39.5907856Z tests/e2e/test_hu_w08_escalado.py:449: Failed
+2026-11-20T17:54:39.5908680Z ----------------------------- Captured stdout call -----------------------------
+2026-11-20T17:54:39.5909231Z 
+2026-11-20T17:54:39.5909483Z HU-W08 N2, resumen para la evidencia:
+2026-11-20T17:54:39.5913563Z - política solventa-int-cotizacion-cpu: objetivo 60.0, enfriamientos 30 s (salida) y 300 s (entrada); MinCapacity 2, MaxCapacity 4, suspendido {'DynamicScalingInSuspended': False, 'DynamicScalingOutSuspended': False, 'ScheduledScalingSuspended': False}
+2026-11-20T17:54:39.5916604Z - alarma alta TargetTracking-service/solventa-int/cotizacion-AlarmHigh-98400020-a331-4c50-b0cc-9711beaede6e; baja TargetTracking-service/solventa-int/cotizacion-AlarmLow-6b2b0243-6dbd-4a88-8319-574154fbec8a
+2026-11-20T17:54:39.5919658Z - alarmas antes: {'alta': {'operador': 'GreaterThanThreshold', 'umbral': 60.0, 'estado': 'OK', 'desde': '2026-11-20T16:15:47+00:00', 'acciones': True}, 'baja': {'operador': 'LessThanThreshold', 'umbral': 54.0, 'estado': 'ALARM', 'desde': '2026-11-20T16:29:27+00:00', 'acciones': True}}
+2026-11-20T17:54:39.5921700Z - alarma alta forzada a ALARM a las 2026-11-20T17:51:33+00:00
+2026-11-20T17:54:39.5922840Z - línea de tiempo (t s, deseadas, corriendo, pendientes): [(0.2, 2, 2, 0), (185.3, 2, 2, 0)]
+2026-11-20T17:54:39.5923894Z - subida: deseadas > 2 a los None s; tareas corriendo a los None s
+2026-11-20T17:54:39.5924764Z - bajada: deseadas = 2 a los None s; corriendo = 2 a los None s
+2026-11-20T17:54:39.5925483Z - actividades de escalado: []
+2026-11-20T17:54:39.5927397Z - historial de la alarma alta: [('2026-11-20T17:51:33+00:00', 'StateUpdate', 'Alarm updated from OK to ALARM'), ('2026-11-20T17:51:33+00:00', 'Action', 'Failed to execute AutoScaling action: StateReasonData must be provided.'), ('2026-11-20T17:52:26+00:00', 'StateUpdate', 'Alarm updated from ALARM to OK')]
+2026-11-20T17:54:39.5931207Z - alarmas después: {'alta': {'operador': 'GreaterThanThreshold', 'umbral': 60.0, 'estado': 'OK', 'desde': '2026-11-20T17:52:26+00:00', 'acciones': True}, 'baja': {'operador': 'LessThanThreshold', 'umbral': 54.0, 'estado': 'ALARM', 'desde': '2026-11-20T16:29:27+00:00', 'acciones': True}}
+2026-11-20T17:54:39.5933047Z - tareas detenidas desde la alarma: []
+2026-11-20T17:54:39.5933887Z --------------------------- Captured stdout teardown ---------------------------
+2026-11-20T17:54:39.5934445Z 
+2026-11-20T17:54:39.5935727Z HU-W08 N2, estado final: alarma alta OK (ya no está en ALARM); alarma baja ALARM; cotizacion con desiredCount 2 y runningCount 2 (min 2, max 4). El scalable target y la política no se tocaron.
+2026-11-20T17:54:39.5937221Z ==================================== PASSES ====================================
+2026-11-20T17:54:39.5938265Z - generated xml file: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/e2e.xml -
+2026-11-20T17:54:39.5939383Z =========================== short test summary info ============================
+2026-11-20T17:54:39.5940526Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_seleccionada_solo_con_el_filtro
+2026-11-20T17:54:39.5941939Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_elige_la_alta_y_la_baja_por_el_nombre_devuelto
+2026-11-20T17:54:39.5943205Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_sin_la_politica
+2026-11-20T17:54:39.5944438Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[None]
+2026-11-20T17:54:39.5945867Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas1]
+2026-11-20T17:54:39.5947289Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas2]
+2026-11-20T17:54:39.5948668Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas3]
+2026-11-20T17:54:39.5949822Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas4]
+2026-11-20T17:54:39.6573697Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas5]
+2026-11-20T17:54:39.6575641Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas6]
+2026-11-20T17:54:39.6577106Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_alarmas_incompletas_o_ambiguas[alarmas7]
+2026-11-20T17:54:39.6578500Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_politica_de_rechaza_lo_que_no_es_target_tracking
+2026-11-20T17:54:39.6579721Z PASSED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_linea_de_tiempo_deja_los_cambios_y_la_ultima
+2026-11-20T17:54:39.6585104Z FAILED tests/e2e/test_hu_w08_escalado.py::test_hu_w08_n2_alarma_alta_escala_cotizacion - Failed: forzar la alarma alta no disparó el escalado: desiredCount siguió en 2 durante 180 s. Alarma alta: OK desde 2026-11-20T17:52:26+00:00 (volvió sola); historial [('2026-11-20T17:51:33+00:00', 'StateUpdate', 'Alarm updated from OK to ALARM'), ('2026-11-20T17:51:33+00:00', 'Action', 'Failed to execute AutoScaling action: StateReasonData must be provided.'), ('2026-11-20T17:52:26+00:00', 'StateUpdate', 'Alarm updated from ALARM to OK')]; actividades []
+2026-11-20T17:54:39.6588976Z =========== 1 failed, 13 passed, 150 deselected in 189.62s (0:03:09) ===========
+2026-11-20T17:54:39.7714797Z ##[error]Process completed with exit code 1.

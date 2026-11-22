@@ -1,0 +1,166 @@
+2026-11-22T13:24:22.6810949Z ##[group]Run uv run pytest tests/e2e -v -rA ${FILTRO:+-k "$FILTRO"} --junitxml=e2e.xml
+2026-11-22T13:24:22.6811344Z uv run pytest tests/e2e -v -rA ${FILTRO:+-k "$FILTRO"} --junitxml=e2e.xml
+2026-11-22T13:24:22.6837742Z shell: /usr/bin/bash -e {0}
+2026-11-22T13:24:22.6837883Z env:
+2026-11-22T13:24:22.6837990Z   ENV: int
+2026-11-22T13:24:22.6838105Z   AWS_REGION: us-east-1
+2026-11-22T13:24:22.6838235Z   UV_PYTHON: 3.12
+2026-11-22T13:24:22.6838451Z   VIRTUAL_ENV: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv
+2026-11-22T13:24:22.6838716Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-11-22T13:24:22.6838891Z   AWS_DEFAULT_REGION: us-east-1
+2026-11-22T13:24:22.6839171Z   AWS_ACCESS_KEY_ID: ***
+2026-11-22T13:24:22.6839370Z   AWS_SECRET_ACCESS_KEY: ***
+2026-11-22T13:24:22.6841916Z   AWS_SESSION_TOKEN: ***
+2026-11-22T13:24:22.6842053Z   E2E_REQUERIDO: 1
+2026-11-22T13:24:22.6842205Z   E2E_ADMIN_USUARIO: ***
+2026-11-22T13:24:22.6842348Z   E2E_ADMIN_CLAVE: ***
+2026-11-22T13:24:22.6842710Z   E2E_ADMIN_TOTP: ***
+2026-11-22T13:24:22.6842840Z   FILTRO: hu_w07
+2026-11-22T13:24:22.6842966Z ##[endgroup]
+2026-11-22T13:24:24.0234213Z ============================= test session starts ==============================
+2026-11-22T13:24:24.0234717Z platform linux -- Python 3.12.16, pytest-9.1.1, pluggy-1.6.0 -- /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv/bin/python
+2026-11-22T13:24:24.0235163Z cachedir: .pytest_cache
+2026-11-22T13:24:24.0235482Z hypothesis profile 'ci' -> database=None, deadline=None, print_blob=True, derandomize=True, suppress_health_check=(HealthCheck.too_slow,)
+2026-11-22T13:24:24.0235878Z rootdir: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend
+2026-11-22T13:24:24.0236115Z configfile: pyproject.toml
+2026-11-22T13:24:24.0236343Z plugins: hypothesis-6.168.5, anyio-4.15.1, respx-0.23.1, schemathesis-4.29.4, cov-7.1.0
+2026-11-22T13:24:24.3792835Z collecting ... collected 191 items / 172 deselected / 19 selected
+2026-11-22T13:24:24.3793131Z 
+2026-11-22T13:26:12.1529929Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_r1_rafaga_con_retiro_de_una_tarea FAILED [  5%]
+2026-11-22T13:26:12.1533400Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_seleccionada_solo_con_el_filtro PASSED [ 10%]
+2026-11-22T13:26:12.1538936Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_task_ids_en_metadatos_y_anotaciones_a_cualquier_profundidad PASSED [ 15%]
+2026-11-22T13:26:12.1544474Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_task_ids_tolera_documentos_raros PASSED [ 21%]
+2026-11-22T13:26:12.1550351Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_clasificar_cuenta_y_separa_por_ventana PASSED [ 26%]
+2026-11-22T13:26:12.1554186Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentamiento_listo_con_racha_de_201_al_final PASSED [ 31%]
+2026-11-22T13:26:12.1557629Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentamiento_un_5xx_o_un_transporte_reinicia_la_racha PASSED [ 36%]
+2026-11-22T13:26:12.1561105Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentamiento_agotado_al_llegar_al_maximo PASSED [ 42%]
+2026-11-22T13:26:12.1564461Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentamiento_un_4xx_es_rechazo_inmediato PASSED [ 47%]
+2026-11-22T13:26:12.1572205Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentar_secuencial_hasta_listo_con_su_pausa PASSED [ 52%]
+2026-11-22T13:26:12.1576234Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentar_agotado_y_rechazo PASSED [ 57%]
+2026-11-22T13:26:12.1580728Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_el_calentamiento_no_entra_a_clasificar_ni_a_task_ids PASSED [ 63%]
+2026-11-22T13:26:12.1584510Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_resumen_del_calentamiento_por_codigo_y_latencia PASSED [ 68%]
+2026-11-22T13:26:12.1593649Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_portal_guarda_quien_respondio_si_no_es_201 PASSED [ 73%]
+2026-11-22T13:26:12.1600057Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_portal_sin_cuerpo_ni_cabecera_y_201_sin_texto PASSED [ 78%]
+2026-11-22T13:26:12.1604079Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_trazas_de_fallas_sin_traza_aun_no_falla PASSED [ 84%]
+2026-11-22T13:26:12.1607616Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_trazas_de_fallas_con_error_de_xray_no_falla PASSED [ 89%]
+2026-11-22T13:26:12.1612030Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_trazas_de_fallas_resume_la_traza_encontrada PASSED [ 94%]
+2026-11-22T13:26:12.1629682Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_resumen_traza_toma_la_hoja_mas_larga_y_tolera_documentos_raros PASSED [100%]
+2026-11-22T13:26:12.1630054Z 
+2026-11-22T13:26:12.1630223Z =================================== FAILURES ===================================
+2026-11-22T13:26:12.1630685Z ________________ test_hu_w07_r1_rafaga_con_retiro_de_una_tarea _________________
+2026-11-22T13:26:12.1630876Z 
+2026-11-22T13:26:12.1631384Z guardas = {'ecs': <botocore.client.ECS object at 0x7cfc8d313860>, 'xray': <botocore.client.XRay object at 0x7cfc8d477dd0>, 'clus...sk/solventa-int/1771c1db5da545139527c57c4aadd90f', zona='us-east-1b', estado='RUNNING', razon='', detenida=None)], ...}
+2026-11-22T13:26:12.1632480Z 
+2026-11-22T13:26:12.1632707Z     def test_hu_w07_r1_rafaga_con_retiro_de_una_tarea(guardas: dict[str, Any]) -> None:
+2026-11-22T13:26:12.1633156Z         ecs, xray, cluster = guardas["ecs"], guardas["xray"], guardas["cluster"]
+2026-11-22T13:26:12.1633509Z         antes: list[Tarea] = guardas["antes"]
+2026-11-22T13:26:12.1633919Z         # Calentamiento, antes de tocar ninguna tarea: si no se logra, la prueba falla con su evidencia.
+2026-11-22T13:26:12.1634376Z         decision, calentamiento = _calentar(guardas["portal"])
+2026-11-22T13:26:12.1634813Z         evidencia_calentamiento = f"\n- calentamiento: {resumen_calentamiento(decision, calentamiento)}"
+2026-11-22T13:26:12.1635078Z         if decision != LISTO:
+2026-11-22T13:26:12.1635228Z             pytest.fail(
+2026-11-22T13:26:12.1635467Z                 f"HU-W07 N3: calentamiento {decision} (sin {CALENTAR_OK} respuestas 201 seguidas en "
+2026-11-22T13:26:12.1635771Z                 f"{CALENTAR_MAX} intentos, o un 4xx); no se detuvo ninguna tarea"
+2026-11-22T13:26:12.1636036Z                 f"{evidencia_calentamiento}{_evidencia_no_201(xray, calentamiento)}"
+2026-11-22T13:26:12.1636240Z             )
+2026-11-22T13:26:12.1636664Z         # (d) Antes de detener: las tareas están en zonas distintas (guarda 4).
+2026-11-22T13:26:12.1636885Z         objetivo = antes[0]
+2026-11-22T13:26:12.1637047Z         hora_inicio = datetime.now(UTC)
+2026-11-22T13:26:12.1637299Z         resultados, retiro, hora_stop = _rafaga(guardas["portal"], ecs, cluster, objetivo, guardas)
+2026-11-22T13:26:12.1637536Z     
+2026-11-22T13:26:12.1637704Z         # (c) AC2: reemplazo con una tarea nueva y nuestro stoppedReason.
+2026-11-22T13:26:12.1637991Z         logrado, segundos = _esperar_estable(ecs, cluster, {objetivo.arn}, ESPERA_REEMPLAZO_S)
+2026-11-22T13:26:12.1638293Z         despues = [t for t in _tareas(ecs, cluster, "RUNNING") if t.estado == "RUNNING"]
+2026-11-22T13:26:12.1638529Z         detenidas = [
+2026-11-22T13:26:12.1638746Z             t for t in _tareas(ecs, cluster, "STOPPED") if t.detenida and t.detenida >= hora_inicio
+2026-11-22T13:26:12.1638976Z         ]
+2026-11-22T13:26:12.1639136Z         nuestra = [t for t in detenidas if t.arn == objetivo.arn]
+2026-11-22T13:26:12.1639362Z         otras = [t for t in detenidas if t.arn != objetivo.arn]
+2026-11-22T13:26:12.1639540Z     
+2026-11-22T13:26:12.1639652Z         # (b) 5xx.
+2026-11-22T13:26:12.1639848Z         clasificacion = clasificar(resultados, retiro, VENTANA_5XX_S, MAX_5XX_PCT)
+2026-11-22T13:26:12.1640126Z         creadas = [r.cuerpo for r in resultados if r.estado == 201 and r.cuerpo]
+2026-11-22T13:26:12.1640326Z     
+2026-11-22T13:26:12.1640590Z         # (e) Trazas.
+2026-11-22T13:26:12.1640834Z         task_ids = _task_ids_en_xray(xray, creadas_de_la_rafaga(resultados))
+2026-11-22T13:26:12.1641033Z     
+2026-11-22T13:26:12.1641141Z         print(
+2026-11-22T13:26:12.1641286Z             "\nHU-W07 N3, resumen para la evidencia:"
+2026-11-22T13:26:12.1641590Z             f"{evidencia_calentamiento}"
+2026-11-22T13:26:12.1641778Z             f"\n- antes: {[(t.id, t.zona) for t in antes]}"
+2026-11-22T13:26:12.1642032Z             f"\n- detenida: {objetivo.id} ({objetivo.zona}) a las {hora_stop.isoformat()}, "
+2026-11-22T13:26:12.1642289Z             f"stoppedReason {[t.razon for t in nuestra]}"
+2026-11-22T13:26:12.1642537Z             f"\n- otras detenidas en la ventana: {[(t.id, t.zona, t.razon) for t in otras]}"
+2026-11-22T13:26:12.1642839Z             f"\n- después: {[(t.id, t.zona) for t in despues]}"
+2026-11-22T13:26:12.1643086Z             f"\n- reemplazo: {'listo' if logrado else 'NO listo'} en {segundos:.0f} s"
+2026-11-22T13:26:12.1643415Z             f"\n- ráfaga: {len(resultados)} solicitudes cada {INTERVALO_S} s; por código "
+2026-11-22T13:26:12.1643650Z             f"{clasificacion.por_codigo}"
+2026-11-22T13:26:12.1643900Z             f"\n- fallas: {len(clasificacion.fallas)} (permitidas {clasificacion.permitidas}); "
+2026-11-22T13:26:12.1644311Z             f"fuera de la ventana de {VENTANA_5XX_S:.0f} s: {len(clasificacion.fuera_de_ventana)}; "
+2026-11-22T13:26:12.1644646Z             f"{[(r.correlacion, r.estado or r.error, round(r.fin - retiro, 1)) for r in clasificacion.fallas]}"
+2026-11-22T13:26:12.1644930Z             f"\n- task_id vistos en X-Ray: {sorted(task_ids)}"
+2026-11-22T13:26:12.1645149Z             f"{_evidencia_no_201(xray, calentamiento + resultados)}"
+2026-11-22T13:26:12.1645332Z         )
+2026-11-22T13:26:12.1645440Z     
+2026-11-22T13:26:12.1645562Z         # (a) AC1, equivalencia.
+2026-11-22T13:26:12.1645782Z         assert creadas, "ninguna cotización 201 en la ráfaga"
+2026-11-22T13:26:12.1646006Z         for campo in ("primaTotal", "desglose", "versionReglas"):
+2026-11-22T13:26:12.1646247Z             valores = {json.dumps(c[campo], sort_keys=True) for c in creadas}
+2026-11-22T13:26:12.1646475Z             assert len(valores) == 1, (campo, valores)
+2026-11-22T13:26:12.1646746Z         # Ningún 4xx: un rechazo funcional o del borde no es parte del retiro.
+2026-11-22T13:26:12.1647018Z         cuatro = {k: v for k, v in clasificacion.por_codigo.items() if k.startswith("4")}
+2026-11-22T13:26:12.1647251Z         assert not cuatro, cuatro
+2026-11-22T13:26:12.1647431Z         # (b) 5xx dentro del presupuesto y solo en la ventana.
+2026-11-22T13:26:12.1647697Z         assert len(clasificacion.fallas) <= clasificacion.permitidas, clasificacion.fallas
+2026-11-22T13:26:12.1647997Z         assert not clasificacion.fuera_de_ventana, clasificacion.fuera_de_ventana
+2026-11-22T13:26:12.1648213Z         # (c) AC2.
+2026-11-22T13:26:12.1648460Z         assert logrado, f"{SERVICIO} no volvió a sus tareas deseadas en {ESPERA_REEMPLAZO_S} s"
+2026-11-22T13:26:12.1648739Z >       assert nuestra and nuestra[0].razon == RAZON_STOP, nuestra
+2026-11-22T13:26:12.1648930Z E       AssertionError: []
+2026-11-22T13:26:12.1649071Z E       assert ([])
+2026-11-22T13:26:12.1649147Z 
+2026-11-22T13:26:12.1649246Z tests/e2e/test_hu_w07_r1_replicas.py:644: AssertionError
+2026-11-22T13:26:12.1649490Z ----------------------------- Captured stdout call -----------------------------
+2026-11-22T13:26:12.1649647Z 
+2026-11-22T13:26:12.1649713Z HU-W07 N3, resumen para la evidencia:
+2026-11-22T13:26:12.1650308Z - calentamiento: listo en 4 intentos; por código {'201': 4}; latencias [('e2e-hu-w07-3f5b0fa3-cal-0000', 201, 0.4), ('e2e-hu-w07-3f5b0fa3-cal-0001', 201, 0.2), ('e2e-hu-w07-3f5b0fa3-cal-0002', 201, 0.25), ('e2e-hu-w07-3f5b0fa3-cal-0003', 201, 0.32)]
+2026-11-22T13:26:12.1651163Z - antes: [('032185c0061c420a92ea71c1d27814c1', 'us-east-1a'), ('1771c1db5da545139527c57c4aadd90f', 'us-east-1b')]
+2026-11-22T13:26:12.1651546Z - detenida: 032185c0061c420a92ea71c1d27814c1 (us-east-1a) a las 2026-11-22T13:25:10.241754+00:00, stoppedReason []
+2026-11-22T13:26:12.1651828Z - otras detenidas en la ventana: []
+2026-11-22T13:26:12.1652153Z - después: [('1771c1db5da545139527c57c4aadd90f', 'us-east-1b'), ('1dee2089554a479bb0270aaebd90f68e', 'us-east-1a')]
+2026-11-22T13:26:12.1652615Z - reemplazo: listo en 21 s
+2026-11-22T13:26:12.1652830Z - ráfaga: 160 solicitudes cada 0.5 s; por código {'201': 160}
+2026-11-22T13:26:12.1653065Z - fallas: 0 (permitidas 1); fuera de la ventana de 30 s: 0; []
+2026-11-22T13:26:12.1653349Z - task_id vistos en X-Ray: ['032185c0061c420a92ea71c1d27814c1', '1771c1db5da545139527c57c4aadd90f']
+2026-11-22T13:26:12.1653610Z - respuestas distintas de 201: ninguna
+2026-11-22T13:26:12.1653802Z =============================== warnings summary ===============================
+2026-11-22T13:26:12.1654070Z tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_r1_rafaga_con_retiro_de_una_tarea
+2026-11-22T13:26:12.1654807Z   /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/.venv/lib/python3.12/site-packages/pycognito/aws_srp.py:310: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+2026-11-22T13:26:12.1655614Z     timestamp = self.get_cognito_formatted_timestamp(datetime.datetime.utcnow())
+2026-11-22T13:26:12.1655788Z 
+2026-11-22T13:26:12.1655920Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2026-11-22T13:26:12.1656165Z ==================================== PASSES ====================================
+2026-11-22T13:26:12.1656457Z - generated xml file: /home/runner/work/proyecto-final-2-backend/proyecto-final-2-backend/e2e.xml -
+2026-11-22T13:26:12.1656747Z =========================== short test summary info ============================
+2026-11-22T13:26:12.1657018Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_seleccionada_solo_con_el_filtro
+2026-11-22T13:26:12.1657375Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_task_ids_en_metadatos_y_anotaciones_a_cualquier_profundidad
+2026-11-22T13:26:12.1657723Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_task_ids_tolera_documentos_raros
+2026-11-22T13:26:12.1658050Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_clasificar_cuenta_y_separa_por_ventana
+2026-11-22T13:26:12.1658391Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentamiento_listo_con_racha_de_201_al_final
+2026-11-22T13:26:12.1658752Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentamiento_un_5xx_o_un_transporte_reinicia_la_racha
+2026-11-22T13:26:12.1659107Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentamiento_agotado_al_llegar_al_maximo
+2026-11-22T13:26:12.1659434Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentamiento_un_4xx_es_rechazo_inmediato
+2026-11-22T13:26:12.1659771Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentar_secuencial_hasta_listo_con_su_pausa
+2026-11-22T13:26:12.1660096Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_calentar_agotado_y_rechazo
+2026-11-22T13:26:12.1660561Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_el_calentamiento_no_entra_a_clasificar_ni_a_task_ids
+2026-11-22T13:26:12.1660943Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_resumen_del_calentamiento_por_codigo_y_latencia
+2026-11-22T13:26:12.1661284Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_portal_guarda_quien_respondio_si_no_es_201
+2026-11-22T13:26:12.1661623Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_portal_sin_cuerpo_ni_cabecera_y_201_sin_texto
+2026-11-22T13:26:12.1661958Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_trazas_de_fallas_sin_traza_aun_no_falla
+2026-11-22T13:26:12.1662288Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_trazas_de_fallas_con_error_de_xray_no_falla
+2026-11-22T13:26:12.1662616Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_trazas_de_fallas_resume_la_traza_encontrada
+2026-11-22T13:26:12.2561599Z PASSED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_resumen_traza_toma_la_hoja_mas_larga_y_tolera_documentos_raros
+2026-11-22T13:26:12.2562127Z FAILED tests/e2e/test_hu_w07_r1_replicas.py::test_hu_w07_r1_rafaga_con_retiro_de_una_tarea - AssertionError: []
+2026-11-22T13:26:12.2562800Z assert ([])
+2026-11-22T13:26:12.2563000Z ===== 1 failed, 18 passed, 172 deselected, 1 warning in 108.14s (0:01:48) ======
+2026-11-22T13:26:12.4237562Z ##[error]Process completed with exit code 1.
