@@ -38,6 +38,8 @@ Los nombres de evento fijan el contrato de enrutamiento: un evento con otro nomb
 | npaezt | HU-M01 a HU-M05 | `bff-movil` → `siniestros` y la proyección con `Indemnizacion*` (HU-M05) |
 | Santi-MISO | HU-W07 a HU-W09, HU-W25 | Ambiente `exp` (sin Spot, 2 réplicas, límites amplios), `pagos-parametricos` como worker que escala por la suma de sus dos colas y la fila Siniestros del tablero |
 
+> **Nota (HU-W25):** desde HU-W25, `pagos-parametricos` ya no escala por la suma de sus dos colas, sino por los mensajes visibles **por tarea** (`(m0 + m1) / RunningTaskCount`, con Container Insights). Además, por la antigüedad del mensaje más viejo de cada cola, solo hacia fuera; la reducción la decide solo la política por mensajes. `auditoria` y `avisos` siguen escalando por la suma de sus colas. Guía: [hu-w25-escalado-consumidores.md](hu-w25-escalado-consumidores.md).
+
 ## Pruebas
 
 | Nivel | Comando | Qué cubre |

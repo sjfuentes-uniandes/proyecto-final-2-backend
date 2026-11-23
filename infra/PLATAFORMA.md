@@ -232,6 +232,8 @@ Igual que en HU-S02, todo se declara en el catálogo (`local.catalog`, `local.qu
 
 Además: `bff-web` y `bff-movil` llaman a `siniestros`, y `dinero` consume `dinero-indemnizaciones` (HU-W23).
 
+> **Nota (HU-W25):** desde HU-W25, `pagos-parametricos` ya no escala por la profundidad total de sus dos colas, sino por los mensajes visibles **por tarea**: `(m0 + m1) / RunningTaskCount`, con Container Insights encendido en `platform`. Además tiene una política por antigüedad del mensaje más viejo en cada cola, solo hacia fuera. La reducción la decide solo la política por mensajes. Se enciende en la entrada de `pagos-parametricos` de `service_overrides`, sin línea global, así que `auditoria` y `avisos` siguen escalando por la suma de sus colas. Valores por ambiente, precondición y drenaje: [docs/hu-w25-escalado-consumidores.md](../docs/hu-w25-escalado-consumidores.md).
+
 **Decisiones contra los diagramas (`docs/arquitectura`):**
 - `bff-web` → `siniestros` y `bff-movil` → `siniestros`: `ServiciosWeb --> AtencionSiniestros` y `ServiciosMovil --> AtencionSiniestros` (`modelo_componentes.puml`, `modelo_despliegue.puml`).
 - `pagos-parametricos` → `siniestros`: `PagosParametricos --> AtencionSiniestros` y `modelo_concurrencia.puml` (9), "Un evento paramétrico válido crea un siniestro una sola vez".
