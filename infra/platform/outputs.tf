@@ -12,6 +12,8 @@ output "platform" {
     kms_key_arn          = local.kms_key_arn
     cluster              = { id = aws_ecs_cluster.main.id, arn = aws_ecs_cluster.main.arn, name = aws_ecs_cluster.main.name }
     namespace_arn        = aws_service_discovery_http_namespace.main.arn
+    # HU-W25: apps exige Container Insights (RunningTaskCount) antes del escalado por tarea.
+    container_insights = var.container_insights
     catalog = {
       for name, service in local.catalog : name => merge(service, {
         discoverable = contains(local.discoverable, name)

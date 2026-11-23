@@ -60,6 +60,10 @@ infra-probar: ## Smoke test del ambiente, Sprint 2 incluido (SMOKE_ALERTA=1 prue
 infra-probar-alerta: ## HU-W28 AC4: activa y recupera la alarma del perfilamiento con una métrica sintética (NIVEL=critica|advertencia)
 	@$(PLATAFORMA_SCRIPTS)/probar-alerta.sh
 
+.PHONY: infra-probar-escalado
+infra-probar-escalado: ## HU-W25 N2: una fase del escalado de pagos-parametricos en int (SERVICE=pagos-parametricos FASE=publicar|recoger|respaldo)
+	@SERVICE="$(SERVICE)" FASE="$(FASE)" $(PLATAFORMA_SCRIPTS)/probar-escalado.sh
+
 infra-usuario-admin: ## Usuario del back-office (EMAIL=, NOMBRE=, GRUPOS=administradores,operacion)
 	@$(PLATAFORMA_SCRIPTS)/usuario-admin.sh
 

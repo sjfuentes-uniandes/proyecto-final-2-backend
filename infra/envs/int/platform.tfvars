@@ -38,6 +38,8 @@ cache_node_type = "cache.t3.micro" # capa gratuita de ElastiCache (750 h/mes)
 # WAF siempre activo (~8 USD/mes: Web ACL + 3 reglas). Solicitudes por IP en 5 min.
 waf_rate_limit = 2000
 
+container_insights = true # HU-W25: RunningTaskCount para el escalado por tarea
+
 # "prueba" es una cuota pequeña y determinista para las pruebas N2/N3 de HU-W02:
 # la sexta solicitud del día responde 429. tests/e2e/test_hu_w02_cuotas.py repone
 # la cuota de los socios de prueba al empezar y al terminar.

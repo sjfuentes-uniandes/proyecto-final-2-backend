@@ -677,3 +677,37 @@ run "socio_con_plan_inexistente" {
 
   expect_failures = [aws_api_gateway_api_key.partner]
 }
+
+# HU-W25 (25.1): Container Insights apagado por omisión, como hoy, y la salida que lee la
+# precondición de infra/apps (aws_appautoscaling_policy.backlog, plan §b-9).
+run "container_insights_por_omision" {
+  command = plan
+
+  assert {
+    condition     = [for s in aws_ecs_cluster.main.setting : s.value if s.name == "containerInsights"] == ["disabled"]
+    error_message = "Por omisión, el clúster queda con containerInsights = disabled, como hoy."
+  }
+  assert {
+    condition     = output.platform.container_insights == false
+    error_message = "Por omisión, la salida platform.container_insights es false."
+  }
+}
+
+# HU-W25 (25.1): con container_insights = true, el clúster publica ECS/ContainerInsights
+# RunningTaskCount (el divisor del escalado por tarea) y apps lo sabe por la salida.
+run "container_insights_hu_w25" {
+  command = plan
+
+  variables {
+    container_insights = true
+  }
+
+  assert {
+    condition     = [for s in aws_ecs_cluster.main.setting : s.value if s.name == "containerInsights"] == ["enabled"]
+    error_message = "Con container_insights = true, el clúster queda con containerInsights = enabled."
+  }
+  assert {
+    condition     = output.platform.container_insights == true
+    error_message = "Con container_insights = true, la salida platform.container_insights es true."
+  }
+}

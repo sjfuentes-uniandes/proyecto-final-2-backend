@@ -217,3 +217,17 @@ run "multizona_hu_w29" {
     error_message = "El output experiment entrega a los scripts la zona, las subredes y la base."
   }
 }
+
+# HU-W25 (25.1): exp publica RunningTaskCount para el escalado por tarea de pagos-parametricos.
+run "container_insights_hu_w25" {
+  command = plan
+
+  assert {
+    condition     = [for s in aws_ecs_cluster.main.setting : s.value if s.name == "containerInsights"] == ["enabled"]
+    error_message = "HU-W25: en exp, el clúster queda con containerInsights = enabled (envs/exp/platform.tfvars)."
+  }
+  assert {
+    condition     = output.platform.container_insights == true
+    error_message = "HU-W25: en exp, la salida platform.container_insights es true."
+  }
+}

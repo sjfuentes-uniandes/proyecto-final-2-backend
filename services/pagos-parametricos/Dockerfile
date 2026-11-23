@@ -14,4 +14,4 @@ RUN useradd --uid 10001 --create-home appuser
 USER 10001
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=3 CMD ["/app/healthcheck"]
-CMD ["uvicorn", "pagos_parametricos.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "pagos_parametricos.main:app", "--host", "0.0.0.0", "--port", "8080", "--timeout-graceful-shutdown", "4"]

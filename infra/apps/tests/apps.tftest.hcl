@@ -33,6 +33,7 @@ override_data {
         kms_key_arn          = null
         cluster              = { id = "arn:aws:ecs:us-east-1:123456789012:cluster/solventa-int", arn = "arn:aws:ecs:us-east-1:123456789012:cluster/solventa-int", name = "solventa-int" }
         namespace_arn        = "arn:aws:servicediscovery:us-east-1:123456789012:namespace/ns-1"
+        container_insights   = true
         catalog = {
           "bff-web"              = { tier = "acceso", listener_port = 8081, database = false, publishes = false, cache = false, calls = ["clientes", "cotizacion", "api-socios", "polizas", "consulta", "siniestros", "pagos-parametricos"], consumes = [], allies = [], stories = [], discoverable = false, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/bff-web", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/bff-web", name = "solventa-int/bff-web" } }
           "bff-movil"            = { tier = "acceso", listener_port = 8082, database = false, publishes = false, cache = false, calls = ["clientes", "consulta", "avisos", "siniestros"], consumes = [], allies = [], stories = [], discoverable = false, ecr = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/solventa-int/bff-movil", url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/solventa-int/bff-movil", name = "solventa-int/bff-movil" } }
@@ -932,6 +933,473 @@ run "politica_cpu_invalida" {
   }
 
   expect_failures = [var.cpu_target, var.scale_out_cooldown_seconds, var.scale_in_cooldown_seconds, var.service_overrides]
+}
+
+# HU-W25 (25.2): objetivo y enfriamientos de la política backlog por servicio y ambiente,
+# separados de los de CPU. queue_backlog_per_task todavía no cambia nada (lo usa la 25.3).
+run "politica_cola_por_omision" {
+  command = plan
+
+  # Sin valores por servicio ni globales nuevos, backlog queda como antes de parametrizarla:
+  # 100 mensajes y 60/300 s en los tres workers, y ningún servicio tiene objetivo de antigüedad.
+  assert {
+    condition = length(aws_appautoscaling_policy.backlog) == 3 && alltrue([
+      for policy in aws_appautoscaling_policy.backlog :
+      policy.target_tracking_scaling_policy_configuration[0].target_value == 100 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 60 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 300
+    ])
+    error_message = "HU-W25: con los valores por omisión, cada política backlog queda en 100 y 60/300 s."
+  }
+  assert {
+    condition     = !var.queue_backlog_per_task && alltrue([for name, sizing in local.sizing : sizing.queue_age_target == null])
+    error_message = "HU-W25: por omisión, el interruptor por tarea está apagado y ningún servicio define queue_age_target."
+  }
+}
+
+run "politica_cola_por_servicio" {
+  command = plan
+
+  # pagos-parametricos ajusta los cuatro campos de cola; auditoria ajusta solo los de CPU (que en
+  # un worker no tienen política); cotizacion (no worker) ajusta los de cola, que no usa.
+  variables {
+    service_overrides = {
+      pagos-parametricos = { queue_backlog_target = 10, queue_age_target = 180, queue_scale_out_cooldown = 30, queue_scale_in_cooldown = 600 }
+      auditoria          = { cpu_target = 45, scale_out_cooldown = 15, scale_in_cooldown = 900 }
+      cotizacion         = { queue_backlog_target = 5, queue_scale_out_cooldown = 1, queue_scale_in_cooldown = 2 }
+    }
+  }
+
+  assert {
+    condition = (
+      aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].target_value == 10 &&
+      aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 30 &&
+      aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 600 &&
+      local.sizing["pagos-parametricos"].queue_age_target == 180
+    )
+    error_message = "HU-W25: el objetivo, la antigüedad y los enfriamientos de cola de service_overrides llegan a su servicio."
+  }
+  assert {
+    condition = alltrue([
+      for name, policy in aws_appautoscaling_policy.backlog :
+      policy.target_tracking_scaling_policy_configuration[0].target_value == 100 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 60 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 300
+      if name != "pagos-parametricos"
+    ]) && alltrue([for name, sizing in local.sizing : sizing.queue_age_target == null if name != "pagos-parametricos"])
+    error_message = "HU-W25: el ajuste de cola de un servicio no cambia la política backlog de los demás, y un override de CPU no mueve la de cola."
+  }
+  assert {
+    condition = alltrue([
+      for name, policy in aws_appautoscaling_policy.cpu :
+      policy.target_tracking_scaling_policy_configuration[0].target_value == 60 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 30 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 300
+    ])
+    error_message = "HU-W25: los campos de cola de service_overrides no mueven la política cpu (ni la de cotizacion)."
+  }
+  assert {
+    condition     = aws_appautoscaling_target.service["pagos-parametricos"].min_capacity == 1 && aws_appautoscaling_target.service["pagos-parametricos"].max_capacity == 3
+    error_message = "HU-W25: los campos de cola no cambian el mínimo ni el máximo del servicio."
+  }
+}
+
+run "politica_cola_por_ambiente" {
+  command = plan
+
+  # Globales de cola del ambiente más un servicio que fija solo uno de los campos: el resto sale
+  # de los globales. Los globales de cola no mueven la política cpu.
+  variables {
+    queue_backlog_target             = 50
+    queue_scale_out_cooldown_seconds = 90
+    queue_scale_in_cooldown_seconds  = 120
+    service_overrides = {
+      auditoria = { queue_scale_in_cooldown = 900 }
+    }
+  }
+
+  assert {
+    condition = (
+      aws_appautoscaling_policy.backlog["auditoria"].target_tracking_scaling_policy_configuration[0].target_value == 50 &&
+      aws_appautoscaling_policy.backlog["auditoria"].target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 90 &&
+      aws_appautoscaling_policy.backlog["auditoria"].target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 900
+    )
+    error_message = "HU-W25: un campo de cola de service_overrides reemplaza solo ese campo; el resto sale de los globales."
+  }
+  assert {
+    condition = alltrue([
+      for name, policy in aws_appautoscaling_policy.backlog :
+      policy.target_tracking_scaling_policy_configuration[0].target_value == 50 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 90 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 120
+      if name != "auditoria"
+    ])
+    error_message = "HU-W25: sin ajuste por servicio, la política backlog toma el objetivo y los enfriamientos de cola del ambiente."
+  }
+  assert {
+    condition = alltrue([
+      for policy in aws_appautoscaling_policy.cpu :
+      policy.target_tracking_scaling_policy_configuration[0].target_value == 60 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 30 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 300
+    ])
+    error_message = "HU-W25: los globales de cola no cambian la política cpu."
+  }
+}
+
+run "politica_cola_limites" {
+  command = plan
+
+  # Los límites válidos: objetivo apenas sobre 0, enfriamientos en 0 y antigüedad de 1 s.
+  variables {
+    queue_backlog_target             = 0.5
+    queue_scale_out_cooldown_seconds = 0
+    queue_scale_in_cooldown_seconds  = 0
+    service_overrides = {
+      pagos-parametricos = { queue_backlog_target = 0.1, queue_age_target = 1, queue_scale_out_cooldown = 0, queue_scale_in_cooldown = 0 }
+    }
+  }
+
+  assert {
+    condition = (
+      aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].target_value == 0.1 &&
+      aws_appautoscaling_policy.backlog["auditoria"].target_tracking_scaling_policy_configuration[0].target_value == 0.5 &&
+      aws_appautoscaling_policy.backlog["auditoria"].target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 0 &&
+      aws_appautoscaling_policy.backlog["auditoria"].target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 0 &&
+      local.sizing["pagos-parametricos"].queue_age_target == 1
+    )
+    error_message = "HU-W25: objetivo > 0, enfriamientos de 0 y antigüedad de 1 s son válidos."
+  }
+}
+
+run "politica_cola_globales_invalidos" {
+  command = plan
+
+  variables {
+    queue_backlog_target             = 0
+    queue_scale_out_cooldown_seconds = -1
+    queue_scale_in_cooldown_seconds  = 1.5
+  }
+
+  expect_failures = [var.queue_backlog_target, var.queue_scale_out_cooldown_seconds, var.queue_scale_in_cooldown_seconds]
+}
+
+# Un campo inválido por run, para que cada validación de service_overrides falle por sí sola.
+run "politica_cola_objetivo_invalido" {
+  command = plan
+
+  variables {
+    service_overrides = { pagos-parametricos = { queue_backlog_target = 0 } }
+  }
+
+  expect_failures = [var.service_overrides]
+}
+
+run "politica_cola_antiguedad_no_entera" {
+  command = plan
+
+  variables {
+    service_overrides = { pagos-parametricos = { queue_age_target = 180.5 } }
+  }
+
+  expect_failures = [var.service_overrides]
+}
+
+run "politica_cola_antiguedad_cero" {
+  command = plan
+
+  variables {
+    service_overrides = { pagos-parametricos = { queue_age_target = 0 } }
+  }
+
+  expect_failures = [var.service_overrides]
+}
+
+run "politica_cola_enfriamiento_salida_invalido" {
+  command = plan
+
+  variables {
+    service_overrides = { pagos-parametricos = { queue_scale_out_cooldown = -1 } }
+  }
+
+  expect_failures = [var.service_overrides]
+}
+
+run "politica_cola_enfriamiento_entrada_invalido" {
+  command = plan
+
+  variables {
+    service_overrides = { pagos-parametricos = { queue_scale_in_cooldown = 1.5 } }
+  }
+
+  expect_failures = [var.service_overrides]
+}
+
+# HU-W25 (§c.2): la expresión por tarea y la política por antigüedad. Este fixture ya trae la
+# salida platform.container_insights de la 25.1; el caso sin ella está en
+# apps_sin_container_insights.tftest.hcl.
+run "por_tarea_apagado" {
+  command = plan
+
+  # Apagado el interruptor, la expresión de backlog es la de hoy (la suma de las colas) y ninguna
+  # política lee RunningTaskCount. Sin queue_age_target no hay política por antigüedad.
+  assert {
+    condition = (
+      one([for m in aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m.expression if m.id == "backlog"]) == "m0 + m1" &&
+      one([for m in aws_appautoscaling_policy.backlog["auditoria"].target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m.expression if m.id == "backlog"]) == "m0" &&
+      one([for m in aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m.label if m.id == "backlog"]) == "Mensajes visibles en las colas de pagos-parametricos"
+    )
+    error_message = "HU-W25: apagado el interruptor, backlog suma los mensajes visibles de las colas (m0 + m1) con el rótulo de antes."
+  }
+  assert {
+    condition = alltrue([
+      for name, policy in aws_appautoscaling_policy.backlog :
+      length(policy.target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics) == 1 + length(local.deployed[name].consumes) &&
+      alltrue([
+        for m in policy.target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics :
+        m.id != "tareas" && alltrue([for stat in m.metric_stat : alltrue([for metric in stat.metric : metric.metric_name != "RunningTaskCount"])])
+      ])
+    ])
+    error_message = "HU-W25: apagado el interruptor, ninguna política backlog tiene la métrica tareas (RunningTaskCount)."
+  }
+  assert {
+    condition     = length(aws_appautoscaling_policy.backlog_age) == 0
+    error_message = "HU-W25: sin queue_age_target en ningún servicio, no hay políticas por antigüedad."
+  }
+}
+
+run "por_tarea_encendido" {
+  command = plan
+
+  variables {
+    queue_backlog_per_task = true
+  }
+
+  assert {
+    condition = (
+      one([for m in aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m.expression if m.id == "backlog"]) == "(m0 + m1) / tareas" &&
+      one([for m in aws_appautoscaling_policy.backlog["auditoria"].target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m.expression if m.id == "backlog"]) == "(m0) / tareas"
+    )
+    error_message = "HU-W25: con el interruptor, backlog divide la suma de las colas por las tareas en ejecución: (m0 + m1) / tareas."
+  }
+  assert {
+    # tareas = ECS/ContainerInsights RunningTaskCount, Average, del clúster y del servicio.
+    condition = alltrue([
+      for name, policy in aws_appautoscaling_policy.backlog :
+      length([for m in policy.target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m if m.id == "tareas"]) == 1 &&
+      alltrue([
+        for m in policy.target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics :
+        one(m.metric_stat).stat == "Average" &&
+        one(one(m.metric_stat).metric).namespace == "ECS/ContainerInsights" &&
+        one(one(m.metric_stat).metric).metric_name == "RunningTaskCount" &&
+        { for d in one(one(m.metric_stat).metric).dimensions : d.name => d.value } == { ClusterName = local.p.cluster.name, ServiceName = local.ecs_services[name].service_name }
+        if m.id == "tareas"
+      ])
+    ])
+    error_message = "HU-W25: la métrica tareas es ECS/ContainerInsights RunningTaskCount con Average, ClusterName del clúster y ServiceName del servicio."
+  }
+  assert {
+    condition = one([
+      for m in aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics :
+      { for d in one(one(m.metric_stat).metric).dimensions : d.name => d.value } if m.id == "tareas"
+    ]) == { ClusterName = "solventa-int", ServiceName = "pagos-parametricos" }
+    error_message = "HU-W25: tareas de pagos-parametricos lee el clúster solventa-int y el servicio pagos-parametricos."
+  }
+  assert {
+    # Solo la expresión devuelve datos; los visibles de cada cola siguen como antes.
+    condition = alltrue([
+      for name, policy in aws_appautoscaling_policy.backlog :
+      [for m in policy.target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m.id if m.return_data] == ["backlog"] &&
+      alltrue([
+        for index, queue in local.deployed[name].consumes :
+        one([
+          for m in policy.target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics :
+          one(m.metric_stat).stat == "Average" &&
+          one(one(m.metric_stat).metric).namespace == "AWS/SQS" &&
+          one(one(m.metric_stat).metric).metric_name == "ApproximateNumberOfMessagesVisible" &&
+          { for d in one(one(m.metric_stat).metric).dimensions : d.name => d.value } == { QueueName = local.p.queues[queue].name }
+          if m.id == "m${index}"
+        ])
+      ])
+    ])
+    error_message = "HU-W25: return_data solo en backlog, y cada mN sigue siendo el Average de los mensajes visibles de su cola."
+  }
+  assert {
+    # El interruptor no cambia qué servicios tienen backlog (apps.tftest.hcl, todos_los_servicios)
+    # ni su objetivo o enfriamientos, ni crea políticas por antigüedad.
+    condition = toset(keys(aws_appautoscaling_policy.backlog)) == toset(["auditoria", "avisos", "pagos-parametricos"]) && length(aws_appautoscaling_policy.backlog_age) == 0 && alltrue([
+      for policy in aws_appautoscaling_policy.backlog :
+      policy.target_tracking_scaling_policy_configuration[0].target_value == 100 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 60 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 300
+    ])
+    error_message = "HU-W25: el interruptor solo cambia la expresión de backlog."
+  }
+}
+
+# HU-W25 (25.3b): el interruptor es por servicio. queue_backlog_per_task en service_overrides lo
+# enciende o lo apaga en un servicio; sin él, el servicio toma el global (false por omisión). Así
+# pagos-parametricos pasa a por tarea sin cambiar la backlog de auditoria ni la de avisos (§b-2).
+run "por_tarea_por_servicio" {
+  command = plan
+
+  variables {
+    service_overrides = { pagos-parametricos = { queue_backlog_per_task = true } }
+  }
+
+  assert {
+    condition = (
+      one([for m in aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m.expression if m.id == "backlog"]) == "(m0 + m1) / tareas" &&
+      one([for m in aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m.label if m.id == "backlog"]) == "Mensajes visibles por tarea en las colas de pagos-parametricos" &&
+      length([for m in aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m if m.id == "tareas"]) == 1
+    )
+    error_message = "HU-W25: con queue_backlog_per_task en su override, pagos-parametricos divide sus colas por sus tareas: (m0 + m1) / tareas."
+  }
+  assert {
+    # auditoria y avisos, sin override, quedan como hoy: la suma, el rótulo de antes y sin tareas.
+    condition = toset(keys(aws_appautoscaling_policy.backlog)) == toset(["auditoria", "avisos", "pagos-parametricos"]) && alltrue([
+      for name, policy in aws_appautoscaling_policy.backlog :
+      one([for m in policy.target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m.expression if m.id == "backlog"]) == join(" + ", [for index, queue in local.deployed[name].consumes : "m${index}"]) &&
+      one([for m in policy.target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m.label if m.id == "backlog"]) == "Mensajes visibles en las colas de ${name}" &&
+      length(policy.target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics) == 1 + length(local.deployed[name].consumes)
+      if name != "pagos-parametricos"
+    ])
+    error_message = "HU-W25: el interruptor de pagos-parametricos no cambia la backlog de auditoria ni la de avisos."
+  }
+}
+
+# Con el global encendido, false en el override de un servicio lo deja con la suma.
+run "por_tarea_global_con_excepcion" {
+  command = plan
+
+  variables {
+    queue_backlog_per_task = true
+    service_overrides      = { auditoria = { queue_backlog_per_task = false } }
+  }
+
+  assert {
+    condition = (
+      one([for m in aws_appautoscaling_policy.backlog["auditoria"].target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m.expression if m.id == "backlog"]) == "m0" &&
+      length(aws_appautoscaling_policy.backlog["auditoria"].target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics) == 2 &&
+      one([for m in aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m.expression if m.id == "backlog"]) == "(m0 + m1) / tareas" &&
+      one([for m in aws_appautoscaling_policy.backlog["avisos"].target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics : m.expression if m.id == "backlog"]) == "(m0) / tareas"
+    )
+    error_message = "HU-W25: queue_backlog_per_task = false en el override de auditoria la deja sumando sus colas aunque el global esté encendido; los demás toman el global."
+  }
+}
+
+run "antiguedad_por_servicio" {
+  command = plan
+
+  # pagos-parametricos define la antigüedad y su enfriamiento de salida. cotizacion (núcleo que
+  # consume una cola) y consulta (proyección con cola) también la definen, pero nunca tienen
+  # política por antigüedad. auditoria no la define. avisos la rechaza la validación (abajo).
+  variables {
+    service_overrides = {
+      pagos-parametricos = { queue_age_target = 180, queue_scale_out_cooldown = 45 }
+      cotizacion         = { queue_age_target = 60 }
+      consulta           = { queue_age_target = 60 }
+    }
+  }
+
+  assert {
+    condition     = toset(keys(aws_appautoscaling_policy.backlog_age)) == toset(["pagos-parametricos/parametricos-eventos", "pagos-parametricos/parametricos-polizas"])
+    error_message = "HU-W25: una política por antigüedad por cola de pagos-parametricos; ninguna en un no-worker ni en un servicio sin queue_age_target."
+  }
+  assert {
+    # Sobre el objetivo de pagos-parametricos solo actúan backlog y sus políticas por antigüedad:
+    # un worker no tiene política de CPU.
+    condition     = !contains(keys(aws_appautoscaling_policy.cpu), "pagos-parametricos")
+    error_message = "HU-W25: pagos-parametricos (worker) no tiene política de CPU sobre el mismo objetivo."
+  }
+  assert {
+    condition = alltrue([
+      for key, policy in aws_appautoscaling_policy.backlog_age :
+      policy.name == "solventa-int-${split("/", key)[0]}-antiguedad-${split("/", key)[1]}" &&
+      policy.policy_type == "TargetTrackingScaling" &&
+      policy.resource_id == aws_appautoscaling_target.service[split("/", key)[0]].resource_id &&
+      policy.scalable_dimension == "ecs:service:DesiredCount" &&
+      policy.service_namespace == "ecs"
+    ]) && aws_appautoscaling_policy.backlog_age["pagos-parametricos/parametricos-eventos"].name == "solventa-int-pagos-parametricos-antiguedad-parametricos-eventos"
+    error_message = "HU-W25: la política por antigüedad se llama <prefijo>-<servicio>-antiguedad-<cola> y actúa sobre el servicio."
+  }
+  assert {
+    # Solo de salida, con el objetivo y el enfriamiento de salida del servicio, y una sola métrica
+    # (sin metric math): Maximum de ApproximateAgeOfOldestMessage de su cola.
+    condition = alltrue([
+      for key, policy in aws_appautoscaling_policy.backlog_age :
+      policy.target_tracking_scaling_policy_configuration[0].disable_scale_in == true &&
+      policy.target_tracking_scaling_policy_configuration[0].target_value == 180 &&
+      policy.target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 45 &&
+      policy.target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].namespace == "AWS/SQS" &&
+      policy.target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metric_name == "ApproximateAgeOfOldestMessage" &&
+      policy.target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].statistic == "Maximum" &&
+      length(policy.target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].metrics) == 0 &&
+      { for d in policy.target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].dimensions : d.name => d.value } == { QueueName = local.p.queues[split("/", key)[1]].name }
+    ])
+    error_message = "HU-W25: la política por antigüedad es solo de salida, con queue_age_target, el enfriamiento de salida del servicio y el Maximum de ApproximateAgeOfOldestMessage de su cola."
+  }
+  assert {
+    condition     = one(aws_appautoscaling_policy.backlog_age["pagos-parametricos/parametricos-polizas"].target_tracking_scaling_policy_configuration[0].customized_metric_specification[0].dimensions).value == "solventa-int-parametricos-polizas"
+    error_message = "HU-W25: la política por antigüedad de parametricos-polizas lee la cola solventa-int-parametricos-polizas."
+  }
+  assert {
+    # La reducción la decide solo backlog, que sigue igual y puede reducir.
+    condition     = toset(keys(aws_appautoscaling_policy.backlog)) == toset(["auditoria", "avisos", "pagos-parametricos"]) && aws_appautoscaling_policy.backlog["pagos-parametricos"].target_tracking_scaling_policy_configuration[0].disable_scale_in != true
+    error_message = "HU-W25: backlog no cambia con la antigüedad y conserva la reducción."
+  }
+}
+
+# avisos no tiene consumidor: un objetivo de antigüedad lo llevaría al máximo sin remedio. El plan
+# falla en vez de ignorarlo. Sus otros campos de cola siguen permitidos.
+run "antiguedad_en_avisos_invalida" {
+  command = plan
+
+  variables {
+    service_overrides = {
+      avisos             = { queue_age_target = 120 }
+      pagos-parametricos = { queue_age_target = 180 }
+    }
+  }
+
+  expect_failures = [var.service_overrides]
+}
+
+run "avisos_otros_campos_de_cola" {
+  command = plan
+
+  variables {
+    service_overrides = {
+      avisos = { queue_backlog_target = 50, queue_scale_out_cooldown = 30, queue_scale_in_cooldown = 600 }
+    }
+  }
+
+  assert {
+    condition     = aws_appautoscaling_policy.backlog["avisos"].target_tracking_scaling_policy_configuration[0].target_value == 50 && length(aws_appautoscaling_policy.backlog_age) == 0
+    error_message = "HU-W25: avisos admite los demás campos de cola; solo queue_age_target está vedado."
+  }
+}
+
+run "antiguedad_sin_rango" {
+  command = plan
+
+  # Sin margen para crecer (max = min), no hay política por antigüedad, igual que backlog. La de
+  # un worker con una sola cola (auditoria) es una.
+  variables {
+    service_overrides = {
+      pagos-parametricos = { min = 2, max = 2, queue_age_target = 180 }
+      auditoria          = { queue_age_target = 300 }
+    }
+  }
+
+  assert {
+    condition     = toset(keys(aws_appautoscaling_policy.backlog_age)) == toset(["auditoria/auditoria"]) && !contains(keys(aws_appautoscaling_policy.backlog), "pagos-parametricos")
+    error_message = "HU-W25: sin max > min no hay política por antigüedad; un worker con una cola tiene una."
+  }
+  assert {
+    condition     = aws_appautoscaling_policy.backlog_age["auditoria/auditoria"].target_tracking_scaling_policy_configuration[0].target_value == 300 && aws_appautoscaling_policy.backlog_age["auditoria/auditoria"].target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 60
+    error_message = "HU-W25: sin enfriamiento propio, la política por antigüedad usa el global de salida de cola (60 s)."
+  }
 }
 
 # HU-W08: panel «Cotizaciones por minuto y capacidad» de Operación › Tablero (bff-web).

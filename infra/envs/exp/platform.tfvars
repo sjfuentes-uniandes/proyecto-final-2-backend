@@ -32,6 +32,8 @@ evidence_force_destroy         = true
 cache_enabled   = true
 cache_node_type = "cache.t3.micro"
 
+container_insights = true # HU-W25: RunningTaskCount para el escalado por tarea
+
 # Límites amplios: la carga sale de pocas IP (generador de carga y simulador de telemetría).
 api_throttle                = { rate = 1000, burst = 2000 }
 telemetria_eventos_throttle = { rate = 500, burst = 1000 }
