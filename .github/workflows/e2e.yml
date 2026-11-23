@@ -50,6 +50,11 @@ jobs:
           E2E_ADMIN_USUARIO: ${{ secrets.E2E_ADMIN_USUARIO }}
           E2E_ADMIN_CLAVE: ${{ secrets.E2E_ADMIN_CLAVE }}
           E2E_ADMIN_TOTP: ${{ secrets.E2E_ADMIN_TOTP }}
+          E2E_CLIENTE_A_USUARIO: ${{ secrets.E2E_CLIENTE_A_USUARIO }}
+          E2E_CLIENTE_A_CLAVE: ${{ secrets.E2E_CLIENTE_A_CLAVE }}
+          E2E_CLIENTE_B_USUARIO: ${{ secrets.E2E_CLIENTE_B_USUARIO }}
+          E2E_CLIENTE_B_CLAVE: ${{ secrets.E2E_CLIENTE_B_CLAVE }}
+          E2E_TELEMETRIA_SECRETO: ${{ secrets.E2E_TELEMETRIA_SECRETO }}
           FILTRO: ${{ inputs.filtro }}
         run: uv run pytest tests/e2e -v -rA ${FILTRO:+-k "$FILTRO"} --junitxml=e2e.xml
 

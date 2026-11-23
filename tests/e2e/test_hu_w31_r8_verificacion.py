@@ -33,7 +33,7 @@ DECLARADOS = {"fechaNacimiento": "1990-04-18", "plazoCreditoMeses": 180, "sumaAs
 
 
 def _token_cliente(ambiente: Any, prefijo: str) -> str:
-    """Access token del pool de clientes por SRP (el flujo que habilita `app-movil`)."""
+    """ID token del pool de clientes por SRP (el flujo que habilita `app-movil`)."""
     if os.getenv(f"{prefijo}_TOKEN"):
         return os.environ[f"{prefijo}_TOKEN"]
     usuario, clave = os.getenv(f"{prefijo}_USUARIO", ""), os.getenv(f"{prefijo}_CLAVE", "")
@@ -46,7 +46,7 @@ def _token_cliente(ambiente: Any, prefijo: str) -> str:
 
     sesion = Cognito(pool_id, client_id, username=usuario)
     sesion.authenticate(password=clave)
-    return sesion.access_token or ""
+    return sesion.id_token or ""
 
 
 class Titular:
