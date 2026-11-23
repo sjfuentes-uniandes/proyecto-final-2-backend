@@ -40,7 +40,7 @@ jobs:
           aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - name: Construir y publicar
         run: make infra-imagenes
